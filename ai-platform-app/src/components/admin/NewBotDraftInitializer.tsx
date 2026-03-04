@@ -7,10 +7,11 @@ import { ensureDraftId, rotateDraftId } from "@/lib/draftBot";
 
 let draftInitInFlight:
   | {
-      clientDraftId: string;
-      promise: Promise<{ botId?: string }>;
-    }
+    clientDraftId: string;
+    promise: Promise<{ botId?: string }>;
+  }
   | null = null;
+
 
 export default function NewBotDraftInitializer() {
   const router = useRouter();
