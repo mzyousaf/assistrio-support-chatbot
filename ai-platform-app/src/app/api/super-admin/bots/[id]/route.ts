@@ -65,12 +65,12 @@ export async function GET(_request: NextRequest, context: RouteContext) {
           .lean(),
         DocumentModel.findOne({ botId: id, status: "failed" })
           .sort({ createdAt: -1 })
-          .select({ _id: 1, title: 1, error: 1, createdAt: 1, updatedAt: 1 })
+          .select({ _id: 1, title: 1, error: 1, createdAt: 1 })
           .lean(),
       ]);
 
     const lastIngestedAtValue = lastReadyDoc?.ingestedAt || lastReadyDoc?.createdAt;
-    const failedUpdatedAtValue = lastFailedDocRaw?.updatedAt || lastFailedDocRaw?.createdAt;
+    const failedUpdatedAtValue = lastFailedDocRaw?.createdAt;
 
     return NextResponse.json({
       ok: true,

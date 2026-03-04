@@ -60,7 +60,6 @@ export default async function SuperAdminEditBotPage({ params }: EditBotPageProps
       error: 1,
       ingestedAt: 1,
       createdAt: 1,
-      updatedAt: 1,
     })
     .lean();
 
@@ -70,7 +69,7 @@ export default async function SuperAdminEditBotPage({ params }: EditBotPageProps
   const docsFailed = documents.filter((doc) => doc.status === "failed").length;
   const lastReadyDoc = documents.find((doc) => doc.status === "ready");
   const lastFailedDoc = documents.find((doc) => doc.status === "failed");
-  const lastFailedUpdatedAt = lastFailedDoc?.updatedAt || lastFailedDoc?.createdAt;
+  const lastFailedUpdatedAt = lastFailedDoc?.createdAt;
 
   if (!bot) {
     return (

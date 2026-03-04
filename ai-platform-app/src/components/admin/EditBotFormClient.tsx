@@ -29,6 +29,20 @@ type EditBotFormClientProps = {
     chatUI?: BotChatUI;
     personality?: BotPersonality;
     config?: BotConfig;
+    health?: {
+      docsTotal: number;
+      docsQueued: number;
+      docsProcessing: number;
+      docsReady: number;
+      docsFailed: number;
+      lastIngestedAt?: string;
+      lastFailedDoc?: {
+        docId: string;
+        title: string;
+        error?: string;
+        updatedAt?: string;
+      };
+    };
   };
 };
 

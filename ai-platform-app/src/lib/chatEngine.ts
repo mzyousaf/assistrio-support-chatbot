@@ -125,16 +125,16 @@ export async function runChat({ bot, visitorId, message, mode, userApiKey }: Run
     relatedDocuments.map((doc) => [String(doc._id), String(doc.title || "Document")]),
   );
 
-  const sources: ChatSource[] = contextChunks.map((chunk) => ({
-    chunkId: String(chunk._id),
-    docId: String(chunk.documentId),
-    docTitle: docTitleById.get(String(chunk.documentId)) || "Document",
-    preview: String(chunk.text || "").slice(0, 120),
-    score:
-      typeof (chunk as { score?: unknown }).score === "number"
-        ? (chunk as { score: number }).score
-        : undefined,
-  }));
+  const sources: ChatSource[] = contextChunks.map((chunk) => {
+    const scoreVal = (chunk as { score?: unknown }).score;
+    return {
+      chunkId: String(chunk._id),
+      docId: String(chunk.documentId),
+      docTitle: docTitleById.get(String(chunk.documentId)) || "Document",
+      preview: String(chunk.text || "").slice(0, 120),
+      score: typeof scoreVal === "number" ? scoreVal : undefined,
+    };
+  });
 
   const contextText = contextChunks.map((c, idx) => `# Snippet ${idx + 1}\n${c.text}`).join("\n\n");
   const faqs = bot.faqs ?? [];

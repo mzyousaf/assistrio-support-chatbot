@@ -25,8 +25,8 @@ async function getPublicBots(): Promise<PublicBot[]> {
     const payload: unknown = await response.json();
     const rawBots = Array.isArray(payload) ? payload : [];
 
-    return rawBots
-      .map((bot) => {
+    const bots: PublicBot[] = rawBots
+      .map((bot): PublicBot | null => {
         if (!bot || typeof bot !== "object") return null;
 
         const typedBot = bot as Record<string, unknown>;
@@ -59,7 +59,9 @@ async function getPublicBots(): Promise<PublicBot[]> {
             typeof typedBot.imageUrl === "string" ? typedBot.imageUrl : undefined,
         };
       })
-      .filter((bot): bot is PublicBot => bot !== null);
+      .filter((b): b is PublicBot => b !== null);
+
+    return bots;
   } catch {
     return [];
   }
