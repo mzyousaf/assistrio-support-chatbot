@@ -5,6 +5,7 @@ export interface Visitor {
   name?: string;
   email?: string;
   phone?: string;
+  limitOverrideMessages?: number;
   showcaseMessageCount: number;
   ownBotMessageCount: number;
   createdAt: Date;
@@ -19,6 +20,7 @@ const VisitorSchema = new Schema<Visitor>(
     name: { type: String },
     email: { type: String },
     phone: { type: String },
+    limitOverrideMessages: { type: Number },
     showcaseMessageCount: { type: Number, default: 0 },
     ownBotMessageCount: { type: Number, default: 0 },
     createdAt: { type: Date, default: Date.now },

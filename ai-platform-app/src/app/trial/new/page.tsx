@@ -9,6 +9,41 @@ import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
 import { useVisitorId } from "@/hooks/useVisitorId";
 
+type TrialCreateQueuedDoc = {
+  docId: string;
+  fileName?: string;
+  status?: "queued" | "processing" | "ready" | "failed";
+};
+
+type TrialCreateBotResponse = {
+  ok?: boolean;
+  slug?: string;
+  botId?: string;
+  docs?: TrialCreateQueuedDoc[];
+};
+
+type TrialDocumentStatus = {
+  docId: string;
+  fileName?: string;
+  status?: "queued" | "processing" | "ready" | "failed";
+  error?: string;
+  ingestedAt?: string;
+};
+
+function getStatusClass(status?: TrialDocumentStatus["status"]): string {
+  if (status === "processing") return "border-blue-500/30 bg-blue-500/10 text-blue-300";
+  if (status === "ready") return "border-emerald-500/30 bg-emerald-500/10 text-emerald-300";
+  if (status === "failed") return "border-red-500/30 bg-red-500/10 text-red-300";
+  return "border-slate-600 bg-slate-800 text-slate-300";
+}
+
+function truncateError(input?: string, max = 120): string | undefined {
+  if (!input) return undefined;
+  const trimmed = input.trim();
+  if (trimmed.length <= max) return trimmed;
+  return `${trimmed.slice(0, max - 1)}...`;
+}
+
 export default function NewTrialBotPage() {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -21,6 +56,10 @@ export default function NewTrialBotPage() {
   const [submitting, setSubmitting] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [createdBot, setCreatedBot] = useState<{ botId: string; slug: string } | null>(null);
+  const [processingDocs, setProcessingDocs] = useState<TrialDocumentStatus[]>([]);
+  const [isPollingDocs, setIsPollingDocs] = useState(false);
+  const [processingDone, setProcessingDone] = useState(false);
   const { visitorId, loading: visitorLoading } = useVisitorId();
 
   useEffect(() => {
@@ -71,6 +110,54 @@ export default function NewTrialBotPage() {
     setFaqs((prev) => prev.filter((_, i) => i !== index));
   }
 
+  async function fetchTrialDocStatuses(botId: string): Promise<TrialDocumentStatus[]> {
+    const response = await fetch(
+      `/api/trial/bots/${botId}/documents?visitorId=${encodeURIComponent(visitorId || "")}`,
+      {
+        method: "GET",
+      },
+    );
+    if (!response.ok) {
+      throw new Error("Failed to fetch trial document statuses");
+    }
+    const data = (await response.json()) as { documents?: TrialDocumentStatus[] };
+    return Array.isArray(data.documents) ? data.documents : [];
+  }
+
+  useEffect(() => {
+    if (!isPollingDocs || !createdBot) return;
+
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const docs = await fetchTrialDocStatuses(createdBot.botId);
+        if (cancelled) return;
+        setProcessingDocs(docs);
+        const allDone =
+          docs.length > 0 &&
+          docs.every((doc) => doc.status === "ready" || doc.status === "failed");
+        if (allDone) {
+          setIsPollingDocs(false);
+          setProcessingDone(true);
+        }
+      } catch {
+        if (!cancelled) {
+          setError("Failed to refresh document processing status.");
+        }
+      }
+    };
+
+    void poll();
+    const interval = setInterval(() => {
+      void poll();
+    }, 2500);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [isPollingDocs, createdBot, visitorId]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!visitorId || submitting) return;
@@ -82,17 +169,19 @@ export default function NewTrialBotPage() {
     try {
       const filteredFaqs = faqs.filter((f) => f.question.trim() && f.answer.trim());
       const faqsJson = JSON.stringify(filteredFaqs);
+      const formData = new FormData();
+      formData.append("botName", botName.trim());
+      formData.append("email", email.trim());
+      formData.append("description", description.trim());
+      formData.append("visitorId", visitorId);
+      formData.append("faqs", faqsJson);
+      for (const file of selectedFiles) {
+        formData.append("files", file);
+      }
 
       const res = await fetch("/api/trial/create-bot", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          botName: botName.trim(),
-          email: email.trim(),
-          description: description.trim(),
-          visitorId,
-          faqs: faqsJson,
-        }),
+        body: formData,
       });
 
       if (!res.ok) {
@@ -100,9 +189,27 @@ export default function NewTrialBotPage() {
         return;
       }
 
-      const data = (await res.json()) as { slug?: string };
+      const data = (await res.json()) as TrialCreateBotResponse;
       const slug = data.slug;
-      if (slug) {
+      const botId = data.botId;
+      const docs = Array.isArray(data.docs) ? data.docs : [];
+      if (!slug || !botId) {
+        setError("Trial bot was created, but the response was incomplete.");
+        return;
+      }
+
+      if (docs.length > 0) {
+        setCreatedBot({ botId, slug });
+        setProcessingDocs(
+          docs.map((doc) => ({
+            docId: doc.docId,
+            fileName: doc.fileName,
+            status: doc.status || "queued",
+          })),
+        );
+        setProcessingDone(false);
+        setIsPollingDocs(true);
+      } else {
         router.push(`/trial/${slug}?visitorId=${visitorId}`);
       }
     } catch {
@@ -276,10 +383,49 @@ export default function NewTrialBotPage() {
         </Card>
 
         {error ? <p className="text-sm text-red-400">{error}</p> : null}
+        {createdBot ? (
+          <Card title={isPollingDocs ? "Processing documents..." : "Document processing finished"}>
+            <p className="text-sm text-slate-400">
+              {isPollingDocs
+                ? "We are indexing your uploaded files. This may take a short while."
+                : "Document ingestion is complete. You can continue to your trial bot."}
+            </p>
+            <ul className="mt-3 space-y-2 text-sm">
+              {processingDocs.map((doc) => (
+                <li
+                  key={doc.docId}
+                  className="rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="truncate text-slate-200">{doc.fileName || "Document"}</span>
+                    <span
+                      className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium ${getStatusClass(doc.status)}`}
+                    >
+                      {doc.status || "queued"}
+                    </span>
+                  </div>
+                  {doc.status === "failed" && doc.error ? (
+                    <p className="mt-1 text-xs text-red-300">{truncateError(doc.error)}</p>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+            {processingDone ? (
+              <div className="mt-4 flex justify-end">
+                <Button
+                  type="button"
+                  onClick={() => router.push(`/trial/${createdBot.slug}?visitorId=${visitorId}`)}
+                >
+                  Continue to bot
+                </Button>
+              </div>
+            ) : null}
+          </Card>
+        ) : null}
 
         <div className="flex justify-end">
-          <Button type="submit" variant="primary" size="md" disabled={submitting}>
-            {submitting ? "Creating..." : "Create trial bot"}
+          <Button type="submit" variant="primary" size="md" disabled={submitting || isPollingDocs}>
+            {submitting ? "Creating..." : isPollingDocs ? "Processing documents..." : "Create trial bot"}
           </Button>
         </div>
       </form>

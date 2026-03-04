@@ -56,9 +56,21 @@ export default async function SuperAdminEditBotPage({ params }: EditBotPageProps
       fileSize: 1,
       url: 1,
       text: 1,
+      status: 1,
+      error: 1,
+      ingestedAt: 1,
       createdAt: 1,
+      updatedAt: 1,
     })
     .lean();
+
+  const docsQueued = documents.filter((doc) => doc.status === "queued").length;
+  const docsProcessing = documents.filter((doc) => doc.status === "processing").length;
+  const docsReady = documents.filter((doc) => doc.status === "ready").length;
+  const docsFailed = documents.filter((doc) => doc.status === "failed").length;
+  const lastReadyDoc = documents.find((doc) => doc.status === "ready");
+  const lastFailedDoc = documents.find((doc) => doc.status === "failed");
+  const lastFailedUpdatedAt = lastFailedDoc?.updatedAt || lastFailedDoc?.createdAt;
 
   if (!bot) {
     return (
@@ -131,10 +143,32 @@ export default async function SuperAdminEditBotPage({ params }: EditBotPageProps
               fileType: doc.fileType || undefined,
               fileSize: doc.fileSize || undefined,
               url: doc.url || undefined,
+              status: doc.status || undefined,
+              error: doc.error || undefined,
+              ingestedAt: doc.ingestedAt ? new Date(doc.ingestedAt).toISOString() : undefined,
               hasText: typeof doc.text === "string" && doc.text.trim().length > 0,
               textLength: typeof doc.text === "string" ? doc.text.length : 0,
               createdAt: doc.createdAt ? new Date(doc.createdAt).toISOString() : undefined,
             })),
+            health: {
+              docsTotal: documents.length,
+              docsQueued,
+              docsProcessing,
+              docsReady,
+              docsFailed,
+              lastIngestedAt:
+                lastReadyDoc?.ingestedAt || lastReadyDoc?.createdAt
+                  ? new Date(lastReadyDoc?.ingestedAt || lastReadyDoc?.createdAt || Date.now()).toISOString()
+                  : undefined,
+              lastFailedDoc: lastFailedDoc
+                ? {
+                    docId: String(lastFailedDoc._id),
+                    title: String(lastFailedDoc.title ?? ""),
+                    error: lastFailedDoc.error || undefined,
+                    updatedAt: lastFailedUpdatedAt ? new Date(lastFailedUpdatedAt).toISOString() : undefined,
+                  }
+                : undefined,
+            },
             isPublic: Boolean(bot.isPublic),
             leadCapture: bot.leadCapture || undefined,
             chatUI: bot.chatUI || undefined,

@@ -3,8 +3,8 @@ import OpenAI from "openai";
 import { connectToDatabase } from "@/lib/mongoose";
 import { Chunk } from "@/models/Chunk";
 
-function getOpenAIClient() {
-  const apiKey = process.env.OPENAI_API_KEY;
+function getOpenAIClient(apiKeyOverride?: string) {
+  const apiKey = (apiKeyOverride || process.env.OPENAI_API_KEY || "").trim();
   if (!apiKey) {
     throw new Error("OPENAI_API_KEY is not set");
   }
@@ -26,10 +26,10 @@ function cosineSimilarity(a: number[], b: number[]): number {
   return dot / (Math.sqrt(normA) * Math.sqrt(normB));
 }
 
-export async function embedText(text: string): Promise<number[]> {
+export async function embedText(text: string, apiKeyOverride?: string): Promise<number[]> {
   const trimmed = text.trim();
   if (!trimmed) return [];
-  const openai = getOpenAIClient();
+  const openai = getOpenAIClient(apiKeyOverride);
   const res = await openai.embeddings.create({
     model: "text-embedding-3-small",
     input: trimmed,
@@ -37,9 +37,14 @@ export async function embedText(text: string): Promise<number[]> {
   return res.data[0].embedding;
 }
 
-export async function getRelevantChunksForBot(botId: string, query: string, limit = 4) {
+export async function getRelevantChunksForBot(
+  botId: string,
+  query: string,
+  limit = 4,
+  apiKeyOverride?: string,
+) {
   await connectToDatabase();
-  const queryEmbedding = await embedText(query);
+  const queryEmbedding = await embedText(query, apiKeyOverride);
   if (!queryEmbedding.length) return [];
 
   const chunks = await Chunk.find({ botId })
@@ -57,6 +62,11 @@ export async function getRelevantChunksForBot(botId: string, query: string, limi
   return scored.slice(0, limit).map((s) => s.chunk);
 }
 
-export async function getRelevantChunks(botId: string, query: string, limit: number = 4) {
-  return getRelevantChunksForBot(botId, query, limit);
+export async function getRelevantChunks(
+  botId: string,
+  query: string,
+  limit: number = 4,
+  apiKeyOverride?: string,
+) {
+  return getRelevantChunksForBot(botId, query, limit, apiKeyOverride);
 }

@@ -40,6 +40,9 @@ export async function GET(_request: NextRequest, context: RouteContext) {
         url: 1,
         text: 1,
         createdAt: 1,
+        status: 1,
+        error: 1,
+        ingestedAt: 1,
       })
       .lean();
 
@@ -53,6 +56,9 @@ export async function GET(_request: NextRequest, context: RouteContext) {
         fileType: doc.fileType || undefined,
         fileSize: doc.fileSize || undefined,
         url: doc.url || undefined,
+        status: doc.status || undefined,
+        error: doc.error || undefined,
+        ingestedAt: doc.ingestedAt ? new Date(doc.ingestedAt).toISOString() : undefined,
         hasText: typeof doc.text === "string" && doc.text.trim().length > 0,
         textLength: typeof doc.text === "string" ? doc.text.length : 0,
         createdAt: doc.createdAt ? new Date(doc.createdAt).toISOString() : undefined,

@@ -4,11 +4,12 @@ import path from "path";
 import mongoose from "mongoose";
 import { NextRequest, NextResponse } from "next/server";
 
-import { chunkText, embedAndStoreChunks, extractTextFromUpload, getFileExtension } from "@/lib/kb";
+import { getFileExtension } from "@/lib/kb";
 import { connectToDatabase } from "@/lib/mongoose";
 import { getAuthenticatedSuperAdmin } from "@/lib/superAdminAuth";
 import { Bot } from "@/models/Bot";
 import { DocumentModel } from "@/models/Document";
+import IngestJob from "@/models/IngestJob";
 
 const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
 const ALLOWED_EXTENSIONS = new Set(["txt", "pdf", "docx", "doc"]);
@@ -105,54 +106,21 @@ export async function POST(request: NextRequest, context: RouteContext) {
       fileName: file.name,
       fileType: mimeType,
       fileSize: file.size,
+      status: "queued",
       url: publicUrl,
-      text: "",
     });
 
-    let extracted = false;
-    let embedded = false;
-    let chunkCount = 0;
-    let reason: string | undefined;
-
-    try {
-      const extractionResult = await extractTextFromUpload({
-        filePath,
-        fileName: file.name,
-        fileType: file.type,
-      });
-
-      extracted = extractionResult.extracted;
-      reason = extractionResult.reason;
-
-      if (extractionResult.extracted) {
-        await DocumentModel.updateOne(
-          { _id: document._id, botId: bot._id },
-          { $set: { text: extractionResult.text } },
-        );
-
-        const chunks = chunkText(extractionResult.text);
-        const embeddingResult = await embedAndStoreChunks({
-          botId: String(bot._id),
-          documentId: String(document._id),
-          chunks,
-        });
-        embedded = embeddingResult.embedded;
-        chunkCount = embeddingResult.chunkCount;
-        reason = embeddingResult.reason || reason;
-      }
-    } catch (ingestError) {
-      console.error("Inline document ingestion failed", ingestError);
-      if (!reason) reason = "ingestion_failed";
-    }
+    const job = await IngestJob.create({
+      botId: bot._id,
+      docId: document._id,
+      status: "queued",
+    });
 
     return NextResponse.json({
       ok: true,
-      documentId: document._id.toString(),
-      url: publicUrl,
-      extracted,
-      embedded,
-      chunkCount,
-      reason,
+      docId: document._id.toString(),
+      jobId: job._id.toString(),
+      status: "queued",
     });
   } catch (error) {
     console.error("Upload doc failed", error);

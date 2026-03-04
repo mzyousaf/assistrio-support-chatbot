@@ -11,6 +11,7 @@ type PublicBotRow = {
   category?: string;
   avatarEmoji?: string;
   imageUrl?: string;
+  exampleQuestions?: string[];
   createdAt?: Date | string;
 };
 
@@ -24,7 +25,7 @@ export async function GET() {
     })
       .sort({ createdAt: -1 })
       .select(
-        "_id name slug shortDescription category avatarEmoji imageUrl createdAt",
+        "_id name slug shortDescription category avatarEmoji imageUrl exampleQuestions createdAt",
       )
       .lean<PublicBotRow[]>();
 
@@ -36,6 +37,9 @@ export async function GET() {
       category: bot.category,
       avatarEmoji: bot.avatarEmoji,
       imageUrl: bot.imageUrl,
+      exampleQuestions: Array.isArray(bot.exampleQuestions)
+        ? bot.exampleQuestions.map((question) => String(question || "").trim()).filter(Boolean)
+        : [],
       createdAt:
         bot.createdAt instanceof Date
           ? bot.createdAt.toISOString()

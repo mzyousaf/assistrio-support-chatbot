@@ -1,23 +1,34 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
-import { getLimitsConfig } from "@/lib/limits";
+import { getMessageLimit } from "@/lib/limits";
 import { logVisitorEvent } from "@/lib/analytics";
+import { runChat } from "@/lib/chatEngine";
 import { connectToDatabase } from "@/lib/mongoose";
 import { checkRateLimit } from "@/lib/rateLimit";
-import { checkAndIncrementUsage, getOrCreateVisitor } from "@/lib/visitors";
+import { getOrCreateVisitor } from "@/lib/visitors";
 import { Bot } from "@/models/Bot";
-import { Conversation } from "@/models/Conversation";
-import { Message } from "@/models/Message";
 
 const demoChatSchema = z.object({
   botSlug: z.string().trim().min(1),
   message: z.string().trim().min(1),
   visitorId: z.string().trim().min(1),
+  userApiKey: z.string().trim().optional(),
+  openaiApiKey: z.string().trim().optional(),
+  apiKey: z.string().trim().optional(),
 });
 
-const DEMO_STUB_REPLY =
-  "Demo stub reply from showcase bot. (Later: OpenAI + RAG here.)";
+function formatUtcDayKey(date: Date): string {
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(date.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getNextUtcMidnightIso(date: Date): string {
+  const next = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + 1, 0, 0, 0, 0));
+  return next.toISOString();
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -28,24 +39,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
     }
 
-    const { botSlug, message, visitorId } = parsed.data;
-
-    const rateKey = `demo_chat:${visitorId}`;
-    const rate = await checkRateLimit({
-      key: rateKey,
-      limit: 30,
-      windowMs: 60_000,
-    });
-
-    if (!rate.allowed) {
-      return NextResponse.json(
-        {
-          error: "rate_limited",
-          message: "Too many requests. Please wait a moment and try again.",
-        },
-        { status: 429 },
-      );
-    }
+    const { botSlug, message, visitorId, userApiKey, openaiApiKey, apiKey } = parsed.data;
+    const requestApiKey =
+      (typeof openaiApiKey === "string" && openaiApiKey.trim()) ||
+      (typeof userApiKey === "string" && userApiKey.trim()) ||
+      (typeof apiKey === "string" && apiKey.trim()) ||
+      undefined;
 
     await connectToDatabase();
 
@@ -54,38 +53,61 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Bot not found" }, { status: 404 });
     }
 
-    await getOrCreateVisitor(visitorId);
-    const limits = await getLimitsConfig();
-    const usage = await checkAndIncrementUsage(visitorId, "showcase", limits);
+    const visitor = await getOrCreateVisitor(visitorId);
+    const hasUserApiKey = Boolean(
+      requestApiKey,
+    );
+    const limit = getMessageLimit({
+      bot: {
+        type: bot.type,
+        limitOverrideMessages: bot.limitOverrideMessages,
+      },
+      visitor: {
+        limitOverrideMessages: visitor.limitOverrideMessages,
+      },
+      hasUserApiKey,
+    });
 
-    if (!usage.allowed) {
+    const now = new Date();
+    const dayKey = formatUtcDayKey(now);
+    const rateKey = `demo:msg:${visitorId}:${bot._id.toString()}:${dayKey}`;
+    const rate = await checkRateLimit({
+      key: rateKey,
+      limit,
+      windowMs: 24 * 60 * 60 * 1000,
+    });
+
+    if (!rate.allowed) {
       return NextResponse.json(
         {
-          error: "limit_reached",
-          message: `You reached the free limit of ${usage.limit} messages for showcase bots.`,
+          ok: false,
+          error: "rate_limited",
+          limit,
+          resetAt: getNextUtcMidnightIso(now),
         },
-        { status: 403 },
+        { status: 429 },
       );
     }
 
-    const now = new Date();
-
-    let conversation = await Conversation.findOne({
-      botId: bot._id,
+    const chatResult = await runChat({
+      bot: {
+        _id: bot._id,
+        openaiApiKeyOverride: bot.openaiApiKeyOverride,
+        personality: bot.personality,
+        config: bot.config,
+        faqs: bot.faqs,
+      },
       visitorId,
+      message,
+      mode: "demo",
+      userApiKey: requestApiKey,
     });
-    let isNewConversation = false;
 
-    if (!conversation) {
-      conversation = await Conversation.create({
-        botId: bot._id,
-        visitorId,
-        createdAt: now,
-      });
-      isNewConversation = true;
+    if (!chatResult.ok) {
+      return NextResponse.json(chatResult, { status: 400 });
     }
 
-    if (isNewConversation) {
+    if (chatResult.isNewConversation) {
       await logVisitorEvent({
         visitorId,
         type: "demo_chat_started",
@@ -97,31 +119,11 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    await Message.create({
-      conversationId: conversation._id,
-      botId: bot._id,
-      visitorId,
-      role: "user",
-      content: message,
-      createdAt: now,
-    });
-
-    await Message.create({
-      conversationId: conversation._id,
-      botId: bot._id,
-      visitorId,
-      role: "assistant",
-      content: DEMO_STUB_REPLY,
-      createdAt: new Date(),
-    });
-
     return NextResponse.json({
-      reply: DEMO_STUB_REPLY,
-      usage: {
-        allowed: true,
-        current: usage.current,
-        limit: usage.limit,
-      },
+      ok: true,
+      conversationId: chatResult.conversationId,
+      assistantMessage: chatResult.assistantMessage,
+      sources: chatResult.sources,
     });
   } catch (error) {
     console.error("Demo chat request failed:", error);

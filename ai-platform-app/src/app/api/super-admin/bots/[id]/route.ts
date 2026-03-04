@@ -6,6 +6,7 @@ import { connectToDatabase } from "@/lib/mongoose";
 import { generateUniqueBotSlug } from "@/lib/slug";
 import { getAuthenticatedSuperAdmin } from "@/lib/superAdminAuth";
 import { Bot } from "@/models/Bot";
+import { DocumentModel } from "@/models/Document";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -51,6 +52,26 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: "Bot not found" }, { status: 404 });
     }
 
+    const [docsTotal, docsQueued, docsProcessing, docsReady, docsFailed, lastReadyDoc, lastFailedDocRaw] =
+      await Promise.all([
+        DocumentModel.countDocuments({ botId: id }),
+        DocumentModel.countDocuments({ botId: id, status: "queued" }),
+        DocumentModel.countDocuments({ botId: id, status: "processing" }),
+        DocumentModel.countDocuments({ botId: id, status: "ready" }),
+        DocumentModel.countDocuments({ botId: id, status: "failed" }),
+        DocumentModel.findOne({ botId: id, status: "ready" })
+          .sort({ ingestedAt: -1, createdAt: -1 })
+          .select({ ingestedAt: 1, createdAt: 1 })
+          .lean(),
+        DocumentModel.findOne({ botId: id, status: "failed" })
+          .sort({ createdAt: -1 })
+          .select({ _id: 1, title: 1, error: 1, createdAt: 1, updatedAt: 1 })
+          .lean(),
+      ]);
+
+    const lastIngestedAtValue = lastReadyDoc?.ingestedAt || lastReadyDoc?.createdAt;
+    const failedUpdatedAtValue = lastFailedDocRaw?.updatedAt || lastFailedDocRaw?.createdAt;
+
     return NextResponse.json({
       ok: true,
       bot: {
@@ -77,6 +98,26 @@ export async function GET(_request: NextRequest, context: RouteContext) {
             : [],
         personality: bot.personality || {},
         config: bot.config || {},
+      },
+      health: {
+        docsTotal,
+        docsQueued,
+        docsProcessing,
+        docsReady,
+        docsFailed,
+        lastIngestedAt: lastIngestedAtValue
+          ? new Date(lastIngestedAtValue).toISOString()
+          : undefined,
+        lastFailedDoc: lastFailedDocRaw
+          ? {
+              docId: String(lastFailedDocRaw._id),
+              title: String(lastFailedDocRaw.title || ""),
+              error: String(lastFailedDocRaw.error || ""),
+              updatedAt: failedUpdatedAtValue
+                ? new Date(failedUpdatedAtValue).toISOString()
+                : undefined,
+            }
+          : undefined,
       },
     });
   } catch (error) {

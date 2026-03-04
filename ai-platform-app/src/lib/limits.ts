@@ -6,6 +6,15 @@ export type LimitsConfig = {
   ownBotMessageLimit: number;
 };
 
+type LimitBot = {
+  type?: "showcase" | "visitor-own" | string;
+  limitOverrideMessages?: number;
+};
+
+type LimitVisitor = {
+  limitOverrideMessages?: number;
+};
+
 const LIMITS_CONFIG_KEY = "limits";
 const DEFAULT_LIMITS: LimitsConfig = {
   showcaseMessageLimit: 10,
@@ -71,4 +80,36 @@ export async function updateLimitsConfig(
   );
 
   return updatedConfig ?? undefined;
+}
+
+export function getMessageLimit(params: {
+  bot: LimitBot;
+  visitor: LimitVisitor;
+  hasUserApiKey: boolean;
+}): number {
+  const visitorOverride =
+    typeof params.visitor?.limitOverrideMessages === "number" &&
+    Number.isFinite(params.visitor.limitOverrideMessages)
+      ? Math.max(1, Math.floor(params.visitor.limitOverrideMessages))
+      : undefined;
+
+  if (visitorOverride !== undefined) {
+    return visitorOverride;
+  }
+
+  const botOverride =
+    typeof params.bot?.limitOverrideMessages === "number" &&
+    Number.isFinite(params.bot.limitOverrideMessages)
+      ? Math.max(1, Math.floor(params.bot.limitOverrideMessages))
+      : undefined;
+
+  if (botOverride !== undefined) {
+    return botOverride;
+  }
+
+  if (params.hasUserApiKey) {
+    return 50;
+  }
+
+  return params.bot?.type === "showcase" ? 10 : 20;
 }

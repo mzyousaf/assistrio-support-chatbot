@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -17,6 +17,8 @@ type BotChatProps = {
     avatarEmoji?: string;
     imageUrl?: string;
     chatUI?: BotChatUI;
+    faqs?: Array<{ question: string; answer: string }>;
+    exampleQuestions?: string[];
     mode: "demo" | "trial";
   };
 };
@@ -37,6 +39,12 @@ function toRgba(hex: string, alpha: number): string {
   const b = Number.parseInt(clean.slice(4, 6), 16);
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
+
+const FALLBACK_EXAMPLE_QUESTIONS = [
+  "What does this service do?",
+  "Who is this best for?",
+  "How can I get started?",
+];
 
 export default function BotChatPage({ bot }: BotChatProps) {
   const { visitorId } = useVisitorId();
@@ -66,17 +74,34 @@ export default function BotChatPage({ bot }: BotChatProps) {
     "--chat-radius": `${bubbleRadius}px`,
     fontFamily: chatFont,
   } as React.CSSProperties;
+  const exampleQuestions = useMemo(() => {
+    const faqQuestions = Array.isArray(bot.faqs)
+      ? bot.faqs.map((faq) => String(faq?.question || "").trim()).filter(Boolean)
+      : [];
+    if (faqQuestions.length > 0) {
+      return faqQuestions.slice(0, 6);
+    }
+
+    const explicitExamples = Array.isArray(bot.exampleQuestions)
+      ? bot.exampleQuestions.map((question) => String(question || "").trim()).filter(Boolean)
+      : [];
+    if (explicitExamples.length > 0) {
+      return explicitExamples.slice(0, 6);
+    }
+
+    return FALLBACK_EXAMPLE_QUESTIONS;
+  }, [bot.faqs, bot.exampleQuestions]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const sendMessage = async (rawMessage: string) => {
     setError(null);
-    if (!visitorId || !input.trim() || loading || limitReached) return;
+    if (!visitorId || loading || limitReached) return;
 
-    const userContent = input.trim();
+    const userContent = rawMessage.trim();
+    if (!userContent) return;
     setMessages((prev) => [...prev, { role: "user", content: userContent }]);
     setInput("");
     setLoading(true);
@@ -117,8 +142,8 @@ export default function BotChatPage({ bot }: BotChatProps) {
         return;
       }
 
-      const data = (await res.json()) as { reply?: string };
-      const reply = data?.reply ?? "No reply.";
+      const data = (await res.json()) as { reply?: string; assistantMessage?: string };
+      const reply = data?.assistantMessage ?? data?.reply ?? "No reply.";
       setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
     } catch (err) {
       console.error(err);
@@ -126,6 +151,11 @@ export default function BotChatPage({ bot }: BotChatProps) {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await sendMessage(input);
   };
 
   return (
@@ -150,9 +180,22 @@ export default function BotChatPage({ bot }: BotChatProps) {
       <div className="flex-1 flex flex-col max-w-3xl mx-auto w-full px-4 md:px-0 py-4 gap-3">
         <div className="flex-1 overflow-y-auto space-y-3 pb-4">
           {messages.length === 0 && (
-            <p className="text-sm text-slate-500 text-center mt-8">
-              Ask a question to start the conversation.
-            </p>
+            <div className="mt-8 space-y-3 text-center">
+              <p className="text-sm text-slate-500">Ask a question to start the conversation.</p>
+              <div className="flex flex-wrap justify-center gap-2">
+                {exampleQuestions.map((question) => (
+                  <button
+                    key={question}
+                    type="button"
+                    className="rounded-full border border-slate-700 bg-slate-900/70 px-3 py-1 text-xs text-slate-300 transition hover:border-slate-500 hover:text-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={loading || limitReached || !visitorId}
+                    onClick={() => void sendMessage(question)}
+                  >
+                    {question}
+                  </button>
+                ))}
+              </div>
+            </div>
           )}
           {messages.map((m, idx) => (
             <div key={idx} className={cx("flex", m.role === "user" ? "justify-end" : "justify-start")}>

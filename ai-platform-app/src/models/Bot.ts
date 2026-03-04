@@ -67,6 +67,7 @@ export interface BotDocument {
   avatarEmoji?: string;
   imageUrl?: string;
   openaiApiKeyOverride?: string;
+  limitOverrideMessages?: number;
   clientDraftId?: string;
   status?: "draft" | "published";
   welcomeMessage?: string;
@@ -75,6 +76,7 @@ export interface BotDocument {
   description?: string;
   knowledgeDescription?: string;
   faqs?: BotFaq[];
+  exampleQuestions?: string[];
   personality?: BotPersonality;
   config?: BotConfig;
   createdAt: Date;
@@ -92,6 +94,7 @@ const BotSchema = new Schema<BotDocument>({
   avatarEmoji: { type: String },
   imageUrl: { type: String },
   openaiApiKeyOverride: { type: String },
+  limitOverrideMessages: { type: Number },
   clientDraftId: { type: String },
   status: {
     type: String,
@@ -161,6 +164,7 @@ const BotSchema = new Schema<BotDocument>({
       answer: { type: String, required: true },
     },
   ],
+  exampleQuestions: { type: [String], default: [] },
   personality: {
     name: { type: String },
     description: { type: String },

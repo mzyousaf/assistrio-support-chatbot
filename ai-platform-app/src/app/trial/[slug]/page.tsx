@@ -23,6 +23,15 @@ export default async function TrialBotPage({ params }: PageProps) {
     avatarEmoji: bot.avatarEmoji ?? "💬",
     imageUrl: bot.imageUrl ?? "",
     chatUI: bot.chatUI ?? undefined,
+    faqs: Array.isArray(bot.faqs)
+      ? bot.faqs.map((faq) => ({
+          question: String(faq?.question ?? "").trim(),
+          answer: String(faq?.answer ?? "").trim(),
+        }))
+      : [],
+    exampleQuestions: Array.isArray(bot.exampleQuestions)
+      ? bot.exampleQuestions.map((question) => String(question || "").trim()).filter(Boolean)
+      : [],
     mode: "trial" as const,
   };
 

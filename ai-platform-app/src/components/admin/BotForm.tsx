@@ -95,6 +95,20 @@ interface BotFormProps {
     chatUI?: BotChatUI;
     personality?: BotPersonality;
     config?: BotConfig;
+    health?: {
+      docsTotal: number;
+      docsQueued: number;
+      docsProcessing: number;
+      docsReady: number;
+      docsFailed: number;
+      lastIngestedAt?: string;
+      lastFailedDoc?: {
+        docId: string;
+        title: string;
+        error?: string;
+        updatedAt?: string;
+      };
+    };
   };
   onSubmit: (payload: BotFormSubmitPayload) => Promise<void> | void;
   onCreateAnotherBot?: () => void;
@@ -300,6 +314,7 @@ export default function BotForm({
     botImageObjectUrl ||
     (botImageUrl.trim().length > 0 && previewVisible ? botImageUrl.trim() : "");
   const isPublishBlocked = !name.trim() || !description.trim();
+  const health = initialBot?.health;
 
   return (
     <form
@@ -508,6 +523,55 @@ export default function BotForm({
               </section>
 
               <BotFaqsEditor value={faqs} onChange={setFaqs} />
+
+              {health ? (
+                <section className="space-y-3 rounded-xl border border-gray-200 bg-gray-50 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="text-sm font-semibold text-gray-900">Bot Health</h3>
+                    {health.lastIngestedAt ? (
+                      <p className="text-[11px] text-gray-500">
+                        Last ingested: {new Date(health.lastIngestedAt).toLocaleString()}
+                      </p>
+                    ) : null}
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+                    <div className="rounded-lg border border-gray-200 bg-white p-2 text-center">
+                      <p className="text-[11px] text-gray-500">Total</p>
+                      <p className="text-sm font-semibold text-gray-900">{health.docsTotal}</p>
+                    </div>
+                    <div className="rounded-lg border border-gray-200 bg-white p-2 text-center">
+                      <p className="text-[11px] text-gray-500">Queued</p>
+                      <p className="text-sm font-semibold text-gray-700">{health.docsQueued}</p>
+                    </div>
+                    <div className="rounded-lg border border-blue-200 bg-blue-50 p-2 text-center">
+                      <p className="text-[11px] text-blue-700">Processing</p>
+                      <p className="text-sm font-semibold text-blue-700">{health.docsProcessing}</p>
+                    </div>
+                    <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-2 text-center">
+                      <p className="text-[11px] text-emerald-700">Ready</p>
+                      <p className="text-sm font-semibold text-emerald-700">{health.docsReady}</p>
+                    </div>
+                    <div className="rounded-lg border border-red-200 bg-red-50 p-2 text-center">
+                      <p className="text-[11px] text-red-700">Failed</p>
+                      <p className="text-sm font-semibold text-red-700">{health.docsFailed}</p>
+                    </div>
+                  </div>
+                  {health.docsFailed > 0 && health.lastFailedDoc ? (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                      <p className="text-xs font-medium text-amber-800">
+                        Latest failed document: {health.lastFailedDoc.title || health.lastFailedDoc.docId}
+                      </p>
+                      {health.lastFailedDoc.error ? (
+                        <p className="mt-1 text-xs text-amber-800">
+                          {health.lastFailedDoc.error.length > 180
+                            ? `${health.lastFailedDoc.error.slice(0, 179)}...`
+                            : health.lastFailedDoc.error}
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </section>
+              ) : null}
 
               {initialBot?.id ? (
                 <BotDocumentsManager botId={initialBot.id} documents={initialBot.documents ?? []} />

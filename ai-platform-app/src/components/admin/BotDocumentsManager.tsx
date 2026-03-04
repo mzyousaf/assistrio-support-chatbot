@@ -12,6 +12,9 @@ export interface BotDocumentItem {
   fileType?: string;
   fileSize?: number;
   url?: string;
+  status?: "queued" | "processing" | "ready" | "failed";
+  error?: string;
+  ingestedAt?: string;
   hasText?: boolean;
   textLength?: number;
   createdAt?: string;
@@ -44,17 +47,44 @@ function getExtension(fileName: string): string {
   return parts.length > 1 ? (parts[parts.length - 1] || "").toLowerCase() : "";
 }
 
-function formatReason(reason?: string): string {
-  if (!reason) return "";
-  if (reason === "doc_extract_unavailable") {
-    return "This .doc file couldn't be extracted. Please convert it to .docx and upload again.";
-  }
-  return reason;
-}
-
 function isLegacyDocWithoutText(doc: BotDocumentItem): boolean {
   const extension = getExtension(doc.fileName || "");
   return !doc.hasText && (extension === "doc" || doc.fileType === "application/msword");
+}
+
+function getStatusMeta(status?: BotDocumentItem["status"]): {
+  label: string;
+  className: string;
+} {
+  if (status === "processing") {
+    return {
+      label: "Processing",
+      className: "border-blue-200 bg-blue-50 text-blue-700",
+    };
+  }
+  if (status === "ready") {
+    return {
+      label: "Ready",
+      className: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    };
+  }
+  if (status === "failed") {
+    return {
+      label: "Failed",
+      className: "border-red-200 bg-red-50 text-red-700",
+    };
+  }
+  return {
+    label: "Queued",
+    className: "border-gray-200 bg-gray-100 text-gray-700",
+  };
+}
+
+function truncateMessage(input?: string, max = 120): string | undefined {
+  if (!input) return undefined;
+  const trimmed = input.trim();
+  if (trimmed.length <= max) return trimmed;
+  return `${trimmed.slice(0, max - 1)}…`;
 }
 
 export default function BotDocumentsManager({ botId, documents }: BotDocumentsManagerProps) {
@@ -65,13 +95,16 @@ export default function BotDocumentsManager({ botId, documents }: BotDocumentsMa
   const [dragOver, setDragOver] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isRunningJobs, setIsRunningJobs] = useState(false);
+  const [retryingId, setRetryingId] = useState<string | null>(null);
+  const [isRetryingAll, setIsRetryingAll] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [embeddingId, setEmbeddingId] = useState<string | null>(null);
-  const [embedMessages, setEmbedMessages] = useState<Record<string, string>>({});
   const [uploadMessages, setUploadMessages] = useState<string[]>([]);
+  const [jobRunMessage, setJobRunMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const disabled = !botId || isUploading;
+  const failedDocs = items.filter((doc) => doc.status === "failed");
 
   async function refreshDocuments() {
     if (!botId) return;
@@ -129,6 +162,7 @@ export default function BotDocumentsManager({ botId, documents }: BotDocumentsMa
     if (!botId || selectedFiles.length === 0 || isUploading) return;
     setIsUploading(true);
     setError(null);
+    setJobRunMessage(null);
     setUploadMessages([]);
     try {
       const nextUploadMessages: string[] = [];
@@ -141,19 +175,17 @@ export default function BotDocumentsManager({ botId, documents }: BotDocumentsMa
           body: formData,
         });
         const data = (await response.json().catch(() => ({}))) as {
-          extracted?: boolean;
-          embedded?: boolean;
-          chunkCount?: number;
-          reason?: string;
+          docId?: string;
+          jobId?: string;
+          status?: string;
           error?: string;
         };
         if (!response.ok) {
           nextUploadMessages.push(`${file.name}: failed (${data.error || "upload_failed"})`);
           continue;
         }
-        const reasonSuffix = data.reason ? `, reason: ${formatReason(data.reason)}` : "";
         nextUploadMessages.push(
-          `${file.name}: extracted=${data.extracted ? "yes" : "no"}, embedded=${data.embedded ? "yes" : "no"}, chunks=${data.chunkCount ?? 0}${reasonSuffix}`,
+          `${file.name}: queued (${data.status || "queued"})${data.jobId ? `, job ${data.jobId}` : ""}`,
         );
       }
       setUploadMessages(nextUploadMessages);
@@ -169,38 +201,34 @@ export default function BotDocumentsManager({ botId, documents }: BotDocumentsMa
     }
   }
 
-  async function handleEmbedNow(docId: string) {
-    if (!botId || embeddingId) return;
-    setEmbeddingId(docId);
+  async function handleRunJobs() {
+    if (!botId || isRunningJobs) return;
+    setIsRunningJobs(true);
     setError(null);
+    setJobRunMessage(null);
     try {
-      const response = await fetch(`/api/super-admin/bots/${botId}/documents/${docId}/embed`, {
+      const response = await fetch("/api/super-admin/jobs/run", {
         method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ limit: 3 }),
       });
       const data = (await response.json().catch(() => ({}))) as {
-        extracted?: boolean;
-        embedded?: boolean;
-        chunkCount?: number;
-        reason?: string;
+        processed?: number;
+        failed?: number;
         error?: string;
       };
       if (!response.ok) {
-        setEmbedMessages((prev) => ({
-          ...prev,
-          [docId]: `Embed failed (${data.error || "request_failed"}).`,
-        }));
+        setError(`Process pending jobs failed (${data.error || "request_failed"}).`);
         return;
       }
-      const reasonSuffix = data.reason ? `, reason: ${formatReason(data.reason)}` : "";
-      setEmbedMessages((prev) => ({
-        ...prev,
-        [docId]: `extracted=${data.extracted ? "yes" : "no"}, embedded=${data.embedded ? "yes" : "no"}, chunks=${data.chunkCount ?? 0}${reasonSuffix}`,
-      }));
+      setJobRunMessage(`processed ${data.processed ?? 0}, failed ${data.failed ?? 0}`);
       await refreshDocuments();
     } catch {
-      setEmbedMessages((prev) => ({ ...prev, [docId]: "Embed failed (network error)." }));
+      setError("Process pending jobs failed (network error).");
     } finally {
-      setEmbeddingId(null);
+      setIsRunningJobs(false);
     }
   }
 
@@ -223,6 +251,56 @@ export default function BotDocumentsManager({ botId, documents }: BotDocumentsMa
     }
   }
 
+  async function handleRetryDoc(docId: string) {
+    if (!botId || retryingId || isRetryingAll) return;
+    setRetryingId(docId);
+    setError(null);
+    setJobRunMessage(null);
+    try {
+      const response = await fetch(`/api/super-admin/bots/${botId}/documents/${docId}/embed`, {
+        method: "POST",
+      });
+      const data = (await response.json().catch(() => ({}))) as {
+        error?: string;
+      };
+      if (!response.ok) {
+        setError(`Retry failed (${data.error || "request_failed"}).`);
+        return;
+      }
+      setJobRunMessage("Retry queued for document.");
+      await refreshDocuments();
+    } catch {
+      setError("Retry failed (network error).");
+    } finally {
+      setRetryingId(null);
+    }
+  }
+
+  async function handleRetryAllFailed() {
+    if (!botId || isRetryingAll || failedDocs.length < 2) return;
+    setIsRetryingAll(true);
+    setError(null);
+    setJobRunMessage(null);
+    let retried = 0;
+    try {
+      for (const doc of failedDocs) {
+        const response = await fetch(`/api/super-admin/bots/${botId}/documents/${doc._id}/embed`, {
+          method: "POST",
+        });
+        if (response.ok) {
+          retried += 1;
+        }
+      }
+      setJobRunMessage(`retried ${retried} docs`);
+      await refreshDocuments();
+    } catch {
+      setError("Retry all failed docs encountered a network error.");
+      await refreshDocuments();
+    } finally {
+      setIsRetryingAll(false);
+    }
+  }
+
   return (
     <section className="space-y-4">
       <div>
@@ -231,7 +309,7 @@ export default function BotDocumentsManager({ botId, documents }: BotDocumentsMa
           Upload PDFs/DOCs/TXTs to build the bot&apos;s knowledge base.
         </p>
         <p className="mt-1 text-xs text-gray-500">
-          Large files may skip auto-embedding; use Embed now after trimming.
+          Uploads are queued for background ingestion. Use Process pending jobs to run queued work.
         </p>
       </div>
 
@@ -307,8 +385,21 @@ export default function BotDocumentsManager({ botId, documents }: BotDocumentsMa
       ) : null}
 
       <div className="flex justify-end">
+        {failedDocs.length >= 2 ? (
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={!botId || isRetryingAll || isRunningJobs}
+            onClick={() => void handleRetryAllFailed()}
+          >
+            {isRetryingAll ? "Retrying failed..." : "Retry all failed"}
+          </Button>
+        ) : null}
         <Button type="button" variant="ghost" disabled={!botId || isLoading} onClick={() => void refreshDocuments()}>
-          {isLoading ? "Refreshing..." : "Refresh documents"}
+          {isLoading ? "Refreshing..." : "Refresh"}
+        </Button>
+        <Button type="button" variant="ghost" disabled={!botId || isRunningJobs} onClick={() => void handleRunJobs()}>
+          {isRunningJobs ? "Processing..." : "Process pending jobs"}
         </Button>
         <Button type="button" disabled={disabled || selectedFiles.length === 0} onClick={handleUpload}>
           {isUploading ? "Uploading..." : "Upload selected files"}
@@ -316,6 +407,7 @@ export default function BotDocumentsManager({ botId, documents }: BotDocumentsMa
       </div>
 
       {error ? <p className="text-xs text-red-500">{error}</p> : null}
+      {jobRunMessage ? <p className="text-xs text-emerald-600">{jobRunMessage}</p> : null}
       {uploadMessages.length > 0 ? (
         <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
           <p className="text-xs font-medium text-gray-700">Recent upload results</p>
@@ -347,15 +439,16 @@ export default function BotDocumentsManager({ botId, documents }: BotDocumentsMa
                   <td className="px-3 py-2 text-xs text-gray-500">{doc.fileName || "-"}</td>
                   <td className="px-3 py-2 text-xs text-gray-500">{formatSize(doc.fileSize)}</td>
                   <td className="px-3 py-2">
-                    {doc.hasText ? (
-                      <span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
-                        Text extracted
-                      </span>
-                    ) : (
-                      <span className="inline-flex rounded-full border border-gray-200 bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-600">
-                        No text
-                      </span>
-                    )}
+                    {(() => {
+                      const statusMeta = getStatusMeta(doc.status);
+                      return (
+                        <span
+                          className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium ${statusMeta.className}`}
+                        >
+                          {statusMeta.label}
+                        </span>
+                      );
+                    })()}
                     <p className="mt-1 text-[11px] text-gray-500">{doc.textLength ?? 0} chars</p>
                     {isLegacyDocWithoutText(doc) ? (
                       <p className="mt-1">
@@ -364,8 +457,8 @@ export default function BotDocumentsManager({ botId, documents }: BotDocumentsMa
                         </span>
                       </p>
                     ) : null}
-                    {embedMessages[doc._id] ? (
-                      <p className="mt-1 text-[11px] text-gray-500">{embedMessages[doc._id]}</p>
+                    {doc.status === "failed" && doc.error ? (
+                      <p className="mt-1 text-[11px] text-red-600">{truncateMessage(doc.error)}</p>
                     ) : null}
                   </td>
                   <td className="px-3 py-2 text-xs text-gray-500">{formatDate(doc.createdAt)}</td>
@@ -375,10 +468,10 @@ export default function BotDocumentsManager({ botId, documents }: BotDocumentsMa
                         type="button"
                         variant="ghost"
                         size="sm"
-                        disabled={embeddingId === doc._id}
-                        onClick={() => void handleEmbedNow(doc._id)}
+                        disabled={doc.status !== "failed" || retryingId === doc._id || isRetryingAll}
+                        onClick={() => void handleRetryDoc(doc._id)}
                       >
-                        {embeddingId === doc._id ? "Embedding..." : "Embed now"}
+                        {retryingId === doc._id ? "Retrying..." : "Retry"}
                       </Button>
                       <Button
                         type="button"
