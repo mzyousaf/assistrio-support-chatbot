@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { apiFetch } from "@/lib/api";
 
 type BotDocumentsSectionProps = {
   botId: string;
@@ -50,7 +51,7 @@ export default function BotDocumentsSection({ botId, documents }: BotDocumentsSe
         formData.append("title", title.trim());
       }
 
-      const response = await fetch(`/api/super-admin/bots/${botId}/upload-doc`, {
+      const response = await apiFetch(`/api/super-admin/bots/${botId}/upload-doc`, {
         method: "POST",
         body: formData,
       });

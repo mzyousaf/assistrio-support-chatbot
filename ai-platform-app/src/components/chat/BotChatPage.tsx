@@ -1,19 +1,33 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 
-import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
-import { Textarea } from "@/components/ui/Textarea";
+import { Chat } from "@/components/chat-ui";
+import type { ChatUIMessage, ChatUISource } from "@/components/chat-ui";
+import { mapSources } from "@/components/chat-ui";
+import { usePreferredColorScheme } from "@/hooks/usePreferredColorScheme";
 import { useVisitorId } from "@/hooks/useVisitorId";
+import { apiFetch } from "@/lib/api";
 import type { BotChatUI } from "@/models/Bot";
+
+const SUBTITLE_MAX_LENGTH = 80;
+
+function truncate(text: string, maxLen: number): string {
+  const t = text.trim();
+  if (t.length <= maxLen) return t;
+  return t.slice(0, maxLen).trimEnd().replace(/\s+\S*$/, "") + "…";
+}
 
 type BotChatProps = {
   bot: {
     id: string;
     slug: string;
     name: string;
+    /** Tagline shown under bot name; falls back to shortDescription or truncated description */
+    tagline?: string;
     shortDescription?: string;
+    description?: string;
+    welcomeMessage?: string;
     avatarEmoji?: string;
     imageUrl?: string;
     chatUI?: BotChatUI;
@@ -23,21 +37,16 @@ type BotChatProps = {
   };
 };
 
-type ChatMessage = { role: "user" | "assistant"; content: string };
+const DEFAULT_SENDER_NAME = " - AI";
 
-function cx(...classes: Array<string | false | null | undefined>) {
-  return classes.filter(Boolean).join(" ");
-}
-
-function toRgba(hex: string, alpha: number): string {
-  if (!/^#[0-9a-fA-F]{6}$/.test(hex)) {
-    return `rgba(20, 184, 166, ${alpha})`;
+function composerBorderWidthFromChatUI(chatUI: BotChatUI | undefined): number {
+  const v = chatUI?.composerBorderWidth;
+  if (typeof v === "number" && v >= 0 && v <= 6) {
+    const w = Number(v);
+    return w > 0 && w < 0.5 ? 0.5 : Math.max(0, Math.min(6, w));
   }
-  const clean = hex.replace("#", "");
-  const r = Number.parseInt(clean.slice(0, 2), 16);
-  const g = Number.parseInt(clean.slice(2, 4), 16);
-  const b = Number.parseInt(clean.slice(4, 6), 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  if ((chatUI as { showComposerBorder?: boolean })?.showComposerBorder === false) return 0;
+  return 1;
 }
 
 const FALLBACK_EXAMPLE_QUESTIONS = [
@@ -46,226 +55,265 @@ const FALLBACK_EXAMPLE_QUESTIONS = [
   "How can I get started?",
 ];
 
+function generateId(): string {
+  return `msg_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function isoNow(): string {
+  return new Date().toISOString();
+}
+
+function buildWelcomeMessage(bot: BotChatProps["bot"]): ChatUIMessage | null {
+  const text = (bot.welcomeMessage ?? "").trim();
+  if (!text) return null;
+  return {
+    id: `welcome_${bot.id}`,
+    role: "assistant",
+    content: text,
+    createdAt: new Date().toISOString(),
+    status: "sent",
+  };
+}
+
 export default function BotChatPage({ bot }: BotChatProps) {
   const { visitorId } = useVisitorId();
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
+  const preferredScheme = usePreferredColorScheme();
+  const welcomeMsg = useMemo(() => buildWelcomeMessage(bot), [bot.id, bot.welcomeMessage]);
+  const [messages, setMessages] = useState<ChatUIMessage[]>(() =>
+    welcomeMsg ? [welcomeMsg] : []
+  );
+  const [isSending, setIsSending] = useState(false);
   const [limitReached, setLimitReached] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const sendDisabled = loading || limitReached || !input.trim() || !visitorId;
+
+  useEffect(() => {
+    if (!welcomeMsg || messages.length > 0) return;
+    setMessages([welcomeMsg]);
+  }, [welcomeMsg, messages.length]);
+
   const primaryColor =
     typeof bot.chatUI?.primaryColor === "string" && /^#[0-9a-fA-F]{6}$/.test(bot.chatUI.primaryColor)
       ? bot.chatUI.primaryColor
       : "#14B8A6";
-  const bubbleRadius = bot.chatUI?.bubbleStyle === "squared" ? 6 : 16;
-  const chatFont =
-    bot.chatUI?.font === "poppins"
-      ? "Poppins, ui-sans-serif, system-ui, sans-serif"
-      : bot.chatUI?.font === "system"
-        ? "system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
-        : "Inter, ui-sans-serif, system-ui, sans-serif";
-  const pageBackground =
-    bot.chatUI?.backgroundStyle === "light" ? "bg-slate-100 text-slate-900" : "bg-slate-950 text-slate-50";
-  const cardBackground = bot.chatUI?.backgroundStyle === "light" ? "bg-white border-slate-200" : "bg-slate-900 border-slate-700";
-  const wrapperStyle = {
-    "--chat-primary": primaryColor,
-    "--chat-radius": `${bubbleRadius}px`,
-    fontFamily: chatFont,
-  } as React.CSSProperties;
-  const exampleQuestions = useMemo(() => {
-    const faqQuestions = Array.isArray(bot.faqs)
-      ? bot.faqs.map((faq) => String(faq?.question || "").trim()).filter(Boolean)
-      : [];
-    if (faqQuestions.length > 0) {
-      return faqQuestions.slice(0, 6);
-    }
+  const dark = useMemo(() => {
+    const style = bot.chatUI?.backgroundStyle;
+    if (style === "light") return false;
+    if (style === "dark") return true;
+    return preferredScheme === "dark";
+  }, [bot.chatUI?.backgroundStyle, preferredScheme]);
+  const bubbleBorderRadius =
+    typeof bot.chatUI?.bubbleBorderRadius === "number"
+      ? Math.max(0, Math.min(32, bot.chatUI.bubbleBorderRadius))
+      : bot.chatUI?.bubbleStyle === "squared"
+        ? 0
+        : 20;
 
-    const explicitExamples = Array.isArray(bot.exampleQuestions)
-      ? bot.exampleQuestions.map((question) => String(question || "").trim()).filter(Boolean)
-      : [];
-    if (explicitExamples.length > 0) {
-      return explicitExamples.slice(0, 6);
-    }
+  const headerSubtitle = useMemo(() => {
+    const tag = (bot.tagline ?? bot.shortDescription ?? "").trim();
+    if (tag) return tag;
+    const desc = (bot.description ?? "").trim();
+    return desc ? truncate(desc, SUBTITLE_MAX_LENGTH) : "";
+  }, [bot.tagline, bot.shortDescription, bot.description]);
 
+  const suggestedQuestions = useMemo(() => {
+    const explicit = Array.isArray(bot.exampleQuestions)
+      ? bot.exampleQuestions.map((q) => String(q || "").trim()).filter(Boolean)
+      : [];
+    if (explicit.length > 0) return explicit.slice(0, 6);
     return FALLBACK_EXAMPLE_QUESTIONS;
-  }, [bot.faqs, bot.exampleQuestions]);
+  }, [bot.exampleQuestions]);
 
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, loading]);
+  const onSend = useCallback(
+    async (text: string) => {
+      const value = text.trim();
+      if (!value || isSending || limitReached || !visitorId) return;
 
-  const sendMessage = async (rawMessage: string) => {
-    setError(null);
-    if (!visitorId || loading || limitReached) return;
+      const userMsg: ChatUIMessage = {
+        id: generateId(),
+        role: "user",
+        content: value,
+        createdAt: isoNow(),
+      };
+      setMessages((prev) => [...prev, userMsg]);
+      setIsSending(true);
 
-    const userContent = rawMessage.trim();
-    if (!userContent) return;
-    setMessages((prev) => [...prev, { role: "user", content: userContent }]);
-    setInput("");
-    setLoading(true);
+      try {
+        const endpoint = bot.mode === "demo" ? "/api/demo/chat" : "/api/trial/chat";
+        const res = await apiFetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            botSlug: bot.slug,
+            message: value,
+            visitorId,
+          }),
+        });
 
-    try {
-      const endpoint = bot.mode === "demo" ? "/api/demo/chat" : "/api/trial/chat";
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          botSlug: bot.slug,
-          message: userContent,
-          visitorId,
-        }),
-      });
+        if (res.status === 403) {
+          const data = (await res.json().catch(() => null)) as
+            | { error?: string; message?: string }
+            | null;
+          if (data?.error === "limit_reached") {
+            setLimitReached(true);
+            const msg = data?.message ?? "You reached the free limit.";
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: generateId(),
+                role: "assistant",
+                content: msg,
+                createdAt: isoNow(),
+                status: "sent",
+              },
+            ]);
+            return;
+          }
+        }
 
-      if (res.status === 403) {
-        const data = (await res.json().catch(() => null)) as
-          | { error?: string; message?: string }
-          | null;
-        if (data?.error === "limit_reached") {
-          setLimitReached(true);
-          const msg = data?.message ?? "You reached the free limit.";
-          setMessages((prev) => [...prev, { role: "assistant", content: msg }]);
+        if (res.status === 429) {
+          const data = (await res.json().catch(() => null)) as { message?: string } | null;
+          const errMsg =
+            data?.message ?? "You are sending messages too fast. Please wait a moment.";
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: generateId(),
+              role: "assistant",
+              content: errMsg,
+              createdAt: isoNow(),
+              status: "error",
+            },
+          ]);
           return;
         }
+
+        if (!res.ok) {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: generateId(),
+              role: "assistant",
+              content: "Something went wrong. Please try again.",
+              createdAt: isoNow(),
+              status: "error",
+            },
+          ]);
+          return;
+        }
+
+        const data = (await res.json()) as {
+          reply?: string;
+          assistantMessage?: string;
+          sources?: ChatUISource[];
+        };
+        const reply = data?.assistantMessage ?? data?.reply ?? "No reply.";
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: generateId(),
+            role: "assistant",
+            content: reply,
+            createdAt: isoNow(),
+            sources: mapSources(data?.sources),
+            status: "sent",
+          },
+        ]);
+      } catch {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: generateId(),
+            role: "assistant",
+            content: "Network error. Please try again.",
+            createdAt: isoNow(),
+            status: "error",
+          },
+        ]);
+      } finally {
+        setIsSending(false);
       }
+    },
+    [bot.mode, bot.slug, isSending, limitReached, visitorId]
+  );
 
-      if (res.status === 429) {
-        const data = (await res.json().catch(() => null)) as { message?: string } | null;
-        const msg = data?.message ?? "You are sending messages too fast. Please wait a moment.";
-        setError(msg);
-        return;
-      }
-
-      if (!res.ok) {
-        setError("Something went wrong. Please try again.");
-        return;
-      }
-
-      const data = (await res.json()) as { reply?: string; assistantMessage?: string };
-      const reply = data?.assistantMessage ?? data?.reply ?? "No reply.";
-      setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
-    } catch (err) {
-      console.error(err);
-      setError("Network error. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    await sendMessage(input);
-  };
+  const emptyState =
+    limitReached ? (
+      <p className="text-sm text-slate-400">
+        Free limit reached. To unlock a full setup, get in touch.
+      </p>
+    ) : (
+      <p className="text-sm text-slate-500">Ask a question to start the conversation.</p>
+    );
 
   return (
-    <div className={cx("min-h-screen flex flex-col", pageBackground)} style={wrapperStyle}>
-      <div
-        className={cx(
-          "border-b px-4 md:px-8 py-4 flex items-center gap-3",
-          bot.chatUI?.backgroundStyle === "light" ? "border-slate-200" : "border-slate-800",
-        )}
-      >
-        <div className={cx("h-10 w-10 flex items-center justify-center rounded-xl border text-2xl", cardBackground)}>
-          {bot.avatarEmoji || "💬"}
-        </div>
-        <div className="flex-1">
-          <h1 className="text-base md:text-lg font-semibold">{bot.name}</h1>
-          <p className="text-xs text-slate-400">
-            {bot.mode === "demo" ? "Showcase demo bot" : "Your trial bot"}
-          </p>
-        </div>
-      </div>
-
-      <div className="flex-1 flex flex-col max-w-3xl mx-auto w-full px-4 md:px-0 py-4 gap-3">
-        <div className="flex-1 overflow-y-auto space-y-3 pb-4">
-          {messages.length === 0 && (
-            <div className="mt-8 space-y-3 text-center">
-              <p className="text-sm text-slate-500">Ask a question to start the conversation.</p>
-              <div className="flex flex-wrap justify-center gap-2">
-                {exampleQuestions.map((question) => (
-                  <button
-                    key={question}
-                    type="button"
-                    className="rounded-full border border-slate-700 bg-slate-900/70 px-3 py-1 text-xs text-slate-300 transition hover:border-slate-500 hover:text-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
-                    disabled={loading || limitReached || !visitorId}
-                    onClick={() => void sendMessage(question)}
-                  >
-                    {question}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-          {messages.map((m, idx) => (
-            <div key={idx} className={cx("flex", m.role === "user" ? "justify-end" : "justify-start")}>
-              <div
-                className={cx(
-                  "max-w-[80%] px-3 py-2 text-sm",
-                  m.role === "user"
-                    ? "bg-slate-200 text-slate-900"
-                    : cx(
-                        "border border-slate-700",
-                        bot.chatUI?.backgroundStyle === "light" ? "text-slate-900" : "text-slate-50",
-                      ),
-                )}
-                style={{
-                  borderRadius: `var(--chat-radius)`,
-                  backgroundColor: m.role === "user" ? undefined : toRgba(primaryColor, 0.35),
-                }}
-              >
-                {m.content}
-              </div>
-            </div>
-          ))}
-          <div ref={messagesEndRef} />
-        </div>
-
-        {limitReached && (
-          <div className="mb-2">
-            <Card>
-              <h2 className="text-sm font-semibold text-slate-50">Free limit reached</h2>
-              <p className="text-xs text-slate-400 mt-1">
-                You&apos;ve reached the free message limit for this bot. To unlock a full setup on
-                your own infrastructure, get in touch.
-              </p>
-              <div className="mt-3 flex gap-2">
-                <a
-                  href="mailto:you@example.com?subject=Assistrio%20AI%20bot%20upgrade"
-                  className="inline-flex"
-                >
-                  <Button size="sm" variant="primary">
-                    Contact us
-                  </Button>
-                </a>
-              </div>
-            </Card>
-          </div>
-        )}
-
-        {error && <p className="text-xs text-red-400 mb-1">{error}</p>}
-
-        <div
-          className={cx("border-t pt-3", bot.chatUI?.backgroundStyle === "light" ? "border-slate-200" : "border-slate-800")}
-        >
-          <form onSubmit={handleSubmit} className="flex items-end gap-2">
-            <Textarea
-              rows={2}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder={limitReached ? "Free limit reached." : "Type your message..."}
-              disabled={loading || limitReached}
-            />
-            <Button
-              type="submit"
-              variant="primary"
-              size="md"
-              disabled={sendDisabled}
-            >
-              {loading ? "Sending..." : "Send"}
-            </Button>
-          </form>
-        </div>
+    <div className="min-h-screen flex flex-col bg-slate-950 text-slate-50 p-4 md:p-6">
+      <div className="flex-1 flex justify-center items-start max-w-3xl mx-auto w-full">
+        <Chat
+          width="100%"
+          height={600}
+          dark={dark}
+          accentColor={primaryColor}
+          bubbleBorderRadius={bubbleBorderRadius}
+          showChatBorder={bot.chatUI?.showChatBorder !== false}
+          showHeader
+          showAvatarInHeader={bot.chatUI?.showAvatarInHeader !== false}
+          showFooter={bot.chatUI?.showBranding !== false}
+          brandingMessage={(bot.chatUI?.brandingMessage ?? "").trim() || undefined}
+          privacyText="Your conversations are private and secure."
+          statusIndicator={bot.chatUI?.statusIndicator ?? "none"}
+          liveIndicatorStyle={bot.chatUI?.liveIndicatorStyle ?? "label"}
+          statusDotStyle={bot.chatUI?.statusDotStyle ?? "blinking"}
+          showScrollToBottom={bot.chatUI?.showScrollToBottom !== false}
+          showScrollbar={bot.chatUI?.showScrollbar !== false}
+          composerAsSeparateBox={bot.chatUI?.composerAsSeparateBox !== false}
+          composerBorderWidth={composerBorderWidthFromChatUI(bot.chatUI)}
+          composerBorderColor={bot.chatUI?.composerBorderColor === "default" ? "default" : "primary"}
+          showSuggestedChips
+          showComposerWithSuggestedQuestions={bot.chatUI?.showComposerWithSuggestedQuestions === true}
+          avatar={
+            bot.chatUI?.showAvatarInHeader !== false
+              ? bot.imageUrl ? (
+                <img src={bot.imageUrl} alt="" className="w-full h-full object-cover rounded-full" />
+              ) : bot.avatarEmoji ? (
+                <span className="text-2xl" aria-hidden>
+                  {bot.avatarEmoji}
+                </span>
+              ) : undefined
+              : undefined
+          }
+          title={bot.name}
+          subtitle={headerSubtitle || undefined}
+          messages={messages}
+          isSending={isSending}
+          onSend={onSend}
+          showMetadata
+          senderName={
+            (bot.chatUI?.senderName ?? "").trim()
+              ? (bot.chatUI?.senderName ?? "").trim()
+              : `${bot.name}${DEFAULT_SENDER_NAME}`
+          }
+          showSenderName={bot.chatUI?.showSenderName !== false}
+          showTime={bot.chatUI?.showTime !== false}
+          timePosition={bot.chatUI?.timePosition === "bottom" || bot.chatUI?.timePosition === "bottom-right" ? "bottom" : "top"}
+          showCopyButton={bot.chatUI?.showCopyButton !== false}
+          showSources={bot.chatUI?.showSources !== false}
+          allowMarkdown
+          emptyState={emptyState}
+          suggestedQuestions={suggestedQuestions}
+          strings={{
+            placeholder: limitReached ? "Free limit reached." : "Type your message…",
+            send: "Send",
+            copy: "Copy",
+            copied: "Copied!",
+            sourcesLabel: "Sources",
+          }}
+          showAttach={bot.chatUI?.allowFileUpload === true}
+          showEmoji={bot.chatUI?.showEmoji !== false}
+          showMic={bot.chatUI?.showMic === true}
+          onAttach={() => { }}
+          onEmoji={() => { }}
+          onMic={() => { }}
+          className="max-w-[460px] w-full"
+        />
       </div>
     </div>
   );

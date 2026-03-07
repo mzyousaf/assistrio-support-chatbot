@@ -1,10 +1,6 @@
-import type { Metadata } from "next";
-import "./globals.css";
+"use client";
 
-export const metadata: Metadata = {
-  title: "AI Platform App",
-  description: "Minimal Next.js starter for AI platform",
-};
+import "./globals.css";
 
 export default function RootLayout({
   children,

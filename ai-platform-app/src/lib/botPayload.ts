@@ -1,5 +1,22 @@
 import { normalizeLeadCapture } from "@/lib/leadCapture";
 import type { BotChatUI, BotConfig, BotLeadCaptureV2, BotPersonality } from "@/models/Bot";
+import type { ChatMenuQuickLink } from "@/models/Bot";
+
+const MENU_QUICK_LINKS_MAX = 3;
+
+function normalizeMenuQuickLinks(input: unknown): ChatMenuQuickLink[] {
+  if (!Array.isArray(input)) return [];
+  return input
+    .slice(0, MENU_QUICK_LINKS_MAX)
+    .map((item: unknown) => {
+      const o = item && typeof item === "object" ? (item as Record<string, unknown>) : null;
+      if (!o) return null;
+      const text = typeof o.text === "string" ? String(o.text).trim() : "";
+      const route = typeof o.route === "string" ? String(o.route).trim() : "";
+      return text && route ? { text, route } : null;
+    })
+    .filter((x): x is ChatMenuQuickLink => x != null);
+}
 
 export type NormalizedFaq = { question: string; answer: string };
 
@@ -43,12 +60,12 @@ export function normalizeFaqs(input: unknown): NormalizedFaq[] {
   const parsed =
     typeof input === "string"
       ? (() => {
-          try {
-            return JSON.parse(input);
-          } catch {
-            return [];
-          }
-        })()
+        try {
+          return JSON.parse(input);
+        } catch {
+          return [];
+        }
+      })()
       : input;
   if (!Array.isArray(parsed)) return [];
   return parsed
@@ -86,29 +103,89 @@ export function normalizeBotPayload(input: BotPayloadInput): NormalizedBotPayloa
         : "#14B8A6",
     backgroundStyle:
       chatUIInput.backgroundStyle === "auto" ||
-      chatUIInput.backgroundStyle === "light" ||
-      chatUIInput.backgroundStyle === "dark"
+        chatUIInput.backgroundStyle === "light" ||
+        chatUIInput.backgroundStyle === "dark"
         ? chatUIInput.backgroundStyle
         : "light",
-    bubbleStyle:
-      chatUIInput.bubbleStyle === "rounded" || chatUIInput.bubbleStyle === "squared"
-        ? chatUIInput.bubbleStyle
-        : "rounded",
-    avatarStyle:
-      chatUIInput.avatarStyle === "emoji" ||
-      chatUIInput.avatarStyle === "image" ||
-      chatUIInput.avatarStyle === "none"
-        ? chatUIInput.avatarStyle
-        : "emoji",
+    bubbleBorderRadius:
+      typeof chatUIInput.bubbleBorderRadius === "number" && chatUIInput.bubbleBorderRadius >= 0 && chatUIInput.bubbleBorderRadius <= 32
+        ? Math.round(chatUIInput.bubbleBorderRadius)
+        : (chatUIInput as { bubbleStyle?: string }).bubbleStyle === "squared"
+          ? 0
+          : 20,
     launcherPosition:
       chatUIInput.launcherPosition === "bottom-left" || chatUIInput.launcherPosition === "bottom-right"
         ? chatUIInput.launcherPosition
         : "bottom-right",
-    font:
-      chatUIInput.font === "system" || chatUIInput.font === "inter" || chatUIInput.font === "poppins"
-        ? chatUIInput.font
-        : "inter",
+    shadowIntensity:
+      chatUIInput.shadowIntensity === "none" ||
+        chatUIInput.shadowIntensity === "low" ||
+        chatUIInput.shadowIntensity === "high"
+        ? chatUIInput.shadowIntensity
+        : "medium",
+    showChatBorder: chatUIInput.showChatBorder !== false,
+    launcherIcon:
+      chatUIInput.launcherIcon === "bot-avatar" || chatUIInput.launcherIcon === "custom"
+        ? chatUIInput.launcherIcon
+        : "default",
+    launcherAvatarUrl:
+      typeof chatUIInput.launcherAvatarUrl === "string" ? chatUIInput.launcherAvatarUrl.trim() || undefined : undefined,
+    launcherAvatarRingWidth:
+      typeof chatUIInput.launcherAvatarRingWidth === "number" &&
+        chatUIInput.launcherAvatarRingWidth >= 0 &&
+        chatUIInput.launcherAvatarRingWidth <= 30
+        ? Math.round(chatUIInput.launcherAvatarRingWidth)
+        : 18,
+    launcherSize:
+      typeof chatUIInput.launcherSize === "number" && chatUIInput.launcherSize >= 32 && chatUIInput.launcherSize <= 96
+        ? Math.round(chatUIInput.launcherSize)
+        : 48,
+    chatOpenAnimation:
+      chatUIInput.chatOpenAnimation === "fade"
+        ? "fade"
+        : chatUIInput.chatOpenAnimation === "expand" || (chatUIInput as { chatOpenAnimation?: string }).chatOpenAnimation === "scale"
+          ? "expand"
+          : "slide-up-fade",
+    openChatOnLoad: chatUIInput.openChatOnLoad !== false,
     showBranding: chatUIInput.showBranding !== false,
+    brandingMessage: typeof chatUIInput.brandingMessage === "string" ? chatUIInput.brandingMessage.trim() : "",
+    liveIndicatorStyle:
+      chatUIInput.liveIndicatorStyle === "dot-only" ? "dot-only" : "label",
+    statusIndicator:
+      chatUIInput.statusIndicator === "live" || chatUIInput.statusIndicator === "active"
+        ? chatUIInput.statusIndicator
+        : "none",
+    statusDotStyle:
+      chatUIInput.statusDotStyle === "static" ? "static" : "blinking",
+    showScrollToBottom: chatUIInput.showScrollToBottom !== false,
+    showScrollbar: chatUIInput.showScrollbar !== false,
+    composerAsSeparateBox: chatUIInput.composerAsSeparateBox !== false,
+    composerBorderWidth:
+      typeof chatUIInput.composerBorderWidth === "number" &&
+        chatUIInput.composerBorderWidth >= 0 &&
+        chatUIInput.composerBorderWidth <= 6
+        ? (() => {
+          const w = Number(chatUIInput.composerBorderWidth);
+          return w > 0 && w < 0.5 ? 0.5 : Math.max(0, Math.min(6, w));
+        })()
+        : (chatUIInput as { showComposerBorder?: boolean }).showComposerBorder === false
+          ? 0
+          : 1,
+    composerBorderColor: chatUIInput.composerBorderColor === "default" ? "default" : "primary",
+    showMenuExpand: chatUIInput.showMenuExpand !== false,
+    menuQuickLinks: normalizeMenuQuickLinks(chatUIInput.menuQuickLinks),
+    showComposerWithSuggestedQuestions: chatUIInput.showComposerWithSuggestedQuestions === true,
+    showAvatarInHeader: chatUIInput.showAvatarInHeader !== false,
+    senderName: typeof chatUIInput.senderName === "string" ? chatUIInput.senderName.trim() : "",
+    showSenderName: chatUIInput.showSenderName !== false,
+    showTime: chatUIInput.showTime !== false,
+    timePosition:
+      chatUIInput.timePosition === "bottom" || chatUIInput.timePosition === "bottom-right" ? "bottom" : "top",
+    showCopyButton: chatUIInput.showCopyButton !== false,
+    showSources: chatUIInput.showSources !== false,
+    showEmoji: chatUIInput.showEmoji !== false,
+    allowFileUpload: chatUIInput.allowFileUpload === true,
+    showMic: chatUIInput.showMic === true,
   };
 
   const personalityInput = (input.personality ?? {}) as BotPersonality;
@@ -127,14 +204,18 @@ export function normalizeBotPayload(input: BotPayloadInput): NormalizedBotPayloa
         : undefined,
     tone:
       personalityInput.tone === "friendly" ||
-      personalityInput.tone === "formal" ||
-      personalityInput.tone === "playful" ||
-      personalityInput.tone === "technical"
+        personalityInput.tone === "formal" ||
+        personalityInput.tone === "playful" ||
+        personalityInput.tone === "technical"
         ? personalityInput.tone
         : undefined,
     language:
       typeof personalityInput.language === "string" && personalityInput.language.trim()
         ? personalityInput.language.trim()
+        : undefined,
+    thingsToAvoid:
+      typeof personalityInput.thingsToAvoid === "string" && personalityInput.thingsToAvoid.trim()
+        ? personalityInput.thingsToAvoid.trim()
         : undefined,
   };
   const personality = Object.values(personalityCandidate).some(Boolean)
@@ -145,8 +226,8 @@ export function normalizeBotPayload(input: BotPayloadInput): NormalizedBotPayloa
   const configCandidate: BotConfig = {
     temperature:
       typeof configInput.temperature === "number" &&
-      configInput.temperature >= 0 &&
-      configInput.temperature <= 1
+        configInput.temperature >= 0 &&
+        configInput.temperature <= 1
         ? configInput.temperature
         : undefined,
     maxTokens:
@@ -155,8 +236,8 @@ export function normalizeBotPayload(input: BotPayloadInput): NormalizedBotPayloa
         : undefined,
     responseLength:
       configInput.responseLength === "short" ||
-      configInput.responseLength === "medium" ||
-      configInput.responseLength === "long"
+        configInput.responseLength === "medium" ||
+        configInput.responseLength === "long"
         ? configInput.responseLength
         : undefined,
   };

@@ -1,6 +1,6 @@
 "use client";
 
-import { PLATFORM_BASE_URL } from "@/lib/config";
+import { API_BASE_URL } from "@/lib/config";
 import { usePageView } from "@/hooks/usePageView";
 import { useVisitorId } from "@/hooks/useVisitorId";
 
@@ -31,7 +31,7 @@ export function BotsPageClient({ bots }: BotsPageClientProps) {
     );
   }
 
-  const createBotUrl = `${PLATFORM_BASE_URL}/trial/new?visitorId=${visitorId}`;
+  const createBotUrl = `${API_BASE_URL}/trial/new?visitorId=${visitorId}`;
 
   return (
     <main className="min-h-screen w-full px-6 py-12">
@@ -58,7 +58,7 @@ export function BotsPageClient({ bots }: BotsPageClientProps) {
 
         <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {bots.map((bot) => {
-            const demoUrl = `${PLATFORM_BASE_URL}/demo/${bot.slug}?visitorId=${visitorId}`;
+            const demoUrl = `${API_BASE_URL}/demo/${bot.slug}?visitorId=${visitorId}`;
 
             return (
               <article

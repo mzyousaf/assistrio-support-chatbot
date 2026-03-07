@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 
 import type { BotConfig, BotPersonality } from "@/models/Bot";
+import { apiFetch } from "@/lib/api";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
@@ -95,7 +96,7 @@ export default function BotPersonalitySection({
                 setTestingKey(true);
                 setTestResult(null);
                 try {
-                  const res = await fetch("/api/super-admin/openai/test-key", {
+                  const res = await apiFetch("/api/super-admin/openai/test-key", {
                     method: "POST",
                     headers: {
                       "Content-Type": "application/json",

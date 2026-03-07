@@ -1,4 +1,4 @@
-import { PLATFORM_BASE_URL } from "@/lib/config";
+import { API_BASE_URL } from "@/lib/config";
 import { BotsPageClient } from "./BotsPageClient";
 
 type PublicBot = {
@@ -13,8 +13,9 @@ type PublicBot = {
 };
 
 async function getPublicBots(): Promise<PublicBot[]> {
+  if (!API_BASE_URL) return [];
   try {
-    const response = await fetch(`${PLATFORM_BASE_URL}/api/public/bots`, {
+    const response = await fetch(`${API_BASE_URL}/api/public/bots`, {
       cache: "no-store",
     });
 

@@ -1,77 +1,144 @@
+"use client";
+
 import Link from "next/link";
-import { redirect } from "next/navigation";
-
+import { useParams } from "next/navigation";
+import { useEffect, useState } from "react";
 import AdminShell from "@/components/admin/AdminShell";
-import CreateNewBotButton from "@/components/admin/CreateNewBotButton";
+import { BotEditorPane } from "@/components/admin/BotEditorPane";
 import EditBotFormClient from "@/components/admin/EditBotFormClient";
+import { EditBotWorkspaceLayout } from "@/components/admin/EditBotWorkspaceLayout";
 import { Card } from "@/components/ui/Card";
-import { connectToDatabase } from "@/lib/mongoose";
-import { getAuthenticatedSuperAdmin } from "@/lib/superAdminAuth";
-import { Bot } from "@/models/Bot";
-import { DocumentModel } from "@/models/Document";
+import { apiFetch } from "@/lib/api";
+import { useSuperAdmin } from "@/hooks/useSuperAdmin";
+import type { BotChatUI, BotLeadCaptureV2 } from "@/models/Bot";
 
-type EditBotPageProps = {
-  params: Promise<{ id: string }>;
+const EDIT_BOT_FORM_ID = "edit-bot-form";
+
+type DocRow = {
+  _id: string;
+  title?: string;
+  sourceType?: string;
+  fileName?: string;
+  fileType?: string;
+  fileSize?: number;
+  url?: string;
+  status?: string;
+  error?: string;
+  ingestedAt?: string;
+  hasText?: boolean;
+  textLength?: number;
+  createdAt?: string;
 };
 
-export default async function SuperAdminEditBotPage({ params }: EditBotPageProps) {
-  const { id: botId } = await params;
+type Health = {
+  docsTotal?: number;
+  docsQueued?: number;
+  docsProcessing?: number;
+  docsReady?: number;
+  docsFailed?: number;
+  lastIngestedAt?: string;
+  lastFailedDoc?: { docId?: string; title?: string; error?: string; updatedAt?: string };
+};
 
-  const admin = await getAuthenticatedSuperAdmin();
-  if (!admin) {
-    redirect("/super-admin/login");
+export default function SuperAdminEditBotPage() {
+  const params = useParams();
+  const botId = typeof params?.id === "string" ? params.id : "";
+  const { user, loading: authLoading } = useSuperAdmin();
+  const [state, setState] = useState<"loading" | "not-found" | "not-showcase" | "ready">("loading");
+  const [bot, setBot] = useState<Record<string, unknown> | null>(null);
+  const [health, setHealth] = useState<Health | undefined>(undefined);
+  const [documents, setDocuments] = useState<DocRow[]>([]);
+  const [botType, setBotType] = useState<string>("");
+  const [unsaved, setUnsaved] = useState(false);
+  const [livePreview, setLivePreview] = useState<{
+    name: string;
+    imageUrl?: string;
+    chatUI?: BotChatUI;
+    tagline?: string;
+    description?: string;
+    welcomeMessage?: string;
+    suggestedQuestions?: string[];
+  } | null>(null);
+
+  useEffect(() => {
+    if (!user || !botId) return;
+    let cancelled = false;
+    Promise.all([
+      apiFetch(`/api/super-admin/bots/${botId}`),
+      apiFetch(`/api/super-admin/bots/${botId}/documents`),
+    ])
+      .then(async ([botRes, docsRes]) => {
+        if (cancelled) return;
+        if (!botRes.ok) {
+          setState("not-found");
+          return;
+        }
+        const botData = (await botRes.json()) as {
+          ok?: boolean;
+          bot?: Record<string, unknown> & { slug?: string };
+          health?: Health;
+        };
+        const b = botData?.bot;
+        if (!b) {
+          setState("not-found");
+          return;
+        }
+        const type = (b.type as string) ?? "";
+        if (type !== "showcase") {
+          setBotType(type);
+          setState("not-showcase");
+          return;
+        }
+        setBot(b);
+        setHealth(botData?.health);
+
+        let docs: DocRow[] = [];
+        if (docsRes.ok) {
+          const docsJson = (await docsRes.json()) as { documents?: DocRow[] };
+          docs = docsJson?.documents ?? [];
+        }
+        setDocuments(docs);
+        setState("ready");
+      })
+      .catch(() => {
+        if (!cancelled) setState("not-found");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user, botId]);
+
+  useEffect(() => {
+    if (state !== "ready" || !bot) return;
+    const name = String(bot.name ?? "Bot");
+    const imageUrl = typeof bot.imageUrl === "string" ? bot.imageUrl : undefined;
+    const chatUI = (bot.chatUI as BotChatUI | undefined) ?? undefined;
+    const tagline = [bot.tagline, bot.shortDescription].find((v) => typeof v === "string" && v.trim()) as string | undefined;
+    const description = typeof bot.description === "string" ? bot.description : undefined;
+    const welcomeMessage = typeof bot.welcomeMessage === "string" && bot.welcomeMessage.trim() ? bot.welcomeMessage.trim() : undefined;
+    const exampleQuestions = Array.isArray(bot.exampleQuestions)
+      ? (bot.exampleQuestions as string[]).map((q) => String(q ?? "").trim()).filter(Boolean).slice(0, 6)
+      : [];
+    setLivePreview({
+      name,
+      imageUrl,
+      chatUI,
+      tagline,
+      description,
+      welcomeMessage,
+      suggestedQuestions: exampleQuestions.length > 0 ? exampleQuestions : undefined,
+    });
+  }, [state, bot]);
+
+  if (authLoading || !user) {
+    return (
+      <AdminShell title="Edit Bot">
+        <p className="text-gray-500">Loading…</p>
+      </AdminShell>
+    );
   }
 
-  await connectToDatabase();
-
-  const bot = await Bot.findById(botId)
-    .select({
-      name: 1,
-      shortDescription: 1,
-      description: 1,
-      category: 1,
-      categories: 1,
-      imageUrl: 1,
-      openaiApiKeyOverride: 1,
-      welcomeMessage: 1,
-      knowledgeDescription: 1,
-      status: 1,
-      isPublic: 1,
-      leadCapture: 1,
-      chatUI: 1,
-      faqs: 1,
-      personality: 1,
-      config: 1,
-      type: 1,
-    })
-    .lean();
-
-  const documents = await DocumentModel.find({ botId })
-    .sort({ createdAt: -1 })
-    .select({
-      title: 1,
-      sourceType: 1,
-      fileName: 1,
-      fileType: 1,
-      fileSize: 1,
-      url: 1,
-      text: 1,
-      status: 1,
-      error: 1,
-      ingestedAt: 1,
-      createdAt: 1,
-    })
-    .lean();
-
-  const docsQueued = documents.filter((doc) => doc.status === "queued").length;
-  const docsProcessing = documents.filter((doc) => doc.status === "processing").length;
-  const docsReady = documents.filter((doc) => doc.status === "ready").length;
-  const docsFailed = documents.filter((doc) => doc.status === "failed").length;
-  const lastReadyDoc = documents.find((doc) => doc.status === "ready");
-  const lastFailedDoc = documents.find((doc) => doc.status === "failed");
-  const lastFailedUpdatedAt = lastFailedDoc?.createdAt;
-
-  if (!bot) {
+  if (state === "not-found") {
     return (
       <AdminShell title="Edit Bot">
         <p className="text-gray-700 dark:text-gray-300">Bot not found.</p>
@@ -79,14 +146,14 @@ export default async function SuperAdminEditBotPage({ params }: EditBotPageProps
     );
   }
 
-  if (bot.type !== "showcase") {
+  if (state === "not-showcase") {
     return (
       <AdminShell title="Edit Bot">
         <Card>
           <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
             Editing is only available for showcase bots.
           </h1>
-          <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">Type: {bot.type}</p>
+          <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">Type: {botType}</p>
           <Link
             className="mt-4 inline-flex items-center rounded-md px-3 py-1.5 text-sm font-medium bg-brand-500 hover:bg-brand-400 text-white transition-colors"
             href="/super-admin/bots"
@@ -98,84 +165,127 @@ export default async function SuperAdminEditBotPage({ params }: EditBotPageProps
     );
   }
 
-  return (
-    <AdminShell title="Edit Bot">
-      <section className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="space-y-1">
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Edit Showcase Bot</h2>
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            Update bot details, behavior, and visibility settings.
-          </p>
-        </div>
-        <CreateNewBotButton
-          className="inline-flex items-center justify-center rounded-lg border border-gray-200 bg-white px-3.5 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
-          label="Create new bot"
-        />
-      </section>
+  if (state !== "ready" || !bot) {
+    return (
+      <AdminShell title="Edit Bot">
+        <p className="text-gray-500">Loading…</p>
+      </AdminShell>
+    );
+  }
 
-      <Card title="Bot basics + FAQ">
-        <EditBotFormClient
-          initialBot={{
-            id: String(bot._id),
-            name: bot.name,
-            shortDescription: bot.shortDescription || undefined,
-            description: bot.description || undefined,
-            category: bot.category || undefined,
-            categories: bot.categories || [],
-            imageUrl: bot.imageUrl || undefined,
-            openaiApiKeyOverride: bot.openaiApiKeyOverride || undefined,
-            welcomeMessage: bot.welcomeMessage || undefined,
-            knowledgeDescription: bot.knowledgeDescription || undefined,
-            status: bot.status === "published" ? "published" : "draft",
-            faqs:
-              Array.isArray(bot.faqs)
-                ? bot.faqs.map((faq) => ({
-                    question: String(faq?.question ?? ""),
-                    answer: String(faq?.answer ?? ""),
-                  }))
-                : [],
-            documents: documents.map((doc) => ({
-              _id: String(doc._id),
-              title: String(doc.title ?? ""),
-              sourceType: String(doc.sourceType ?? ""),
-              fileName: doc.fileName || undefined,
-              fileType: doc.fileType || undefined,
-              fileSize: doc.fileSize || undefined,
-              url: doc.url || undefined,
-              status: doc.status || undefined,
-              error: doc.error || undefined,
-              ingestedAt: doc.ingestedAt ? new Date(doc.ingestedAt).toISOString() : undefined,
-              hasText: typeof doc.text === "string" && doc.text.trim().length > 0,
-              textLength: typeof doc.text === "string" ? doc.text.length : 0,
-              createdAt: doc.createdAt ? new Date(doc.createdAt).toISOString() : undefined,
-            })),
-            health: {
-              docsTotal: documents.length,
-              docsQueued,
-              docsProcessing,
-              docsReady,
-              docsFailed,
-              lastIngestedAt:
-                lastReadyDoc?.ingestedAt || lastReadyDoc?.createdAt
-                  ? new Date(lastReadyDoc?.ingestedAt || lastReadyDoc?.createdAt || Date.now()).toISOString()
-                  : undefined,
-              lastFailedDoc: lastFailedDoc
-                ? {
-                    docId: String(lastFailedDoc._id),
-                    title: String(lastFailedDoc.title ?? ""),
-                    error: lastFailedDoc.error || undefined,
-                    updatedAt: lastFailedUpdatedAt ? new Date(lastFailedUpdatedAt).toISOString() : undefined,
-                  }
-                : undefined,
-            },
-            isPublic: Boolean(bot.isPublic),
-            leadCapture: bot.leadCapture || undefined,
-            chatUI: bot.chatUI || undefined,
-            personality: bot.personality || {},
-            config: bot.config || {},
-          }}
-        />
-      </Card>
+  const docsMapped = documents.map((doc) => {
+    const status = doc.status;
+    const validStatus =
+      status === "queued" || status === "processing" || status === "ready" || status === "failed"
+        ? status
+        : undefined;
+    return {
+      _id: String(doc._id),
+      title: String(doc.title ?? ""),
+      sourceType: String(doc.sourceType ?? ""),
+      fileName: doc.fileName ?? undefined,
+      fileType: doc.fileType ?? undefined,
+      fileSize: doc.fileSize,
+      url: doc.url ?? undefined,
+      status: validStatus,
+      error: doc.error ?? undefined,
+      ingestedAt: doc.ingestedAt ?? undefined,
+      hasText: Boolean(doc.hasText),
+      textLength: Number(doc.textLength) || 0,
+      createdAt: doc.createdAt ?? undefined,
+    };
+  });
+
+  const botName = String(bot.name ?? "Bot");
+  const botSlug = typeof (bot as { slug?: string }).slug === "string" ? (bot as { slug: string }).slug : "";
+  const botImageUrl = typeof bot.imageUrl === "string" ? bot.imageUrl : undefined;
+  const status = (bot.status as string) === "published" ? "published" : "draft";
+
+  const initialBot = {
+    id: String(bot.id ?? bot._id),
+    name: botName,
+    shortDescription: (bot.shortDescription as string) || undefined,
+    description: (bot.description as string) || undefined,
+    category: (bot.category as string) || undefined,
+    categories: (Array.isArray(bot.categories) ? bot.categories : []) as string[],
+    imageUrl: botImageUrl,
+    openaiApiKeyOverride: (bot.openaiApiKeyOverride as string) || undefined,
+    whisperApiKeyOverride: (bot.whisperApiKeyOverride as string) || undefined,
+    welcomeMessage: (bot.welcomeMessage as string) || undefined,
+    knowledgeDescription: (bot.knowledgeDescription as string) || undefined,
+    status,
+    faqs: Array.isArray(bot.faqs)
+      ? (bot.faqs as Array<{ question?: unknown; answer?: unknown }>).map((faq) => ({
+        question: String(faq?.question ?? ""),
+        answer: String(faq?.answer ?? ""),
+      }))
+      : [],
+    exampleQuestions: Array.isArray(bot.exampleQuestions)
+      ? (bot.exampleQuestions as string[]).map((q) => String(q ?? "").trim()).filter(Boolean)
+      : [],
+    documents: docsMapped,
+    health: health
+      ? {
+        docsTotal: health.docsTotal ?? 0,
+        docsQueued: health.docsQueued ?? 0,
+        docsProcessing: health.docsProcessing ?? 0,
+        docsReady: health.docsReady ?? 0,
+        docsFailed: health.docsFailed ?? 0,
+        lastIngestedAt: health.lastIngestedAt,
+        lastFailedDoc: health.lastFailedDoc
+          ? {
+            docId: health.lastFailedDoc.docId ?? "",
+            title: health.lastFailedDoc.title ?? "",
+            error: health.lastFailedDoc.error,
+            updatedAt: health.lastFailedDoc.updatedAt,
+          }
+          : undefined,
+      }
+      : {
+        docsTotal: documents.length,
+        docsQueued: 0,
+        docsProcessing: 0,
+        docsReady: 0,
+        docsFailed: 0,
+        lastIngestedAt: undefined,
+        lastFailedDoc: undefined,
+      },
+    isPublic: Boolean(bot.isPublic),
+    leadCapture: (bot.leadCapture as BotLeadCaptureV2 | undefined) ?? undefined,
+    chatUI: (bot.chatUI as BotChatUI | undefined) ?? undefined,
+    personality: (bot.personality as object) ?? {},
+    config: (bot.config as object) ?? {},
+  };
+
+  const previewHref: string | undefined = undefined;
+
+  return (
+    <AdminShell title="Edit Bot" fullWidth>
+      <div className="flex-1 min-h-0 flex flex-col bg-gray-50 dark:bg-gray-950">
+        <EditBotWorkspaceLayout
+          botId={botId}
+          botName={botName}
+          botAvatarUrl={botImageUrl}
+          livePreview={livePreview}
+          defaultChatOpen={state === "ready" ? (bot?.chatUI as BotChatUI | undefined)?.openChatOnLoad !== false : true}
+          expandHref={previewHref}
+        >
+          <BotEditorPane
+            botName={botName}
+            status={status}
+            unsaved={unsaved}
+            formId={EDIT_BOT_FORM_ID}
+            previewHref={previewHref}
+          >
+            <EditBotFormClient
+              formId={EDIT_BOT_FORM_ID}
+              onDirtyChange={setUnsaved}
+              onLivePreviewChange={setLivePreview}
+              initialBot={initialBot}
+            />
+          </BotEditorPane>
+        </EditBotWorkspaceLayout>
+      </div>
     </AdminShell>
   );
 }

@@ -1,18 +1,19 @@
-import { redirect } from "next/navigation";
+"use client";
 
 import AdminShell from "@/components/admin/AdminShell";
 import NewBotDraftInitializer from "@/components/admin/NewBotDraftInitializer";
-import { connectToDatabase } from "@/lib/mongoose";
-import { getAuthenticatedSuperAdmin } from "@/lib/superAdminAuth";
+import { useSuperAdmin } from "@/hooks/useSuperAdmin";
 
-export default async function SuperAdminNewBotPage() {
-  const admin = await getAuthenticatedSuperAdmin();
+export default function SuperAdminNewBotPage() {
+  const { user, loading } = useSuperAdmin();
 
-  if (!admin) {
-    redirect("/super-admin/login");
+  if (loading || !user) {
+    return (
+      <AdminShell title="Create Bot">
+        <p className="text-sm text-gray-500">Loading…</p>
+      </AdminShell>
+    );
   }
-
-  await connectToDatabase();
 
   return (
     <AdminShell title="Create Bot">

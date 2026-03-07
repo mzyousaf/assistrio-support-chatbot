@@ -1,0 +1,30 @@
+---
+description: Use unique React keys in lists to avoid duplicate-key warnings and bugs
+globs: **/*.tsx **/*.jsx
+alwaysApply: false
+---
+
+# React list keys
+
+When rendering lists with `.map()`, the `key` prop must be **unique among siblings** and **stable across renders**. Duplicate or unstable keys cause React warnings and can lead to wrong or duplicated DOM.
+
+## Do
+
+- Use **array index** when the list is static or not reordered: `key={index}` or `key={i}`.
+- Use a **stable unique id** when items have one (e.g. `key={item.id}`, `key={doc._id}`) and the id is guaranteed unique in that list.
+- Prefer index for user-editable repeaters (e.g. form fields, suggested questions) when there is no server-assigned id.
+
+## Don't
+
+- Use **user-provided or editable content** as the key (e.g. `key={field.key}`, `key={questionText}`). Two items can have the same value and produce duplicate keys.
+- Use **composite keys** that can repeat (e.g. `key={\`${name}-${size}\`}` for file lists) unless you are sure the combination is unique; prefer index instead.
+
+## Example
+
+```tsx
+// BAD: duplicate "asdas" → duplicate key
+{suggestedQuestions.map((q) => <button key={q}>...</button>)}
+
+// GOOD: index is unique
+{suggestedQuestions.map((q, i) => <button key={i}>...</button>)}
+```

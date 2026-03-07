@@ -70,20 +70,24 @@ export function TabsList({ children, className }: TabsListProps) {
 interface TabsTriggerProps {
   value: string;
   children: React.ReactNode;
+  className?: string;
 }
 
-export function TabsTrigger({ value, children }: TabsTriggerProps) {
+export function TabsTrigger({ value, children, className: customClass }: TabsTriggerProps) {
   const { value: active, setValue } = useTabs();
   const isActive = active === value;
   return (
     <button
       type="button"
       onClick={() => setValue(value)}
+      data-state={isActive ? "active" : "inactive"}
       className={cx(
-        "px-4 py-1.5 text-xs md:text-sm rounded-full font-medium transition-colors",
-        isActive
-          ? "bg-white dark:bg-gray-900 text-brand-700 dark:text-brand-300 shadow-card border border-gray-200 dark:border-gray-700"
-          : "text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/40",
+        customClass ??
+          "px-4 py-1.5 text-xs md:text-sm rounded-full font-medium transition-colors",
+        !customClass &&
+          (isActive
+            ? "bg-white dark:bg-gray-900 text-brand-700 dark:text-brand-300 shadow-card border border-gray-200 dark:border-gray-700"
+            : "text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/40"),
       )}
     >
       {children}

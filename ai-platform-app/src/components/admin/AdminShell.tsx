@@ -5,10 +5,13 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/Button";
+import { apiFetch } from "@/lib/api";
 
 interface AdminShellProps {
   title?: string;
   children: React.ReactNode;
+  /** When true, main content uses full width (no max-w-6xl). */
+  fullWidth?: boolean;
 }
 
 const navItems = [
@@ -61,7 +64,7 @@ function formatBreadcrumbLabel(segment: string): string {
     .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
-export default function AdminShell({ title, children }: AdminShellProps) {
+export default function AdminShell({ title, children, fullWidth }: AdminShellProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [theme, setTheme] = useState<"light" | "dark">("light");
@@ -98,7 +101,7 @@ export default function AdminShell({ title, children }: AdminShellProps) {
   }
 
   async function handleLogout() {
-    await fetch("/api/super-admin/logout", { method: "POST" });
+    await apiFetch("/api/super-admin/logout", { method: "POST" });
     router.push("/super-admin/login");
   }
 
@@ -134,10 +137,10 @@ export default function AdminShell({ title, children }: AdminShellProps) {
               <Link
                 key={item.href}
                 className={cx(
-                  "flex items-center px-3 py-2 rounded-xl text-sm transition-colors",
+                  "flex items-center px-3 py-2 rounded-xl text-sm transition-colors border-l-4",
                   active
-                    ? "bg-brand-50 dark:bg-brand-500/20 text-brand-700 dark:text-brand-300 font-medium border border-brand-100 dark:border-brand-500/30 shadow-card"
-                    : "text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100",
+                    ? "bg-brand-50 dark:bg-brand-500/20 text-brand-700 dark:text-brand-300 font-semibold border-brand-500 dark:border-brand-400 shadow-card"
+                    : "border-transparent text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100",
                 )}
                 href={item.href}
               >
@@ -178,32 +181,32 @@ export default function AdminShell({ title, children }: AdminShellProps) {
             ) : null}
 
             <div className="min-w-0">
-            {breadcrumbs.length > 0 ? (
-              <nav aria-label="Breadcrumb" className="mb-0.5 overflow-x-auto">
-                <ol className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
-                  <li>
-                    <Link href="/super-admin/dashboard" className="hover:text-brand-600 dark:hover:text-brand-300 transition-colors">
-                      Dashboard
-                    </Link>
-                  </li>
-                  {breadcrumbs.map((crumb) => (
-                    <li key={crumb.href} className="flex items-center gap-1.5">
-                      <span aria-hidden="true">›</span>
-                      {crumb.isLast ? (
-                        <span className="text-gray-700 dark:text-gray-200">{crumb.label}</span>
-                      ) : (
-                        <Link href={crumb.href} className="hover:text-brand-600 dark:hover:text-brand-300 transition-colors">
-                          {crumb.label}
-                        </Link>
-                      )}
+              {breadcrumbs.length > 0 ? (
+                <nav aria-label="Breadcrumb" className="mb-0.5 overflow-x-auto">
+                  <ol className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                    <li>
+                      <Link href="/super-admin/dashboard" className="hover:text-brand-600 dark:hover:text-brand-300 transition-colors">
+                        Dashboard
+                      </Link>
                     </li>
-                  ))}
-                </ol>
-              </nav>
-            ) : null}
-            {title ? (
-              <h1 className="truncate text-base md:text-lg font-heading font-semibold text-gray-900 dark:text-gray-100">{title}</h1>
-            ) : null}
+                    {breadcrumbs.map((crumb) => (
+                      <li key={crumb.href} className="flex items-center gap-1.5">
+                        <span aria-hidden="true">›</span>
+                        {crumb.isLast ? (
+                          <span className="text-gray-700 dark:text-gray-200">{crumb.label}</span>
+                        ) : (
+                          <Link href={crumb.href} className="hover:text-brand-600 dark:hover:text-brand-300 transition-colors">
+                            {crumb.label}
+                          </Link>
+                        )}
+                      </li>
+                    ))}
+                  </ol>
+                </nav>
+              ) : null}
+              {title ? (
+                <h1 className="truncate text-base md:text-lg font-heading font-semibold text-gray-900 dark:text-gray-100">{title}</h1>
+              ) : null}
             </div>
           </div>
 
@@ -242,8 +245,10 @@ export default function AdminShell({ title, children }: AdminShellProps) {
           </div>
         </nav>
 
-        <main className="flex-1 px-4 md:px-8 py-6">
-          <div className="max-w-6xl mx-auto space-y-6">{children}</div>
+        <main className="flex-1 px-4 md:px-8 py-6 flex flex-col min-h-0">
+          <div className={cx("flex-1 min-h-0", fullWidth ? "w-full max-w-none flex flex-col" : "max-w-6xl mx-auto space-y-6")}>
+            {children}
+          </div>
         </main>
       </div>
     </div>

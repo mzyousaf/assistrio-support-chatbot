@@ -1,44 +1,76 @@
-import Link from "next/link";
-import { redirect } from "next/navigation";
+"use client";
 
+import Link from "next/link";
+import { useEffect, useState } from "react";
 import AdminShell from "@/components/admin/AdminShell";
 import { Card } from "@/components/ui/Card";
+import { apiFetch } from "@/lib/api";
+import { useSuperAdmin } from "@/hooks/useSuperAdmin";
 
-import { connectToDatabase } from "@/lib/mongoose";
-import { getAuthenticatedSuperAdmin } from "@/lib/superAdminAuth";
-import { Visitor } from "@/models/Visitor";
-
-function formatDate(value: Date | null | undefined): string {
-  if (!value) {
-    return "-";
-  }
-
-  return value.toLocaleString();
+function formatDate(value: string | Date | null | undefined): string {
+  if (!value) return "-";
+  const d = typeof value === "string" ? new Date(value) : value;
+  return d.toLocaleString();
 }
 
-export default async function SuperAdminVisitorsPage() {
-  const user = await getAuthenticatedSuperAdmin();
+type VisitorRow = {
+  visitorId: string;
+  name?: string;
+  email?: string;
+  phone?: string;
+  showcaseMessageCount?: number;
+  ownBotMessageCount?: number;
+  createdAt?: string | null;
+  lastSeenAt?: string | null;
+};
 
-  if (!user) {
-    redirect("/super-admin/login");
+export default function SuperAdminVisitorsPage() {
+  const { user, loading: authLoading } = useSuperAdmin();
+  const [visitors, setVisitors] = useState<VisitorRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    apiFetch("/api/super-admin/visitors")
+      .then(async (res) => {
+        if (cancelled) return;
+        if (!res.ok) {
+          setError("Failed to load visitors.");
+          return;
+        }
+        const raw = (await res.json()) as unknown[];
+        const all = (raw ?? []) as VisitorRow[];
+        const sorted = [...all]
+          .sort((a, b) => new Date(b.lastSeenAt ?? 0).getTime() - new Date(a.lastSeenAt ?? 0).getTime())
+          .slice(0, 100);
+        setVisitors(sorted);
+      })
+      .catch(() => setError("Failed to load visitors."))
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
+  if (authLoading || !user) {
+    return (
+      <AdminShell title="Visitors">
+        <p className="text-sm text-gray-500">Loading…</p>
+      </AdminShell>
+    );
   }
 
-  await connectToDatabase();
-
-  const visitors = await Visitor.find({})
-    .sort({ lastSeenAt: -1 })
-    .limit(100)
-    .select({
-      visitorId: 1,
-      name: 1,
-      email: 1,
-      phone: 1,
-      showcaseMessageCount: 1,
-      ownBotMessageCount: 1,
-      createdAt: 1,
-      lastSeenAt: 1,
-    })
-    .lean();
+  if (error) {
+    return (
+      <AdminShell title="Visitors">
+        <p className="text-sm text-red-600">{error}</p>
+      </AdminShell>
+    );
+  }
 
   return (
     <AdminShell title="Visitors">
@@ -65,32 +97,40 @@ export default async function SuperAdminVisitorsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-800 text-gray-800 dark:text-gray-200">
-              {visitors.map((visitor) => (
-                <tr key={visitor.visitorId} className="hover:bg-gray-50/80 dark:hover:bg-gray-800/40 transition-colors">
-                  <td className="px-4 py-3">
-                    <Link
-                      href={`/super-admin/visitors/${visitor.visitorId}`}
-                      className="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium text-brand-700 dark:text-brand-300 bg-brand-50 dark:bg-brand-500/15 hover:bg-brand-100 dark:hover:bg-brand-500/25 transition-colors"
-                    >
-                      {visitor.visitorId}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-3">{visitor.name || "-"}</td>
-                  <td className="px-4 py-3">{visitor.email || "-"}</td>
-                  <td className="px-4 py-3">{visitor.phone || "-"}</td>
-                  <td className="px-4 py-3">{visitor.showcaseMessageCount}</td>
-                  <td className="px-4 py-3">{visitor.ownBotMessageCount}</td>
-                  <td className="px-4 py-3">{formatDate(visitor.createdAt)}</td>
-                  <td className="px-4 py-3">{formatDate(visitor.lastSeenAt)}</td>
-                </tr>
-              ))}
-              {visitors.length === 0 ? (
+              {loading ? (
                 <tr>
-                  <td className="px-4 py-6 text-gray-500 dark:text-gray-400" colSpan={8}>
-                    No visitors found yet.
-                  </td>
+                  <td className="px-4 py-6 text-gray-500" colSpan={8}>Loading…</td>
                 </tr>
-              ) : null}
+              ) : (
+                <>
+                  {visitors.map((visitor) => (
+                    <tr key={visitor.visitorId} className="hover:bg-gray-50/80 dark:hover:bg-gray-800/40 transition-colors">
+                      <td className="px-4 py-3">
+                        <Link
+                          href={`/super-admin/visitors/${visitor.visitorId}`}
+                          className="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium text-brand-700 dark:text-brand-300 bg-brand-50 dark:bg-brand-500/15 hover:bg-brand-100 dark:hover:bg-brand-500/25 transition-colors"
+                        >
+                          {visitor.visitorId}
+                        </Link>
+                      </td>
+                      <td className="px-4 py-3">{visitor.name || "-"}</td>
+                      <td className="px-4 py-3">{visitor.email || "-"}</td>
+                      <td className="px-4 py-3">{visitor.phone || "-"}</td>
+                      <td className="px-4 py-3">{visitor.showcaseMessageCount}</td>
+                      <td className="px-4 py-3">{visitor.ownBotMessageCount}</td>
+                      <td className="px-4 py-3">{formatDate(visitor.createdAt)}</td>
+                      <td className="px-4 py-3">{formatDate(visitor.lastSeenAt)}</td>
+                    </tr>
+                  ))}
+                  {visitors.length === 0 && (
+                    <tr>
+                      <td className="px-4 py-6 text-gray-500 dark:text-gray-400" colSpan={8}>
+                        No visitors found yet.
+                      </td>
+                    </tr>
+                  )}
+                </>
+              )}
             </tbody>
           </table>
         </div>

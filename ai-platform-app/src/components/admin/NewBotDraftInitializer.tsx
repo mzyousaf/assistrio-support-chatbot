@@ -3,6 +3,7 @@
 import React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
+import { apiFetch } from "@/lib/api";
 import { ensureDraftId, rotateDraftId } from "@/lib/draftBot";
 
 let draftInitInFlight:
@@ -32,7 +33,7 @@ export default function NewBotDraftInitializer() {
           draftInitInFlight = {
             clientDraftId,
             promise: (async () => {
-              const response = await fetch("/api/super-admin/bots/draft", {
+              const response = await apiFetch("/api/super-admin/bots/draft", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ clientDraftId }),

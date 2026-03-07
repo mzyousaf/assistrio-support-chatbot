@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
+import { apiFetch } from "@/lib/api";
 
 export interface BotDocumentItem {
   _id: string;
@@ -25,7 +26,7 @@ interface BotDocumentsManagerProps {
   documents: BotDocumentItem[];
 }
 
-const ALLOWED_EXTENSIONS = new Set(["pdf", "doc", "docx", "txt"]);
+const ALLOWED_EXTENSIONS = new Set(["pdf", "doc", "docx", "txt", "md", "markdown"]);
 const MAX_FILE_SIZE_BYTES = 15 * 1024 * 1024;
 const MAX_BATCH_FILES = 5;
 
@@ -59,24 +60,24 @@ function getStatusMeta(status?: BotDocumentItem["status"]): {
   if (status === "processing") {
     return {
       label: "Processing",
-      className: "border-blue-200 bg-blue-50 text-blue-700",
+      className: "border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300",
     };
   }
   if (status === "ready") {
     return {
       label: "Ready",
-      className: "border-emerald-200 bg-emerald-50 text-emerald-700",
+      className: "border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300",
     };
   }
   if (status === "failed") {
     return {
       label: "Failed",
-      className: "border-red-200 bg-red-50 text-red-700",
+      className: "border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300",
     };
   }
   return {
     label: "Queued",
-    className: "border-gray-200 bg-gray-100 text-gray-700",
+    className: "border-gray-200 dark:border-gray-600 bg-gray-100 dark:bg-gray-700/50 text-gray-700 dark:text-gray-300",
   };
 }
 
@@ -102,6 +103,7 @@ export default function BotDocumentsManager({ botId, documents }: BotDocumentsMa
   const [uploadMessages, setUploadMessages] = useState<string[]>([]);
   const [jobRunMessage, setJobRunMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [chunkCounts, setChunkCounts] = useState<Record<string, number | "loading">>({});
 
   const disabled = !botId || isUploading;
   const failedDocs = items.filter((doc) => doc.status === "failed");
@@ -110,7 +112,7 @@ export default function BotDocumentsManager({ botId, documents }: BotDocumentsMa
     if (!botId) return;
     setIsLoading(true);
     try {
-      const response = await fetch(`/api/super-admin/bots/${botId}/documents`, {
+      const response = await apiFetch(`/api/super-admin/bots/${botId}/documents`, {
         method: "GET",
       });
       if (!response.ok) {
@@ -170,22 +172,29 @@ export default function BotDocumentsManager({ botId, documents }: BotDocumentsMa
         const formData = new FormData();
         formData.append("file", file);
         formData.append("title", file.name);
-        const response = await fetch(`/api/super-admin/bots/${botId}/upload-doc`, {
+        // Single doc upload endpoint: creates Document (queued) + IngestJob. apiFetch sends credentials.
+        const response = await apiFetch(`/api/super-admin/bots/${botId}/upload-doc`, {
           method: "POST",
           body: formData,
         });
         const data = (await response.json().catch(() => ({}))) as {
-          docId?: string;
-          jobId?: string;
-          status?: string;
+          ok?: boolean;
+          documentId?: string;
+          documentStatus?: "queued" | "processing" | "ready" | "failed";
+          ingestJobId?: string;
+          ingestJobStatus?: "queued" | "processing" | "done" | "failed";
+          s3Key?: string;
+          originalName?: string;
           error?: string;
         };
         if (!response.ok) {
           nextUploadMessages.push(`${file.name}: failed (${data.error || "upload_failed"})`);
           continue;
         }
+        const docStatus = data.documentStatus ?? "queued";
+        const jobStatus = data.ingestJobStatus ?? "queued";
         nextUploadMessages.push(
-          `${file.name}: queued (${data.status || "queued"})${data.jobId ? `, job ${data.jobId}` : ""}`,
+          `${file.name}: doc ${docStatus}, job ${jobStatus}${data.ingestJobId ? ` (job ${data.ingestJobId})` : ""}`,
         );
       }
       setUploadMessages(nextUploadMessages);
@@ -207,7 +216,7 @@ export default function BotDocumentsManager({ botId, documents }: BotDocumentsMa
     setError(null);
     setJobRunMessage(null);
     try {
-      const response = await fetch("/api/super-admin/jobs/run", {
+      const response = await apiFetch("/api/super-admin/jobs/run", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -216,14 +225,19 @@ export default function BotDocumentsManager({ botId, documents }: BotDocumentsMa
       });
       const data = (await response.json().catch(() => ({}))) as {
         processed?: number;
+        processedCount?: number;
         failed?: number;
+        claimedJobId?: string;
+        finalDocStatus?: string;
         error?: string;
       };
       if (!response.ok) {
         setError(`Process pending jobs failed (${data.error || "request_failed"}).`);
         return;
       }
-      setJobRunMessage(`processed ${data.processed ?? 0}, failed ${data.failed ?? 0}`);
+      const processed = data.processedCount ?? data.processed ?? 0;
+      const msg = `processed ${processed}, failed ${data.failed ?? 0}${data.claimedJobId ? ` (job ${data.claimedJobId})` : ""}${data.finalDocStatus ? `, doc ${data.finalDocStatus}` : ""}`;
+      setJobRunMessage(msg);
       await refreshDocuments();
     } catch {
       setError("Process pending jobs failed (network error).");
@@ -232,12 +246,24 @@ export default function BotDocumentsManager({ botId, documents }: BotDocumentsMa
     }
   }
 
+  async function fetchChunksCount(docId: string) {
+    setChunkCounts((prev) => ({ ...prev, [docId]: "loading" as const }));
+    try {
+      const res = await apiFetch(`/api/super-admin/documents/${docId}/chunks-count`);
+      const data = (await res.json().catch(() => ({}))) as { count?: number };
+      const count = res.ok && typeof data.count === "number" ? data.count : 0;
+      setChunkCounts((prev) => ({ ...prev, [docId]: count }));
+    } catch {
+      setChunkCounts((prev) => ({ ...prev, [docId]: 0 }));
+    }
+  }
+
   async function handleDelete(docId: string) {
     if (!botId || deletingId) return;
     setDeletingId(docId);
     setError(null);
     try {
-      const response = await fetch(`/api/super-admin/bots/${botId}/documents/${docId}`, {
+      const response = await apiFetch(`/api/super-admin/bots/${botId}/documents/${docId}`, {
         method: "DELETE",
       });
       if (!response.ok) {
@@ -257,7 +283,7 @@ export default function BotDocumentsManager({ botId, documents }: BotDocumentsMa
     setError(null);
     setJobRunMessage(null);
     try {
-      const response = await fetch(`/api/super-admin/bots/${botId}/documents/${docId}/embed`, {
+      const response = await apiFetch(`/api/super-admin/bots/${botId}/documents/${docId}/embed`, {
         method: "POST",
       });
       const data = (await response.json().catch(() => ({}))) as {
@@ -284,7 +310,7 @@ export default function BotDocumentsManager({ botId, documents }: BotDocumentsMa
     let retried = 0;
     try {
       for (const doc of failedDocs) {
-        const response = await fetch(`/api/super-admin/bots/${botId}/documents/${doc._id}/embed`, {
+        const response = await apiFetch(`/api/super-admin/bots/${botId}/documents/${doc._id}/embed`, {
           method: "POST",
         });
         if (response.ok) {
@@ -302,14 +328,11 @@ export default function BotDocumentsManager({ botId, documents }: BotDocumentsMa
   }
 
   return (
-    <section className="space-y-4">
+    <section className="space-y-6">
       <div>
-        <h3 className="text-sm font-semibold text-gray-900">Documents</h3>
-        <p className="text-xs text-gray-500">
-          Upload PDFs/DOCs/TXTs to build the bot&apos;s knowledge base.
-        </p>
-        <p className="mt-1 text-xs text-gray-500">
-          Uploads are queued for background ingestion. Use Process pending jobs to run queued work.
+        <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Documents</h3>
+        <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+          Upload PDF, DOC, DOCX, or TXT to build the bot&apos;s knowledge base. Uploads are queued for ingestion.
         </p>
       </div>
 
@@ -317,18 +340,18 @@ export default function BotDocumentsManager({ botId, documents }: BotDocumentsMa
         ref={fileInputRef}
         type="file"
         multiple
-        accept=".pdf,.doc,.docx,.txt"
+        accept=".pdf,.doc,.docx,.txt,.md,.markdown"
         className="hidden"
         onChange={(event) => applyFiles(Array.from(event.target.files ?? []))}
       />
 
       <div
-        className={`rounded-xl border border-dashed px-4 py-5 text-center transition ${
+        className={`relative rounded-xl border-2 border-dashed px-6 py-10 text-center transition-all ${
           disabled
-            ? "cursor-not-allowed border-gray-200 bg-gray-100 text-gray-400"
+            ? "cursor-not-allowed border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800/50 text-gray-400 dark:text-gray-500"
             : dragOver
-              ? "cursor-pointer border-brand-500 bg-brand-50"
-              : "cursor-pointer border-gray-300 bg-white hover:border-brand-400"
+              ? "cursor-pointer border-brand-500 dark:border-brand-400 bg-brand-50 dark:bg-brand-900/20 scale-[1.01]"
+              : "cursor-pointer border-gray-300 dark:border-gray-600 bg-gray-50/80 dark:bg-gray-800/50 hover:border-brand-400 dark:hover:border-brand-600 hover:bg-brand-50/50 dark:hover:bg-brand-900/10"
         }`}
         onClick={() => {
           if (!disabled) fileInputRef.current?.click();
@@ -336,6 +359,7 @@ export default function BotDocumentsManager({ botId, documents }: BotDocumentsMa
         onDragOver={(event) => {
           if (disabled) return;
           event.preventDefault();
+          event.stopPropagation();
           setDragOver(true);
         }}
         onDragLeave={() => setDragOver(false)}
@@ -346,29 +370,36 @@ export default function BotDocumentsManager({ botId, documents }: BotDocumentsMa
           applyFiles(Array.from(event.dataTransfer.files ?? []));
         }}
       >
-        <p className="text-sm text-gray-700">
-          Drag &amp; drop files here, or{" "}
-          <span className="text-brand-600 underline underline-offset-4">browse</span>.
+        <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400">
+          <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m6.75 12l-3-3m0 0l-3 3m3-3v6m-1.5-9H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+          </svg>
+        </div>
+        <p className="text-sm font-medium text-gray-700 dark:text-gray-200">
+          Drag &amp; drop files here, or <span className="text-brand-600 dark:text-brand-400 underline underline-offset-2">browse</span>
         </p>
-        <p className="mt-1 text-xs text-gray-500">Allowed: PDF, DOC, DOCX, TXT. Max 5 files, 15MB each.</p>
+        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          PDF, DOC, DOCX, TXT · Max 5 files, 15MB each
+        </p>
       </div>
 
       {selectedFiles.length > 0 ? (
-        <div className="rounded-xl border border-gray-200 bg-white p-3">
-          <p className="text-xs font-medium text-gray-700">Selected files</p>
-          <ul className="mt-2 space-y-1 text-xs text-gray-600">
-            {selectedFiles.map((file) => (
+        <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-4 shadow-sm">
+          <p className="mb-3 text-xs font-semibold text-gray-700 dark:text-gray-300">Selected for upload</p>
+          <ul className="space-y-2">
+            {selectedFiles.map((file, fileIndex) => (
               <li
-                key={`${file.name}-${file.lastModified}-${file.size}`}
-                className="flex items-center justify-between gap-3 rounded-md border border-gray-200 px-2 py-1"
+                key={fileIndex}
+                className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-800/50 px-3 py-2"
               >
-                <span className="truncate">{file.name}</span>
-                <div className="flex items-center gap-2">
-                  <span>{formatSize(file.size)}</span>
+                <span className="min-w-0 truncate text-sm text-gray-800 dark:text-gray-200">{file.name}</span>
+                <div className="flex shrink-0 items-center gap-3">
+                  <span className="text-xs text-gray-500 dark:text-gray-400">{formatSize(file.size)}</span>
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
+                    className="text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 dark:hover:text-red-400"
                     onClick={() =>
                       setSelectedFiles((prev) =>
                         prev.filter((item) => item !== file),
@@ -384,7 +415,20 @@ export default function BotDocumentsManager({ botId, documents }: BotDocumentsMa
         </div>
       ) : null}
 
-      <div className="flex justify-end">
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          disabled={disabled || selectedFiles.length === 0}
+          onClick={handleUpload}
+        >
+          {isUploading ? "Uploading…" : "Upload selected files"}
+        </Button>
+        <Button type="button" variant="secondary" disabled={!botId || isLoading} onClick={() => void refreshDocuments()}>
+          {isLoading ? "Refreshing…" : "Refresh"}
+        </Button>
+        <Button type="button" variant="secondary" disabled={!botId || isRunningJobs} onClick={() => void handleRunJobs()}>
+          {isRunningJobs ? "Processing…" : "Process pending jobs"}
+        </Button>
         {failedDocs.length >= 2 ? (
           <Button
             type="button"
@@ -392,77 +436,85 @@ export default function BotDocumentsManager({ botId, documents }: BotDocumentsMa
             disabled={!botId || isRetryingAll || isRunningJobs}
             onClick={() => void handleRetryAllFailed()}
           >
-            {isRetryingAll ? "Retrying failed..." : "Retry all failed"}
+            {isRetryingAll ? "Retrying…" : "Retry all failed"}
           </Button>
         ) : null}
-        <Button type="button" variant="ghost" disabled={!botId || isLoading} onClick={() => void refreshDocuments()}>
-          {isLoading ? "Refreshing..." : "Refresh"}
-        </Button>
-        <Button type="button" variant="ghost" disabled={!botId || isRunningJobs} onClick={() => void handleRunJobs()}>
-          {isRunningJobs ? "Processing..." : "Process pending jobs"}
-        </Button>
-        <Button type="button" disabled={disabled || selectedFiles.length === 0} onClick={handleUpload}>
-          {isUploading ? "Uploading..." : "Upload selected files"}
-        </Button>
       </div>
 
-      {error ? <p className="text-xs text-red-500">{error}</p> : null}
-      {jobRunMessage ? <p className="text-xs text-emerald-600">{jobRunMessage}</p> : null}
+      {error ? <p className="text-sm text-red-600 dark:text-red-400">{error}</p> : null}
+      {jobRunMessage ? <p className="text-sm text-emerald-600 dark:text-emerald-400">{jobRunMessage}</p> : null}
       {uploadMessages.length > 0 ? (
-        <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
-          <p className="text-xs font-medium text-gray-700">Recent upload results</p>
-          <ul className="mt-2 space-y-1 text-xs text-gray-600">
+        <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 p-3">
+          <p className="text-xs font-medium text-gray-700 dark:text-gray-300">Recent uploads</p>
+          <ul className="mt-2 space-y-1 text-xs text-gray-600 dark:text-gray-400">
             {uploadMessages.map((message, index) => (
-              <li key={`${index}-${message}`}>{message}</li>
+              <li key={index}>{message}</li>
             ))}
           </ul>
         </div>
       ) : null}
 
       {items.length > 0 ? (
-        <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+        <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
           <table className="min-w-full text-left text-sm">
-            <thead className="bg-gray-50 text-gray-700">
+            <thead className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/80">
               <tr>
-                <th className="px-3 py-2 font-medium">Title</th>
-                <th className="px-3 py-2 font-medium">File</th>
-                <th className="px-3 py-2 font-medium">Size</th>
-                <th className="px-3 py-2 font-medium">Status</th>
-                <th className="px-3 py-2 font-medium">Added</th>
-                <th className="px-3 py-2 font-medium">Actions</th>
+                <th className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Title</th>
+                <th className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">File</th>
+                <th className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Size</th>
+                <th className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Status</th>
+                <th className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Chunks</th>
+                <th className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Added</th>
+                <th className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200 text-gray-700">
+            <tbody className="divide-y divide-gray-200 dark:divide-gray-700 text-gray-700 dark:text-gray-300">
               {items.map((doc) => (
-                <tr key={doc._id}>
-                  <td className="px-3 py-2">{doc.title}</td>
-                  <td className="px-3 py-2 text-xs text-gray-500">{doc.fileName || "-"}</td>
-                  <td className="px-3 py-2 text-xs text-gray-500">{formatSize(doc.fileSize)}</td>
-                  <td className="px-3 py-2">
-                    {(() => {
-                      const statusMeta = getStatusMeta(doc.status);
-                      return (
-                        <span
-                          className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium ${statusMeta.className}`}
-                        >
-                          {statusMeta.label}
-                        </span>
-                      );
-                    })()}
-                    <p className="mt-1 text-[11px] text-gray-500">{doc.textLength ?? 0} chars</p>
-                    {isLegacyDocWithoutText(doc) ? (
-                      <p className="mt-1">
-                        <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700">
+                <tr key={doc._id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                  <td className="px-4 py-3 font-medium text-gray-900 dark:text-gray-100">{doc.title}</td>
+                  <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400">{doc.fileName || "—"}</td>
+                  <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400">{formatSize(doc.fileSize)}</td>
+                  <td className="px-4 py-3">
+                    <div className="space-y-1">
+                      {(() => {
+                        const statusMeta = getStatusMeta(doc.status);
+                        return (
+                          <span
+                            className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-medium ${statusMeta.className}`}
+                          >
+                            {statusMeta.label}
+                          </span>
+                        );
+                      })()}
+                      <p className="text-xs text-gray-500 dark:text-gray-400">{doc.textLength ?? 0} chars</p>
+                      {isLegacyDocWithoutText(doc) ? (
+                        <span className="inline-flex rounded-full border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/30 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-300">
                           DOC needs conversion
                         </span>
-                      </p>
-                    ) : null}
-                    {doc.status === "failed" && doc.error ? (
-                      <p className="mt-1 text-[11px] text-red-600">{truncateMessage(doc.error)}</p>
-                    ) : null}
+                      ) : null}
+                      {doc.status === "failed" && doc.error ? (
+                        <p className="text-xs text-red-600 dark:text-red-400">{truncateMessage(doc.error)}</p>
+                      ) : null}
+                    </div>
                   </td>
-                  <td className="px-3 py-2 text-xs text-gray-500">{formatDate(doc.createdAt)}</td>
-                  <td className="px-3 py-2">
+                  <td className="px-4 py-3">
+                    {chunkCounts[doc._id] === "loading" ? (
+                      <span className="text-xs text-gray-400">…</span>
+                    ) : typeof chunkCounts[doc._id] === "number" ? (
+                      <span className="text-xs text-gray-600 dark:text-gray-400">{chunkCounts[doc._id]} chunks</span>
+                    ) : (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => void fetchChunksCount(doc._id)}
+                      >
+                        <span className="text-xs">Count</span>
+                      </Button>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400">{formatDate(doc.createdAt)}</td>
+                  <td className="px-4 py-3">
                     <div className="flex items-center gap-1">
                       <Button
                         type="button"
@@ -471,16 +523,17 @@ export default function BotDocumentsManager({ botId, documents }: BotDocumentsMa
                         disabled={doc.status !== "failed" || retryingId === doc._id || isRetryingAll}
                         onClick={() => void handleRetryDoc(doc._id)}
                       >
-                        {retryingId === doc._id ? "Retrying..." : "Retry"}
+                        {retryingId === doc._id ? "Retrying…" : "Retry"}
                       </Button>
                       <Button
                         type="button"
                         variant="ghost"
                         size="sm"
                         disabled={deletingId === doc._id}
+                        className="text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 dark:hover:text-red-400"
                         onClick={() => handleDelete(doc._id)}
                       >
-                        {deletingId === doc._id ? "Deleting..." : "Delete"}
+                        {deletingId === doc._id ? "Deleting…" : "Delete"}
                       </Button>
                     </div>
                   </td>
@@ -490,7 +543,10 @@ export default function BotDocumentsManager({ botId, documents }: BotDocumentsMa
           </table>
         </div>
       ) : (
-        <p className="text-xs text-gray-500">No documents uploaded yet.</p>
+        <div className="rounded-xl border border-dashed border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/30 py-8 text-center">
+          <p className="text-sm text-gray-500 dark:text-gray-400">No documents yet</p>
+          <p className="mt-0.5 text-xs text-gray-400 dark:text-gray-500">Upload files above to get started.</p>
+        </div>
       )}
     </section>
   );

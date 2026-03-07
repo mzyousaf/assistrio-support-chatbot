@@ -6,10 +6,15 @@ import { useRouter } from "next/navigation";
 import BotForm from "@/components/admin/BotForm";
 import type { BotDocumentItem } from "@/components/admin/BotDocumentsManager";
 import type { BotFaq } from "@/components/admin/BotFaqsEditor";
+import { apiFetch } from "@/lib/api";
 import { clearDraftId, rotateDraftId } from "@/lib/draftBot";
 import type { BotChatUI, BotConfig, BotLeadCaptureV2, BotPersonality } from "@/models/Bot";
 
 type EditBotFormClientProps = {
+  formId?: string;
+  onDirtyChange?: (dirty: boolean) => void;
+  /** Called when name, imageUrl, or chatUI change for live chat preview. */
+  onLivePreviewChange?: (preview: { name: string; imageUrl?: string; chatUI: BotChatUI; tagline?: string; description?: string; welcomeMessage?: string }) => void;
   initialBot: {
     id?: string;
     name?: string;
@@ -22,8 +27,10 @@ type EditBotFormClientProps = {
     knowledgeDescription?: string;
     status?: "draft" | "published";
     faqs?: BotFaq[];
+    exampleQuestions?: string[];
     documents?: BotDocumentItem[];
     openaiApiKeyOverride?: string;
+    whisperApiKeyOverride?: string;
     isPublic?: boolean;
     leadCapture?: BotLeadCaptureV2;
     chatUI?: BotChatUI;
@@ -46,12 +53,20 @@ type EditBotFormClientProps = {
   };
 };
 
-export default function EditBotFormClient({ initialBot }: EditBotFormClientProps) {
+export default function EditBotFormClient({
+  initialBot,
+  formId,
+  onDirtyChange,
+  onLivePreviewChange,
+}: EditBotFormClientProps) {
   const router = useRouter();
 
   return (
     <BotForm
       mode="edit"
+      formId={formId}
+      onDirtyChange={onDirtyChange}
+      onLivePreviewChange={onLivePreviewChange}
       initialBot={{
         ...initialBot,
         config: {
@@ -64,7 +79,7 @@ export default function EditBotFormClient({ initialBot }: EditBotFormClientProps
         if (!initialBot.id) {
           throw new Error("Bot id is missing.");
         }
-        const response = await fetch(`/api/super-admin/bots/${initialBot.id}`, {
+        const response = await apiFetch(`/api/super-admin/bots/${initialBot.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),

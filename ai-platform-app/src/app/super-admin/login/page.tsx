@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import { apiFetch } from "@/lib/api";
 
 export default function SuperAdminLoginPage() {
   const router = useRouter();
@@ -16,7 +17,7 @@ export default function SuperAdminLoginPage() {
     setIsSubmitting(true);
 
     try {
-      const response = await fetch("/api/super-admin/login", {
+      const response = await apiFetch("/api/super-admin/login", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

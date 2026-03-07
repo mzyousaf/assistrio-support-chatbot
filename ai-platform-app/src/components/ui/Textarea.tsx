@@ -1,3 +1,5 @@
+"use client";
+
 import React from "react";
 
 function cx(...classes: Array<string | undefined | null | false>): string {

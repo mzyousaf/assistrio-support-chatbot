@@ -1,5 +1,4 @@
-import mongoose, { Model, Schema } from "mongoose";
-
+/** Types only – no DB. All API calls go to the backend. */
 export interface BotFaq {
   question: string;
   answer: string;
@@ -9,8 +8,12 @@ export interface BotPersonality {
   name?: string;
   description?: string;
   systemPrompt?: string;
+  /** Behavior preset key (default, support, sales, …). Persisted so dropdown reflects after reload. */
+  behaviorPreset?: string;
   tone?: "friendly" | "formal" | "playful" | "technical";
   language?: string;
+  /** Things the bot should avoid (topics, behaviours). Used in behaviour context. */
+  thingsToAvoid?: string;
 }
 
 export interface BotConfig {
@@ -40,19 +43,96 @@ export interface BotLeadCaptureLegacy {
 }
 
 export type ChatBackgroundStyle = "auto" | "light" | "dark";
-export type ChatBubbleStyle = "rounded" | "squared";
 export type ChatLauncherPosition = "bottom-right" | "bottom-left";
-export type ChatFont = "system" | "inter" | "poppins";
-export type ChatAvatarStyle = "emoji" | "image" | "none";
+/** Message bubble border radius in pixels (0–32). Affects message bubbles and suggested chips. */
+export const BUBBLE_RADIUS_MIN = 0;
+export const BUBBLE_RADIUS_MAX = 32;
+/** "label" = dot + label next to title; "dot-only" = dot overlapping avatar */
+export type LiveIndicatorStyle = "label" | "dot-only";
+/** Header status: "live" | "active" | "none". When "none", no status pill/label is shown. */
+export type ChatStatusIndicator = "live" | "active" | "none";
+/** Where to show message time: "top" (above message) or "bottom" (assistant=right, user=left) */
+export type ChatTimePosition = "top" | "bottom";
+
+/** Quick link in chat header menu (max 3): display text + route/URL */
+export interface ChatMenuQuickLink {
+  text: string;
+  route: string;
+}
+
+/** Launcher icon source: default chat icon, bot avatar (with background), or custom upload */
+export type ChatLauncherIcon = "default" | "bot-avatar" | "custom";
+/** Shadow intensity for chat and launcher */
+export type ChatShadowIntensity = "none" | "low" | "medium" | "high";
+/** Chat open/close animation style: slide-up-fade, fade, or expand (grows from launcher) */
+export type ChatOpenAnimation = "slide-up-fade" | "fade" | "expand";
 
 export interface BotChatUI {
   primaryColor?: string;
   backgroundStyle?: ChatBackgroundStyle;
-  bubbleStyle?: ChatBubbleStyle;
-  avatarStyle?: ChatAvatarStyle;
+  /** Message bubble border radius in pixels (0–32). Affects message bubbles and suggested chips. */
+  bubbleBorderRadius?: number;
   launcherPosition?: ChatLauncherPosition;
-  font?: ChatFont;
+  /** Shadow intensity for chat panel and launcher (default "medium") */
+  shadowIntensity?: ChatShadowIntensity;
+  /** When true, show a border around the chat panel using primary color (default true). */
+  showChatBorder?: boolean;
+  /** Launcher icon: default, bot avatar with background, or custom upload (default "default") */
+  launcherIcon?: ChatLauncherIcon;
+  /** When launcherIcon is "custom", image URL or data URL from upload */
+  launcherAvatarUrl?: string;
+  /** When launcherIcon is "bot-avatar", ring width (accent around avatar) 0–30 percent; 0 = no ring (default 18) */
+  launcherAvatarRingWidth?: number;
+  /** Launcher button size in pixels (default 48) */
+  launcherSize?: number;
+  /** How the chat panel opens/closes: slide-up-fade, fade, or expand (default "slide-up-fade") */
+  chatOpenAnimation?: ChatOpenAnimation;
+  /** When true, chat opens automatically on page load (default true). Only applies where the widget is used (e.g. bot edit page). */
+  openChatOnLoad?: boolean;
   showBranding?: boolean;
+  /** Editable text in footer when showBranding is true (e.g. "Powered by ...") */
+  brandingMessage?: string;
+  liveIndicatorStyle?: LiveIndicatorStyle;
+  /** Header status: "live" | "active" | "none" (default "none") */
+  statusIndicator?: ChatStatusIndicator;
+  /** Status dot: "blinking" or "static" (default "blinking") */
+  statusDotStyle?: "blinking" | "static";
+  /** Show scroll-to-bottom button when user scrolls up (default true) */
+  showScrollToBottom?: boolean;
+  /** Show scrollbar in message area (default true). When false, scrollbar is hidden but content still scrolls. */
+  showScrollbar?: boolean;
+  /** When true, message input is a separate box (border-top + bg). When false, no border and no bg (default true). */
+  composerAsSeparateBox?: boolean;
+  /** Message input border width in px. 0 = default 1px; 0.5–6 = custom (min 0.5). Focus = width × 1.5. Default 1. */
+  composerBorderWidth?: number;
+  /** When composerBorderWidth >= 0.5: "default" = gray border, "primary" = primary color. Default "primary". */
+  composerBorderColor?: "default" | "primary";
+  /** Show "Expand chat" option in header menu (default true) */
+  showMenuExpand?: boolean;
+  /** Quick links in header menu (max 3) */
+  menuQuickLinks?: ChatMenuQuickLink[];
+  /** When true, show chat input with suggested questions on first message. When false, only quick-question chips until user picks one (default false). */
+  showComposerWithSuggestedQuestions?: boolean;
+  /** Show bot avatar in chat header (default true) */
+  showAvatarInHeader?: boolean;
+  /** Display name for assistant/sender (e.g. "Bot Name - AI"). Empty = use bot name + " - AI". */
+  senderName?: string;
+  /** Show sender/assistant name above messages (default true) */
+  showSenderName?: boolean;
+  /** Show message time in metadata (default true) */
+  showTime?: boolean;
+  /** Show copy button on assistant messages (default true) */
+  showCopyButton?: boolean;
+  /** Show sources on assistant messages (default true) */
+  showSources?: boolean;
+  /** Where to show time: top (above message) or bottom (assistant=right, user=left) */
+  timePosition?: ChatTimePosition;
+  /** Show emoji picker in composer (default true) */
+  showEmoji?: boolean;
+  /** Allow file uploads in chat (Integration; consumes more GPT) */
+  allowFileUpload?: boolean;
+  /** Show mic button; when true, Whisper API key required in Integrations */
+  showMic?: boolean;
 }
 
 export interface BotDocument {
@@ -67,6 +147,7 @@ export interface BotDocument {
   avatarEmoji?: string;
   imageUrl?: string;
   openaiApiKeyOverride?: string;
+  whisperApiKeyOverride?: string;
   limitOverrideMessages?: number;
   clientDraftId?: string;
   status?: "draft" | "published";
@@ -81,123 +162,3 @@ export interface BotDocument {
   config?: BotConfig;
   createdAt: Date;
 }
-
-const BotSchema = new Schema<BotDocument>({
-  name: { type: String, required: true },
-  slug: { type: String, required: true, unique: true, lowercase: true },
-  type: { type: String, required: true, enum: ["showcase", "visitor-own"] },
-  ownerVisitorId: { type: String },
-  isPublic: { type: Boolean, default: false },
-  shortDescription: { type: String },
-  category: { type: String },
-  categories: { type: [String], default: [] },
-  avatarEmoji: { type: String },
-  imageUrl: { type: String },
-  openaiApiKeyOverride: { type: String },
-  limitOverrideMessages: { type: Number },
-  clientDraftId: { type: String },
-  status: {
-    type: String,
-    enum: ["draft", "published"],
-    default: "draft",
-    index: true,
-  },
-  welcomeMessage: { type: String },
-  leadCapture: {
-    enabled: { type: Boolean, default: false },
-    fields: {
-      type: [
-        new Schema(
-          {
-            key: { type: String, required: true },
-            label: { type: String, required: true },
-            type: {
-              type: String,
-              enum: ["text", "email", "phone", "number", "url"],
-              default: "text",
-            },
-            required: { type: Boolean, default: true },
-          },
-          { _id: false },
-        ),
-      ],
-      default: [],
-    },
-    collectName: { type: Boolean },
-    collectEmail: { type: Boolean },
-    collectPhone: { type: Boolean },
-  },
-  chatUI: {
-    primaryColor: { type: String, default: "#14B8A6" },
-    backgroundStyle: {
-      type: String,
-      enum: ["auto", "light", "dark"],
-      default: "light",
-    },
-    bubbleStyle: {
-      type: String,
-      enum: ["rounded", "squared"],
-      default: "rounded",
-    },
-    avatarStyle: {
-      type: String,
-      enum: ["emoji", "image", "none"],
-      default: "emoji",
-    },
-    launcherPosition: {
-      type: String,
-      enum: ["bottom-right", "bottom-left"],
-      default: "bottom-right",
-    },
-    font: {
-      type: String,
-      enum: ["system", "inter", "poppins"],
-      default: "inter",
-    },
-    showBranding: { type: Boolean, default: true },
-  },
-  description: { type: String },
-  knowledgeDescription: { type: String },
-  faqs: [
-    {
-      question: { type: String, required: true },
-      answer: { type: String, required: true },
-    },
-  ],
-  exampleQuestions: { type: [String], default: [] },
-  personality: {
-    name: { type: String },
-    description: { type: String },
-    systemPrompt: { type: String },
-    tone: {
-      type: String,
-      enum: ["friendly", "formal", "playful", "technical"],
-    },
-    language: { type: String },
-  },
-  config: {
-    temperature: { type: Number, min: 0, max: 1 },
-    maxTokens: { type: Number },
-    responseLength: {
-      type: String,
-      enum: ["short", "medium", "long"],
-    },
-  },
-  createdAt: { type: Date, default: Date.now },
-});
-
-BotSchema.index(
-  { clientDraftId: 1 },
-  {
-    unique: true,
-    partialFilterExpression: {
-      status: "draft",
-      type: "showcase",
-      clientDraftId: { $type: "string" },
-    },
-  },
-);
-
-export const Bot =
-  (mongoose.models.Bot as Model<BotDocument>) ||
-  mongoose.model<BotDocument>("Bot", BotSchema);

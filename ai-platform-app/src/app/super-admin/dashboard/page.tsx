@@ -1,16 +1,19 @@
-import Link from "next/link";
-import { redirect } from "next/navigation";
+"use client";
 
+import Link from "next/link";
 import AdminShell from "@/components/admin/AdminShell";
 import { Card } from "@/components/ui/Card";
+import { useSuperAdmin } from "@/hooks/useSuperAdmin";
 
-import { getAuthenticatedSuperAdmin } from "@/lib/superAdminAuth";
+export default function SuperAdminDashboardPage() {
+  const { user, loading } = useSuperAdmin();
 
-export default async function SuperAdminDashboardPage() {
-  const user = await getAuthenticatedSuperAdmin();
-
-  if (!user) {
-    redirect("/super-admin/login");
+  if (loading || !user) {
+    return (
+      <AdminShell title="Dashboard">
+        <p className="text-sm text-gray-500">Loading…</p>
+      </AdminShell>
+    );
   }
 
   return (

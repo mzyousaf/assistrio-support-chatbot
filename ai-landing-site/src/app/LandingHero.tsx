@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { PLATFORM_BASE_URL } from "@/lib/config";
+import { API_BASE_URL } from "@/lib/config";
 import { usePageView } from "@/hooks/usePageView";
 import { useVisitorId } from "@/hooks/useVisitorId";
 
@@ -9,8 +9,8 @@ export function LandingHero() {
   usePageView("/");
   const { visitorId, loading } = useVisitorId();
 
-  const createBotUrl = visitorId
-    ? `${PLATFORM_BASE_URL}/trial/new?visitorId=${visitorId}`
+  const createBotUrl = visitorId && API_BASE_URL
+    ? `${API_BASE_URL}/trial/new?visitorId=${visitorId}`
     : "#";
 
   return (

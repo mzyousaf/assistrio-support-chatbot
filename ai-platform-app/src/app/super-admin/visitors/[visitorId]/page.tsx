@@ -1,53 +1,90 @@
-import { redirect } from "next/navigation";
+"use client";
 
+import { useParams } from "next/navigation";
+import { useEffect, useState } from "react";
 import AdminShell from "@/components/admin/AdminShell";
 import { Card } from "@/components/ui/Card";
-import { connectToDatabase } from "@/lib/mongoose";
-import { getAuthenticatedSuperAdmin } from "@/lib/superAdminAuth";
-import { Bot } from "@/models/Bot";
-import { Conversation } from "@/models/Conversation";
-import { Visitor } from "@/models/Visitor";
-import { VisitorEvent } from "@/models/VisitorEvent";
-
-interface PageProps {
-  params: Promise<{ visitorId: string }>;
-}
+import { apiFetch } from "@/lib/api";
+import { useSuperAdmin } from "@/hooks/useSuperAdmin";
 
 function formatDate(value: unknown): string {
-  if (!value) {
-    return "—";
-  }
-
+  if (!value) return "—";
   const date = value instanceof Date ? value : new Date(String(value));
-  if (Number.isNaN(date.getTime())) {
-    return "—";
-  }
-
+  if (Number.isNaN(date.getTime())) return "—";
   return date.toLocaleString();
 }
 
-export default async function VisitorDetailPage({ params }: PageProps) {
-  const { visitorId } = await params;
+type PageData = {
+  visitor: {
+    name?: string;
+    email?: string;
+    phone?: string;
+    createdAt?: string | null;
+    lastSeenAt?: string | null;
+    showcaseMessageCount?: number;
+    ownBotMessageCount?: number;
+    [key: string]: unknown;
+  };
+  events: Array<{ _id: string; createdAt?: string | null; type?: string; path?: string; botSlug?: string }>;
+  bots: Array<{ _id: string; name?: string; slug?: string; createdAt?: string | null }>;
+  conversationsCount: number;
+};
 
-  const admin = await getAuthenticatedSuperAdmin();
-  if (!admin) redirect("/super-admin/login");
+export default function VisitorDetailPage() {
+  const params = useParams();
+  const visitorId = typeof params?.visitorId === "string" ? params.visitorId : "";
+  const { user, loading: authLoading } = useSuperAdmin();
+  const [data, setData] = useState<PageData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  await connectToDatabase();
+  useEffect(() => {
+    if (!user || !visitorId) return;
+    let cancelled = false;
+    apiFetch(`/api/super-admin/visitors/${encodeURIComponent(visitorId)}`)
+      .then(async (res) => {
+        if (cancelled) return;
+        if (!res.ok) {
+          setError("Visitor not found.");
+          return;
+        }
+        const json = (await res.json()) as PageData;
+        setData(json);
+      })
+      .catch(() => setError("Failed to load visitor."))
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user, visitorId]);
 
-  const visitor = await Visitor.findOne({ visitorId }).lean();
-  if (!visitor) {
+  if (authLoading || !user) {
     return (
       <AdminShell title="Visitor">
-        <p className="text-gray-500 dark:text-gray-400 text-sm">Visitor not found.</p>
+        <p className="text-sm text-gray-500">Loading…</p>
       </AdminShell>
     );
   }
 
-  const [events, bots, conversationsCount] = await Promise.all([
-    VisitorEvent.find({ visitorId }).sort({ createdAt: -1 }).limit(50).lean(),
-    Bot.find({ ownerVisitorId: visitorId }).sort({ createdAt: -1 }).lean(),
-    Conversation.countDocuments({ visitorId }),
-  ]);
+  if (error || (!loading && !data)) {
+    return (
+      <AdminShell title="Visitor">
+        <p className="text-sm text-gray-500 dark:text-gray-400">{error ?? "Visitor not found."}</p>
+      </AdminShell>
+    );
+  }
+
+  if (loading || !data) {
+    return (
+      <AdminShell title={`Visitor ${visitorId}`}>
+        <p className="text-sm text-gray-500">Loading…</p>
+      </AdminShell>
+    );
+  }
+
+  const { visitor, events, bots, conversationsCount } = data;
 
   return (
     <AdminShell title={`Visitor ${visitorId}`}>
@@ -124,21 +161,12 @@ export default async function VisitorDetailPage({ params }: PageProps) {
               </thead>
               <tbody>
                 {bots.map((bot) => (
-                  <tr key={bot._id.toString()} className="border-b border-gray-200 dark:border-gray-800">
+                  <tr key={String(bot._id)} className="border-b border-gray-200 dark:border-gray-800">
                     <td className="py-2 pr-2">{bot.name}</td>
                     <td className="py-2 pr-2 text-gray-500 dark:text-gray-400 text-[11px]">
                       {formatDate(bot.createdAt)}
                     </td>
-                    <td className="py-2 pr-2">
-                      <a
-                        href={`/trial/${bot.slug}?visitorId=${visitorId}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-emerald-400 hover:text-emerald-300 text-[11px]"
-                      >
-                        Open chat
-                      </a>
-                    </td>
+                    <td className="py-2 pr-2 text-gray-500 dark:text-gray-400 text-[11px]">—</td>
                   </tr>
                 ))}
               </tbody>

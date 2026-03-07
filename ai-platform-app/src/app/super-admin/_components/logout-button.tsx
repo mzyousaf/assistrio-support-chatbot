@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { apiFetch } from "@/lib/api";
+
 export function LogoutButton() {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -11,7 +13,7 @@ export function LogoutButton() {
     setIsSubmitting(true);
 
     try {
-      await fetch("/api/super-admin/logout", {
+      await apiFetch("/api/super-admin/logout", {
         method: "POST",
       });
     } finally {

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { apiFetch } from "@/lib/api";
 
 interface BotDocumentItem {
   _id: string;
@@ -44,7 +45,7 @@ export default function BotKnowledgeBaseSection({
         formData.append("file", file);
         formData.append("title", file.name);
 
-        const res = await fetch(`/api/super-admin/bots/${botId}/upload-doc`, {
+        const res = await apiFetch(`/api/super-admin/bots/${botId}/upload-doc`, {
           method: "POST",
           body: formData,
         });
@@ -69,7 +70,7 @@ export default function BotKnowledgeBaseSection({
     setDeletingId(docId);
     setError(null);
     try {
-      const res = await fetch(`/api/super-admin/bots/${botId}/documents/${docId}`, {
+      const res = await apiFetch(`/api/super-admin/bots/${botId}/documents/${docId}`, {
         method: "DELETE",
       });
       if (!res.ok) {
@@ -129,9 +130,9 @@ export default function BotKnowledgeBaseSection({
           <div className="space-y-2">
             <p className="text-xs text-slate-400">Selected files</p>
             <ul className="space-y-1 text-xs text-slate-300">
-              {selectedFiles.map((file) => (
+              {selectedFiles.map((file, fileIndex) => (
                 <li
-                  key={`${file.name}-${file.size}-${file.lastModified}`}
+                  key={fileIndex}
                   className="flex items-center justify-between"
                 >
                   <span className="truncate max-w-[240px]">{file.name}</span>
