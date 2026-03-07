@@ -25,11 +25,10 @@ export interface PublicBotDto {
   chatUI?: {
     primaryColor?: string;
     backgroundStyle?: string;
-    bubbleStyle?: string;
-    avatarStyle?: string;
+    bubbleBorderRadius?: number;
     launcherPosition?: string;
-    font?: string;
     showBranding?: boolean;
+    timePosition?: 'top' | 'bottom';
   };
   createdAt: string;
 }
@@ -217,7 +216,7 @@ export class BotsService {
           welcomeMessage: '',
           knowledgeDescription: '',
           leadCapture: { enabled: false, fields: [{ key: 'name', label: 'Full name', type: 'text', required: true }, { key: 'email', label: 'Email', type: 'email', required: true }, { key: 'phone', label: 'Phone', type: 'phone', required: true }] },
-          chatUI: { primaryColor: '#14B8A6', backgroundStyle: 'light', bubbleStyle: 'rounded', avatarStyle: 'emoji', launcherPosition: 'bottom-right', font: 'inter', showBranding: true },
+          chatUI: { primaryColor: '#14B8A6', backgroundStyle: 'light', bubbleBorderRadius: 20, launcherPosition: 'bottom-right', timePosition: 'top', showBranding: true },
           faqs: [],
           personality: { language: 'en-US' },
           config: { temperature: 0.3, responseLength: 'medium', maxTokens: 512 },

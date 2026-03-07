@@ -140,23 +140,36 @@ export function normalizeBotPayload(input: Record<string, unknown>): NormalizedB
   const leadCapture = normalizeLeadCapture(input.leadCapture);
 
   const chatUIInput = (input.chatUI ?? {}) as Record<string, unknown>;
+  const bubbleRadius =
+    typeof chatUIInput.bubbleBorderRadius === 'number' && chatUIInput.bubbleBorderRadius >= 0 && chatUIInput.bubbleBorderRadius <= 32
+      ? Math.round(chatUIInput.bubbleBorderRadius)
+      : chatUIInput.bubbleStyle === 'squared'
+        ? 0
+        : 20;
+  const timePos =
+    chatUIInput.timePosition === 'bottom' || chatUIInput.timePosition === 'bottom-right' ? 'bottom' : 'top';
   const chatUI: BotChatUI = {
     primaryColor: typeof chatUIInput.primaryColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(chatUIInput.primaryColor.trim()) ? chatUIInput.primaryColor.trim() : '#14B8A6',
     backgroundStyle: chatUIInput.backgroundStyle === 'auto' || chatUIInput.backgroundStyle === 'light' || chatUIInput.backgroundStyle === 'dark' ? chatUIInput.backgroundStyle as BotChatUI['backgroundStyle'] : 'light',
-    bubbleStyle: chatUIInput.bubbleStyle === 'rounded' || chatUIInput.bubbleStyle === 'squared' ? chatUIInput.bubbleStyle as BotChatUI['bubbleStyle'] : 'rounded',
-    avatarStyle: chatUIInput.avatarStyle === 'emoji' || chatUIInput.avatarStyle === 'image' || chatUIInput.avatarStyle === 'none' ? chatUIInput.avatarStyle as BotChatUI['avatarStyle'] : 'emoji',
+    bubbleBorderRadius: bubbleRadius,
     launcherPosition: chatUIInput.launcherPosition === 'bottom-left' || chatUIInput.launcherPosition === 'bottom-right' ? chatUIInput.launcherPosition as BotChatUI['launcherPosition'] : 'bottom-right',
-    font: chatUIInput.font === 'system' || chatUIInput.font === 'inter' || chatUIInput.font === 'poppins' ? chatUIInput.font as BotChatUI['font'] : 'inter',
     showBranding: chatUIInput.showBranding !== false,
     brandingMessage: typeof chatUIInput.brandingMessage === 'string' ? chatUIInput.brandingMessage.trim() : '',
     liveIndicatorStyle: chatUIInput.liveIndicatorStyle === 'dot-only' ? 'dot-only' : 'label',
+    statusIndicator: chatUIInput.statusIndicator === 'live' || chatUIInput.statusIndicator === 'active' ? chatUIInput.statusIndicator as BotChatUI['statusIndicator'] : 'none',
+    statusDotStyle: chatUIInput.statusDotStyle === 'static' ? 'static' : 'blinking',
+    showScrollToBottom: chatUIInput.showScrollToBottom !== false,
+    composerAsSeparateBox: chatUIInput.composerAsSeparateBox !== false,
     showMenuExpand: chatUIInput.showMenuExpand !== false,
     menuQuickLinks: normalizeMenuQuickLinks(chatUIInput.menuQuickLinks),
     showComposerWithSuggestedQuestions: chatUIInput.showComposerWithSuggestedQuestions === true,
     showAvatarInHeader: chatUIInput.showAvatarInHeader !== false,
     senderName: typeof chatUIInput.senderName === 'string' ? chatUIInput.senderName.trim() : '',
+    showSenderName: chatUIInput.showSenderName !== false,
     showTime: chatUIInput.showTime !== false,
-    timePosition: chatUIInput.timePosition === 'bottom-right' ? 'bottom-right' : 'top-left',
+    showCopyButton: chatUIInput.showCopyButton !== false,
+    showSources: chatUIInput.showSources !== false,
+    timePosition: timePos,
     showEmoji: chatUIInput.showEmoji !== false,
     allowFileUpload: chatUIInput.allowFileUpload === true,
     showMic: chatUIInput.showMic === true,

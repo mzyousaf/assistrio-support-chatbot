@@ -78,10 +78,9 @@ export class SuperAdminSeedController {
           chatUI: {
             primaryColor: '#14B8A6',
             backgroundStyle: 'light',
-            bubbleStyle: 'rounded',
-            avatarStyle: 'emoji',
+            bubbleBorderRadius: 20,
             launcherPosition: 'bottom-right',
-            font: 'inter',
+            timePosition: 'top',
             showBranding: true,
           },
           config: { temperature: 0.3, responseLength: 'medium', maxTokens: 512 },

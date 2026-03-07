@@ -9,7 +9,7 @@ export {
   BotPersonality,
   BotConfig,
 } from './bot.schema';
-export type { LeadFieldType, ChatBackgroundStyle, ChatBubbleStyle, ChatLauncherPosition, ChatFont, ChatAvatarStyle } from './bot.schema';
+export type { LeadFieldType, ChatBackgroundStyle, ChatLauncherPosition, ChatTimePosition, LiveIndicatorStyle, ChatStatusIndicator } from './bot.schema';
 
 export { DocumentModel, DocumentSchema } from './document.schema';
 export { Chunk, ChunkSchema } from './chunk.schema';
