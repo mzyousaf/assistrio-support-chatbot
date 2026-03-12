@@ -5,7 +5,10 @@ import {
   HttpException,
   HttpStatus,
   Post,
+  Req,
 } from '@nestjs/common';
+import { FastifyRequest } from 'fastify';
+import { getRequestId } from '../lib/request-id.helper';
 import { AnalyticsService } from '../analytics/analytics.service';
 import { BotsService } from '../bots/bots.service';
 import { ChatEngineService } from '../chat/chat-engine.service';
@@ -33,7 +36,7 @@ export class DemoChatController {
 
   @Post('chat')
   @HttpCode(HttpStatus.OK)
-  async chat(@Body() body: unknown) {
+  async chat(@Body() body: unknown, @Req() req: FastifyRequest) {
     const parsed = parseDemoChatBody(body);
     if (!parsed) {
       throw new HttpException(
@@ -88,8 +91,14 @@ export class DemoChatController {
 
     const botLike: BotLike = {
       _id: (bot as { _id: { toString(): string } })._id,
+      name: (bot as { name?: string }).name,
+      shortDescription: (bot as { shortDescription?: string }).shortDescription,
+      description: (bot as { description?: string }).description,
+      category: (bot as { category?: string }).category,
       openaiApiKeyOverride: (bot as { openaiApiKeyOverride?: string }).openaiApiKeyOverride,
       welcomeMessage: (bot as { welcomeMessage?: string }).welcomeMessage,
+      knowledgeDescription: (bot as { knowledgeDescription?: string }).knowledgeDescription,
+      leadCapture: (bot as { leadCapture?: unknown }).leadCapture as BotLike['leadCapture'],
       personality: (bot as { personality?: unknown }).personality as BotLike['personality'],
       config: (bot as { config?: unknown }).config as BotLike['config'],
       faqs: (bot as { faqs?: unknown }).faqs as BotLike['faqs'],
@@ -100,6 +109,7 @@ export class DemoChatController {
       message,
       mode: 'demo',
       userApiKey: requestApiKey,
+      requestId: getRequestId(req),
     });
 
     if (!chatResult.ok) {

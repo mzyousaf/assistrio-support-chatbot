@@ -118,7 +118,7 @@ export function SourceDetailModal({ source, onClose }: SourceDetailModalProps) {
         </div>
         {source.score != null ? (
           <div className="flex-shrink-0 border-t border-gray-200 dark:border-gray-700 px-4 py-2 text-xs text-gray-500">
-            Chunk ID: {source.chunkId} · Score: {source.score.toFixed(2)}
+            Relevance: {source.score.toFixed(2)}
           </div>
         ) : null}
       </div>

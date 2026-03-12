@@ -3,8 +3,11 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { Pencil, Trash2, X } from "lucide-react";
 import AdminShell from "@/components/admin/AdminShell";
 import CreateNewBotButton from "@/components/admin/CreateNewBotButton";
+import { SettingsModal } from "@/components/admin/settings/SettingsModal";
+import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { apiFetch } from "@/lib/api";
 import { useSuperAdmin } from "@/hooks/useSuperAdmin";
@@ -34,24 +37,37 @@ export default function SuperAdminBotsPage() {
     : "all";
   const [bots, setBots] = useState<BotRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [apiError, setApiError] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [botToDelete, setBotToDelete] = useState<{ id: string; name: string } | null>(null);
+
+  async function fetchBots() {
+    const url = `/api/super-admin/bots${statusFilter !== "all" ? `?status=${statusFilter}` : ""}`;
+    const res = await apiFetch(url);
+    if (!res.ok) {
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      setApiError(data.error ?? "Failed to load bots.");
+      return;
+    }
+    const data = await res.json();
+    setBots(Array.isArray(data) ? data : []);
+    setApiError(null);
+  }
 
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
     const url = `/api/super-admin/bots${statusFilter !== "all" ? `?status=${statusFilter}` : ""}`;
     apiFetch(url)
-      .then((res) => {
+      .then(async (res) => {
         if (cancelled) return;
+        const data = (await res.json().catch(() => ({}))) as { error?: string } | BotRow[];
         if (!res.ok) {
-          setError("Failed to load bots.");
+          setApiError((data as { error?: string })?.error ?? "Failed to load bots.");
           return;
         }
-        return res.json();
-      })
-      .then((data) => {
-        if (cancelled || !data) return;
         setBots(Array.isArray(data) ? data : []);
+        setApiError(null);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -61,6 +77,26 @@ export default function SuperAdminBotsPage() {
     };
   }, [user, statusFilter]);
 
+  async function confirmDelete() {
+    if (!botToDelete) return;
+    setDeletingId(botToDelete.id);
+    setApiError(null);
+    try {
+      const res = await apiFetch(`/api/super-admin/bots/${botToDelete.id}`, { method: "DELETE" });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setApiError(data.error ?? "Failed to delete bot.");
+        return;
+      }
+      setBotToDelete(null);
+      await fetchBots();
+    } catch {
+      setApiError("Failed to delete bot. Please try again.");
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   if (authLoading || !user) {
     return (
       <AdminShell title="Bots">
@@ -69,16 +105,57 @@ export default function SuperAdminBotsPage() {
     );
   }
 
-  if (error) {
-    return (
-      <AdminShell title="Bots">
-        <p className="text-sm text-red-600">{error}</p>
-      </AdminShell>
-    );
-  }
-
   return (
     <AdminShell title="Bots">
+      {apiError ? (
+        <div
+          className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-800 dark:bg-red-900/20 dark:text-red-200"
+          role="alert"
+        >
+          <span>{apiError}</span>
+          <button
+            type="button"
+            onClick={() => setApiError(null)}
+            className="shrink-0 rounded p-1 hover:bg-red-100 dark:hover:bg-red-900/40"
+            aria-label="Dismiss"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      ) : null}
+      <SettingsModal
+        open={botToDelete !== null}
+        onClose={() => !deletingId && setBotToDelete(null)}
+        title="Delete bot?"
+        description={botToDelete ? `"${botToDelete.name}" will be permanently deleted. This cannot be undone.` : undefined}
+        maxWidthClass="max-w-md"
+        footer={
+          <>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setBotToDelete(null)}
+              disabled={!!deletingId}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              onClick={() => void confirmDelete()}
+              disabled={!!deletingId}
+            >
+              {deletingId ? "Deleting…" : "Delete"}
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-gray-600 dark:text-gray-400">
+          Are you sure you want to delete this bot? All associated documents and data will be removed.
+        </p>
+      </SettingsModal>
       <section className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-sm text-gray-600 dark:text-gray-400">Manage and review all configured bots.</p>
@@ -120,8 +197,8 @@ export default function SuperAdminBotsPage() {
           </div>
         </div>
         <CreateNewBotButton
-          className="inline-flex items-center justify-center rounded-lg bg-brand-500 px-3.5 py-2 text-sm font-medium text-white shadow-card transition hover:bg-brand-400"
-          label="Create new bot"
+          label="Create new"
+          className="shrink-0 rounded-lg bg-brand-500 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-brand-400"
         />
       </section>
 
@@ -180,12 +257,30 @@ export default function SuperAdminBotsPage() {
                       <td className="px-4 py-3">{formatDate(bot.createdAt)}</td>
                       <td className="px-4 py-3">
                         {bot.type === "showcase" ? (
-                          <Link
-                            className="inline-flex items-center rounded-md px-2.5 py-1 text-xs font-medium bg-brand-500 hover:bg-brand-400 text-white transition-colors"
-                            href={`/super-admin/bots/${String(bot._id)}`}
-                          >
-                            Edit
-                          </Link>
+                          <div className="flex items-center gap-1">
+                            <Link
+                              href={`/super-admin/bots/${String(bot._id)}`}
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
+                              title="Edit bot"
+                              aria-label="Edit bot"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Link>
+                            <button
+                              type="button"
+                              onClick={() => setBotToDelete({ id: String(bot._id), name: bot.name })}
+                              disabled={deletingId === bot._id}
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20 disabled:opacity-50"
+                              title="Delete bot"
+                              aria-label="Delete bot"
+                            >
+                              {deletingId === bot._id ? (
+                                <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" aria-hidden />
+                              ) : (
+                                <Trash2 className="h-4 w-4" />
+                              )}
+                            </button>
+                          </div>
                         ) : (
                           <span className="text-gray-500 dark:text-gray-500">-</span>
                         )}

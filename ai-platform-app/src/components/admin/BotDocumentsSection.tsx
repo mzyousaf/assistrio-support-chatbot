@@ -1,5 +1,10 @@
 "use client";
 
+/**
+ * @deprecated Unused. BotDocumentsManager is the single source of truth for document management
+ * in the Knowledge tab. Do not use this component in the live UI.
+ */
+
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -47,11 +52,12 @@ export default function BotDocumentsSection({ botId, documents }: BotDocumentsSe
     try {
       const formData = new FormData();
       formData.append("file", file);
+      formData.append("botId", botId);
       if (title.trim()) {
         formData.append("title", title.trim());
       }
 
-      const response = await apiFetch(`/api/super-admin/bots/${botId}/upload-doc`, {
+      const response = await apiFetch("/api/super-admin/upload", {
         method: "POST",
         body: formData,
       });

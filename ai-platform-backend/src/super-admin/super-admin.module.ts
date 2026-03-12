@@ -6,6 +6,7 @@ import { SuperAdminUser, SuperAdminUserSchema } from '../models';
 import { BotsModule } from '../bots/bots.module';
 import { ChatModule } from '../chat/chat.module';
 import { DocumentsModule } from '../documents/documents.module';
+import { EmbeddingModule } from '../embedding/embedding.module';
 import { IngestionModule } from '../ingestion/ingestion.module';
 import { KbModule } from '../kb/kb.module';
 import { LimitsModule } from '../limits/limits.module';
@@ -18,9 +19,10 @@ import { SuperAdminJobsController } from './super-admin-jobs.controller';
 import { SuperAdminLimitsController } from './super-admin-limits.controller';
 import { SuperAdminOpenaiController } from './super-admin-openai.controller';
 import { SuperAdminSeedController } from './super-admin-seed.controller';
-import { SuperAdminUploadsController } from './super-admin-uploads.controller';
+import { SuperAdminUploadController } from './super-admin-upload.controller';
 import { SuperAdminGuard } from './super-admin.guard';
 import { SuperAdminLoginController } from './super-admin-login.controller';
+import { BotOnboardingService } from './bot-onboarding.service';
 
 @Module({
   imports: [
@@ -37,6 +39,7 @@ import { SuperAdminLoginController } from './super-admin-login.controller';
     BotsModule,
     ChatModule,
     DocumentsModule,
+    EmbeddingModule,
     IngestionModule,
     KbModule,
     LimitsModule,
@@ -51,9 +54,9 @@ import { SuperAdminLoginController } from './super-admin-login.controller';
     SuperAdminJobsController,
     SuperAdminOpenaiController,
     SuperAdminSeedController,
-    SuperAdminUploadsController,
+    SuperAdminUploadController,
   ],
-  providers: [SuperAdminAuthService, SuperAdminGuard],
+  providers: [SuperAdminAuthService, SuperAdminGuard, BotOnboardingService],
   exports: [SuperAdminAuthService, SuperAdminGuard],
 })
 export class SuperAdminModule {}

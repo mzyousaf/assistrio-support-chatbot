@@ -11,6 +11,7 @@ import { Card } from "@/components/ui/Card";
 import { apiFetch } from "@/lib/api";
 import { useSuperAdmin } from "@/hooks/useSuperAdmin";
 import type { BotChatUI, BotLeadCaptureV2 } from "@/models/Bot";
+import type { BotFaq } from "@/components/admin/BotFaqsEditor";
 
 const EDIT_BOT_FORM_ID = "edit-bot-form";
 
@@ -50,6 +51,7 @@ export default function SuperAdminEditBotPage() {
   const [documents, setDocuments] = useState<DocRow[]>([]);
   const [botType, setBotType] = useState<string>("");
   const [unsaved, setUnsaved] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [livePreview, setLivePreview] = useState<{
     name: string;
     imageUrl?: string;
@@ -58,6 +60,13 @@ export default function SuperAdminEditBotPage() {
     description?: string;
     welcomeMessage?: string;
     suggestedQuestions?: string[];
+  } | null>(null);
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [embeddingStatus, setEmbeddingStatus] = useState<{
+    faqs: Array<{ index: number; embeddingStatus: string; embeddingUpdatedAt: string | null; embeddingError: string | null }>;
+    note: { embeddingStatus: string; embeddingUpdatedAt: string | null; embeddingError: string | null } | null;
+    hasPending: boolean;
+    hasFailed: boolean;
   } | null>(null);
 
   useEffect(() => {
@@ -107,6 +116,41 @@ export default function SuperAdminEditBotPage() {
       cancelled = true;
     };
   }, [user, botId]);
+
+  useEffect(() => {
+    if (state !== "ready" || !botId || !user) return;
+    let cancelled = false;
+    const poll = () => {
+      if (cancelled || (typeof document !== "undefined" && document.visibilityState !== "visible")) return;
+      apiFetch(`/api/super-admin/bots/${botId}/embedding-status`)
+        .then((res) => {
+          if (cancelled || !res.ok) return;
+          return res.json();
+        })
+        .then((data: { faqs?: Array<{ index: number; embeddingStatus: string; embeddingUpdatedAt: string | null; embeddingError: string | null }>; note?: { embeddingStatus: string; embeddingUpdatedAt: string | null; embeddingError: string | null } | null; hasPending?: boolean; hasFailed?: boolean } | null) => {
+          if (cancelled || !data) return;
+          setEmbeddingStatus({
+            faqs: data.faqs ?? [],
+            note: data.note ?? null,
+            hasPending: data.hasPending ?? false,
+            hasFailed: data.hasFailed ?? false,
+          });
+        })
+        .catch(() => {});
+    };
+    poll();
+    const intervalMs = (embeddingStatus?.hasPending || embeddingStatus?.hasFailed) ? 5_000 : 30_000;
+    const id = setInterval(poll, intervalMs);
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") poll();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [state, botId, user, embeddingStatus?.hasPending, embeddingStatus?.hasFailed]);
 
   useEffect(() => {
     if (state !== "ready" || !bot) return;
@@ -199,7 +243,7 @@ export default function SuperAdminEditBotPage() {
   const botName = String(bot.name ?? "Bot");
   const botSlug = typeof (bot as { slug?: string }).slug === "string" ? (bot as { slug: string }).slug : "";
   const botImageUrl = typeof bot.imageUrl === "string" ? bot.imageUrl : undefined;
-  const status = (bot.status as string) === "published" ? "published" : "draft";
+  const status: "draft" | "published" = (bot.status as string) === "published" ? "published" : "draft";
 
   const initialBot = {
     id: String(bot.id ?? bot._id),
@@ -214,12 +258,22 @@ export default function SuperAdminEditBotPage() {
     welcomeMessage: (bot.welcomeMessage as string) || undefined,
     knowledgeDescription: (bot.knowledgeDescription as string) || undefined,
     status,
-    faqs: Array.isArray(bot.faqs)
-      ? (bot.faqs as Array<{ question?: unknown; answer?: unknown }>).map((faq) => ({
-        question: String(faq?.question ?? ""),
-        answer: String(faq?.answer ?? ""),
-      }))
-      : [],
+    noteEmbeddingStatus: (embeddingStatus?.note?.embeddingStatus ?? (bot as { noteEmbeddingStatus?: string }).noteEmbeddingStatus) as "ready" | "pending" | "failed" | undefined,
+    noteEmbeddingUpdatedAt: embeddingStatus?.note?.embeddingUpdatedAt ?? (bot as { noteEmbeddingUpdatedAt?: string }).noteEmbeddingUpdatedAt,
+    noteEmbeddingError: embeddingStatus?.note?.embeddingError ?? (bot as { noteEmbeddingError?: string | null }).noteEmbeddingError ?? undefined,
+    faqs: (Array.isArray(bot.faqs)
+      ? (bot.faqs as Array<{ question?: unknown; answer?: unknown; embeddingStatus?: string; embeddingUpdatedAt?: string; embeddingError?: string | null }>).map((faq, i) => {
+        const fromPoll = embeddingStatus?.faqs?.find((f) => f.index === i);
+        const status = fromPoll?.embeddingStatus ?? faq?.embeddingStatus;
+        return {
+          question: String(faq?.question ?? ""),
+          answer: String(faq?.answer ?? ""),
+          embeddingStatus: (status === "ready" || status === "pending" || status === "failed" ? status : undefined) as BotFaq["embeddingStatus"],
+          embeddingUpdatedAt: fromPoll?.embeddingUpdatedAt ?? faq?.embeddingUpdatedAt,
+          embeddingError: (fromPoll?.embeddingError ?? faq?.embeddingError) ?? undefined,
+        };
+      })
+      : []) as BotFaq[],
     exampleQuestions: Array.isArray(bot.exampleQuestions)
       ? (bot.exampleQuestions as string[]).map((q) => String(q ?? "").trim()).filter(Boolean)
       : [],
@@ -251,6 +305,8 @@ export default function SuperAdminEditBotPage() {
         lastFailedDoc: undefined,
       },
     isPublic: Boolean(bot.isPublic),
+    includeNameInKnowledge: Boolean((bot as { includeNameInKnowledge?: boolean }).includeNameInKnowledge),
+    includeTaglineInKnowledge: Boolean((bot as { includeTaglineInKnowledge?: boolean }).includeTaglineInKnowledge),
     leadCapture: (bot.leadCapture as BotLeadCaptureV2 | undefined) ?? undefined,
     chatUI: (bot.chatUI as BotChatUI | undefined) ?? undefined,
     personality: (bot.personality as object) ?? {},
@@ -274,12 +330,21 @@ export default function SuperAdminEditBotPage() {
             botName={botName}
             status={status}
             unsaved={unsaved}
+            saving={saving}
             formId={EDIT_BOT_FORM_ID}
             previewHref={previewHref}
+            saveMessage={saveMessage}
           >
             <EditBotFormClient
               formId={EDIT_BOT_FORM_ID}
               onDirtyChange={setUnsaved}
+              onSavingChange={setSaving}
+              onSaveSuccess={({ embeddingQueued }) => {
+                if (embeddingQueued) {
+                  setSaveMessage("Saved. Embedding update queued.");
+                  window.setTimeout(() => setSaveMessage(null), 4000);
+                }
+              }}
               onLivePreviewChange={setLivePreview}
               initialBot={initialBot}
             />

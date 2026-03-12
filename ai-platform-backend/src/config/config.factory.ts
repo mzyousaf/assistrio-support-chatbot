@@ -9,6 +9,10 @@ export function configFactory() {
     awsRegion: process.env.AWS_REGION ?? '',
     s3Bucket: process.env.S3_BUCKET ?? '',
     cloudfrontBaseUrl: process.env.CLOUDFRONT_BASE_URL?.trim().replace(/\/$/, '') ?? '',
+    /** When 'true', run unified knowledge retrieval (documents + FAQs + notes) and attach to debug; does not replace existing RAG for prompt. */
+    useUnifiedKnowledgeRetrieval: process.env.USE_UNIFIED_KNOWLEDGE_RETRIEVAL === 'true',
+    /** When 'true', use unified retrieval result as the only factual knowledge in the prompt (evidence-first); requires retrieval to run. */
+    useUnifiedEvidencePrompt: process.env.USE_UNIFIED_EVIDENCE_PROMPT === 'true',
   };
 }
 

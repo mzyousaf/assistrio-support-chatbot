@@ -14,6 +14,7 @@ import { RateLimitModule } from './rate-limit/rate-limit.module';
 import { LimitsModule } from './limits/limits.module';
 import { DemoModule } from './demo/demo.module';
 import { TrialModule } from './trial/trial.module';
+import { EmbeddingModule } from './embedding/embedding.module';
 import { JobsCronService } from './worker/jobs-cron.service';
 
 @Module({
@@ -32,6 +33,7 @@ import { JobsCronService } from './worker/jobs-cron.service';
     ChatModule,
     AnalyticsModule,
     VisitorsModule,
+    EmbeddingModule,
   ],
   controllers: [HealthController],
   providers: [JobsCronService],

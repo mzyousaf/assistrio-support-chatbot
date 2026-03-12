@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpException,
   HttpStatus,
@@ -13,6 +14,9 @@ import {
 import { Types } from 'mongoose';
 import { BotsService } from '../bots/bots.service';
 import { DocumentsService } from '../documents/documents.service';
+import { FaqNoteEmbeddingJobService } from '../embedding/faq-note-embedding-job.service';
+import { KbService } from '../kb/kb.service';
+import { BotOnboardingService } from './bot-onboarding.service';
 import { normalizeBotPayload } from './bot-payload';
 import { SuperAdminGuard } from './super-admin.guard';
 
@@ -22,6 +26,9 @@ export class SuperAdminBotsController {
   constructor(
     private readonly botsService: BotsService,
     private readonly documentsService: DocumentsService,
+    private readonly kbService: KbService,
+    private readonly botOnboardingService: BotOnboardingService,
+    private readonly faqNoteEmbeddingJobService: FaqNoteEmbeddingJobService,
   ) {}
 
   @Post('draft')
@@ -34,7 +41,9 @@ export class SuperAdminBotsController {
       );
     }
     try {
-      return await this.botsService.createDraft(clientDraftId);
+      const result = await this.botsService.createDraft(clientDraftId);
+      await this.botOnboardingService.onboardNewBot(result.botId);
+      return result;
     } catch (err) {
       console.error('Create draft bot failed', err);
       throw new HttpException(
@@ -67,6 +76,12 @@ export class SuperAdminBotsController {
     }
   }
 
+  @Get(':id/debug-chunks')
+  async debugBotChunks(@Param('id') id: string) {
+    const result = await this.kbService.debugBotChunks(id);
+    return result;
+  }
+
   @Get()
   async listBots(@Query('status') status?: string) {
     const filter =
@@ -94,7 +109,18 @@ export class SuperAdminBotsController {
       throw new HttpException({ error: 'Bot not found' }, HttpStatus.NOT_FOUND);
     }
     const health = await this.documentsService.getHealthSummary(id);
-    const b = bot as Record<string, unknown>;
+    const b = bot as Record<string, unknown> & {
+      faqs?: Array<{
+        question?: unknown;
+        answer?: unknown;
+        embeddingStatus?: string;
+        embeddingUpdatedAt?: Date;
+        embeddingError?: string | null;
+      }>;
+      noteEmbeddingStatus?: string;
+      noteEmbeddingUpdatedAt?: Date;
+      noteEmbeddingError?: string | null;
+    };
     return {
       ok: true,
       bot: {
@@ -116,16 +142,26 @@ export class SuperAdminBotsController {
         leadCapture: b.leadCapture ?? undefined,
         chatUI: b.chatUI ?? undefined,
         faqs: Array.isArray(b.faqs)
-          ? (b.faqs as Array<{ question?: unknown; answer?: unknown }>).map((faq) => ({
+          ? (b.faqs as Array<{ question?: unknown; answer?: unknown; embeddingStatus?: string; embeddingUpdatedAt?: Date; embeddingError?: string | null }>).map((faq) => ({
               question: String(faq?.question ?? ''),
               answer: String(faq?.answer ?? ''),
+              embeddingStatus: faq?.embeddingStatus,
+              embeddingUpdatedAt: faq?.embeddingUpdatedAt instanceof Date ? faq.embeddingUpdatedAt.toISOString() : (faq?.embeddingUpdatedAt as string | undefined),
+              embeddingError: faq?.embeddingError ?? undefined,
             }))
           : [],
+        noteEmbeddingStatus: b.noteEmbeddingStatus,
+        noteEmbeddingUpdatedAt: b.noteEmbeddingUpdatedAt instanceof Date ? b.noteEmbeddingUpdatedAt.toISOString() : (b.noteEmbeddingUpdatedAt as string | undefined),
+        noteEmbeddingError: b.noteEmbeddingError ?? undefined,
         exampleQuestions: Array.isArray(b.exampleQuestions)
           ? (b.exampleQuestions as string[]).map((q) => String(q ?? '').trim()).filter(Boolean)
           : [],
         personality: b.personality ?? {},
         config: b.config ?? {},
+        limitOverrideMessages:
+          typeof b.limitOverrideMessages === 'number' ? b.limitOverrideMessages : undefined,
+        includeNameInKnowledge: Boolean(b.includeNameInKnowledge),
+        includeTaglineInKnowledge: Boolean(b.includeTaglineInKnowledge),
       },
       health,
     };
@@ -154,8 +190,11 @@ export class SuperAdminBotsController {
         exampleQuestions: normalized.exampleQuestions,
         personality: normalized.personality,
         config: normalized.config,
+        limitOverrideMessages: normalized.limitOverrideMessages,
         isPublic: normalized.isPublic,
         status: normalized.status,
+        includeNameInKnowledge: normalized.includeNameInKnowledge,
+        includeTaglineInKnowledge: normalized.includeTaglineInKnowledge,
       });
       return result;
     } catch (err) {
@@ -170,4 +209,82 @@ export class SuperAdminBotsController {
     }
   }
 
+  @Get(':id/embedding-status')
+  async getEmbeddingStatus(@Param('id') id: string) {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new HttpException({ error: 'Invalid id' }, HttpStatus.BAD_REQUEST);
+    }
+    const bot = await this.botsService.findOne(id);
+    if (!bot || (bot as { type?: string }).type !== 'showcase') {
+      throw new HttpException({ error: 'Bot not found' }, HttpStatus.NOT_FOUND);
+    }
+    return this.faqNoteEmbeddingJobService.getEmbeddingStatusForBot(id);
+  }
+
+  @Post(':id/embed/retry-faq')
+  async retryFaqEmbedding(
+    @Param('id') id: string,
+    @Body() body: { faqIndex?: number },
+  ) {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new HttpException({ error: 'Invalid id' }, HttpStatus.BAD_REQUEST);
+    }
+    const bot = await this.botsService.findOne(id);
+    if (!bot || (bot as { type?: string }).type !== 'showcase') {
+      throw new HttpException({ error: 'Bot not found' }, HttpStatus.NOT_FOUND);
+    }
+    const faqIndex = typeof body?.faqIndex === 'number' ? body.faqIndex : 0;
+    const faqs = (bot as { faqs?: unknown[] }).faqs ?? [];
+    if (faqIndex < 0 || faqIndex >= faqs.length) {
+      throw new HttpException({ error: 'Invalid faqIndex' }, HttpStatus.BAD_REQUEST);
+    }
+    await this.faqNoteEmbeddingJobService.enqueue(id, 'faq', faqIndex);
+    return { ok: true, message: 'FAQ embedding job queued.', faqIndex };
+  }
+
+  @Post(':id/embed/retry-note')
+  async retryNoteEmbedding(@Param('id') id: string) {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new HttpException({ error: 'Invalid id' }, HttpStatus.BAD_REQUEST);
+    }
+    const bot = await this.botsService.findOne(id);
+    if (!bot || (bot as { type?: string }).type !== 'showcase') {
+      throw new HttpException({ error: 'Bot not found' }, HttpStatus.NOT_FOUND);
+    }
+    await this.faqNoteEmbeddingJobService.enqueue(id, 'note');
+    return { ok: true, message: 'Note embedding job queued.' };
+  }
+
+  @Post(':id/embed/backfill')
+  async backfillEmbeddings(
+    @Param('id') id: string,
+    @Body() body: { batchSize?: number },
+  ) {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new HttpException({ error: 'Invalid id' }, HttpStatus.BAD_REQUEST);
+    }
+    const bot = await this.botsService.findOne(id);
+    if (!bot || (bot as { type?: string }).type !== 'showcase') {
+      throw new HttpException({ error: 'Bot not found' }, HttpStatus.NOT_FOUND);
+    }
+    const batchSize = typeof body?.batchSize === 'number' ? Math.min(50, Math.max(1, body.batchSize)) : 20;
+    const { enqueued } = await this.faqNoteEmbeddingJobService.enqueueBackfillForBot(id, batchSize);
+    return { ok: true, message: `Enqueued ${enqueued} embedding job(s).`, enqueued };
+  }
+
+  @Delete(':id')
+  async deleteBot(@Param('id') id: string) {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new HttpException({ error: 'Invalid id' }, HttpStatus.BAD_REQUEST);
+    }
+    const bot = await this.botsService.findOne(id);
+    if (!bot) {
+      throw new HttpException({ error: 'Bot not found' }, HttpStatus.NOT_FOUND);
+    }
+    if ((bot as { type?: string }).type !== 'showcase') {
+      throw new HttpException({ error: 'Only showcase bots can be deleted here' }, HttpStatus.BAD_REQUEST);
+    }
+    await this.botsService.remove(id);
+    return { ok: true, deleted: id };
+  }
 }

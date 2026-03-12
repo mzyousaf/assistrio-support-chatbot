@@ -10,18 +10,26 @@ import {
   SettingsItemList,
   SettingsSideSheet,
 } from "@/components/admin/settings";
+import { EmbeddingStatusBadge } from "@/components/admin/EmbeddingStatusBadge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
+import type { EmbeddingStatus } from "@/models/Bot";
 
 export interface BotFaq {
   question: string;
   answer: string;
+  embeddingStatus?: EmbeddingStatus;
+  embeddingUpdatedAt?: string;
+  embeddingError?: string | null;
 }
 
 interface BotFaqsEditorProps {
   value: BotFaq[];
   onChange: (next: BotFaq[]) => void;
+  /** When set, show embedding status and retry for failed items. */
+  botId?: string;
+  onRetryFaq?: (faqIndex: number) => Promise<void>;
 }
 
 function cleanFaqs(raw: BotFaq[]): BotFaq[] {
@@ -33,7 +41,7 @@ function cleanFaqs(raw: BotFaq[]): BotFaq[] {
     .filter((faq) => faq.question && faq.answer);
 }
 
-export default function BotFaqsEditor({ value, onChange }: BotFaqsEditorProps) {
+export default function BotFaqsEditor({ value, onChange, botId, onRetryFaq }: BotFaqsEditorProps) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [draft, setDraft] = useState<BotFaq>({ question: "", answer: "" });
@@ -109,19 +117,42 @@ export default function BotFaqsEditor({ value, onChange }: BotFaqsEditorProps) {
             <SettingsItemCard
               key={index}
               actions={
-                <SettingsActionMenu
-                  onEdit={() => openEdit(index)}
-                  onDelete={() => handleDelete(index)}
-                  editLabel="Edit FAQ"
-                  deleteLabel="Remove FAQ"
-                  showLabels={false}
-                />
+                <div className="flex items-center gap-2">
+                  {botId && onRetryFaq && faq.embeddingStatus === "failed" && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="text-xs"
+                      onClick={() => onRetryFaq(index)}
+                    >
+                      Retry embed
+                    </Button>
+                  )}
+                  <SettingsActionMenu
+                    onEdit={() => openEdit(index)}
+                    onDelete={() => handleDelete(index)}
+                    editLabel="Edit FAQ"
+                    deleteLabel="Remove FAQ"
+                    showLabels={false}
+                  />
+                </div>
               }
             >
               <div className="space-y-1.5">
-                <p className="text-sm font-semibold leading-snug text-gray-900 dark:text-gray-100">
-                  {faq.question || "—"}
-                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-sm font-semibold leading-snug text-gray-900 dark:text-gray-100 flex-1 min-w-0">
+                    {faq.question || "—"}
+                  </p>
+                  {botId && (
+                    <EmbeddingStatusBadge
+                      status={faq.embeddingStatus ?? "pending"}
+                      updatedAt={faq.embeddingUpdatedAt}
+                      error={faq.embeddingError}
+                      size="xs"
+                    />
+                  )}
+                </div>
                 <p className="line-clamp-2 text-xs leading-relaxed text-gray-500 dark:text-gray-400" title={faq.answer || undefined}>
                   {answerPreview(faq.answer)}
                 </p>

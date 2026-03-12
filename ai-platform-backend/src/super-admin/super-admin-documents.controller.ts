@@ -1,56 +1,22 @@
 import {
+  Body,
   Controller,
   Delete,
   Get,
   HttpException,
   HttpStatus,
   Param,
+  Patch,
   Post,
-  Req,
+  Query,
   UseGuards,
 } from '@nestjs/common';
-import { FastifyRequest } from 'fastify';
 import { Types } from 'mongoose';
 import { BotsService } from '../bots/bots.service';
 import { DocumentsService } from '../documents/documents.service';
 import { IngestionService } from '../ingestion/ingestion.service';
-import { KbService } from '../kb/kb.service';
-import { uploadPrivateDoc } from '../lib/s3';
+import { getSignedGetUrl } from '../lib/s3';
 import { SuperAdminGuard } from './super-admin.guard';
-
-const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
-const ALLOWED_EXTENSIONS = new Set(['txt', 'pdf', 'docx', 'doc', 'md', 'markdown']);
-const MIME_BY_EXT: Record<string, Set<string>> = {
-  txt: new Set(['text/plain']),
-  pdf: new Set(['application/pdf']),
-  doc: new Set(['application/msword']),
-  docx: new Set([
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'application/zip',
-  ]),
-  md: new Set(['text/markdown', 'text/plain']),
-  markdown: new Set(['text/markdown', 'text/plain']),
-};
-
-function isMimeAllowed(extension: string, mimeType: string): boolean {
-  return MIME_BY_EXT[extension]?.has(mimeType) ?? false;
-}
-
-async function parseMultipart(req: FastifyRequest): Promise<{ file?: { buffer: Buffer; name: string; mimetype: string; size: number }; title?: string }> {
-  const raw = req as FastifyRequest & { isMultipart?: () => boolean; parts?: () => AsyncIterable<{ type: string; fieldname: string; value?: string; filename?: string; mimetype?: string; toBuffer?: () => Promise<Buffer> }> };
-  if (!raw.isMultipart?.() || !raw.parts) return {};
-  let file: { buffer: Buffer; name: string; mimetype: string; size: number } | undefined;
-  let title: string | undefined;
-  for await (const part of raw.parts()) {
-    if (part.type === 'field' && typeof part.value === 'string') {
-      if (part.fieldname === 'title') title = part.value.trim();
-    } else if (part.type === 'file' && part.filename && part.toBuffer) {
-      const buffer = await part.toBuffer();
-      file = { buffer, name: part.filename, mimetype: part.mimetype ?? 'application/octet-stream', size: buffer.length };
-    }
-  }
-  return { file, title };
-}
 
 @Controller('api/super-admin/bots')
 @UseGuards(SuperAdminGuard)
@@ -59,11 +25,125 @@ export class SuperAdminDocumentsController {
     private readonly botsService: BotsService,
     private readonly documentsService: DocumentsService,
     private readonly ingestionService: IngestionService,
-    private readonly kbService: KbService,
   ) {}
 
   @Get(':id/documents')
-  async listDocuments(@Param('id') id: string) {
+  async listDocuments(
+    @Param('id') id: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new HttpException({ error: 'Invalid id' }, HttpStatus.BAD_REQUEST);
+    }
+    const bot = await this.botsService.findOne(id);
+    if (!bot) {
+      throw new HttpException({ error: 'Bot not found' }, HttpStatus.NOT_FOUND);
+    }
+    const pageNum = Math.max(1, parseInt(String(page ?? '1'), 10) || 1);
+    const limitNum = Math.min(100, Math.max(1, parseInt(String(limit ?? '10'), 10) || 10));
+    const { documents: rawDocs, total } = await this.documentsService.findByBotPaginated(
+      id,
+      pageNum,
+      limitNum,
+    );
+    const documents = rawDocs.map((doc) => ({
+      _id: String(doc._id),
+      title: String(doc.title ?? ''),
+      sourceType: String(doc.sourceType ?? ''),
+      fileName: doc.fileName ?? undefined,
+      fileType: doc.fileType ?? undefined,
+      fileSize: doc.fileSize ?? undefined,
+      url: doc.url ?? undefined,
+      status: doc.status ?? undefined,
+      error: doc.error ?? undefined,
+      ingestedAt: doc.ingestedAt ? new Date(doc.ingestedAt as Date).toISOString() : undefined,
+      hasText: typeof doc.text === 'string' && (doc.text as string).trim().length > 0,
+      textLength: typeof doc.text === 'string' ? (doc.text as string).length : 0,
+      createdAt: doc.createdAt ? new Date(doc.createdAt as Date).toISOString() : undefined,
+      active: (doc as { active?: boolean }).active !== false,
+    }));
+    const totalPages = Math.ceil(total / limitNum) || 1;
+    const health = await this.documentsService.getHealthSummary(id);
+    return {
+      ok: true,
+      documents,
+      total,
+      page: pageNum,
+      limit: limitNum,
+      totalPages,
+      counts: {
+        total: health.docsTotal,
+        queued: health.docsQueued,
+        processing: health.docsProcessing,
+        ready: health.docsReady,
+        failed: health.docsFailed,
+      },
+      lastIngestedAt: health.lastIngestedAt,
+      lastFailedDoc: health.lastFailedDoc,
+    };
+  }
+
+  /**
+   * Verification endpoint: document status, text length, chunk count, chunks with valid embeddings.
+   * Use to diagnose RAG ingestion (e.g. ready but 0 chunks).
+   */
+  @Get(':id/documents/:docId/verify')
+  async verifyDocument(
+    @Param('id') id: string,
+    @Param('docId') docId: string,
+  ) {
+    if (!Types.ObjectId.isValid(id) || !Types.ObjectId.isValid(docId)) {
+      throw new HttpException({ error: 'Invalid id' }, HttpStatus.BAD_REQUEST);
+    }
+    const bot = await this.botsService.findOne(id);
+    if (!bot) {
+      throw new HttpException({ error: 'Bot not found' }, HttpStatus.NOT_FOUND);
+    }
+    const integrity = await this.documentsService.getDocumentIntegrity(id, docId);
+    if (!integrity) {
+      throw new HttpException({ error: 'Document not found' }, HttpStatus.NOT_FOUND);
+    }
+    const { ok: verified, ...rest } = integrity;
+    return { ok: true, verified, ...rest };
+  }
+
+  /**
+   * Returns a single document's download URL (presigned for S3, or the stored url for url-sourced docs).
+   */
+  @Get(':id/documents/:docId/download-url')
+  async getDocumentDownloadUrl(@Param('id') id: string, @Param('docId') docId: string) {
+    if (!Types.ObjectId.isValid(id) || !Types.ObjectId.isValid(docId)) {
+      throw new HttpException({ error: 'Invalid id' }, HttpStatus.BAD_REQUEST);
+    }
+    const bot = await this.botsService.findOne(id);
+    if (!bot) {
+      throw new HttpException({ error: 'Bot not found' }, HttpStatus.NOT_FOUND);
+    }
+    const doc = await this.documentsService.findOneByBotAndDoc(id, docId);
+    if (!doc) {
+      throw new HttpException({ error: 'Document not found' }, HttpStatus.NOT_FOUND);
+    }
+    const d = doc as Record<string, unknown>;
+    let url = d.url as string | undefined;
+    if (!url && d.s3Bucket && d.s3Key) {
+      try {
+        url = await getSignedGetUrl(String(d.s3Bucket), String(d.s3Key), 3600);
+      } catch {
+        throw new HttpException({ error: 'Download URL unavailable' }, HttpStatus.SERVICE_UNAVAILABLE);
+      }
+    }
+    if (!url) {
+      throw new HttpException({ error: 'No download URL for this document' }, HttpStatus.NOT_FOUND);
+    }
+    return { ok: true, url };
+  }
+
+  /**
+   * Returns list of document file names with URLs (presigned for S3 uploads) for copy/export.
+   */
+  @Get(':id/documents/urls-list')
+  async getDocumentsUrlsList(@Param('id') id: string) {
     if (!Types.ObjectId.isValid(id)) {
       throw new HttpException({ error: 'Invalid id' }, HttpStatus.BAD_REQUEST);
     }
@@ -72,32 +152,28 @@ export class SuperAdminDocumentsController {
       throw new HttpException({ error: 'Bot not found' }, HttpStatus.NOT_FOUND);
     }
     const documents = await this.documentsService.findByBot(id);
-    return {
-      ok: true,
-      documents: (documents as Array<Record<string, unknown>>).map((doc) => ({
-        _id: String(doc._id),
-        title: String(doc.title ?? ''),
-        sourceType: String(doc.sourceType ?? ''),
-        fileName: doc.fileName ?? undefined,
-        fileType: doc.fileType ?? undefined,
-        fileSize: doc.fileSize ?? undefined,
-        url: doc.url ?? undefined,
-        status: doc.status ?? undefined,
-        error: doc.error ?? undefined,
-        ingestedAt: doc.ingestedAt ? new Date(doc.ingestedAt as Date).toISOString() : undefined,
-        hasText: typeof doc.text === 'string' && (doc.text as string).trim().length > 0,
-        textLength: typeof doc.text === 'string' ? (doc.text as string).length : 0,
-        createdAt: doc.createdAt ? new Date(doc.createdAt as Date).toISOString() : undefined,
-      })),
-    };
+    const items: { fileName: string; url: string }[] = [];
+    for (const doc of documents as Array<Record<string, unknown>>) {
+      const name = String(doc.fileName ?? doc.title ?? '');
+      let url = doc.url as string | undefined;
+      if (!url && doc.s3Bucket && doc.s3Key) {
+        try {
+          url = await getSignedGetUrl(String(doc.s3Bucket), String(doc.s3Key), 3600);
+        } catch {
+          url = '(URL unavailable)';
+        }
+      }
+      if (!url) url = '(no URL)';
+      items.push({ fileName: name, url });
+    }
+    return { ok: true, items };
   }
 
-  /**
-   * Single doc upload endpoint: uploadToS3 (private) -> Document (status: queued) -> IngestJob (queued).
-   * Runner processes jobs to "ready" and creates chunks. FE must use this path only (not /documents/upload).
-   */
-  @Post(':id/upload-doc')
-  async uploadDoc(@Param('id') id: string, @Req() req: FastifyRequest) {
+  @Post(':id/documents/bulk-delete')
+  async bulkDeleteDocuments(
+    @Param('id') id: string,
+    @Body() body: { docIds?: string[] },
+  ) {
     if (!Types.ObjectId.isValid(id)) {
       throw new HttpException({ error: 'Invalid id' }, HttpStatus.BAD_REQUEST);
     }
@@ -105,64 +181,17 @@ export class SuperAdminDocumentsController {
     if (!bot) {
       throw new HttpException({ error: 'Bot not found' }, HttpStatus.NOT_FOUND);
     }
-    const { file, title: titleFromForm } = await parseMultipart(req);
-    if (!file) {
-      throw new HttpException({ error: 'File is required' }, HttpStatus.BAD_REQUEST);
+    const docIds = Array.isArray(body?.docIds) ? body.docIds : [];
+    if (docIds.length === 0) {
+      return { ok: true, deleted: 0 };
     }
-    const extension = this.kbService.getFileExtension(file.name);
-    if (!ALLOWED_EXTENSIONS.has(extension)) {
-      throw new HttpException({ error: 'Unsupported file type' }, HttpStatus.BAD_REQUEST);
+    for (const docId of docIds) {
+      if (Types.ObjectId.isValid(docId)) {
+        await this.ingestionService.deleteJobsByDocId(id, docId);
+      }
     }
-    if (!isMimeAllowed(extension, file.mimetype)) {
-      throw new HttpException({ error: 'Invalid MIME type for file extension' }, HttpStatus.BAD_REQUEST);
-    }
-    if (file.size <= 0 || file.size > MAX_UPLOAD_BYTES) {
-      throw new HttpException({ error: 'File exceeds 15MB limit' }, HttpStatus.BAD_REQUEST);
-    }
-    const title =
-      typeof titleFromForm === 'string' && titleFromForm.length > 0 ? titleFromForm : file.name;
-
-    const result = await uploadPrivateDoc({
-      botId: id,
-      body: file.buffer,
-      originalName: file.name,
-      contentType: file.mimetype,
-    });
-
-    const document = await this.documentsService.create({
-      botId: id,
-      title,
-      sourceType: 'upload',
-      storage: 's3',
-      s3Bucket: result.bucket,
-      s3Key: result.key,
-      fileName: file.name,
-      fileType: file.mimetype,
-      fileSize: file.size,
-      status: 'queued',
-    });
-    const docId = (document as { _id?: { toString?: () => string } })._id?.toString?.() ?? String((document as { _id?: unknown })._id);
-
-    try {
-      const job = await this.ingestionService.createQueuedJob(id, docId);
-      const jobId = (job as { _id?: { toString?: () => string } })._id?.toString?.() ?? String((job as { _id?: unknown })._id);
-      return {
-        ok: true,
-        documentId: docId,
-        documentStatus: 'queued' as const,
-        ingestJobId: jobId,
-        ingestJobStatus: 'queued' as const,
-        s3Key: result.key,
-        originalName: file.name,
-      };
-    } catch (jobErr) {
-      await this.documentsService.setFailed(id, docId, 'job_queue_failed');
-      const msg = jobErr instanceof Error ? jobErr.message : String(jobErr);
-      throw new HttpException(
-        { error: `Failed to queue ingestion: ${msg}` },
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    }
+    const deleted = await this.documentsService.removeByBotAndDocIds(id, docIds);
+    return { ok: true, deleted };
   }
 
   @Delete(':id/documents/:docId')
@@ -178,7 +207,31 @@ export class SuperAdminDocumentsController {
     if (!existing) {
       throw new HttpException({ error: 'Document not found' }, HttpStatus.NOT_FOUND);
     }
+    await this.ingestionService.deleteJobsByDocId(id, docId);
     await this.documentsService.removeByBotAndDoc(id, docId);
+    return { ok: true };
+  }
+
+  @Patch(':id/documents/:docId')
+  async updateDocument(
+    @Param('id') id: string,
+    @Param('docId') docId: string,
+    @Body() body: { active?: boolean },
+  ) {
+    if (!Types.ObjectId.isValid(id) || !Types.ObjectId.isValid(docId)) {
+      throw new HttpException({ error: 'Invalid id' }, HttpStatus.BAD_REQUEST);
+    }
+    const bot = await this.botsService.findOne(id);
+    if (!bot) {
+      throw new HttpException({ error: 'Bot not found' }, HttpStatus.NOT_FOUND);
+    }
+    const existing = await this.documentsService.findOneByBotAndDoc(id, docId);
+    if (!existing) {
+      throw new HttpException({ error: 'Document not found' }, HttpStatus.NOT_FOUND);
+    }
+    if (typeof body.active === 'boolean') {
+      await this.documentsService.setActive(id, docId, body.active);
+    }
     return { ok: true };
   }
 

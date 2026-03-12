@@ -1,8 +1,10 @@
 "use client";
 
 import React, { useCallback, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import type { ChatUIMessage, ChatUISource } from "./types";
-import { cx, renderSimpleMarkdown } from "./utils";
+import { cx } from "./utils";
 import { ChatSources } from "./ChatSources";
 
 export interface ChatBubbleProps {
@@ -90,10 +92,7 @@ export function ChatBubble({
     }
   }, [message.id, message.content, onCopy]);
 
-  const bubbleContent =
-    isAssistant && allowMarkdown
-      ? renderSimpleMarkdown(message.content)
-      : null;
+  const showMarkdown = isAssistant && allowMarkdown && message.content;
 
   const metaClass = cx(
     "text-xs flex items-center gap-2",
@@ -103,7 +102,8 @@ export function ChatBubble({
 
   const bubbleBaseClass = cx(
     "px-3 py-2.5 text-sm leading-relaxed text-left box-border",
-    "break-words w-max max-w-full min-w-0",
+    "min-w-0 max-w-full w-full overflow-hidden",
+    "break-words",
     isUser && "text-white",
     isAssistant &&
     (dark
@@ -117,23 +117,23 @@ export function ChatBubble({
       : { borderRadius: `${radiusPx}px` };
 
   const contentWrapperClass = cx(
-    "text-left w-max max-w-full min-w-0 [&>*]:max-w-full chat-bubble-content",
+    "text-left min-w-0 max-w-full w-full overflow-hidden chat-bubble-content",
+    "[&>*]:min-w-0 [&>*]:max-w-full",
     dark ? "[&>code]:bg-gray-600 [&>code]:text-gray-200" : "[&>code]:bg-gray-300 [&>code]:text-gray-800",
-    "[&>code]:rounded [&>code]:px-1 [&>code]:py-0.5"
+    "[&>code]:rounded [&>code]:px-1 [&>code]:py-0.5 [&>code]:break-all"
   );
 
   // Same text width classes for both user and assistant (emoji-friendly font for display)
-  const plainTextClass = "whitespace-pre-wrap w-max max-w-full min-w-0 chat-bubble-content";
+  const plainTextClass = "whitespace-pre-wrap min-w-0 max-w-full w-full overflow-hidden break-words chat-bubble-content";
 
-  // Same width-control classes for both roles: row and column only differ by alignment.
-  // User row: self-end so it doesn't stretch to full article width (sizes to content).
+  // Row/column: constrain width so bubble stays inside; min-w-0 allows flex children to shrink.
   const rowClass = cx(
-    "flex items-start gap-2 max-w-[85%]",
-    isUser ? "flex-row-reverse w-full self-end" : "w-full"
+    "flex items-start gap-2 w-full min-w-0 max-w-[85%]",
+    isUser ? "flex-row-reverse self-end" : ""
   );
   const columnClass = cx(
-    "flex flex-col gap-0.5 w-max min-w-0 max-w-[85%]",
-    isUser ? "items-end shrink-0" : "items-start"
+    "flex flex-col gap-0.5 min-w-0 max-w-full w-full",
+    isUser ? "items-end" : "items-start"
   );
 
   return (
@@ -161,11 +161,20 @@ export function ChatBubble({
             style={bubbleInlineStyle}
             role="article"
           >
-            {bubbleContent ? (
+            {showMarkdown ? (
               <div
-                className={contentWrapperClass}
-                dangerouslySetInnerHTML={{ __html: bubbleContent }}
-              />
+                className={cx(
+                  contentWrapperClass,
+                  "prose prose-sm max-w-full dark:prose-invert",
+                  "[&_a]:text-blue-400 [&_a]:underline [&_a]:break-all",
+                  "[&_pre]:text-sm [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_pre]:rounded",
+                  "[&_table]:max-w-full [&_table]:block [&_table]:overflow-x-auto"
+                )}
+              >
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {message.content}
+                </ReactMarkdown>
+              </div>
             ) : (
               <div className={plainTextClass}>
                 {message.content}

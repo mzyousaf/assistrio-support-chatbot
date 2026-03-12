@@ -5,6 +5,7 @@ import Image from "next/image";
 
 import BotDocumentsManager, { type BotDocumentItem } from "@/components/admin/BotDocumentsManager";
 import BotFaqsEditor, { type BotFaq } from "@/components/admin/BotFaqsEditor";
+import { EmbeddingStatusBadge } from "@/components/admin/EmbeddingStatusBadge";
 import {
   FormField,
   FormFieldDescription,
@@ -46,6 +47,43 @@ import {
   type LiveIndicatorStyle,
   type ChatShadowIntensity,
 } from "@/models/Bot";
+
+/** Default welcome message template when user enables welcome message. Variables: {{Name}}, {{Tagline}}, {{description}} */
+export const DEFAULT_WELCOME_MESSAGE =
+  "Hi! 👋 I'm {{Name}} — {{Tagline}}. How can I help you today?";
+
+const WELCOME_VARIABLES = [
+  { label: "Name", value: "{{Name}}" },
+  { label: "Tagline", value: "{{Tagline}}" },
+  { label: "Description", value: "{{description}}" },
+] as const;
+
+const WELCOME_VAR_REGEX = /\{\{Name\}\}|\{\{Tagline\}\}|\{\{description\}\}/g;
+
+function WelcomeMessagePreview({ text }: { text: string }) {
+  const parts = text.split(WELCOME_VAR_REGEX);
+  const tokens = text.match(WELCOME_VAR_REGEX) ?? [];
+  const labels: Record<string, string> = {
+    "{{Name}}": "Name",
+    "{{Tagline}}": "Tagline",
+    "{{description}}": "Description",
+  };
+  const nodes: React.ReactNode[] = [];
+  parts.forEach((part, i) => {
+    if (part) nodes.push(<span key={`p-${i}`}>{part}</span>);
+    const token = tokens[i];
+    if (token)
+      nodes.push(
+        <span
+          key={`v-${i}`}
+          className="inline-flex items-center rounded border border-brand-300 bg-brand-50 px-1 py-0.5 text-[10px] font-medium text-brand-700 dark:border-brand-600 dark:bg-brand-900/50 dark:text-brand-200"
+        >
+          {labels[token] ?? token}
+        </span>
+      );
+  });
+  return <span className="inline">{nodes}</span>;
+}
 
 const CATEGORY_OPTIONS = [
   { value: "support", label: "Support" },
@@ -137,6 +175,8 @@ export interface BotFormSubmitPayload {
   config: BotConfig;
   openaiApiKeyOverride?: string;
   whisperApiKeyOverride?: string;
+  includeNameInKnowledge?: boolean;
+  includeTaglineInKnowledge?: boolean;
 }
 
 interface BotFormProps {
@@ -158,6 +198,8 @@ interface BotFormProps {
     openaiApiKeyOverride?: string;
     whisperApiKeyOverride?: string;
     isPublic?: boolean;
+    includeNameInKnowledge?: boolean;
+    includeTaglineInKnowledge?: boolean;
     leadCapture?: BotLeadCaptureV2;
     chatUI?: BotChatUI;
     personality?: BotPersonality;
@@ -176,8 +218,15 @@ interface BotFormProps {
         updatedAt?: string;
       };
     };
+    noteEmbeddingStatus?: string;
+    noteEmbeddingUpdatedAt?: string;
+    noteEmbeddingError?: string | null;
   };
   onSubmit: (payload: BotFormSubmitPayload) => Promise<void> | void;
+  botId?: string;
+  onRetryFaq?: (faqIndex: number) => Promise<void>;
+  onRetryNote?: () => Promise<void>;
+  onBackfillEmbeddings?: () => Promise<void>;
   onCreateAnotherBot?: () => void;
   submitting?: boolean;
   /** ID for the form element (for external submit button via form="..."). */
@@ -186,6 +235,8 @@ interface BotFormProps {
   onDirtyChange?: (dirty: boolean) => void;
   /** Called when name, image, chatUI, tagline, description, or welcomeMessage change (for live chat preview). */
   onLivePreviewChange?: (preview: { name: string; imageUrl?: string; chatUI: BotChatUI; tagline?: string; description?: string; welcomeMessage?: string; suggestedQuestions?: string[] }) => void;
+  /** Called when document upload starts (true) or ends (false). Used to show header "Saving" state. */
+  onSavingChange?: (saving: boolean) => void;
 }
 
 function presetToPrompt(preset: string) {
@@ -242,9 +293,15 @@ export default function BotForm({
   formId,
   onDirtyChange,
   onLivePreviewChange,
+  onSavingChange,
+  botId,
+  onRetryFaq,
+  onRetryNote,
+  onBackfillEmbeddings,
 }: BotFormProps) {
   const [name, setName] = useState(initialBot?.name ?? "");
   const [shortDescription, setShortDescription] = useState(initialBot?.shortDescription ?? "");
+  const [includeNameInKnowledge, setIncludeNameInKnowledge] = useState(initialBot?.includeNameInKnowledge ?? false);
   const [description, setDescription] = useState(initialBot?.description ?? "");
   const [isPublic, setIsPublic] = useState(initialBot?.isPublic ?? true);
   const [categories, setCategories] = useState<string[]>(
@@ -260,7 +317,39 @@ export default function BotForm({
     initialBot?.personality?.description ?? initialBot?.personality?.systemPrompt ?? "",
   );
   const [thingsToAvoid, setThingsToAvoid] = useState(initialBot?.personality?.thingsToAvoid ?? "");
-  const [welcomeMessage, setWelcomeMessage] = useState(initialBot?.welcomeMessage ?? "");
+  const [welcomeMessageEnabled, setWelcomeMessageEnabled] = useState(
+    Boolean((initialBot?.welcomeMessage ?? "").trim()),
+  );
+  const [welcomeMessage, setWelcomeMessage] = useState(
+    (initialBot?.welcomeMessage ?? "").trim() || "",
+  );
+  const welcomeMessageInputRef = useRef<HTMLTextAreaElement | null>(null);
+
+  function setWelcomeMessageEnabledWithDefault(on: boolean) {
+    setWelcomeMessageEnabled(on);
+    if (on && !welcomeMessage.trim()) {
+      setWelcomeMessage(DEFAULT_WELCOME_MESSAGE);
+    }
+    // When turning off, keep the message text in state so turning on again restores it
+  }
+
+  function insertWelcomeVariable(variable: string) {
+    const el = welcomeMessageInputRef.current;
+    if (!el) {
+      setWelcomeMessage((prev) => prev + variable);
+      return;
+    }
+    const start = el.selectionStart;
+    const end = el.selectionEnd;
+    const before = welcomeMessage.slice(0, start);
+    const after = welcomeMessage.slice(end);
+    setWelcomeMessage(before + variable + after);
+    requestAnimationFrame(() => {
+      el.focus();
+      const newPos = start + variable.length;
+      el.setSelectionRange(newPos, newPos);
+    });
+  }
   const [knowledgeDescription, setKnowledgeDescription] = useState(initialBot?.knowledgeDescription ?? "");
   const [faqs, setFaqs] = useState<BotFaq[]>(initialBot?.faqs ?? []);
   const [exampleQuestions, setExampleQuestions] = useState<string[]>(
@@ -268,6 +357,7 @@ export default function BotForm({
   );
   const [status, setStatus] = useState<"draft" | "published">(initialBot?.status ?? "draft");
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState("general");
   const [testingKey, setTestingKey] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
 
@@ -343,10 +433,10 @@ export default function BotForm({
       chatUI,
       tagline: shortDescription.trim() || undefined,
       description: description.trim() || undefined,
-      welcomeMessage: welcomeMessage.trim() || undefined,
+      welcomeMessage: welcomeMessageEnabled ? (welcomeMessage.trim() || undefined) : undefined,
       suggestedQuestions: suggestedQuestionsPreview.length > 0 ? suggestedQuestionsPreview : undefined,
     });
-  }, [name, botImageUrl, botImageObjectUrl, chatUI, shortDescription, description, welcomeMessage, exampleQuestions, onLivePreviewChange]);
+  }, [name, botImageUrl, botImageObjectUrl, chatUI, shortDescription, description, welcomeMessageEnabled, welcomeMessage, exampleQuestions, onLivePreviewChange]);
 
   function handleFilePick(nextFile: File | null) {
     if (!nextFile) return;
@@ -373,17 +463,19 @@ export default function BotForm({
         try {
           const formData = new FormData();
           formData.append("file", botImageFile);
-          const uploadResponse = await apiFetch("/api/super-admin/uploads/image", {
+          const uploadResponse = await apiFetch("/api/super-admin/upload", {
             method: "POST",
             body: formData,
           });
           const uploadJson = (await uploadResponse.json().catch(() => ({}))) as {
             url?: string;
+            results?: Array<{ type: string; url?: string }>;
             error?: string;
+            message?: string;
           };
           if (!uploadResponse.ok) {
             const msg =
-              (uploadJson as { message?: string }).message ??
+              uploadJson.message ??
               (uploadJson.error === "invalid_type"
                 ? "Invalid image type. Use PNG, JPG, or WEBP."
                 : uploadJson.error === "file_too_large"
@@ -397,12 +489,17 @@ export default function BotForm({
             setIsUploadingImage(false);
             return null;
           }
-          if (!uploadJson.url) {
+          const url =
+            uploadJson.url ??
+            (Array.isArray(uploadJson.results) && uploadJson.results[0]?.url
+              ? uploadJson.results[0].url
+              : undefined);
+          if (!url) {
             setSubmitError("Image upload did not return a URL.");
             setIsUploadingImage(false);
             return null;
           }
-          finalImageUrl = uploadJson.url;
+          finalImageUrl = url;
         } catch {
           setSubmitError("Failed to upload bot image. Please try again.");
           setIsUploadingImage(false);
@@ -423,7 +520,7 @@ export default function BotForm({
       description: description.trim() || undefined,
       categories: customCategory.trim().length > 0 ? [customCategory.trim().toLowerCase()] : categories,
       imageUrl: finalImageUrl,
-      welcomeMessage: welcomeMessage.trim() || undefined,
+      welcomeMessage: welcomeMessageEnabled ? (welcomeMessage.trim() || undefined) : undefined,
       knowledgeDescription: knowledgeDescription.trim() || undefined,
       faqs,
       exampleQuestions: exampleQuestions.map((q) => q.trim()).filter(Boolean).slice(0, EXAMPLE_QUESTIONS_MAX),
@@ -485,13 +582,17 @@ export default function BotForm({
       config,
       openaiApiKeyOverride: openaiApiKeyOverride.trim() || undefined,
       whisperApiKeyOverride: whisperApiKeyOverride.trim() || undefined,
+      includeNameInKnowledge,
+      includeTaglineInKnowledge: false,
     } satisfies BotFormSubmitPayload;
   }
 
   async function submitWithStatus(desiredStatus?: "draft" | "published") {
-    const payload = await buildSubmitPayload(desiredStatus);
-    if (!payload) return;
+    onSavingChange?.(true);
+    let payload: BotFormSubmitPayload | null = null;
     try {
+      payload = await buildSubmitPayload(desiredStatus);
+      if (!payload) return;
       await onSubmit(payload);
       onDirtyChange?.(false);
       if (payload.status) {
@@ -503,6 +604,8 @@ export default function BotForm({
       if (fileInputRef.current) fileInputRef.current.value = "";
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : "Failed to save bot. Please try again.");
+    } finally {
+      onSavingChange?.(false);
     }
   }
 
@@ -546,8 +649,10 @@ export default function BotForm({
     const dirty =
       (name || "") !== (initial.name || "") ||
       (shortDescription || "") !== (initial.shortDescription || "") ||
+      includeNameInKnowledge !== (initial.includeNameInKnowledge ?? false) ||
       (description || "") !== (initial.description || "") ||
-      (welcomeMessage || "") !== (initial.welcomeMessage || "") ||
+      welcomeMessageEnabled !== Boolean((initial.welcomeMessage ?? "").trim()) ||
+      (welcomeMessageEnabled && (welcomeMessage || "") !== (initial.welcomeMessage || "")) ||
       (knowledgeDescription || "") !== (initial.knowledgeDescription || "") ||
       (behaviorText || "") !== ((initial.personality?.description ?? initial.personality?.systemPrompt) || "") ||
       (behaviorPreset || "default") !== (initial.personality?.behaviorPreset ?? "default") ||
@@ -566,7 +671,9 @@ export default function BotForm({
   }, [
     name,
     shortDescription,
+    includeNameInKnowledge,
     description,
+    welcomeMessageEnabled,
     welcomeMessage,
     knowledgeDescription,
     behaviorText,
@@ -597,7 +704,7 @@ export default function BotForm({
     >
       {submitError ? <p className="text-sm text-red-500">{submitError}</p> : null}
 
-      <Tabs defaultValue="general" className="space-y-0">
+      <Tabs defaultValue="general" value={activeTab} onValueChange={(v) => setActiveTab(v)} className="space-y-0">
         <div className="border-b border-gray-200 dark:border-gray-700 bg-gray-50/60 dark:bg-gray-800/40">
           <TabsList className="w-full justify-start rounded-none border-0 bg-transparent p-0 gap-0 min-h-0">
             {TAB_IDS.map((tab) => (
@@ -629,13 +736,28 @@ export default function BotForm({
                     required
                     helperText="Display name used in listings, chat header, and across the platform."
                   >
-                    <Input
-                      id="bot-name"
-                      required
-                      value={name}
-                      onChange={(event) => setName(event.target.value)}
-                      className="w-full"
-                    />
+                    <div className="flex flex-col gap-2 w-full">
+                      <Input
+                        id="bot-name"
+                        required
+                        value={name}
+                        onChange={(event) => setName(event.target.value)}
+                        className="w-full"
+                      />
+                      <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={includeNameInKnowledge}
+                          onChange={(e) => setIncludeNameInKnowledge(e.target.checked)}
+                          className="rounded border-gray-300 dark:border-gray-600 text-brand-600 focus:ring-brand-500"
+                        />
+                        <span>Include in knowledge base</span>
+                        <SettingsInfoTooltip
+                          content="When enabled, the bot name above is included in the knowledge base and overrides any other name given to the bot, no matter where it's mentioned in context."
+                          className="ml-0.5"
+                        />
+                      </label>
+                    </div>
                   </SettingsFieldRow>
                   <SettingsFieldRow
                     label="Tagline"
@@ -750,10 +872,10 @@ export default function BotForm({
                       />
                       <div
                         className={`rounded-xl border-2 border-dashed px-4 py-5 text-center transition ${hasImageUrl
-                            ? "cursor-not-allowed border-gray-200 bg-gray-100 text-gray-400 dark:border-gray-700 dark:bg-gray-800"
-                            : dragOver
-                              ? "cursor-pointer border-brand-500 bg-brand-50 dark:bg-brand-900/20"
-                              : "cursor-pointer border-gray-300 bg-gray-50 hover:border-gray-400 dark:border-gray-600 dark:bg-gray-800/50 dark:hover:border-gray-500"
+                          ? "cursor-not-allowed border-gray-200 bg-gray-100 text-gray-400 dark:border-gray-700 dark:bg-gray-800"
+                          : dragOver
+                            ? "cursor-pointer border-brand-500 bg-brand-50 dark:bg-brand-900/20"
+                            : "cursor-pointer border-gray-300 bg-gray-50 hover:border-gray-400 dark:border-gray-600 dark:bg-gray-800/50 dark:hover:border-gray-500"
                           }`}
                         onClick={() => {
                           if (!hasImageUrl) fileInputRef.current?.click();
@@ -906,19 +1028,56 @@ export default function BotForm({
                 description="Configure what users see when they first open the chat."
               >
                 <div className="space-y-5">
-                  <SettingsFieldRow
+                  <SettingsToggleRow
                     label="Welcome message"
-                    htmlFor="welcome-message"
-                    helperText="Shown when the user opens the chat."
+                    htmlFor="welcome-message-enabled"
+                    helperText="Show a custom message when the user opens the chat."
                   >
-                    <Textarea
-                      id="welcome-message"
-                      rows={3}
-                      value={welcomeMessage}
-                      onChange={(event) => setWelcomeMessage(event.target.value)}
-                      className="w-full min-h-[5rem] resize-y"
+                    <input
+                      id="welcome-message-enabled"
+                      type="checkbox"
+                      checked={welcomeMessageEnabled}
+                      onChange={(e) => setWelcomeMessageEnabledWithDefault(e.target.checked)}
+                      className="rounded border-gray-300 dark:border-gray-600 text-brand-600 focus:ring-brand-500"
                     />
-                  </SettingsFieldRow>
+                  </SettingsToggleRow>
+                  {welcomeMessageEnabled ? (
+                    <SettingsFieldRow
+                      label="Message text"
+                      htmlFor="welcome-message"
+                      helperText="Click a pill to insert that variable. Variables are highlighted in the preview below."
+                    >
+                      <div className="flex flex-col gap-2 w-full">
+                        <div className="flex flex-wrap gap-1.5">
+                          {WELCOME_VARIABLES.map((v) => (
+                            <button
+                              key={v.label}
+                              type="button"
+                              onClick={() => insertWelcomeVariable(v.value)}
+                              className="inline-flex items-center rounded-md border border-gray-200 bg-gray-50/80 px-2 py-0.5 text-[11px] font-medium text-gray-600 shadow-sm hover:border-gray-300 hover:bg-gray-100 dark:border-gray-600 dark:bg-gray-700/50 dark:text-gray-400 dark:hover:bg-gray-600/50"
+                            >
+                              {v.label}
+                            </button>
+                          ))}
+                        </div>
+                        <Textarea
+                          ref={welcomeMessageInputRef}
+                          id="welcome-message"
+                          rows={3}
+                          value={welcomeMessage}
+                          onChange={(event) => setWelcomeMessage(event.target.value)}
+                          placeholder={DEFAULT_WELCOME_MESSAGE}
+                          className="w-full min-h-[5rem] resize-y"
+                        />
+                        {welcomeMessage.trim() ? (
+                          <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                            Preview:{" "}
+                            <WelcomeMessagePreview text={welcomeMessage} />
+                          </p>
+                        ) : null}
+                      </div>
+                    </SettingsFieldRow>
+                  ) : null}
                   <SettingsFieldRow
                     label="Suggested questions"
                     helperText={`Quick conversation starters. ${exampleQuestions.length} of ${EXAMPLE_QUESTIONS_MAX}.`}
@@ -1003,13 +1162,29 @@ export default function BotForm({
                   htmlFor="knowledge-description"
                   helperText="Not shown to users. Describe what knowledge you've added so other admins can understand scope."
                 >
-                  <Textarea
-                    id="knowledge-description"
-                    rows={3}
-                    value={knowledgeDescription}
-                    onChange={(event) => setKnowledgeDescription(event.target.value)}
-                    className="w-full min-h-[5rem] resize-y"
-                  />
+                  <div className="space-y-2">
+                    <Textarea
+                      id="knowledge-description"
+                      rows={3}
+                      value={knowledgeDescription}
+                      onChange={(event) => setKnowledgeDescription(event.target.value)}
+                      className="w-full min-h-[5rem] resize-y"
+                    />
+                    {botId && (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <EmbeddingStatusBadge
+                          status={(initialBot?.noteEmbeddingStatus as "ready" | "pending" | "failed" | undefined) ?? "pending"}
+                          updatedAt={initialBot?.noteEmbeddingUpdatedAt}
+                          error={initialBot?.noteEmbeddingError}
+                        />
+                        {onRetryNote && (initialBot?.noteEmbeddingStatus === "failed") && (
+                          <Button type="button" variant="ghost" size="sm" onClick={onRetryNote}>
+                            Retry embed
+                          </Button>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </SettingsFieldRow>
               </SettingsSectionCard>
 
@@ -1017,105 +1192,48 @@ export default function BotForm({
                 title="FAQs"
                 description="Curated questions and answers used by the bot."
               >
-                <BotFaqsEditor value={faqs} onChange={setFaqs} />
-              </SettingsSectionCard>
-
-              <SettingsSectionCard
-                title="Documents"
-                description="Upload and manage source documents used by the bot."
-              >
-                <div className="space-y-4">
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    Upload files that the bot can use to answer questions.
-                  </p>
-                  {initialBot?.id ? (
-                    <>
-                      {(initialBot.documents ?? []).length === 0 ? (
-                        <SettingsEmptyState
-                          title="No files yet"
-                          description="Upload PDF, DOC, DOCX, or TXT files below. The bot will use their content to answer questions."
-                          className="py-8"
-                        />
-                      ) : null}
-                      <BotDocumentsManager botId={initialBot.id} documents={initialBot.documents ?? []} />
-                    </>
-                  ) : (
-                    <div className="rounded-xl border border-gray-200 bg-gray-50 p-6 text-center text-sm text-gray-600 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-400">
-                      Save the bot first to upload documents.
+                <div className="space-y-3">
+                  {botId && onBackfillEmbeddings && (
+                    <div className="flex justify-end">
+                      <Button type="button" variant="secondary" size="sm" onClick={onBackfillEmbeddings}>
+                        Re-embed all missing FAQs & notes
+                      </Button>
                     </div>
                   )}
+                  <BotFaqsEditor
+                    value={faqs}
+                    onChange={setFaqs}
+                    botId={botId}
+                    onRetryFaq={onRetryFaq}
+                  />
                 </div>
               </SettingsSectionCard>
 
-              {health ? (
+              {initialBot?.id ? (
+                <BotDocumentsManager
+                  botId={initialBot.id}
+                  documents={initialBot.documents ?? []}
+                  health={
+                    health
+                      ? {
+                        lastIngestedAt: health.lastIngestedAt,
+                        lastFailedDoc: health.lastFailedDoc,
+                      }
+                      : undefined
+                  }
+                  onUploadingChange={onSavingChange}
+                  pollWhenActive={activeTab === "knowledge"}
+                />
+              ) : (
                 <SettingsSectionCard
-                  title="Knowledge Health"
-                  description="Monitor ingestion and document processing status."
+                  title="Documents"
+                  description="Upload and manage source documents used by the bot."
                 >
-                  <div className="space-y-5 select-none cursor-default" aria-readonly>
-                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-                      <div className="rounded-xl border border-gray-200 bg-white px-4 py-4 text-center shadow-sm dark:border-gray-700 dark:bg-gray-900">
-                        <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Total</p>
-                        <p className="mt-1 text-2xl font-semibold text-gray-900 dark:text-gray-100">{health.docsTotal}</p>
-                      </div>
-                      <div className="rounded-xl border border-gray-200 bg-white px-4 py-4 text-center shadow-sm dark:border-gray-700 dark:bg-gray-900">
-                        <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Queued</p>
-                        <p className="mt-1 text-2xl font-semibold text-gray-700 dark:text-gray-300">{health.docsQueued}</p>
-                      </div>
-                      <div className="rounded-xl border border-blue-200 bg-blue-50/80 px-4 py-4 text-center shadow-sm dark:border-blue-700 dark:bg-blue-900/30">
-                        <p className="text-xs font-medium uppercase tracking-wide text-blue-700 dark:text-blue-300">Processing</p>
-                        <p className="mt-1 text-2xl font-semibold text-blue-700 dark:text-blue-300">{health.docsProcessing}</p>
-                      </div>
-                      <div className="rounded-xl border border-emerald-200 bg-emerald-50/80 px-4 py-4 text-center shadow-sm dark:border-emerald-700 dark:bg-emerald-900/30">
-                        <p className="text-xs font-medium uppercase tracking-wide text-emerald-700 dark:text-emerald-300">Ready</p>
-                        <p className="mt-1 text-2xl font-semibold text-emerald-700 dark:text-emerald-300">{health.docsReady}</p>
-                      </div>
-                      <div
-                        className={`rounded-xl border px-4 py-4 text-center shadow-sm ${health.docsFailed > 0
-                            ? "border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-900/30"
-                            : "border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900"
-                          }`}
-                      >
-                        <p className={`text-xs font-medium uppercase tracking-wide ${health.docsFailed > 0 ? "text-amber-700 dark:text-amber-300" : "text-gray-500 dark:text-gray-400"}`}>
-                          Failed
-                        </p>
-                        <p className={`mt-1 text-2xl font-semibold ${health.docsFailed > 0 ? "text-amber-800 dark:text-amber-200" : "text-gray-700 dark:text-gray-300"}`}>
-                          {health.docsFailed}
-                        </p>
-                      </div>
-                    </div>
-                    {health.lastIngestedAt ? (
-                      <div className="rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/50">
-                        <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Last ingested</p>
-                        <p className="mt-0.5 text-sm font-medium text-gray-900 dark:text-gray-100">
-                          {new Date(health.lastIngestedAt).toLocaleString()}
-                        </p>
-                      </div>
-                    ) : null}
-                    {health.docsFailed > 0 && health.lastFailedDoc ? (
-                      <div className="rounded-xl border-2 border-amber-200 bg-amber-50 p-4 dark:border-amber-700 dark:bg-amber-900/20">
-                        <p className="text-sm font-semibold text-amber-800 dark:text-amber-200">
-                          Latest failed document
-                        </p>
-                        <p className="mt-0.5 text-sm text-amber-800 dark:text-amber-200">
-                          {health.lastFailedDoc.title || health.lastFailedDoc.docId}
-                        </p>
-                        {health.lastFailedDoc.error ? (
-                          <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
-                            {health.lastFailedDoc.error.length > 200
-                              ? `${health.lastFailedDoc.error.slice(0, 199)}…`
-                              : health.lastFailedDoc.error}
-                          </p>
-                        ) : null}
-                      </div>
-                    ) : (
-                      <div className="rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/30">
-                        <p className="text-sm text-gray-500 dark:text-gray-400">No failed documents</p>
-                      </div>
-                    )}
+                  <div className="rounded-xl border border-gray-200 bg-gray-50 p-6 text-center text-sm text-gray-600 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-400">
+                    Save the bot first to upload documents.
                   </div>
                 </SettingsSectionCard>
-              ) : null}
+              )}
             </div>
           </TabsContent>
 
@@ -1684,10 +1802,10 @@ export default function BotForm({
                   </p>
                   <div
                     className={`flex flex-wrap items-center gap-3 rounded-lg border p-3 ${chatUI.backgroundStyle === "dark"
-                        ? "border-gray-600 bg-gray-800"
-                        : chatUI.backgroundStyle === "auto"
-                          ? "border-gray-300 bg-gradient-to-r from-gray-100 to-gray-800 dark:border-gray-600"
-                          : "border-gray-200 bg-gray-100 dark:border-gray-700 dark:bg-gray-800"
+                      ? "border-gray-600 bg-gray-800"
+                      : chatUI.backgroundStyle === "auto"
+                        ? "border-gray-300 bg-gradient-to-r from-gray-100 to-gray-800 dark:border-gray-600"
+                        : "border-gray-200 bg-gray-100 dark:border-gray-700 dark:bg-gray-800"
                       }`}
                     aria-hidden
                   >
@@ -2082,8 +2200,8 @@ export default function BotForm({
                             setChatUI((prev) => ({ ...prev, chatOpenAnimation: value }))
                           }
                           className={`rounded-xl border-2 px-4 py-3 text-left text-sm font-medium transition-colors ${selected
-                              ? "border-brand-500 bg-brand-50 text-brand-800 dark:border-brand-400 dark:bg-brand-900/30 dark:text-brand-200"
-                              : "border-gray-200 bg-white text-gray-700 hover:border-gray-300 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-300 dark:hover:border-gray-600 dark:hover:bg-gray-800"
+                            ? "border-brand-500 bg-brand-50 text-brand-800 dark:border-brand-400 dark:bg-brand-900/30 dark:text-brand-200"
+                            : "border-gray-200 bg-white text-gray-700 hover:border-gray-300 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-300 dark:hover:border-gray-600 dark:hover:bg-gray-800"
                             }`}
                         >
                           {label}
@@ -2312,8 +2430,8 @@ export default function BotForm({
                       role="radio"
                       aria-checked={status === "draft"}
                       className={`min-w-[7rem] rounded-lg px-4 py-2.5 text-sm font-semibold transition-all ${status === "draft"
-                          ? "border border-gray-300 bg-white text-gray-900 shadow-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
-                          : "text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200"
+                        ? "border border-gray-300 bg-white text-gray-900 shadow-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+                        : "text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200"
                         }`}
                       onClick={() => setStatus("draft")}
                     >
@@ -2324,8 +2442,8 @@ export default function BotForm({
                       role="radio"
                       aria-checked={status === "published"}
                       className={`min-w-[7rem] rounded-lg px-4 py-2.5 text-sm font-semibold transition-all ${status === "published"
-                          ? "border-2 border-brand-500 bg-brand-600 text-white shadow-sm dark:border-brand-400 dark:bg-brand-500"
-                          : "text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200"
+                        ? "border-2 border-brand-500 bg-brand-600 text-white shadow-sm dark:border-brand-400 dark:bg-brand-500"
+                        : "text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200"
                         }`}
                       onClick={() => setStatus("published")}
                     >
@@ -2343,8 +2461,8 @@ export default function BotForm({
                   <li>
                     <div
                       className={`flex items-start gap-3 rounded-xl border px-3 py-2.5 ${name.trim()
-                          ? "border-gray-200 bg-gray-50/50 dark:border-gray-700 dark:bg-gray-800/30"
-                          : "border-amber-200 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-900/20"
+                        ? "border-gray-200 bg-gray-50/50 dark:border-gray-700 dark:bg-gray-800/30"
+                        : "border-amber-200 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-900/20"
                         }`}
                     >
                       {name.trim() ? (
@@ -2373,8 +2491,8 @@ export default function BotForm({
                   <li>
                     <div
                       className={`flex items-start gap-3 rounded-xl border px-3 py-2.5 ${description.trim()
-                          ? "border-gray-200 bg-gray-50/50 dark:border-gray-700 dark:bg-gray-800/30"
-                          : "border-amber-200 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-900/20"
+                        ? "border-gray-200 bg-gray-50/50 dark:border-gray-700 dark:bg-gray-800/30"
+                        : "border-amber-200 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-900/20"
                         }`}
                     >
                       {description.trim() ? (

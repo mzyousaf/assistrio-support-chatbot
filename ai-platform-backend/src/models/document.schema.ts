@@ -33,6 +33,12 @@ export class DocumentModel {
   text?: string;
   @Prop({ default: () => new Date() })
   createdAt: Date;
+  /** Optional upload session: when set, used to cancel an in-progress upload and remove all docs from this session. */
+  @Prop()
+  uploadSessionId?: string;
+  /** When false, document is excluded from knowledge base search. Default true. */
+  @Prop({ default: true })
+  active?: boolean;
 }
 
 export const DocumentSchema = SchemaFactory.createForClass(DocumentModel);

@@ -8,6 +8,7 @@ import { mapSources } from "@/components/chat-ui";
 import { usePreferredColorScheme } from "@/hooks/usePreferredColorScheme";
 import { useVisitorId } from "@/hooks/useVisitorId";
 import { apiFetch } from "@/lib/api";
+import { resolveWelcomeMessage } from "@/lib/welcomeMessage";
 import type { BotChatUI } from "@/models/Bot";
 
 const SUBTITLE_MAX_LENGTH = 80;
@@ -64,12 +65,17 @@ function isoNow(): string {
 }
 
 function buildWelcomeMessage(bot: BotChatProps["bot"]): ChatUIMessage | null {
-  const text = (bot.welcomeMessage ?? "").trim();
-  if (!text) return null;
+  const template = (bot.welcomeMessage ?? "").trim();
+  if (!template) return null;
+  const content = resolveWelcomeMessage(template, {
+    name: bot.name,
+    tagline: bot.tagline ?? bot.shortDescription,
+    description: bot.description,
+  });
   return {
     id: `welcome_${bot.id}`,
     role: "assistant",
-    content: text,
+    content,
     createdAt: new Date().toISOString(),
     status: "sent",
   };

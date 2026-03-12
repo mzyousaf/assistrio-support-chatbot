@@ -1,7 +1,14 @@
+/** Embedding status for semantic retrieval (FAQ/note). */
+export type EmbeddingStatus = "pending" | "ready" | "failed";
+
 /** Types only – no DB. All API calls go to the backend. */
 export interface BotFaq {
   question: string;
   answer: string;
+  /** Embedding status for this FAQ (semantic retrieval). */
+  embeddingStatus?: EmbeddingStatus;
+  embeddingUpdatedAt?: string;
+  embeddingError?: string | null;
 }
 
 export interface BotPersonality {
@@ -157,6 +164,10 @@ export interface BotDocument {
   description?: string;
   knowledgeDescription?: string;
   faqs?: BotFaq[];
+  /** Note (knowledge description) embedding status. */
+  noteEmbeddingStatus?: EmbeddingStatus;
+  noteEmbeddingUpdatedAt?: string;
+  noteEmbeddingError?: string | null;
   exampleQuestions?: string[];
   personality?: BotPersonality;
   config?: BotConfig;

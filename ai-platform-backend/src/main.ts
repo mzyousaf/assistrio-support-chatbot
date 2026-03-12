@@ -39,7 +39,10 @@ async function bootstrap() {
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true,
   });
-  await app.getHttpAdapter().getInstance().register(multipart as never);
+  const maxDocUploadBytes = 5 * 1024 * 1024; // 5MB for docs (pdf, doc, txt, md)
+  await app.getHttpAdapter().getInstance().register(multipart as never, {
+    limits: { fileSize: maxDocUploadBytes },
+  });
   const port = process.env.PORT ?? 3001;
   await app.listen(port, '0.0.0.0');
   console.log(`Backend listening on http://0.0.0.0:${port}`);

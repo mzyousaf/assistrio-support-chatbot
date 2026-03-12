@@ -8,6 +8,7 @@ import type { ChatUIMessage, ChatUISource } from "@/components/chat-ui";
 import { mapSources } from "@/components/chat-ui";
 import { cx } from "@/components/chat-ui/utils";
 import { apiFetch } from "@/lib/api";
+import { resolveWelcomeMessage } from "@/lib/welcomeMessage";
 import type { BotChatUI } from "@/models/Bot";
 
 function generateId(): string {
@@ -106,20 +107,25 @@ export function AdminLiveChatAdapter({
   className,
   style,
 }: AdminLiveChatAdapterProps) {
-  const endpoint = `/api/super-admin/bots/${botId}/chat`;
+  const endpoint = `/api/super-admin/bots/${botId}/chat?debug=true`;
   const conversationIdRef = useRef<string | null>(null);
 
   const welcomeMsg = useMemo((): ChatUIMessage | null => {
-    const text = (welcomeMessage ?? "").trim();
-    if (!text) return null;
+    const template = (welcomeMessage ?? "").trim();
+    if (!template) return null;
+    const content = resolveWelcomeMessage(template, {
+      name: botName,
+      tagline,
+      description,
+    });
     return {
       id: `welcome_${botId}`,
       role: "assistant",
-      content: text,
+      content,
       createdAt: new Date().toISOString(),
       status: "sent",
     };
-  }, [botId, welcomeMessage]);
+  }, [botId, welcomeMessage, botName, tagline, description]);
 
   const preferredScheme = usePreferredColorScheme();
   const [messages, setMessages] = useState<ChatUIMessage[]>(() => (welcomeMsg ? [welcomeMsg] : []));
@@ -242,18 +248,18 @@ export function AdminLiveChatAdapter({
         showSuggestedChips={Boolean(suggestedQuestions?.length)}
         suggestedQuestions={suggestedQuestions}
         showComposerWithSuggestedQuestions={chatUI?.showComposerWithSuggestedQuestions === true}
-        onBack={onBack ?? (() => {})}
+        onBack={onBack ?? (() => { })}
         onMenu={onMenu}
         showMenuExpand={chatUI?.showMenuExpand !== false}
         onMenuExpand={() => setExpanded((e) => !e)}
         isExpanded={expanded}
         menuQuickLinks={chatUI?.menuQuickLinks?.length ? chatUI.menuQuickLinks : undefined}
-        onClose={onClose ?? (() => {})}
+        onClose={onClose ?? (() => { })}
         avatar={
           chatUI?.showAvatarInHeader !== false
             ? (avatarUrl ? (
-                <img src={avatarUrl} alt="" className="w-full h-full object-cover" />
-              ) : undefined)
+              <img src={avatarUrl} alt="" className="w-full h-full object-cover" />
+            ) : undefined)
             : undefined
         }
         title={botName}
@@ -292,9 +298,9 @@ export function AdminLiveChatAdapter({
         showAttach={chatUI?.allowFileUpload === true}
         showEmoji={chatUI?.showEmoji !== false}
         showMic={chatUI?.showMic === true}
-        onAttach={() => {}}
-        onEmoji={() => {}}
-        onMic={() => {}}
+        onAttach={() => { }}
+        onEmoji={() => { }}
+        onMic={() => { }}
       />
     </div>
   );

@@ -1,5 +1,10 @@
 "use client";
 
+/**
+ * @deprecated Unused. BotDocumentsManager is the single source of truth for document management
+ * in the Knowledge tab. Do not use this component in the live UI.
+ */
+
 import React, { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -40,19 +45,19 @@ export default function BotKnowledgeBaseSection({
     setUploading(true);
     setError(null);
     try {
+      const formData = new FormData();
+      formData.append("botId", botId);
       for (const file of selectedFiles) {
-        const formData = new FormData();
         formData.append("file", file);
-        formData.append("title", file.name);
+      }
 
-        const res = await apiFetch(`/api/super-admin/bots/${botId}/upload-doc`, {
-          method: "POST",
-          body: formData,
-        });
+      const res = await apiFetch("/api/super-admin/upload", {
+        method: "POST",
+        body: formData,
+      });
 
-        if (!res.ok) {
-          throw new Error("Upload failed");
-        }
+      if (!res.ok) {
+        throw new Error("Upload failed");
       }
       setSelectedFiles([]);
       if (fileInputRef.current) {

@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@plugin "@tailwindcss/typography";
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
@@ -255,6 +256,13 @@ body {
 .chat-composer-textarea {
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Segoe UI Symbol";
   -webkit-font-smoothing: antialiased;
+}
+
+/* Keep message content inside bubble: wrap long words/URLs and constrain width */
+.chat-bubble-content {
+  word-break: break-word;
+  overflow-wrap: break-word;
+  max-width: 100%;
 }
 
 /* Emoji picker (emoji-picker-element from CDN) – smaller emoji and more columns */

@@ -12,6 +12,9 @@ export class BotLeadField {
   type: LeadFieldType;
   @Prop({ default: true })
   required?: boolean;
+  /** Optional aliases for spontaneous extraction (e.g. ["employees", "staff", "headcount"] for team_size). */
+  @Prop({ type: [String], default: undefined })
+  aliases?: string[];
 }
 
 @Schema({ _id: false })
@@ -20,6 +23,14 @@ export class BotLeadCaptureV2 {
   enabled?: boolean;
   @Prop({ type: [BotLeadField], default: [] })
   fields?: BotLeadField[];
+  /** How to ask for missing fields: soft (less frequent), balanced, direct (ask sooner). */
+  @Prop({ enum: ['soft', 'balanced', 'direct'], default: undefined })
+  askStrategy?: 'soft' | 'balanced' | 'direct';
+  @Prop({ default: undefined })
+  politeMode?: boolean;
+  /** chat = ask in chat; form = avoid aggressive in-chat asking; hybrid = both gently. */
+  @Prop({ enum: ['chat', 'form', 'hybrid'], default: undefined })
+  captureMode?: 'chat' | 'form' | 'hybrid';
 }
 
 export type ChatBackgroundStyle = 'auto' | 'light' | 'dark';
@@ -104,12 +115,26 @@ export class BotChatUI {
   showMic?: boolean;
 }
 
+export type EmbeddingStatus = 'pending' | 'ready' | 'failed';
+
 @Schema({ _id: false })
 export class BotFaq {
   @Prop({ required: true })
   question: string;
   @Prop({ required: true })
   answer: string;
+  /** Embedding vector for semantic retrieval (when ready). */
+  @Prop({ type: [Number], select: false })
+  embedding?: number[];
+  @Prop({ enum: ['pending', 'ready', 'failed'], default: undefined })
+  embeddingStatus?: EmbeddingStatus;
+  @Prop()
+  embeddingUpdatedAt?: Date;
+  /** Hash of normalized embedding input; used to skip re-embed when unchanged. */
+  @Prop()
+  embeddingInputHash?: string;
+  @Prop({ type: String, default: null })
+  embeddingError?: string | null;
 }
 
 const BEHAVIOR_PRESET_VALUES = [
@@ -123,6 +148,7 @@ export class BotPersonality {
   name?: string;
   @Prop()
   description?: string;
+  /** Optional response behavior rules (how to answer). Use for tone/style; do not put company facts (pricing, hours, policies) here—those come from knowledge/retrieval. */
   @Prop()
   systemPrompt?: string;
   /** UI behavior preset key (e.g. default, support, sales). Persisted so dropdown reflects after reload. */
@@ -161,6 +187,12 @@ export class Bot {
   isPublic: boolean;
   @Prop()
   shortDescription?: string;
+  /** @deprecated Identity is now in the behavior/identity layer; bot name is always applied in system prompt. Kept for backward compatibility. */
+  @Prop({ default: false })
+  includeNameInKnowledge?: boolean;
+  /** @deprecated Tagline is not injected into knowledge layer anymore. Kept for backward compatibility. */
+  @Prop({ default: false })
+  includeTaglineInKnowledge?: boolean;
   @Prop()
   category?: string;
   @Prop({ type: [String], default: [] })
@@ -190,6 +222,17 @@ export class Bot {
   description?: string;
   @Prop()
   knowledgeDescription?: string;
+  /** Embedding for the single note (knowledgeDescription). */
+  @Prop({ type: [Number], select: false })
+  noteEmbedding?: number[];
+  @Prop({ enum: ['pending', 'ready', 'failed'], default: undefined })
+  noteEmbeddingStatus?: EmbeddingStatus;
+  @Prop()
+  noteEmbeddingUpdatedAt?: Date;
+  @Prop()
+  noteEmbeddingInputHash?: string;
+  @Prop({ type: String, default: null })
+  noteEmbeddingError?: string | null;
   @Prop({ type: [BotFaq], default: [] })
   faqs?: BotFaq[];
   @Prop({ type: [String], default: [] })

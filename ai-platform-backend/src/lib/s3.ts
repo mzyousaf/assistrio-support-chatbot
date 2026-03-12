@@ -153,36 +153,22 @@ export async function uploadToS3(params: UploadParams): Promise<UploadResult> {
 }
 
 /**
- * Upload a public avatar image to bots/avatars.
+ * Upload any file to the public bucket under a given prefix.
+ * Used for both images and documents (single public upload).
  */
-export async function uploadPublicAvatar(params: {
+export async function uploadPublic(params: {
+  prefix: string;
   body: Buffer;
   originalName: string;
   contentType: string;
+  cacheControl?: string;
 }): Promise<UploadResult> {
   return uploadToS3({
     visibility: 'public',
-    prefix: 'bots/avatars',
+    prefix: params.prefix,
     originalName: params.originalName,
     contentType: params.contentType,
     body: params.body,
-  });
-}
-
-/**
- * Upload a private document for a bot to bots/docs/{botId}.
- */
-export async function uploadPrivateDoc(params: {
-  botId: string;
-  body: Buffer;
-  originalName: string;
-  contentType: string;
-}): Promise<UploadResult> {
-  return uploadToS3({
-    visibility: 'private',
-    prefix: `bots/docs/${params.botId}`,
-    originalName: params.originalName,
-    contentType: params.contentType,
-    body: params.body,
+    cacheControl: params.cacheControl,
   });
 }

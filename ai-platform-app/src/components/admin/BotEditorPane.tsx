@@ -3,14 +3,16 @@
 import React from "react";
 import Link from "next/link";
 
-import CreateNewBotButton from "./CreateNewBotButton";
-
 export interface BotEditorPaneProps {
   botName: string;
   status: "draft" | "published";
   unsaved: boolean;
+  /** When true, Save changes button shows loading state. */
+  saving?: boolean;
   formId: string;
   previewHref?: string;
+  /** Brief success message (e.g. "Saved. Embedding update queued."). Shown below the header. */
+  saveMessage?: string | null;
   children: React.ReactNode;
 }
 
@@ -18,18 +20,21 @@ export function BotEditorPane({
   botName,
   status,
   unsaved,
+  saving = false,
   formId,
   previewHref,
+  saveMessage,
   children,
 }: BotEditorPaneProps) {
   return (
     <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 overflow-hidden flex flex-col min-h-0">
       {/* Sticky action bar */}
-      <div className="flex-shrink-0 sticky top-0 z-10 flex items-center justify-between gap-4 p-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
-        <div className="min-w-0 flex items-center gap-3">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 truncate">
-            {botName}
-          </h2>
+      <div className="flex-shrink-0 sticky top-0 z-10 flex flex-col border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
+        <div className="flex items-center justify-between gap-4 p-4">
+          <div className="min-w-0 flex items-center gap-3">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 truncate">
+              {botName}
+            </h2>
           <span
             className={`flex-shrink-0 text-xs font-medium px-2 py-0.5 rounded-full ${
               status === "published"
@@ -65,18 +70,49 @@ export function BotEditorPane({
               </svg>
             </Link>
           )}
-          <CreateNewBotButton
-            className="inline-flex items-center justify-center rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3.5 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-            label="New bot"
-          />
           <button
             type="submit"
             form={formId}
-            className="inline-flex items-center rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 transition-colors"
+            disabled={saving}
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 transition-colors disabled:opacity-70 disabled:pointer-events-none min-w-[7rem]"
+            aria-busy={saving}
           >
-            Save changes
+            {saving ? (
+              <>
+                <svg
+                  className="h-4 w-4 shrink-0 animate-spin"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  aria-hidden
+                >
+                  <circle
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="3"
+                    strokeOpacity={0.25}
+                  />
+                  <path
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    opacity={0.75}
+                  />
+                </svg>
+                Saving
+              </>
+            ) : (
+              "Save changes"
+            )}
           </button>
         </div>
+        </div>
+        {saveMessage && (
+          <div className="px-4 py-2 bg-emerald-50 dark:bg-emerald-900/20 border-t border-emerald-100 dark:border-emerald-800/50 text-sm text-emerald-800 dark:text-emerald-200">
+            {saveMessage}
+          </div>
+        )}
       </div>
 
       {/* Section nav + content (single surface, no nested card) */}

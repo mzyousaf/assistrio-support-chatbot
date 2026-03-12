@@ -37,11 +37,15 @@ function normalizeFields(input: unknown): BotLeadField[] {
     const typeRaw = typeof o.type === 'string' ? o.type : 'text';
     const type: LeadFieldType = LEAD_TYPES.includes(typeRaw as LeadFieldType) ? (typeRaw as LeadFieldType) : 'text';
     const key = ensureUniqueKey(keyRaw || labelRaw, used);
+    const aliases = Array.isArray(o.aliases)
+      ? (o.aliases as unknown[]).map((a) => String(a).trim().toLowerCase()).filter(Boolean)
+      : undefined;
     out.push({
       key,
       label: labelRaw || key.replace(/_/g, ' '),
       type,
       required: o.required !== false,
+      ...(aliases?.length ? { aliases } : {}),
     });
   }
   return out;
@@ -52,16 +56,20 @@ function normalizeLeadCapture(input: unknown): BotLeadCaptureV2 {
   const o = input as Record<string, unknown>;
   const fields = normalizeFields(o.fields);
   const enabled = typeof o.enabled === 'boolean' ? o.enabled : fields.length > 0;
-  if (fields.length > 0) return { enabled, fields };
+  const askStrategy = ['soft', 'balanced', 'direct'].includes(String(o.askStrategy ?? '')) ? (o.askStrategy as BotLeadCaptureV2['askStrategy']) : undefined;
+  const politeMode = typeof o.politeMode === 'boolean' ? o.politeMode : undefined;
+  const captureMode = ['chat', 'form', 'hybrid'].includes(String(o.captureMode ?? '')) ? (o.captureMode as BotLeadCaptureV2['captureMode']) : undefined;
+  const extra = { askStrategy, politeMode, captureMode };
+  if (fields.length > 0) return { enabled, fields, ...extra };
   if ('collectName' in o || 'collectEmail' in o || 'collectPhone' in o) {
     const leg = o as { collectName?: boolean; collectEmail?: boolean; collectPhone?: boolean; enabled?: boolean };
     const legacyFields: BotLeadField[] = [];
     if (leg.collectName !== false) legacyFields.push({ key: 'name', label: 'Full name', type: 'text', required: true });
     if (leg.collectEmail !== false) legacyFields.push({ key: 'email', label: 'Email', type: 'email', required: true });
     if (leg.collectPhone) legacyFields.push({ key: 'phone', label: 'Phone', type: 'phone', required: true });
-    return { enabled: leg.enabled === true, fields: legacyFields };
+    return { enabled: leg.enabled === true, fields: legacyFields, ...extra };
   }
-  return { enabled: false, fields: [] };
+  return { enabled: false, fields: [], ...extra };
 }
 
 function normalizeFaqs(input: unknown): Array<{ question: string; answer: string }> {
@@ -117,8 +125,11 @@ export interface NormalizedBotPayload {
   config?: BotConfig;
   openaiApiKeyOverride?: string;
   whisperApiKeyOverride?: string;
+  limitOverrideMessages?: number;
   isPublic: boolean;
   status?: 'draft' | 'published';
+  includeNameInKnowledge?: boolean;
+  includeTaglineInKnowledge?: boolean;
 }
 
 export function normalizeBotPayload(input: Record<string, unknown>): NormalizedBotPayload {
@@ -133,8 +144,14 @@ export function normalizeBotPayload(input: Record<string, unknown>): NormalizedB
   const welcomeMessage = String(input.welcomeMessage ?? '').trim();
   const openaiApiKeyOverride = String(input.openaiApiKeyOverride ?? '').trim();
   const whisperApiKeyOverride = String(input.whisperApiKeyOverride ?? '').trim();
+  const limitOverrideMessages =
+    typeof input.limitOverrideMessages === 'number' && Number.isFinite(input.limitOverrideMessages)
+      ? Math.max(0, Math.floor(input.limitOverrideMessages))
+      : undefined;
   const isPublic = input.isPublic !== false;
   const status = input.status === 'draft' || input.status === 'published' ? input.status : undefined;
+  const includeNameInKnowledge = input.includeNameInKnowledge === true;
+  const includeTaglineInKnowledge = input.includeTaglineInKnowledge === true;
   const faqs = normalizeFaqs(input.faqs);
   const exampleQuestions = normalizeExampleQuestions(input.exampleQuestions);
   const leadCapture = normalizeLeadCapture(input.leadCapture);
@@ -214,7 +231,10 @@ export function normalizeBotPayload(input: Record<string, unknown>): NormalizedB
     config,
     openaiApiKeyOverride: openaiApiKeyOverride || undefined,
     whisperApiKeyOverride: whisperApiKeyOverride || undefined,
+    limitOverrideMessages,
     isPublic,
     status,
+    includeNameInKnowledge,
+    includeTaglineInKnowledge,
   };
 }

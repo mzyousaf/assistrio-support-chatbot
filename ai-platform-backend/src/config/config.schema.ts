@@ -10,4 +10,6 @@ export const configValidationSchema = Joi.object({
   AWS_REGION: Joi.string().optional(),
   S3_BUCKET: Joi.string().optional(),
   CLOUDFRONT_BASE_URL: Joi.string().uri().optional().allow(''),
+  USE_UNIFIED_KNOWLEDGE_RETRIEVAL: Joi.string().valid('true', 'false').optional(),
+  USE_UNIFIED_EVIDENCE_PROMPT: Joi.string().valid('true', 'false').optional(),
 });

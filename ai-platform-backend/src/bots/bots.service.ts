@@ -2,6 +2,13 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Bot } from '../models';
+import { getDefaultBotCreatePayload } from '../super-admin/default-new-bot.payload';
+import { FaqNoteEmbeddingJobService } from '../embedding/faq-note-embedding-job.service';
+import {
+  mergeFaqsForSave,
+  getNoteEmbeddingStateForSave,
+} from '../embedding/faq-note-embedding.helper';
+import type { FaqWithEmbeddingMeta } from '../embedding/faq-note-embedding.helper';
 
 function slugify(input: string): string {
   const slug = input
@@ -35,7 +42,10 @@ export interface PublicBotDto {
 
 @Injectable()
 export class BotsService {
-  constructor(@InjectModel(Bot.name) private readonly botModel: Model<Bot>) {}
+  constructor(
+    @InjectModel(Bot.name) private readonly botModel: Model<Bot>,
+    private readonly faqNoteEmbeddingJobService: FaqNoteEmbeddingJobService,
+  ) {}
 
   async findAll() {
     return this.botModel.find().lean();
@@ -93,11 +103,11 @@ export class BotsService {
     return this.botModel.findOne({ slug: slug.trim().toLowerCase() }).select('_id').lean();
   }
 
-  /** Find showcase bot by slug for chat (returns BotLike shape). */
+  /** Find showcase bot by slug for chat (returns BotLike shape with knowledge + lead capture). */
   async findOneBySlugForChat(slug: string) {
     return this.botModel
       .findOne({ slug: slug.trim().toLowerCase(), type: 'showcase' })
-      .select('_id slug openaiApiKeyOverride welcomeMessage personality config faqs type limitOverrideMessages')
+      .select('_id slug name shortDescription description category openaiApiKeyOverride welcomeMessage knowledgeDescription leadCapture personality config faqs type limitOverrideMessages includeNameInKnowledge includeTaglineInKnowledge')
       .lean();
   }
 
@@ -105,7 +115,7 @@ export class BotsService {
   async findOneBySlugTrial(slug: string) {
     return this.botModel
       .findOne({ slug: slug.trim().toLowerCase(), type: 'visitor-own' })
-      .select('_id slug openaiApiKeyOverride welcomeMessage personality config faqs type limitOverrideMessages')
+      .select('_id slug name shortDescription description category openaiApiKeyOverride welcomeMessage knowledgeDescription leadCapture personality config faqs type limitOverrideMessages includeNameInKnowledge includeTaglineInKnowledge')
       .lean();
   }
 
@@ -182,7 +192,7 @@ export class BotsService {
   async findOneShowcaseForAdmin(id: string) {
     return this.botModel
       .findById(id)
-      .select('slug name shortDescription description category categories imageUrl openaiApiKeyOverride whisperApiKeyOverride welcomeMessage knowledgeDescription status isPublic leadCapture chatUI faqs exampleQuestions personality type config')
+      .select('slug name shortDescription description category categories imageUrl openaiApiKeyOverride whisperApiKeyOverride welcomeMessage knowledgeDescription status isPublic leadCapture chatUI faqs exampleQuestions personality type config limitOverrideMessages includeNameInKnowledge includeTaglineInKnowledge')
       .lean();
   }
 
@@ -200,28 +210,10 @@ export class BotsService {
       return { botId: String((existing as { _id: unknown })._id), slug: (existing as { slug: string }).slug };
     }
     for (let attempt = 0; attempt < 5; attempt++) {
-      const slug = await this.generateUniqueSlug('new-bot');
+      const slug = await this.generateUniqueSlug('ai-support-assistant');
       try {
-        const created = await this.botModel.create({
-          name: 'New bot',
-          slug,
-          type: 'showcase',
-          status: 'draft',
-          clientDraftId,
-          isPublic: true,
-          shortDescription: '',
-          description: '',
-          categories: [],
-          imageUrl: '',
-          welcomeMessage: '',
-          knowledgeDescription: '',
-          leadCapture: { enabled: false, fields: [{ key: 'name', label: 'Full name', type: 'text', required: true }, { key: 'email', label: 'Email', type: 'email', required: true }, { key: 'phone', label: 'Phone', type: 'phone', required: true }] },
-          chatUI: { primaryColor: '#14B8A6', backgroundStyle: 'light', bubbleBorderRadius: 20, launcherPosition: 'bottom-right', timePosition: 'top', showBranding: true },
-          faqs: [],
-          personality: { language: 'en-US' },
-          config: { temperature: 0.3, responseLength: 'medium', maxTokens: 512 },
-          createdAt: new Date(),
-        });
+        const payload = getDefaultBotCreatePayload(slug, clientDraftId);
+        const created = await this.botModel.create(payload as unknown as Record<string, unknown>);
         return { botId: String((created as { _id: unknown })._id), slug: (created as { slug: string }).slug };
       } catch (err: unknown) {
         const e = err as { code?: number; keyPattern?: Record<string, number> };
@@ -244,14 +236,19 @@ export class BotsService {
       categories: string[];
       imageUrl?: string;
       openaiApiKeyOverride?: string;
+      whisperApiKeyOverride?: string;
       welcomeMessage?: string;
       knowledgeDescription?: string;
       leadCapture?: unknown;
       chatUI?: unknown;
       faqs?: unknown;
+      exampleQuestions?: string[];
       personality?: unknown;
       config?: unknown;
+      limitOverrideMessages?: number;
       isPublic: boolean;
+      includeNameInKnowledge?: boolean;
+      includeTaglineInKnowledge?: boolean;
     },
   ): Promise<{ botId: string; slug: string }> {
     const finalName = normalized.name || 'Draft bot';
@@ -276,17 +273,22 @@ export class BotsService {
               category: normalized.categories?.[0],
               imageUrl: normalized.imageUrl,
               openaiApiKeyOverride: normalized.openaiApiKeyOverride,
+              whisperApiKeyOverride: normalized.whisperApiKeyOverride,
               welcomeMessage: normalized.welcomeMessage,
               knowledgeDescription: normalized.knowledgeDescription,
               leadCapture: normalized.leadCapture,
               chatUI: normalized.chatUI,
               faqs: normalized.faqs,
+              exampleQuestions: normalized.exampleQuestions ?? [],
               personality: normalized.personality,
               config: normalized.config,
+              limitOverrideMessages: normalized.limitOverrideMessages,
               type: 'showcase',
               status: 'published',
               clientDraftId: undefined,
               isPublic: normalized.isPublic,
+              includeNameInKnowledge: normalized.includeNameInKnowledge,
+              includeTaglineInKnowledge: normalized.includeTaglineInKnowledge,
             },
           );
           return { botId: String((existing as { _id: unknown })._id), slug: finalSlug };
@@ -310,16 +312,21 @@ export class BotsService {
           category: normalized.categories?.[0],
           imageUrl: normalized.imageUrl,
           openaiApiKeyOverride: normalized.openaiApiKeyOverride,
+          whisperApiKeyOverride: normalized.whisperApiKeyOverride,
           welcomeMessage: normalized.welcomeMessage,
           knowledgeDescription: normalized.knowledgeDescription,
           leadCapture: normalized.leadCapture,
           chatUI: normalized.chatUI,
           faqs: normalized.faqs,
+          exampleQuestions: normalized.exampleQuestions ?? [],
           personality: normalized.personality,
           config: normalized.config,
+          limitOverrideMessages: normalized.limitOverrideMessages,
           type: 'showcase',
           status: 'published',
           isPublic: normalized.isPublic,
+          includeNameInKnowledge: normalized.includeNameInKnowledge,
+          includeTaglineInKnowledge: normalized.includeTaglineInKnowledge,
           createdAt: new Date(),
         });
         return { botId: String((created as { _id: unknown })._id), slug: (created as { slug: string }).slug };
@@ -349,10 +356,13 @@ export class BotsService {
       exampleQuestions?: string[];
       personality?: unknown;
       config?: unknown;
+      limitOverrideMessages?: number;
       isPublic: boolean;
       status?: 'draft' | 'published';
+      includeNameInKnowledge?: boolean;
+      includeTaglineInKnowledge?: boolean;
     },
-  ): Promise<{ ok: true; botId: string; status: string }> {
+  ): Promise<{ ok: true; botId: string; status: string; embeddingQueued?: boolean }> {
     const existing = await this.botModel.findById(id).select('_id type name slug').lean();
     if (!existing || (existing as { type?: string }).type !== 'showcase') {
       throw new Error('Bot not found');
@@ -369,6 +379,26 @@ export class BotsService {
     if (shouldUpdateSlug) {
       nextSlug = await this.generateUniqueSlug(finalName, id);
     }
+
+    const newFaqs = Array.isArray(normalized.faqs)
+      ? (normalized.faqs as Array<{ question?: string; answer?: string }>).map((f) => ({
+          question: String(f?.question ?? '').trim(),
+          answer: String(f?.answer ?? '').trim(),
+        })).filter((f) => f.question || f.answer)
+      : [];
+    const newKnowledgeDescription = String(normalized.knowledgeDescription ?? '').trim();
+
+    const currentForMerge = await this.botModel
+      .findById(id)
+      .select('faqs knowledgeDescription noteEmbeddingStatus noteEmbeddingInputHash')
+      .select('+faqs.embedding')
+      .lean();
+    const currentFaqs = (currentForMerge as { faqs?: FaqWithEmbeddingMeta[] } | null)?.faqs;
+    const mergedFaqs = mergeFaqsForSave(currentFaqs, newFaqs);
+    const currentNoteHash = (currentForMerge as { noteEmbeddingInputHash?: string } | null)?.noteEmbeddingInputHash;
+    const currentNoteStatus = (currentForMerge as { noteEmbeddingStatus?: 'pending' | 'ready' | 'failed' } | null)?.noteEmbeddingStatus;
+    const noteState = getNoteEmbeddingStateForSave(currentNoteHash, currentNoteStatus, newKnowledgeDescription);
+
     for (let attempt = 0; attempt < 5; attempt++) {
       try {
         await this.botModel.findByIdAndUpdate(id, {
@@ -382,17 +412,23 @@ export class BotsService {
           openaiApiKeyOverride: normalized.openaiApiKeyOverride,
           whisperApiKeyOverride: normalized.whisperApiKeyOverride,
           welcomeMessage: normalized.welcomeMessage ?? '',
-          knowledgeDescription: normalized.knowledgeDescription ?? '',
-          faqs: normalized.faqs,
+          knowledgeDescription: newKnowledgeDescription,
+          faqs: mergedFaqs,
+          noteEmbeddingInputHash: noteState.noteEmbeddingInputHash,
+          noteEmbeddingStatus: noteState.noteEmbeddingStatus,
           exampleQuestions: normalized.exampleQuestions ?? [],
           leadCapture: normalized.leadCapture,
           chatUI: normalized.chatUI,
           personality: normalized.personality,
           config: normalized.config,
+          limitOverrideMessages: normalized.limitOverrideMessages,
           isPublic: normalized.isPublic,
           status,
+          includeNameInKnowledge: normalized.includeNameInKnowledge,
+          includeTaglineInKnowledge: normalized.includeTaglineInKnowledge,
         });
-        return { ok: true, botId: id, status };
+        const { faqCount, noteCount } = await this.faqNoteEmbeddingJobService.enqueueForBot(id);
+        return { ok: true, botId: id, status, embeddingQueued: faqCount + noteCount > 0 };
       } catch (err: unknown) {
         const e = err as { code?: number; keyPattern?: Record<string, number> };
         if (!(e.code === 11000 && e.keyPattern?.slug)) throw err;

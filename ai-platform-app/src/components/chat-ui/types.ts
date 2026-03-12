@@ -10,7 +10,7 @@ export interface ChatUISource {
   chunkId?: string;
 }
 
-/** Backend API often returns sources as { docId, docTitle, chunkId, preview, score? }. */
+/** Backend API returns sources as { documentId, chunkId, title, sourceType?, url?, text, score? }. Legacy: { docId, docTitle, chunkId, preview, score? }. */
 export function mapSources(raw: unknown): ChatUISource[] {
   if (!Array.isArray(raw)) return [];
   return raw
@@ -25,9 +25,11 @@ export function mapSources(raw: unknown): ChatUISource[] {
       const snippet =
         typeof s.snippet === "string"
           ? s.snippet.trim() || undefined
-          : typeof s.preview === "string"
-            ? s.preview.trim() || undefined
-            : undefined;
+          : typeof s.text === "string"
+            ? s.text.trim() || undefined
+            : typeof s.preview === "string"
+              ? s.preview.trim() || undefined
+              : undefined;
       const documentId =
         typeof s.documentId === "string"
           ? s.documentId
