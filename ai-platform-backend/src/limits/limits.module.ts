@@ -10,4 +10,4 @@ import { LimitsService } from './limits.service';
   providers: [LimitsService],
   exports: [LimitsService],
 })
-export class LimitsModule {}
+export class LimitsModule { }

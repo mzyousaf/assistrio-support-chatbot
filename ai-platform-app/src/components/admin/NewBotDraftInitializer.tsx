@@ -4,7 +4,7 @@ import React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { apiFetch } from "@/lib/api";
-import { ensureDraftId, rotateDraftId } from "@/lib/draftBot";
+import { ensureDraftId } from "@/lib/draftBot";
 
 let draftInitInFlight:
   | {
@@ -23,8 +23,10 @@ export default function NewBotDraftInitializer() {
     let mounted = true;
     const run = async () => {
       try {
-        const isNew = searchParams.get("new") === "1";
-        const clientDraftId = isNew ? rotateDraftId() : ensureDraftId();
+        // Use the draft id already set by CreateNewBotButton (rotateDraftId) before navigation.
+        // Do not call rotateDraftId() here — React Strict Mode runs this effect twice in dev, which
+        // would generate two different ids and bypass draftInitInFlight, causing duplicate POST /draft.
+        const clientDraftId = ensureDraftId();
         if (!clientDraftId) {
           throw new Error("Failed to create draft id.");
         }
@@ -33,7 +35,7 @@ export default function NewBotDraftInitializer() {
           draftInitInFlight = {
             clientDraftId,
             promise: (async () => {
-              const response = await apiFetch("/api/super-admin/bots/draft", {
+              const response = await apiFetch("/api/user/bots/draft", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ clientDraftId }),
@@ -51,7 +53,7 @@ export default function NewBotDraftInitializer() {
           throw new Error("Draft bot id missing.");
         }
         if (mounted) {
-          router.replace(`/super-admin/bots/${data.botId}`);
+          router.replace(`/user/bots/${data.botId}`);
         }
       } catch {
         draftInitInFlight = null;

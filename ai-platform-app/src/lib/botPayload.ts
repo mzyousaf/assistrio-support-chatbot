@@ -18,7 +18,7 @@ function normalizeMenuQuickLinks(input: unknown): ChatMenuQuickLink[] {
     .filter((x): x is ChatMenuQuickLink => x != null);
 }
 
-export type NormalizedFaq = { question: string; answer: string };
+export type NormalizedFaq = { question: string; answer: string; active?: boolean };
 
 export type BotPayloadInput = {
   name?: unknown;
@@ -72,6 +72,7 @@ export function normalizeFaqs(input: unknown): NormalizedFaq[] {
     .map((item) => ({
       question: typeof item?.question === "string" ? item.question.trim() : "",
       answer: typeof item?.answer === "string" ? item.answer.trim() : "",
+      active: item?.active === false ? false : true,
     }))
     .filter((item) => item.question && item.answer);
 }
@@ -180,7 +181,7 @@ export function normalizeBotPayload(input: BotPayloadInput): NormalizedBotPayloa
     showSenderName: chatUIInput.showSenderName !== false,
     showTime: chatUIInput.showTime !== false,
     timePosition:
-      chatUIInput.timePosition === "bottom" || chatUIInput.timePosition === "bottom-right" ? "bottom" : "top",
+      chatUIInput.timePosition === "bottom" ? "bottom" : "top",
     showCopyButton: chatUIInput.showCopyButton !== false,
     showSources: chatUIInput.showSources !== false,
     showEmoji: chatUIInput.showEmoji !== false,

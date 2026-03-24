@@ -1,14 +1,9 @@
-/** Embedding status for semantic retrieval (FAQ/note). */
-export type EmbeddingStatus = "pending" | "ready" | "failed";
-
-/** Types only – no DB. All API calls go to the backend. */
+/** FAQ item (content owned by knowledge base; API contract only). */
 export interface BotFaq {
   question: string;
   answer: string;
-  /** Embedding status for this FAQ (semantic retrieval). */
-  embeddingStatus?: EmbeddingStatus;
-  embeddingUpdatedAt?: string;
-  embeddingError?: string | null;
+  /** When false, this FAQ is excluded from retrieval/chunks. */
+  active?: boolean;
 }
 
 export interface BotPersonality {
@@ -162,12 +157,10 @@ export interface BotDocument {
   leadCapture?: BotLeadCaptureV2;
   chatUI?: BotChatUI;
   description?: string;
+  /** Note content (sourced from knowledge base for display). */
   knowledgeDescription?: string;
+  /** FAQs (sourced from knowledge base for display). */
   faqs?: BotFaq[];
-  /** Note (knowledge description) embedding status. */
-  noteEmbeddingStatus?: EmbeddingStatus;
-  noteEmbeddingUpdatedAt?: string;
-  noteEmbeddingError?: string | null;
   exampleQuestions?: string[];
   personality?: BotPersonality;
   config?: BotConfig;

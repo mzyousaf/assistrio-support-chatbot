@@ -15,10 +15,9 @@ export interface ChatLogEvent {
   retrievalConfidence?: string;
   messageCount?: number;
   durationMs?: number;
-  /** Endpoint: trial | demo | super-admin */
+  /** Endpoint: trial | demo | user */
   endpoint?: string;
   selectedChunksCount?: number;
-  usedFaqCount?: number;
   leadFieldsCapturedCount?: number;
   summaryUsed?: boolean;
   retryCount?: number;
@@ -54,3 +53,4 @@ function emit(ev: ChatLogEvent): void {
 export function chatLog(ev: ChatLogEvent): void {
   emit(ev);
 }
+

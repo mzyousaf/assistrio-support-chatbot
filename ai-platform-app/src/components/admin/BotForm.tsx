@@ -1,11 +1,14 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
+import { Pencil, RefreshCw } from "lucide-react";
 
-import BotDocumentsManager, { type BotDocumentItem } from "@/components/admin/BotDocumentsManager";
+import BotDocumentsManager, {
+  type BotDocumentItem,
+  type KnowledgePollHealthPayload,
+} from "@/components/admin/BotDocumentsManager";
 import BotFaqsEditor, { type BotFaq } from "@/components/admin/BotFaqsEditor";
-import { EmbeddingStatusBadge } from "@/components/admin/EmbeddingStatusBadge";
 import {
   FormField,
   FormFieldDescription,
@@ -20,6 +23,7 @@ import {
   SettingsEmptyState,
   SettingsInfoTooltip,
   SettingsDependencyAlert,
+  SettingsSideSheet,
 } from "@/components/admin/settings";
 import LeadCaptureEditor from "@/components/admin/LeadCaptureEditor";
 import MenuQuickLinksEditor from "@/components/admin/MenuQuickLinksEditor";
@@ -29,9 +33,12 @@ import { Input } from "@/components/ui/Input";
 import MultiSelect from "@/components/ui/MultiSelect";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { Textarea } from "@/components/ui/Textarea";
+import { Switch } from "@/components/ui/Switch";
 import Tooltip from "@/components/ui/Tooltip";
 import { apiFetch } from "@/lib/api";
 import { normalizeLeadCapture } from "@/lib/leadCapture";
+import { SettingsEmbedPreview } from "@/components/admin/settings/SettingsEmbedPreview";
+import { SettingsModal } from "@/components/admin/settings/SettingsModal";
 import {
   BUBBLE_RADIUS_MAX,
   BUBBLE_RADIUS_MIN,
@@ -177,6 +184,7 @@ export interface BotFormSubmitPayload {
   whisperApiKeyOverride?: string;
   includeNameInKnowledge?: boolean;
   includeTaglineInKnowledge?: boolean;
+  includeNotesInKnowledge?: boolean;
 }
 
 interface BotFormProps {
@@ -200,6 +208,7 @@ interface BotFormProps {
     isPublic?: boolean;
     includeNameInKnowledge?: boolean;
     includeTaglineInKnowledge?: boolean;
+    includeNotesInKnowledge?: boolean;
     leadCapture?: BotLeadCaptureV2;
     chatUI?: BotChatUI;
     personality?: BotPersonality;
@@ -218,15 +227,11 @@ interface BotFormProps {
         updatedAt?: string;
       };
     };
-    noteEmbeddingStatus?: string;
-    noteEmbeddingUpdatedAt?: string;
-    noteEmbeddingError?: string | null;
   };
   onSubmit: (payload: BotFormSubmitPayload) => Promise<void> | void;
   botId?: string;
   onRetryFaq?: (faqIndex: number) => Promise<void>;
   onRetryNote?: () => Promise<void>;
-  onBackfillEmbeddings?: () => Promise<void>;
   onCreateAnotherBot?: () => void;
   submitting?: boolean;
   /** ID for the form element (for external submit button via form="..."). */
@@ -284,6 +289,9 @@ const TAB_META: Record<(typeof TAB_IDS)[number]["value"], { title: string; descr
 
 const TAB_CONTENT_CLASS = "mx-auto w-full max-w-5xl space-y-8 pb-2";
 
+/** Single interval for Knowledge base tab: document list + health (docs queued/processing/ready, etc.). */
+const KNOWLEDGE_BASE_POLL_INTERVAL_MS = 5000;
+
 export default function BotForm({
   mode,
   initialBot,
@@ -297,7 +305,6 @@ export default function BotForm({
   botId,
   onRetryFaq,
   onRetryNote,
-  onBackfillEmbeddings,
 }: BotFormProps) {
   const [name, setName] = useState(initialBot?.name ?? "");
   const [shortDescription, setShortDescription] = useState(initialBot?.shortDescription ?? "");
@@ -351,13 +358,26 @@ export default function BotForm({
     });
   }
   const [knowledgeDescription, setKnowledgeDescription] = useState(initialBot?.knowledgeDescription ?? "");
+  const [includeNotesInKnowledge, setIncludeNotesInKnowledge] = useState(initialBot?.includeNotesInKnowledge ?? true);
   const [faqs, setFaqs] = useState<BotFaq[]>(initialBot?.faqs ?? []);
+  const [faqAutoRefreshToken, setFaqAutoRefreshToken] = useState<number>(0);
+  const [refreshNotesConfirmOpen, setRefreshNotesConfirmOpen] = useState(false);
+  const [knowledgeNotesSheetOpen, setKnowledgeNotesSheetOpen] = useState(false);
+  const [knowledgeNotesDraft, setKnowledgeNotesDraft] = useState("");
   const [exampleQuestions, setExampleQuestions] = useState<string[]>(
     initialBot?.exampleQuestions?.length ? initialBot.exampleQuestions.slice(0, EXAMPLE_QUESTIONS_MAX) : [],
   );
   const [status, setStatus] = useState<"draft" | "published">(initialBot?.status ?? "draft");
+  const [noteSyncStatus, setNoteSyncStatus] = useState<"processing" | "failed" | "ready">("ready");
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("general");
+  /** Bumped by the knowledge-base poll so documents + server health stay fresh while the tab is open. */
+  const [knowledgePollTick, setKnowledgePollTick] = useState(0);
+  const [health, setHealth] = useState(initialBot?.health);
+  const [kbEmbeddingSnapshot, setKbEmbeddingSnapshot] = useState<{
+    faqItemCount: number;
+    noteContentLength: number;
+  } | null>(null);
   const [testingKey, setTestingKey] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
 
@@ -397,6 +417,37 @@ export default function BotForm({
       setBehaviorPreset(preset.trim());
     }
   }, [initialBot?.personality?.behaviorPreset]);
+
+  const serverHealthKey = JSON.stringify(initialBot?.health ?? null);
+  useEffect(() => {
+    setHealth(initialBot?.health);
+  }, [initialBot?.id, serverHealthKey]);
+
+  useEffect(() => {
+    setKbEmbeddingSnapshot(null);
+  }, [initialBot?.id]);
+
+  const handleKnowledgePollResult = useCallback(
+    (payload: {
+      health: KnowledgePollHealthPayload;
+      embedding: { faqItemCount: number; noteContentLength: number };
+    }) => {
+      setHealth(payload.health);
+      setKbEmbeddingSnapshot(payload.embedding);
+    },
+    [],
+  );
+
+  /** While Knowledge base is open: interval-only ticks (no immediate bump — avoids duplicate refresh with mount). Reset when leaving tab so remount doesn't double-fire with stale tick. */
+  useEffect(() => {
+    if (!botId) return;
+    if (activeTab !== "knowledge") {
+      setKnowledgePollTick(0);
+      return;
+    }
+    const id = window.setInterval(() => setKnowledgePollTick((t) => t + 1), KNOWLEDGE_BASE_POLL_INTERVAL_MS);
+    return () => window.clearInterval(id);
+  }, [botId, activeTab]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [botImageFile, setBotImageFile] = useState<File | null>(null);
@@ -463,7 +514,7 @@ export default function BotForm({
         try {
           const formData = new FormData();
           formData.append("file", botImageFile);
-          const uploadResponse = await apiFetch("/api/super-admin/upload", {
+          const uploadResponse = await apiFetch("/api/user/upload", {
             method: "POST",
             body: formData,
           });
@@ -584,30 +635,81 @@ export default function BotForm({
       whisperApiKeyOverride: whisperApiKeyOverride.trim() || undefined,
       includeNameInKnowledge,
       includeTaglineInKnowledge: false,
+      includeNotesInKnowledge,
     } satisfies BotFormSubmitPayload;
   }
 
   async function submitWithStatus(desiredStatus?: "draft" | "published") {
     onSavingChange?.(true);
     let payload: BotFormSubmitPayload | null = null;
+    let notesChanged = false;
     try {
       payload = await buildSubmitPayload(desiredStatus);
       if (!payload) return;
+
+      notesChanged =
+        (knowledgeDescription || "") !== (initialBot?.knowledgeDescription || "") ||
+        includeNotesInKnowledge !== (initialBot?.includeNotesInKnowledge ?? true);
+      const faqsChanged = JSON.stringify(faqs) !== JSON.stringify(initialBot?.faqs ?? []);
+
+      if (notesChanged && botId && onRetryNote) setNoteSyncStatus("processing");
+
       await onSubmit(payload);
       onDirtyChange?.(false);
       if (payload.status) {
         setStatus(payload.status);
       }
+
+      // Auto-refresh embeddings so KB is always in sync after saving.
+      if (botId && onRetryNote && notesChanged) void handleRefreshNoteStatus();
+      if (botId && onRetryFaq && faqsChanged) setFaqAutoRefreshToken((t) => t + 1);
+
       // Clear pending file and sync URL so next Save doesn't re-upload the same image
       setBotImageFile(null);
       setBotImageUrl(payload.imageUrl ?? "");
       if (fileInputRef.current) fileInputRef.current.value = "";
     } catch (error) {
+      if (notesChanged && botId && onRetryNote) setNoteSyncStatus("ready");
       setSubmitError(error instanceof Error ? error.message : "Failed to save bot. Please try again.");
     } finally {
       onSavingChange?.(false);
     }
   }
+
+  async function handleRefreshNoteStatus() {
+    if (!onRetryNote) return;
+    setNoteSyncStatus("processing");
+    try {
+      await onRetryNote();
+      setNoteSyncStatus("ready");
+    } catch {
+      setNoteSyncStatus("failed");
+    }
+  }
+
+  function truncateForPreview(text?: string, maxChars = 420) {
+    if (!text) return "—";
+    const trimmed = String(text).trim();
+    if (!trimmed) return "—";
+    if (trimmed.length <= maxChars) return trimmed;
+    return `${trimmed.slice(0, maxChars)}…`;
+  }
+
+  function openKnowledgeNotesSheet() {
+    setKnowledgeNotesDraft(knowledgeDescription);
+    setKnowledgeNotesSheetOpen(true);
+  }
+
+  function closeKnowledgeNotesSheet() {
+    setKnowledgeNotesSheetOpen(false);
+  }
+
+  function saveKnowledgeNotesFromSheet() {
+    setKnowledgeDescription(knowledgeNotesDraft);
+    setKnowledgeNotesSheetOpen(false);
+  }
+
+  const knowledgeNotesDraftDirty = knowledgeNotesDraft !== knowledgeDescription;
 
   const hasImageUrl = botImageUrl.trim().length > 0;
   const hasImageFile = Boolean(botImageFile);
@@ -640,7 +742,6 @@ export default function BotForm({
     botImageObjectUrl ||
     (botImageUrl.trim().length > 0 && previewVisible ? botImageUrl.trim() : "");
   const isPublishBlocked = !name.trim() || !description.trim();
-  const health = initialBot?.health;
 
   // Dirty state: compare current form state to initial
   React.useEffect(() => {
@@ -651,6 +752,7 @@ export default function BotForm({
       (shortDescription || "") !== (initial.shortDescription || "") ||
       includeNameInKnowledge !== (initial.includeNameInKnowledge ?? false) ||
       (description || "") !== (initial.description || "") ||
+      includeNotesInKnowledge !== (initial.includeNotesInKnowledge ?? true) ||
       welcomeMessageEnabled !== Boolean((initial.welcomeMessage ?? "").trim()) ||
       (welcomeMessageEnabled && (welcomeMessage || "") !== (initial.welcomeMessage || "")) ||
       (knowledgeDescription || "") !== (initial.knowledgeDescription || "") ||
@@ -672,6 +774,7 @@ export default function BotForm({
     name,
     shortDescription,
     includeNameInKnowledge,
+    includeNotesInKnowledge,
     description,
     welcomeMessageEnabled,
     welcomeMessage,
@@ -1154,33 +1257,115 @@ export default function BotForm({
                 description={TAB_META.knowledge.description}
               />
               <SettingsSectionCard
-                title="Knowledge Notes"
-                description="Internal notes for admins describing the scope of the bot's knowledge."
+                title={
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span>Knowledge Notes</span>
+                    <span
+                      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${noteSyncStatus === "processing"
+                        ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-300 animate-pulse"
+                        : noteSyncStatus === "failed"
+                          ? "border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-300"
+                          : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300"
+                        }`}
+                    >
+                      {noteSyncStatus === "processing"
+                        ? "Processing"
+                        : noteSyncStatus === "failed"
+                          ? "Failed"
+                          : "Ready"}
+                    </span>
+                    <Tooltip content={includeNotesInKnowledge ? "These notes are used by the assistant when replying." : "These notes are saved, but the assistant ignores them in replies."}>
+                      <span
+                        className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${includeNotesInKnowledge
+                          ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300"
+                          : "border-gray-200 bg-gray-50 text-gray-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400"
+                          }`}
+                      >
+                        {includeNotesInKnowledge ? "Included" : "Excluded"}
+                      </span>
+                    </Tooltip>
+                  </div>
+                }
+                description={
+                  kbEmbeddingSnapshot != null
+                    ? `Internal notes for admins describing the scope of the bot's knowledge. (${kbEmbeddingSnapshot.noteContentLength} chars in KB)`
+                    : "Internal notes for admins describing the scope of the bot's knowledge."
+                }
+                headerAction={
+                  <div className="flex items-center gap-0">
+                    <Tooltip content="Turn this on to let the assistant use these notes when replying. Turn it off to ignore these notes in replies.">
+                      <span className="mr-1 inline-flex h-8 w-8 items-center justify-center rounded-md">
+                        <Switch
+                          checked={includeNotesInKnowledge}
+                          onCheckedChange={(checked) => setIncludeNotesInKnowledge(checked)}
+                          aria-label="Include notes in knowledge base"
+                          className="scale-90"
+                          disabled={noteSyncStatus === "processing" || submitting}
+                        />
+                      </span>
+                    </Tooltip>
+                    {botId && onRetryNote ? (
+                      <Tooltip content="Refresh these notes so the assistant uses the latest version.">
+                        <button
+                          type="button"
+                          className={`inline-flex h-8 w-8 items-center justify-center rounded-md bg-transparent transition outline-none focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 ${
+                            noteSyncStatus === "processing"
+                              ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 cursor-not-allowed animate-pulse"
+                              : noteSyncStatus === "failed"
+                                ? "text-red-700 hover:bg-red-100 dark:text-red-300 dark:hover:bg-red-900/30"
+                                : noteSyncStatus === "ready"
+                                  ? "text-emerald-700 hover:bg-emerald-100 dark:text-emerald-300 dark:hover:bg-emerald-900/30"
+                                  : "text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+                          }`}
+                          onClick={() => setRefreshNotesConfirmOpen(true)}
+                          disabled={noteSyncStatus === "processing"}
+                          aria-label="Refresh notes in knowledge base"
+                        >
+                          <RefreshCw
+                            className={`h-3.5 w-3.5 ${noteSyncStatus === "processing" ? "animate-spin" : ""}`}
+                            aria-hidden
+                          />
+                        </button>
+                      </Tooltip>
+                    ) : null}
+                    <Tooltip content="Edit internal notes">
+                      <button
+                        type="button"
+                        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-transparent text-brand-600 outline-none ring-0 transition hover:bg-brand-100 focus:outline-none focus-visible:ring-0 disabled:pointer-events-none disabled:opacity-50 dark:text-brand-400 dark:hover:bg-brand-900/25 dark:hover:text-brand-300"
+                        onClick={openKnowledgeNotesSheet}
+                        aria-label="Edit internal notes"
+                        disabled={noteSyncStatus === "processing" || submitting}
+                      >
+                        <Pencil className="h-4 w-4" strokeWidth={2} aria-hidden />
+                      </button>
+                    </Tooltip>
+                  </div>
+                }
               >
                 <SettingsFieldRow
                   label="Internal notes"
-                  htmlFor="knowledge-description"
+                  htmlFor="knowledge-description-preview"
                   helperText="Not shown to users. Describe what knowledge you've added so other admins can understand scope."
                 >
                   <div className="space-y-2">
-                    <Textarea
-                      id="knowledge-description"
-                      rows={3}
-                      value={knowledgeDescription}
-                      onChange={(event) => setKnowledgeDescription(event.target.value)}
-                      className="w-full min-h-[5rem] resize-y"
-                    />
-                    {botId && (
-                      <div className="flex flex-wrap items-center gap-2">
-                        <EmbeddingStatusBadge
-                          status={(initialBot?.noteEmbeddingStatus as "ready" | "pending" | "failed" | undefined) ?? "pending"}
-                          updatedAt={initialBot?.noteEmbeddingUpdatedAt}
-                          error={initialBot?.noteEmbeddingError}
-                        />
-                        {onRetryNote && (initialBot?.noteEmbeddingStatus === "failed") && (
-                          <Button type="button" variant="ghost" size="sm" onClick={onRetryNote}>
-                            Retry embed
-                          </Button>
+                    {noteSyncStatus === "processing" || submitting ? (
+                      <div
+                        className="min-h-[5rem] w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm leading-relaxed text-gray-800 dark:border-gray-700 dark:bg-gray-900/50 dark:text-gray-200"
+                        aria-readonly
+                      >
+                        <p className="whitespace-pre-wrap break-words">
+                          {(knowledgeDescription || "").trim() ? knowledgeDescription : "—"}
+                        </p>
+                      </div>
+                    ) : (
+                      <div
+                        id="knowledge-description-preview"
+                        className="min-h-[5rem] max-h-52 w-full overflow-y-auto rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm leading-relaxed text-gray-800 dark:border-gray-700 dark:bg-gray-900/40 dark:text-gray-200"
+                      >
+                        {(knowledgeDescription || "").trim() ? (
+                          <p className="whitespace-pre-wrap break-words">{knowledgeDescription}</p>
+                        ) : (
+                          <p className="text-gray-400 dark:text-gray-500">No internal notes yet.</p>
                         )}
                       </div>
                     )}
@@ -1193,18 +1378,13 @@ export default function BotForm({
                 description="Curated questions and answers used by the bot."
               >
                 <div className="space-y-3">
-                  {botId && onBackfillEmbeddings && (
-                    <div className="flex justify-end">
-                      <Button type="button" variant="secondary" size="sm" onClick={onBackfillEmbeddings}>
-                        Re-embed all missing FAQs & notes
-                      </Button>
-                    </div>
-                  )}
                   <BotFaqsEditor
                     value={faqs}
                     onChange={setFaqs}
                     botId={botId}
                     onRetryFaq={onRetryFaq}
+                    autoRefreshFaqsToken={faqAutoRefreshToken}
+                    kbEmbeddingSnapshot={kbEmbeddingSnapshot}
                   />
                 </div>
               </SettingsSectionCard>
@@ -1222,7 +1402,8 @@ export default function BotForm({
                       : undefined
                   }
                   onUploadingChange={onSavingChange}
-                  pollWhenActive={activeTab === "knowledge"}
+                  pollTick={knowledgePollTick}
+                  onKnowledgePollResult={handleKnowledgePollResult}
                 />
               ) : (
                 <SettingsSectionCard
@@ -1274,7 +1455,7 @@ export default function BotForm({
                             setTestingKey(true);
                             setTestResult(null);
                             try {
-                              const response = await apiFetch("/api/super-admin/openai/test-key", {
+                              const response = await apiFetch("/api/user/openai/test-key", {
                                 method: "POST",
                                 headers: { "Content-Type": "application/json" },
                                 body: JSON.stringify({ apiKey: openaiApiKeyOverride || "" }),
@@ -2555,6 +2736,84 @@ export default function BotForm({
           </TabsContent>
         </div>
       </Tabs>
+      <SettingsModal
+        open={refreshNotesConfirmOpen}
+        onClose={() => setRefreshNotesConfirmOpen(false)}
+        icon={<RefreshCw className="h-5 w-5" strokeWidth={2} aria-hidden />}
+        maxWidthClass="max-w-md"
+        title="Refresh knowledge notes"
+        description="Re-builds embeddings for the internal notes below so the assistant uses the latest text."
+        footer={
+          <>
+            <Button type="button" variant="ghost" size="sm" onClick={() => setRefreshNotesConfirmOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              disabled={noteSyncStatus === "processing"}
+              onClick={async () => {
+                setRefreshNotesConfirmOpen(false);
+                await handleRefreshNoteStatus();
+              }}
+            >
+              Refresh embeddings
+            </Button>
+          </>
+        }
+      >
+        <SettingsEmbedPreview
+          eyebrow="Knowledge notes"
+          badge={
+            <span
+              className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-semibold ${
+                includeNotesInKnowledge
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-900/35 dark:text-emerald-300"
+                  : "border-gray-200 bg-gray-100 text-gray-600 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-400"
+              }`}
+            >
+              {includeNotesInKnowledge ? "Included in KB" : "Excluded from KB"}
+            </span>
+          }
+        >
+          <pre className="whitespace-pre-wrap break-words font-sans text-sm leading-relaxed text-gray-800 dark:text-gray-200">
+            {truncateForPreview(knowledgeDescription)}
+          </pre>
+        </SettingsEmbedPreview>
+      </SettingsModal>
+
+      <SettingsSideSheet
+        open={knowledgeNotesSheetOpen}
+        onClose={closeKnowledgeNotesSheet}
+        title="Edit knowledge notes"
+        description="Not shown to users. Describe what knowledge you've added so other admins can understand scope."
+        footer={
+          <>
+            <Button type="button" variant="ghost" size="sm" onClick={closeKnowledgeNotesSheet}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              onClick={saveKnowledgeNotesFromSheet}
+              disabled={!knowledgeNotesDraftDirty}
+            >
+              Save
+            </Button>
+          </>
+        }
+      >
+        <Textarea
+          id="knowledge-description"
+          rows={12}
+          value={knowledgeNotesDraft}
+          onChange={(e) => setKnowledgeNotesDraft(e.target.value)}
+          className="w-full min-h-[14rem] resize-y"
+          placeholder="Describe the scope of this bot's knowledge for other admins…"
+        />
+      </SettingsSideSheet>
     </form>
   );
 }

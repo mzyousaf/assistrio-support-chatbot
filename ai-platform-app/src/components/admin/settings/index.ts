@@ -58,6 +58,9 @@ export type { SettingsSideSheetProps } from "./SettingsSideSheet";
 export { SettingsModal } from "./SettingsModal";
 export type { SettingsModalProps } from "./SettingsModal";
 
+export { SettingsEmbedPreview } from "./SettingsEmbedPreview";
+export type { SettingsEmbedPreviewProps } from "./SettingsEmbedPreview";
+
 export { SettingsEmptyCollection } from "./SettingsEmptyCollection";
 export type { SettingsEmptyCollectionProps } from "./SettingsEmptyCollection";
 

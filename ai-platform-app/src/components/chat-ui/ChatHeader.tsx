@@ -199,7 +199,7 @@ export function ChatHeader({
               <Bot className={cx("w-6 h-6 flex-shrink-0", dark ? "text-gray-400" : "text-gray-500")} aria-hidden />
             )}
           </div>
-          {showStatusPillOnAvatar && statusIndicator !== "none" ? (
+          {showStatusPillOnAvatar ? (
             <StatusPill dark={dark} blinking={dotBlinking} />
           ) : null}
         </div>

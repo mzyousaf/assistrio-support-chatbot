@@ -19,21 +19,6 @@ export interface ChatContextBehavior {
   systemPrompt?: string;
 }
 
-export interface ChatContextFaq {
-  question: string;
-  answer: string;
-}
-
-export interface ChatContextDocumentChunk {
-  documentId: string;
-  title: string;
-  chunkId: string;
-  text: string;
-  score?: number;
-  url?: string;
-  sourceType?: string;
-}
-
 /** One item in the unified evidence list for evidence-first prompt (sourceType, title, section, text, optional URL). */
 export interface ChatContextEvidenceItem {
   sourceType: string;
@@ -44,11 +29,9 @@ export interface ChatContextEvidenceItem {
   url?: string;
 }
 
+/** Knowledge context: unified evidence only (ranked docs/FAQs/notes from unified retrieval). */
 export interface ChatContextKnowledge {
-  notes?: string[];
-  faqs?: ChatContextFaq[];
-  documents?: ChatContextDocumentChunk[];
-  /** When set, prompt uses this as the only knowledge block (evidence-first mode); ignores notes/documents/faqs. */
+  /** Ranked evidence items for the prompt (evidence-first). */
   unifiedEvidence?: ChatContextEvidenceItem[];
 }
 

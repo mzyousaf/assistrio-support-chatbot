@@ -29,7 +29,7 @@ export class VisitorsService {
     @InjectModel(VisitorEvent.name) private readonly visitorEventModel: Model<VisitorEvent>,
     @InjectModel(Bot.name) private readonly botModel: Model<Bot>,
     @InjectModel(Conversation.name) private readonly conversationModel: Model<Conversation>,
-  ) {}
+  ) { }
 
   async findAll() {
     return this.visitorModel.find().lean();
@@ -133,7 +133,7 @@ export class VisitorsService {
     return { allowed: true, current: current + 1, limit };
   }
 
-  /** Get one visitor with events, owned bots, and conversation count (for super-admin detail page). */
+  /** Get one visitor with events, owned bots, and conversation count (for user panel detail page). */
   async getOneWithDetails(visitorId: string) {
     const visitor = await this.visitorModel.findOne({ visitorId }).lean();
     if (!visitor) return null;

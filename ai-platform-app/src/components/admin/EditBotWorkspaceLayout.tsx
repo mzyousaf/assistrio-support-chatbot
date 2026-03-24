@@ -177,7 +177,7 @@ export function EditBotWorkspaceLayout({
               opacity: animStyle.opacity,
               transform: animStyle.transform,
               transformOrigin: animStyle.transformOrigin,
-              pointerEvents: animStyle.pointerEvents,
+              pointerEvents: animStyle.pointerEvents as React.CSSProperties["pointerEvents"],
               transition: "opacity 250ms ease-out, transform 250ms ease-out",
             }}
           >

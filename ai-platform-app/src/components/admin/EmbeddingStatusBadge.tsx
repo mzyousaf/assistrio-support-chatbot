@@ -1,7 +1,8 @@
 "use client";
 
-import type { EmbeddingStatus } from "@/models/Bot";
 import Tooltip from "@/components/ui/Tooltip";
+
+type EmbeddingStatus = "pending" | "ready" | "failed";
 
 const STATUS_LABELS: Record<EmbeddingStatus, string> = {
   ready: "Ready",

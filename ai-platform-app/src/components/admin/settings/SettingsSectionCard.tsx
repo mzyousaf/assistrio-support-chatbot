@@ -3,7 +3,7 @@
 import React from "react";
 
 export interface SettingsSectionCardProps {
-  title?: string;
+  title?: React.ReactNode;
   description?: string;
   headerAction?: React.ReactNode;
   children: React.ReactNode;

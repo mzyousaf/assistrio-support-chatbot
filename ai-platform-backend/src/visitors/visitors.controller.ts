@@ -1,9 +1,9 @@
 import { Controller, Get, HttpException, HttpStatus, Param, UseGuards } from '@nestjs/common';
-import { SuperAdminGuard } from '../super-admin/super-admin.guard';
+import { AuthGuard } from '../auth/auth.guard';
 import { VisitorsService } from './visitors.service';
 
-@Controller('api/super-admin/visitors')
-@UseGuards(SuperAdminGuard)
+@Controller('api/user/visitors')
+@UseGuards(AuthGuard)
 export class VisitorsController {
   constructor(private readonly visitorsService: VisitorsService) {}
 

@@ -4,20 +4,18 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Types } from 'mongoose';
 import OpenAI from 'openai';
-import { Conversation, DocumentModel, Message } from '../models';
+import { Conversation, Message } from '../models';
 import type { CapturedLeadData, LeadCaptureMeta } from '../models';
-import { RagService } from '../rag/rag.service';
 import { UnifiedKnowledgeRetrievalService } from '../rag/unified-knowledge-retrieval.service';
 import { extractChunkHeading, normalizeSourceExcerpt } from '../rag/retrieval-helpers';
-import type { EnrichedChunk, RetrievalResult } from '../rag/retrieval.types';
-import { assembleContextWithBudget } from './context-budget.helper';
+import type { EnrichedChunk } from '../rag/retrieval.types';
 import { buildChatKnowledgeContext, formatPromptFromContext } from './chat-context-builder';
 import { buildModelConversationContext } from './conversation-memory.helper';
 import type { BotLike, ChatDebugInfo, DebugChunkExcerpt, ChatSource, DisplaySource, RunChatInput, RunChatResult } from './chat-engine.types';
 import type { ChatContextEvidenceItem } from './chat-context.types';
 import type { AnswerabilityContext } from './answerability.types';
 import type { RankedKnowledgeItem } from '../rag/unified-retrieval.types';
-import { inferChunkKind } from '../kb/chunking.helper';
+import { inferChunkKind } from '../knowledge/chunking.helper';
 import { excerptForDebug, getChunkQualitySignals } from './chunk-quality.helper';
 import {
   classifyQuestion,
@@ -26,7 +24,6 @@ import {
 } from './answerability.helper';
 import { assembleEvidencePromptWithBudget } from './evidence-budget.helper';
 import { DEFAULT_SECTION_BUDGET, estimateTokens } from './token-budget.helper';
-import { rankFaqsByRelevance } from './faq-relevance.helper';
 import {
   buildLeadCaptureContext,
   classifyLeadIntent,
@@ -40,10 +37,6 @@ import { SUMMARY_MIN_MESSAGES, SUMMARY_UPDATE_INTERVAL } from './conversation-su
 import { chatLog } from './chat-logger';
 import { SummaryJobService } from './summary-job.service';
 import { withRetry, withTimeout, AI_CALL_TIMEOUTS } from '../lib/ai-call.helper';
-
-/** Max relevant FAQs to include (after ranking). */
-const MAX_FAQS_IN_CONTEXT = 5;
-
 
 function rankedItemToEvidenceItem(item: RankedKnowledgeItem): ChatContextEvidenceItem {
   const url =
@@ -77,7 +70,7 @@ function rankedItemToEnrichedChunk(item: RankedKnowledgeItem): EnrichedChunk {
   };
 }
 
-/** Chunk text from post-improvement chunking starts with "[Section]" and newline; legacy chunks do not. */
+/** Chunk text from post-improvement chunking starts with "[Section]" and newline; older chunks may not. */
 function chunkLooksNewFormat(chunkText: string): boolean {
   const t = (chunkText || '').trim();
   return /^\[[^\]]+\]\s*\n/.test(t) || (t.startsWith('[') && t.includes(']\n'));
@@ -224,13 +217,11 @@ const DEDUPE_WINDOW_MS = 25_000;
 export class ChatEngineService {
   constructor(
     private readonly config: ConfigService,
-    private readonly ragService: RagService,
     private readonly unifiedKnowledgeRetrievalService: UnifiedKnowledgeRetrievalService,
     @InjectModel(Conversation.name) private readonly conversationModel: Model<Conversation>,
     @InjectModel(Message.name) private readonly messageModel: Model<Message>,
-    @InjectModel(DocumentModel.name) private readonly documentModel: Model<DocumentModel>,
     private readonly summaryJobService: SummaryJobService,
-  ) {}
+  ) { }
 
   resolveOpenAIKey(params: { userApiKey?: string; bot: BotLike }): string {
     const requestKey = String(params.userApiKey || '').trim();
@@ -251,7 +242,7 @@ export class ChatEngineService {
   }: RunChatInput): Promise<RunChatResult> {
     const requestId = inputRequestId ?? `chat-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
     const startTime = Date.now();
-    const endpoint = mode === 'super_admin' ? 'super-admin' : mode;
+    const endpoint = mode === 'user' ? 'user' : mode;
 
     chatLog({
       event: 'chat.request_started',
@@ -371,117 +362,34 @@ export class ChatEngineService {
       { recentWindow: 14, storedSummary: convSummary },
     );
 
-    // Retrieval: unified (evidence-first) or legacy RAG.
-    const useUnifiedEvidencePrompt = this.config.get<boolean>('useUnifiedEvidencePrompt') === true;
+    // Unified knowledge retrieval (evidence-first prompt).
     const retrievalStart = Date.now();
-    let retrievalResult: RetrievalResult;
-    let unifiedResult: Awaited<ReturnType<UnifiedKnowledgeRetrievalService['getRelevantKnowledgeItemsForBot']>> | null = null;
-    if (useUnifiedEvidencePrompt) {
-      try {
-        unifiedResult = await this.unifiedKnowledgeRetrievalService.getRelevantKnowledgeItemsForBot(
-          bot._id.toString(),
-          message,
-          {
-            limit: 25,
-            apiKeyOverride: resolvedApiKey,
-            debug: requestDebug ?? false,
-            bot,
-          },
-        );
-      } catch (unifiedErr) {
-        const msg = unifiedErr instanceof Error ? unifiedErr.message : 'unified_retrieval_failed';
-        chatLog({
-          event: 'chat.unified_retrieval_failed',
-          level: 'warn',
-          botId: bot._id.toString(),
-          conversationId: conversation._id.toString(),
-          visitorId,
-          requestId,
-          reason: msg.slice(0, 80),
-        });
-        unifiedResult = { items: [] };
-      }
-      retrievalResult = {
-        confidence: unifiedResult.items.length === 0 ? 'low' : 'medium',
-        chunks: [],
-        metadata: undefined,
-      };
-    } else {
-      try {
-        retrievalResult = await this.ragService.getRelevantChunksForBotWithConfidence(
-          bot._id.toString(),
-          message,
-          12,
-          resolvedApiKey,
-        );
-      } catch (retrievalErr) {
-        const msg = retrievalErr instanceof Error ? retrievalErr.message : 'retrieval_failed';
-        chatLog({
-          event: 'chat.retrieval_failed',
-          level: 'warn',
-          botId: bot._id.toString(),
-          conversationId: conversation._id.toString(),
-          visitorId,
-          requestId,
-          reason: msg.slice(0, 80),
-        });
-        retrievalResult = { confidence: 'low', chunks: [] };
-      }
-    }
-    const retrievalDurationMs = Date.now() - retrievalStart;
-    const { confidence: retrievalConfidence, chunks: enrichedChunks, metadata: retrievalMetadata } = retrievalResult;
-    // Safety logs: make document/chunk gaps visible
-    if (retrievalMetadata) {
-      const { eligibleDocumentCount, eligibleChunkCount, chunksWithValidEmbeddingCount, retrievedChunkCount } = retrievalMetadata;
-      if (eligibleDocumentCount > 0 && eligibleChunkCount === 0) {
-        chatLog({
-          event: 'chat.rag_eligible_docs_no_chunks',
-          level: 'warn',
-          botId: bot._id.toString(),
-          requestId,
-          metadata: { eligibleDocumentCount },
-        });
-      }
-      if (eligibleChunkCount > 0 && chunksWithValidEmbeddingCount === 0) {
-        chatLog({
-          event: 'chat.rag_chunks_missing_embeddings',
-          level: 'warn',
-          botId: bot._id.toString(),
-          requestId,
-          metadata: { eligibleChunkCount },
-        });
-      }
-      if (eligibleDocumentCount > 0 && retrievedChunkCount === 0) {
-        chatLog({
-          event: 'chat.rag_no_document_chunks_retrieved',
-          level: 'info',
-          botId: bot._id.toString(),
-          requestId,
-          metadata: { eligibleDocumentCount, chunksWithValidEmbeddingCount },
-        });
-      }
-      const botIds = retrievalMetadata.retrievedChunkBotIds ?? [];
-      const requestBotId = bot._id.toString();
-      if (botIds.length > 1 || (botIds.length === 1 && botIds[0] !== requestBotId)) {
-        chatLog({
-          event: 'chat.rag_bot_isolation_check',
-          level: 'warn',
-          botId: requestBotId,
-          requestId,
-          metadata: { retrievalRequestBotId: retrievalMetadata.requestBotId, retrievedChunkBotIds: botIds },
-        });
-      }
-    }
-    if (retrievalConfidence === 'low' && enrichedChunks.length > 0) {
+    let unifiedResult: Awaited<ReturnType<UnifiedKnowledgeRetrievalService['getRelevantKnowledgeItemsForBot']>>;
+    try {
+      unifiedResult = await this.unifiedKnowledgeRetrievalService.getRelevantKnowledgeItemsForBot(
+        bot._id.toString(),
+        message,
+        {
+          limit: 25,
+          apiKeyOverride: resolvedApiKey,
+          debug: requestDebug ?? false,
+        },
+      );
+    } catch (unifiedErr) {
+      const msg = unifiedErr instanceof Error ? unifiedErr.message : 'unified_retrieval_failed';
       chatLog({
-        event: 'chat.retrieval_low_confidence',
-        level: 'info',
+        event: 'chat.unified_retrieval_failed',
+        level: 'warn',
         botId: bot._id.toString(),
         conversationId: conversation._id.toString(),
+        visitorId,
         requestId,
-        retrievalConfidence: 'low',
+        reason: msg.slice(0, 80),
       });
+      unifiedResult = { items: [] };
     }
+    const retrievalDurationMs = Date.now() - retrievalStart;
+    const retrievalConfidence = unifiedResult.items.length === 0 ? 'low' : 'medium';
 
     // Lead capture: state from conversation + meta; extraction with last-asked context; decline detection.
     const leadConfig = bot.leadCapture;
@@ -574,172 +482,84 @@ export class ChatEngineService {
       await this.conversationModel.updateOne({ _id: conversation._id }, { $set: updates });
     }
 
-    let budgetResult: Awaited<ReturnType<typeof assembleContextWithBudget>>;
-    let trimmedChunks: EnrichedChunk[];
-    let trimmedFaqs: Array<{ question: string; answer: string }>;
-    let documentDirectAnswerLikely: boolean;
-    let ctx: ReturnType<typeof buildChatKnowledgeContext>;
-    let evidenceTrimmedOutIds: string[] = [];
-    let evidenceKeptCount = 0;
-    let evidenceBlockTokensUsed = 0;
-    let faqCountBeforeTrim: number | undefined;
-    let protectedEvidenceCount = 0;
-    let evidenceTrimReason: string | undefined;
-    let conversationTrimReason: string | undefined;
-    let evidenceTrimSummary: string | undefined;
-    let evidencePromptTokenDistribution: ChatDebugInfo['evidencePromptTokenDistribution'];
-    let conversationMessagesTrimmedOut = 0;
-    let evidenceItemsKeptIds: string[] = [];
-    let answerabilityContext: AnswerabilityContext | undefined;
+    const evidenceItems: ChatContextEvidenceItem[] = unifiedResult.items.map(rankedItemToEvidenceItem);
+    const userMax = DEFAULT_SECTION_BUDGET.userMaxTokens;
+    const currentMsgTokens = estimateTokens(message);
+    const budget = assembleEvidencePromptWithBudget(
+      evidenceItems,
+      conversationMessages,
+      currentMsgTokens,
+      userMax,
+      undefined,
+    );
 
-    if (useUnifiedEvidencePrompt && unifiedResult != null) {
-      const evidenceItems: ChatContextEvidenceItem[] = unifiedResult.items.map(rankedItemToEvidenceItem);
-      const userMax = DEFAULT_SECTION_BUDGET.userMaxTokens;
-      const currentMsgTokens = estimateTokens(message);
-      const budget = assembleEvidencePromptWithBudget(
-        evidenceItems,
-        conversationMessages,
-        currentMsgTokens,
-        userMax,
-        undefined,
-      );
+    const evidenceKept = budget.evidenceKept;
+    const evidenceKeptCount = evidenceKept.length;
+    const evidenceTrimmedOutIds = unifiedResult.items.slice(evidenceKeptCount).map((item) => item.id);
+    const evidenceBlockTokensUsed = budget.tokenDistribution.userEvidence;
+    const protectedEvidenceCount = budget.protectedEvidenceCount;
+    const evidenceTrimReason = budget.evidenceTrimReason;
+    const conversationTrimReason = budget.conversationTrimReason;
+    const evidenceTrimSummary = budget.trimSummary;
+    const conversationMessagesTrimmedOut = budget.conversationTrimmedOut.length;
+    const evidenceItemsKeptIds = unifiedResult.items.slice(0, evidenceKeptCount).map((item) => item.id);
+    const evidencePromptTokenDistribution: ChatDebugInfo['evidencePromptTokenDistribution'] = {
+      system: 0,
+      userEvidence: budget.tokenDistribution.userEvidence,
+      userConversation: budget.tokenDistribution.userConversation,
+      userCurrentMessage: budget.tokenDistribution.userCurrentMessage,
+      userTotal: budget.tokenDistribution.userTotal,
+    };
 
-      const evidenceKept = budget.evidenceKept;
-      evidenceKeptCount = evidenceKept.length;
-      evidenceTrimmedOutIds = unifiedResult.items.slice(evidenceKept.length).map((item) => item.id);
-      evidenceBlockTokensUsed = budget.tokenDistribution.userEvidence;
-      protectedEvidenceCount = budget.protectedEvidenceCount;
-      evidenceTrimReason = budget.evidenceTrimReason;
-      conversationTrimReason = budget.conversationTrimReason;
-      evidenceTrimSummary = budget.trimSummary;
-      conversationMessagesTrimmedOut = budget.conversationTrimmedOut.length;
-      evidenceItemsKeptIds = unifiedResult.items.slice(0, evidenceKeptCount).map((item) => item.id);
-      evidencePromptTokenDistribution = {
-        system: 0,
-        userEvidence: budget.tokenDistribution.userEvidence,
-        userConversation: budget.tokenDistribution.userConversation,
-        userCurrentMessage: budget.tokenDistribution.userCurrentMessage,
-        userTotal: budget.tokenDistribution.userTotal,
-      };
+    const budgetResult = {
+      conversationMessages: budget.conversationKept,
+      tokenCounts: {
+        conversation: budget.tokenDistribution.userConversation,
+        chunks: budget.tokenDistribution.userEvidence,
+        faqs: 0,
+        currentMessage: currentMsgTokens,
+        notes: 0,
+        totalUserEstimate: budget.tokenDistribution.userTotal,
+      },
+      trimmed: {
+        historyDropped: budget.conversationTrimmedOut.length,
+        chunksDropped: budget.evidenceTrimmedOut.length,
+        faqsDropped: 0,
+      },
+    };
 
-      budgetResult = {
-        conversationMessages: budget.conversationKept,
-        documentChunks: [],
-        faqs: [],
-        tokenCounts: {
-          conversation: budget.tokenDistribution.userConversation,
-          chunks: budget.tokenDistribution.userEvidence,
-          faqs: 0,
-          currentMessage: currentMsgTokens,
-          notes: 0,
-          totalUserEstimate: budget.tokenDistribution.userTotal,
-        },
-        trimmed: {
-          historyDropped: budget.conversationTrimmedOut.length,
-          chunksDropped: budget.evidenceTrimmedOut.length,
-          faqsDropped: 0,
-        },
-        finalDocumentChunkCount: 0,
-        finalFaqCount: 0,
-      };
-      trimmedChunks = unifiedResult.items.slice(0, evidenceKeptCount).map(rankedItemToEnrichedChunk);
-      trimmedFaqs = [];
-      faqCountBeforeTrim = undefined;
-      documentDirectAnswerLikely = evidenceKept.length > 0;
+    const trimmedChunks: EnrichedChunk[] = unifiedResult.items.slice(0, evidenceKeptCount).map(rankedItemToEnrichedChunk);
+    const documentDirectAnswerLikely = evidenceKept.length > 0;
 
-      const keptRankedItems = unifiedResult.items.slice(0, evidenceKeptCount);
-      const questionClassification = classifyQuestion(message);
-      const evidenceStrength = evaluateEvidenceStrength(keptRankedItems);
-      answerabilityContext = computeAnswerabilityContext(questionClassification, evidenceStrength);
+    const keptRankedItems = unifiedResult.items.slice(0, evidenceKeptCount);
+    const questionClassification = classifyQuestion(message);
+    const evidenceStrength = evaluateEvidenceStrength(keptRankedItems);
+    const answerabilityContext = computeAnswerabilityContext(questionClassification, evidenceStrength);
 
-      ctx = buildChatKnowledgeContext({
-        botName: (bot.name || 'Assistant').trim(),
-        category: bot.category,
-        personalityPreset: personality.behaviorPreset,
-        personalityDescription: personality.description,
-        thingsToAvoid: personality.thingsToAvoid,
-        tone: personality.tone ?? 'friendly',
-        language: personality.language ?? 'en',
-        responseLength: cfg.responseLength ?? 'medium',
-        systemPrompt: personality.systemPrompt,
-        knowledgeNotes: undefined,
-        leadCapture: leadCaptureContext,
-        conversationMessages: budgetResult.conversationMessages as Array<{ role: 'user' | 'assistant' | 'system'; content: string }>,
-        conversationSummary,
-        currentUserMessage: message,
-        retrievalConfidence: retrievalConfidence,
-        documentDirectAnswerLikely,
-        unifiedEvidence: evidenceKept,
-        answerability: {
-          evidenceStrongEnough: answerabilityContext.evidenceStrongEnough,
-          directAnswerLikely: answerabilityContext.directAnswerLikely,
-          shouldUseFallback: answerabilityContext.shouldUseFallback,
-          shouldAnswerGenerally: answerabilityContext.shouldAnswerGenerally,
-        },
-      });
-    } else {
-      const rankedFaqs = rankFaqsByRelevance(bot.faqs ?? [], message, MAX_FAQS_IN_CONTEXT);
-      faqCountBeforeTrim = rankedFaqs.length;
-      const chunksForBudget = enrichedChunks.map((c) => ({
-        ...c,
-        text: c.text,
-        score: c.combinedScore,
-      }));
-      budgetResult = assembleContextWithBudget({
-        conversationMessages,
-        documentChunks: chunksForBudget,
-        faqs: rankedFaqs,
-        currentUserMessage: message,
-        knowledgeNotes: bot.knowledgeDescription,
-        leadBlockChars: leadCaptureContext.enabled ? 300 : 0,
-        budget: DEFAULT_SECTION_BUDGET,
-      });
-      trimmedChunks = budgetResult.documentChunks as EnrichedChunk[];
-      trimmedFaqs = budgetResult.faqs;
-      documentDirectAnswerLikely =
-        trimmedChunks.length > 0 &&
-        (trimmedChunks.some((c) => c.combinedScore >= 0.4) ||
-          trimmedChunks.some(
-            (c) =>
-              c.lexicalBreakdown &&
-              (c.lexicalBreakdown.headingBonus > 0 ||
-                c.lexicalBreakdown.phraseBonus > 0 ||
-                c.lexicalBreakdown.faqQuestionBonus > 0 ||
-                c.lexicalBreakdown.titleBonus >= 0.1),
-          ));
-
-      ctx = buildChatKnowledgeContext({
-        botName: (bot.name || 'Assistant').trim(),
-        category: bot.category,
-        personalityPreset: personality.behaviorPreset,
-        personalityDescription: personality.description,
-        thingsToAvoid: personality.thingsToAvoid,
-        tone: personality.tone ?? 'friendly',
-        language: personality.language ?? 'en',
-        responseLength: cfg.responseLength ?? 'medium',
-        systemPrompt: personality.systemPrompt,
-        knowledgeNotes: bot.knowledgeDescription,
-        faqs: trimmedFaqs.length ? trimmedFaqs : undefined,
-        documentChunks:
-          trimmedChunks.length > 0
-            ? trimmedChunks.map((c) => ({
-                documentId: c.documentId,
-                title: c.title,
-                chunkId: c.chunkId,
-                text: c.text,
-                score: c.combinedScore,
-                url: c.url,
-                sourceType: c.sourceType,
-              }))
-            : undefined,
-        leadCapture: leadCaptureContext,
-        conversationMessages: budgetResult.conversationMessages as Array<{ role: 'user' | 'assistant' | 'system'; content: string }>,
-        conversationSummary,
-        currentUserMessage: message,
-        retrievalConfidence: retrievalConfidence,
-        documentDirectAnswerLikely,
-      });
-    }
+    const ctx = buildChatKnowledgeContext({
+      botName: (bot.name || 'Assistant').trim(),
+      category: bot.category,
+      personalityPreset: personality.behaviorPreset,
+      personalityDescription: personality.description,
+      thingsToAvoid: personality.thingsToAvoid,
+      tone: personality.tone ?? 'friendly',
+      language: personality.language ?? 'en',
+      responseLength: cfg.responseLength ?? 'medium',
+      systemPrompt: personality.systemPrompt,
+      leadCapture: leadCaptureContext,
+      conversationMessages: budgetResult.conversationMessages as Array<{ role: 'user' | 'assistant' | 'system'; content: string }>,
+      conversationSummary,
+      currentUserMessage: message,
+      retrievalConfidence,
+      documentDirectAnswerLikely,
+      unifiedEvidence: evidenceKept,
+      answerability: {
+        evidenceStrongEnough: answerabilityContext.evidenceStrongEnough,
+        directAnswerLikely: answerabilityContext.directAnswerLikely,
+        shouldUseFallback: answerabilityContext.shouldUseFallback,
+        shouldAnswerGenerally: answerabilityContext.shouldAnswerGenerally,
+      },
+    });
 
     const { systemPrompt, userPrompt } = formatPromptFromContext(ctx);
 
@@ -798,12 +618,12 @@ export class ChatEngineService {
     const messageSources =
       sources.length > 0
         ? sources.map((s) => ({
-            chunkId: s.chunkId,
-            docId: s.documentId,
-            docTitle: s.title,
-            preview: s.text.slice(0, 200),
-            score: s.score,
-          }))
+          chunkId: s.chunkId,
+          docId: s.documentId,
+          docTitle: s.title,
+          preview: s.text.slice(0, 200),
+          score: s.score,
+        }))
         : undefined;
 
     await this.messageModel.create({
@@ -836,14 +656,13 @@ export class ChatEngineService {
       visitorId,
       requestId,
       endpoint,
-      retrievalConfidence: retrievalConfidence,
+      retrievalConfidence,
       messageCount: totalMessagesNow,
       durationMs: totalDurationMs,
       retrievalDurationMs,
       completionDurationMs,
       summaryEnqueueDurationMs,
       selectedChunksCount: trimmedChunks.length,
-      usedFaqCount: trimmedFaqs.length,
       summaryUsed: !!conversationSummary,
     });
 
@@ -856,41 +675,51 @@ export class ChatEngineService {
       isNewConversation,
     };
     if (requestDebug) {
+      const topRetrievedForDebug = unifiedResult.items.slice(0, 12).map(rankedItemToEnrichedChunk);
+      const documentChunksTrimmedOutForDebug = unifiedResult.items
+        .slice(evidenceKeptCount)
+        .map(rankedItemToEnrichedChunk)
+        .map(toDebugChunkExcerpt);
+
+      const finalAnswerMode: ChatDebugInfo['finalAnswerMode'] =
+        answerabilityContext?.shouldUseFallback === true
+          ? 'safe_fallback'
+          : answerabilityContext?.shouldAnswerGenerally === true
+            ? 'general'
+            : 'grounded';
+      const retrievalOutcome: ChatDebugInfo['retrievalOutcome'] =
+        unifiedResult.items.length === 0
+          ? 'none'
+          : (answerabilityContext?.evidenceStrongEnough === true ? 'strong' : 'weak');
+
       const debugInfo: ChatDebugInfo = {
         userQuery: message,
-        eligibleCountBySourceType: {
-          notes: bot.knowledgeDescription?.trim() ? 1 : 0,
-          faqs: (bot.faqs ?? []).length,
-          documentChunks: retrievalMetadata?.eligibleChunkCount ?? 0,
-        },
-        eligibleChunkCountByDocumentSourceType: retrievalMetadata?.eligibleChunkCountBySourceType,
-        retrievalConfidence: retrievalConfidence,
+        finalAnswerPipeline: 'unified',
+        finalAnswerMode,
+        retrievalOutcome,
+        retrievalConfidence,
         usedChunkIds: trimmedChunks.map((c) => c.chunkId),
-        usedFaqCount: trimmedFaqs.length,
         historyMessageCount: budgetResult.conversationMessages.length,
         leadCaptureState: leadCaptureContext.enabled
           ? {
-              collectedKeys: Object.keys(leadCaptureContext.collected).filter(
-                (k) => leadCaptureContext.collected[k]?.trim(),
-              ),
-              missingRequired: leadCaptureContext.missingRequired,
-              declinedFields: conv.leadCaptureMeta?.declinedFields ?? [],
-              postponedFields: conv.leadCaptureMeta?.postponedFields ?? [],
-              shouldAskNow: leadCaptureContext.shouldAskNow,
-            }
+            collectedKeys: Object.keys(leadCaptureContext.collected).filter(
+              (k) => leadCaptureContext.collected[k]?.trim(),
+            ),
+            missingRequired: leadCaptureContext.missingRequired,
+            declinedFields: conv.leadCaptureMeta?.declinedFields ?? [],
+            postponedFields: conv.leadCaptureMeta?.postponedFields ?? [],
+            shouldAskNow: leadCaptureContext.shouldAskNow,
+          }
           : undefined,
         promptSectionSizes: { systemChars: systemPrompt.length, userChars: userPrompt.length },
         lowConfidenceMode: retrievalConfidence === 'low',
         tokenBudget: {
           conversationTokens: budgetResult.tokenCounts.conversation,
-          chunksTokens: budgetResult.tokenCounts.chunks,
-          faqsTokens: budgetResult.tokenCounts.faqs,
+          evidenceTokens: budgetResult.tokenCounts.chunks,
           currentMessageTokens: budgetResult.tokenCounts.currentMessage,
-          notesTokens: budgetResult.tokenCounts.notes,
           totalUserEstimate: budgetResult.tokenCounts.totalUserEstimate,
           historyDropped: budgetResult.trimmed.historyDropped,
-          chunksDropped: budgetResult.trimmed.chunksDropped,
-          faqsDropped: budgetResult.trimmed.faqsDropped,
+          evidenceDropped: budgetResult.trimmed.chunksDropped,
         },
         topChunkScores: trimmedChunks.slice(0, 10).map((c) => c.combinedScore),
         extractionMethodsByField: Object.keys(matchedByField).length ? matchedByField : undefined,
@@ -906,45 +735,21 @@ export class ChatEngineService {
         completionDurationMs,
         summaryEnqueueDurationMs,
         totalDurationMs,
-        retrievalRequestBotId: retrievalMetadata?.requestBotId,
-        eligibleDocumentCount: retrievalMetadata?.eligibleDocumentCount,
-        eligibleChunkCount: retrievalMetadata?.eligibleChunkCount,
-        chunksWithValidEmbeddingCount: retrievalMetadata?.chunksWithValidEmbeddingCount,
-        retrievedDocumentChunkCount: retrievalMetadata?.retrievedChunkCount,
-        retrievedChunkBotIds: retrievalMetadata?.retrievedChunkBotIds,
-        trimmedDocumentChunkCount: useUnifiedEvidencePrompt
-          ? (unifiedResult?.items.length ?? 0) - evidenceKeptCount
-          : enrichedChunks.length - trimmedChunks.length,
-        finalPromptDocumentChunkCount: trimmedChunks.length,
+        trimmedEvidenceCount: unifiedResult.items.length - evidenceKeptCount,
+        evidenceItemsInFinalPrompt: trimmedChunks.length,
         selectedDocumentTitles: [...new Set(trimmedChunks.map((c) => c.title))],
         selectedDocumentChunkIds: trimmedChunks.map((c) => c.chunkId),
-        faqCountBeforeTrim: faqCountBeforeTrim,
-        faqCountAfterTrim: trimmedFaqs.length,
-        topRetrievedDocumentChunks: enrichedChunks.slice(0, 12).map(toDebugChunkExcerpt),
+        topRetrievedDocumentChunks: topRetrievedForDebug.map(toDebugChunkExcerpt),
         finalPromptDocumentChunks: trimmedChunks.map(toDebugChunkExcerpt),
-        documentChunksTrimmedOut: (() => {
-          const inPrompt = new Set(trimmedChunks.map((c) => c.chunkId));
-          return enrichedChunks.filter((c) => !inPrompt.has(c.chunkId)).map(toDebugChunkExcerpt);
-        })(),
-        faqEntriesUsed: trimmedFaqs.map((f) => ({
-          questionExcerpt: excerptForDebug(f.question, 80),
-          answerExcerpt: excerptForDebug(f.answer, 80),
-        })),
-        retrievalModeSummary: `${enrichedChunks.length} retrieved, ${trimmedChunks.length} in prompt; ${trimmedFaqs.length} FAQs; docs ${trimmedChunks.length > 0 ? 'included' : 'none'}`,
+        documentChunksTrimmedOut: documentChunksTrimmedOutForDebug,
+        retrievalModeSummary: `${unifiedResult.items.length} retrieved, ${trimmedChunks.length} in prompt; ${trimmedChunks.length > 0 ? 'included' : 'none'}`,
         documentChunksInPrompt: trimmedChunks.length > 0,
         chunkQualitySignals: trimmedChunks.length > 0 ? getChunkQualitySignals(trimmedChunks) : undefined,
-        documentsBeforeFaqs: true,
         documentDirectAnswerLikely,
-        promptKnowledgeSummary: [
-          `Notes: ${bot.knowledgeDescription?.trim() ? 1 : 0}`,
-          `Documents: ${trimmedChunks.length}`,
-          `Supporting FAQs: ${trimmedFaqs.length}`,
-        ].join(', '),
         strongestDocumentChunkScore:
           trimmedChunks.length > 0
             ? Math.max(...trimmedChunks.map((c) => c.combinedScore))
             : undefined,
-        strongestFaqCount: trimmedFaqs.length,
         finalPromptContainsStrongDoc: trimmedChunks.some((c) => c.combinedScore >= 0.35),
         answerUsedDocumentLikely:
           trimmedChunks.length > 0 && assistantMessage
@@ -955,35 +760,33 @@ export class ChatEngineService {
           !trimmedChunks.some((c) => chunkLooksNewFormat(c.text)),
         promptTokenEstimatesByBlock: {
           system: estimateTokens(systemPrompt),
-          userNotes: budgetResult.tokenCounts.notes,
-          userDocuments: budgetResult.tokenCounts.chunks,
-          userFaqs: budgetResult.tokenCounts.faqs,
+          userEvidence: budgetResult.tokenCounts.chunks,
           userConversation: budgetResult.tokenCounts.conversation,
           userCurrentMessage: budgetResult.tokenCounts.currentMessage,
           userTotal: budgetResult.tokenCounts.totalUserEstimate,
         },
-        useUnifiedEvidencePrompt: useUnifiedEvidencePrompt ? true : undefined,
-        evidenceItemsInPrompt: useUnifiedEvidencePrompt ? evidenceKeptCount : undefined,
-        evidenceItemsTrimmedOut: useUnifiedEvidencePrompt && evidenceTrimmedOutIds.length > 0 ? evidenceTrimmedOutIds : undefined,
-        evidenceBlockTokens: useUnifiedEvidencePrompt ? evidenceBlockTokensUsed : undefined,
-        evidencePromptTokenDistribution:
-          useUnifiedEvidencePrompt && evidencePromptTokenDistribution
-            ? { ...evidencePromptTokenDistribution, system: estimateTokens(systemPrompt) }
-            : undefined,
-        protectedEvidenceCount: useUnifiedEvidencePrompt ? protectedEvidenceCount : undefined,
-        evidenceItemsKeptIds: useUnifiedEvidencePrompt && evidenceItemsKeptIds.length > 0 ? evidenceItemsKeptIds : undefined,
-        conversationMessagesTrimmedOut: useUnifiedEvidencePrompt ? conversationMessagesTrimmedOut : undefined,
-        evidenceTrimReason: useUnifiedEvidencePrompt ? evidenceTrimReason : undefined,
-        conversationTrimReason: useUnifiedEvidencePrompt ? conversationTrimReason : undefined,
-        evidenceTrimSummary: useUnifiedEvidencePrompt ? evidenceTrimSummary : undefined,
+        unifiedRetrievalUsed: true,
+        evidenceItemsInPrompt: evidenceKeptCount,
+        evidenceItemsTrimmedOut: evidenceTrimmedOutIds.length > 0 ? evidenceTrimmedOutIds : undefined,
+        evidenceBlockTokens: evidenceBlockTokensUsed,
+        evidencePromptTokenDistribution: {
+          ...evidencePromptTokenDistribution,
+          system: estimateTokens(systemPrompt),
+        },
+        protectedEvidenceCount,
+        evidenceItemsKeptIds: evidenceItemsKeptIds.length > 0 ? evidenceItemsKeptIds : undefined,
+        conversationMessagesTrimmedOut,
+        evidenceTrimReason,
+        conversationTrimReason,
+        evidenceTrimSummary,
         questionClassification: answerabilityContext?.questionClassification,
         evidenceStrengthSummary: answerabilityContext?.evidenceStrengthSummary
           ? {
-              topCombinedScore: answerabilityContext.evidenceStrengthSummary.topCombinedScore,
-              scoreGap: answerabilityContext.evidenceStrengthSummary.scoreGap,
-              evidenceItemCount: answerabilityContext.evidenceStrengthSummary.evidenceItemCount,
-              hasStrongMatchSignal: answerabilityContext.evidenceStrengthSummary.hasStrongMatchSignal,
-            }
+            topCombinedScore: answerabilityContext.evidenceStrengthSummary.topCombinedScore,
+            scoreGap: answerabilityContext.evidenceStrengthSummary.scoreGap,
+            evidenceItemCount: answerabilityContext.evidenceStrengthSummary.evidenceItemCount,
+            hasStrongMatchSignal: answerabilityContext.evidenceStrengthSummary.hasStrongMatchSignal,
+          }
           : undefined,
         evidenceStrongEnough: answerabilityContext?.evidenceStrongEnough,
         directAnswerLikely: answerabilityContext?.directAnswerLikely,
@@ -992,58 +795,23 @@ export class ChatEngineService {
         shouldAnswerGenerally: answerabilityContext?.shouldAnswerGenerally,
         answerabilityExplanation: answerabilityContext?.decisionExplanation,
       };
-      if (useUnifiedEvidencePrompt && unifiedResult != null) {
-        debugInfo.unifiedRetrievalUsed = true;
-        if (unifiedResult.debug) {
-          debugInfo.unifiedRetrievalEligibleCounts = unifiedResult.debug.eligibleCountBySourceType;
-          if (unifiedResult.debug.retrievedBySourceType) {
-            debugInfo.unifiedRetrievalBySourceType = Object.fromEntries(
-              Object.entries(unifiedResult.debug.retrievedBySourceType).map(([k, arr]) => [
-                k,
-                (arr ?? []).map((it) => ({
-                  sourceType: it.sourceType,
-                  title: it.title.slice(0, 80),
-                  combinedScore: it.combinedScore,
-                })),
-              ]),
-            );
-          }
-          debugInfo.unifiedRetrievalScoreBreakdown = unifiedResult.debug.scoreBreakdown;
-          debugInfo.unifiedRetrievalDiversityDebug = unifiedResult.debug.diversityDebug;
-        }
-      } else if (this.config.get<boolean>('useUnifiedKnowledgeRetrieval')) {
-        try {
-          const unifiedResultDebug = await this.unifiedKnowledgeRetrievalService.getRelevantKnowledgeItemsForBot(
-            bot._id.toString(),
-            message,
-            {
-              limit: 20,
-              apiKeyOverride: resolvedApiKey,
-              debug: true,
-              bot: { faqs: bot.faqs, knowledgeDescription: bot.knowledgeDescription },
-            },
+      if (unifiedResult.debug) {
+        debugInfo.knowledgeBaseItemIds = unifiedResult.debug.knowledgeBaseItemIds;
+        debugInfo.unifiedRetrievalEligibleCounts = unifiedResult.debug.eligibleCountBySourceType;
+        if (unifiedResult.debug.retrievedBySourceType) {
+          debugInfo.unifiedRetrievalBySourceType = Object.fromEntries(
+            Object.entries(unifiedResult.debug.retrievedBySourceType).map(([k, arr]) => [
+              k,
+              (arr ?? []).map((it) => ({
+                sourceType: it.sourceType,
+                title: it.title.slice(0, 80),
+                combinedScore: it.combinedScore,
+              })),
+            ]),
           );
-          debugInfo.unifiedRetrievalUsed = true;
-          if (unifiedResultDebug.debug) {
-            debugInfo.unifiedRetrievalEligibleCounts = unifiedResultDebug.debug.eligibleCountBySourceType;
-            if (unifiedResultDebug.debug.retrievedBySourceType) {
-              debugInfo.unifiedRetrievalBySourceType = Object.fromEntries(
-                Object.entries(unifiedResultDebug.debug.retrievedBySourceType).map(([k, arr]) => [
-                  k,
-                  (arr ?? []).map((it) => ({
-                    sourceType: it.sourceType,
-                    title: it.title.slice(0, 80),
-                    combinedScore: it.combinedScore,
-                  })),
-                ]),
-              );
-            }
-            debugInfo.unifiedRetrievalScoreBreakdown = unifiedResultDebug.debug.scoreBreakdown;
-            debugInfo.unifiedRetrievalDiversityDebug = unifiedResultDebug.debug.diversityDebug;
-          }
-        } catch (unifiedErr) {
-          debugInfo.unifiedRetrievalUsed = false;
         }
+        debugInfo.unifiedRetrievalScoreBreakdown = unifiedResult.debug.scoreBreakdown;
+        debugInfo.unifiedRetrievalDiversityDebug = unifiedResult.debug.diversityDebug;
       }
       result.debug = debugInfo;
     }

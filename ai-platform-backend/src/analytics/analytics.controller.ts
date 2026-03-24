@@ -1,9 +1,9 @@
 import { Controller, Get, UseGuards } from '@nestjs/common';
-import { SuperAdminGuard } from '../super-admin/super-admin.guard';
+import { AuthGuard } from '../auth/auth.guard';
 import { AnalyticsService } from './analytics.service';
 
-@Controller('api/super-admin/analytics')
-@UseGuards(SuperAdminGuard)
+@Controller('api/user/analytics')
+@UseGuards(AuthGuard)
 export class AnalyticsController {
   constructor(private readonly analyticsService: AnalyticsService) {}
 

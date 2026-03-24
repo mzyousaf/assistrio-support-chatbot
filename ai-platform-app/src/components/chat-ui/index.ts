@@ -17,7 +17,7 @@ export { ChatComposer } from "./ChatComposer";
 export { ChatLauncherBubble } from "./ChatLauncherBubble";
 export { ChatWithLauncher } from "./ChatWithLauncher";
 
-export type { ChatProps, ChatBorderRadius } from "./Chat";
+export type { ChatProps } from "./Chat";
 export type { ChatHeaderProps } from "./ChatHeader";
 export type { ChatMessagesProps } from "./ChatMessages";
 export type { ChatBubbleProps } from "./ChatBubble";

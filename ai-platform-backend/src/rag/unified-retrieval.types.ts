@@ -53,8 +53,10 @@ export interface UnifiedRetrievalDiversityDebug {
 
 /** Debug info when unified retrieval is run (e.g. debug mode). */
 export interface UnifiedRetrievalDebug {
-  /** Whether the new unified retrieval path was used this request. */
+  /** Whether unified retrieval was used this request. */
   usedUnifiedPath: boolean;
+  /** Distinct knowledge base item ids in the result (for source/debug). */
+  knowledgeBaseItemIds?: string[];
   /** Eligible item counts by source type. */
   eligibleCountBySourceType: UnifiedRetrievalEligibleCounts;
   /** Retrieved ranked items grouped by source type (for inspection). */
@@ -86,11 +88,6 @@ export interface UnifiedRetrievalOptions {
   apiKeyOverride?: string;
   /** When true, include debug info in result. */
   debug?: boolean;
-  /** Preloaded bot data to avoid loading bot again (faqs, knowledgeDescription). */
-  bot?: {
-    faqs?: Array<{ question: string; answer: string }>;
-    knowledgeDescription?: string;
-  };
   /** Optional weights override for combined score (default: balanced hybrid). */
   weights?: UnifiedRetrievalWeights;
   /** Optional diversity and deduplication options (default: sensible caps and 0.85 text overlap threshold). */

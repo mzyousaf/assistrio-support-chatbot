@@ -1,17 +1,16 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { DocumentsService } from './documents.service';
-import { Chunk, ChunkSchema, DocumentModel, DocumentSchema } from '../models';
+import { DocumentModel, DocumentSchema } from '../models';
+import { KnowledgeModule } from '../knowledge/knowledge.module';
 
 @Module({
   imports: [
-    MongooseModule.forFeature([
-      { name: DocumentModel.name, schema: DocumentSchema },
-      { name: Chunk.name, schema: ChunkSchema },
-    ]),
+    MongooseModule.forFeature([{ name: DocumentModel.name, schema: DocumentSchema }]),
+    KnowledgeModule,
   ],
   controllers: [],
   providers: [DocumentsService],
   exports: [DocumentsService],
 })
-export class DocumentsModule {}
+export class DocumentsModule { }

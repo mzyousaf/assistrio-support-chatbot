@@ -18,6 +18,21 @@ import {
   formatSize,
 } from "@/components/admin/documents";
 
+/** Survives Strict Mode remounts; collapses duplicate effect-driven polls with identical inputs. */
+const KNOWLEDGE_POLL_DEDUPE_MS = 400;
+let lastKnowledgePollDedupeKey = "";
+let lastKnowledgePollDedupeAt = 0;
+
+function shouldSkipDuplicateKnowledgePoll(dedupeKey: string): boolean {
+  const now = Date.now();
+  if (dedupeKey === lastKnowledgePollDedupeKey && now - lastKnowledgePollDedupeAt < KNOWLEDGE_POLL_DEDUPE_MS) {
+    return true;
+  }
+  lastKnowledgePollDedupeKey = dedupeKey;
+  lastKnowledgePollDedupeAt = now;
+  return false;
+}
+
 export interface BotDocumentItem {
   _id: string;
   title: string;
@@ -41,19 +56,39 @@ export type DocumentsManagerHealth = {
   lastFailedDoc?: { docId: string; title: string; error?: string; updatedAt?: string };
 };
 
+export type KnowledgePollHealthPayload = {
+  docsTotal: number;
+  docsQueued: number;
+  docsProcessing: number;
+  docsReady: number;
+  docsFailed: number;
+  lastIngestedAt?: string;
+  lastFailedDoc?: DocumentsManagerHealth["lastFailedDoc"];
+};
+
 interface BotDocumentsManagerProps {
   botId: string;
   documents: BotDocumentItem[];
   health?: DocumentsManagerHealth;
   /** When provided, called when document upload starts (true) or ends (false). Used to show header "Saving" state. */
   onUploadingChange?: (uploading: boolean) => void;
-  /** When true, poll documents list on an interval (e.g. when knowledge base tab is active). */
-  pollWhenActive?: boolean;
+  /** When incremented by the parent knowledge-base poll, refetches via a single knowledge-poll request. */
+  pollTick?: number;
+  /** Health + embedding from the same knowledge-poll response (one HTTP request with the document page). */
+  onKnowledgePollResult?: (payload: {
+    health: KnowledgePollHealthPayload;
+    embedding: { faqItemCount: number; noteContentLength: number };
+  }) => void;
 }
 
-const POLL_INTERVAL_MS = 5000;
-
-export default function BotDocumentsManager({ botId, documents, health, onUploadingChange, pollWhenActive }: BotDocumentsManagerProps) {
+export default function BotDocumentsManager({
+  botId,
+  documents,
+  health,
+  onUploadingChange,
+  pollTick,
+  onKnowledgePollResult,
+}: BotDocumentsManagerProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [items, setItems] = useState<BotDocumentItem[]>([]);
@@ -91,25 +126,29 @@ export default function BotDocumentsManager({ botId, documents, health, onUpload
   const filteredTableItems =
     tableFilter === "all" ? items : items.filter((doc) => (doc.status ?? "queued") === tableFilter);
 
-  async function refreshDocuments() {
+  async function refreshDocuments(options?: { force?: boolean }) {
     if (!botId) return;
+    if (!options?.force) {
+      const dedupeKey = `${botId}:${page}:${limit}:${pollTick ?? "u"}`;
+      if (shouldSkipDuplicateKnowledgePoll(dedupeKey)) return;
+    }
+
     setIsLoading(true);
     try {
       const params = new URLSearchParams({ page: String(page), limit: String(limit) });
       const response = await apiFetch(
-        `/api/super-admin/bots/${botId}/documents?${params.toString()}`,
+        `/api/user/bots/${botId}/knowledge-poll?${params.toString()}`,
         { method: "GET" },
       );
       if (!response.ok) throw new Error("Failed to fetch documents");
       const data = (await response.json()) as {
         documents?: BotDocumentItem[];
         total?: number;
-        page?: number;
-        limit?: number;
-        totalPages?: number;
         counts?: { total: number; queued: number; processing: number; ready: number; failed: number };
         lastIngestedAt?: string;
         lastFailedDoc?: DocumentsManagerHealth["lastFailedDoc"];
+        health?: KnowledgePollHealthPayload;
+        embedding?: { faqItemCount: number; noteContentLength: number };
       };
       setItems(Array.isArray(data.documents) ? data.documents : []);
       setTotal(typeof data.total === "number" ? data.total : 0);
@@ -124,6 +163,9 @@ export default function BotDocumentsManager({ botId, documents, health, onUpload
       }
       if (data.lastIngestedAt !== undefined) setLastIngestedAt(data.lastIngestedAt);
       if (data.lastFailedDoc !== undefined) setLatestFailed(data.lastFailedDoc);
+      if (data.health && data.embedding && onKnowledgePollResult) {
+        onKnowledgePollResult({ health: data.health, embedding: data.embedding });
+      }
     } catch {
       // Silent retry: do not show error; polling or next refetch will retry
     } finally {
@@ -131,18 +173,12 @@ export default function BotDocumentsManager({ botId, documents, health, onUpload
     }
   }
 
+  /** Single subscription: initial load + page/limit + poll ticks (avoid duplicate requests on tab open). */
   useEffect(() => {
     if (!botId) return;
     void refreshDocuments();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [botId, page, limit]);
-
-  useEffect(() => {
-    if (!botId || !pollWhenActive) return;
-    const id = setInterval(() => void refreshDocuments(), POLL_INTERVAL_MS);
-    return () => clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [botId, pollWhenActive, page, limit]);
+  }, [botId, page, limit, pollTick]);
 
   useEffect(() => {
     if (!uploadBackgroundAlert) return;
@@ -182,7 +218,7 @@ export default function BotDocumentsManager({ botId, documents, health, onUpload
       for (const file of selectedFiles) {
         formData.append("file", file);
       }
-      const response = await apiFetch("/api/super-admin/upload", {
+      const response = await apiFetch("/api/user/upload", {
         method: "POST",
         body: formData,
       });
@@ -204,7 +240,7 @@ export default function BotDocumentsManager({ botId, documents, health, onUpload
       setSelectedFiles([]);
       setUploadPanelOpen(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
-      await refreshDocuments();
+      await refreshDocuments({ force: true });
     } catch {
       setError("Upload failed. Please try again.");
     } finally {
@@ -230,7 +266,7 @@ export default function BotDocumentsManager({ botId, documents, health, onUpload
     setError(null);
     setJobRunMessage(null);
     try {
-      const response = await apiFetch("/api/super-admin/jobs/run", {
+      const response = await apiFetch("/api/user/jobs/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ limit: 3 }),
@@ -251,7 +287,7 @@ export default function BotDocumentsManager({ botId, documents, health, onUpload
       setJobRunMessage(
         `Processed ${processed}, failed ${data.failed ?? 0}${data.claimedJobId ? ` (job ${data.claimedJobId})` : ""}${data.finalDocStatus ? `, doc ${data.finalDocStatus}` : ""}`,
       );
-      await refreshDocuments();
+      await refreshDocuments({ force: true });
     } catch {
       setError("Process pending jobs failed (network error).");
     } finally {
@@ -265,12 +301,12 @@ export default function BotDocumentsManager({ botId, documents, health, onUpload
     setError(null);
     const wasOnlyItemOnPage = items.length === 1 && page > 1;
     try {
-      const response = await apiFetch(`/api/super-admin/bots/${botId}/documents/${docId}`, { method: "DELETE" });
+      const response = await apiFetch(`/api/user/bots/${botId}/documents/${docId}`, { method: "DELETE" });
       if (!response.ok) throw new Error("Delete failed");
       if (wasOnlyItemOnPage) {
         setPage((p) => Math.max(1, p - 1));
       } else {
-        await refreshDocuments();
+        await refreshDocuments({ force: true });
       }
     } catch {
       setError("Delete failed. Please try again.");
@@ -288,7 +324,7 @@ export default function BotDocumentsManager({ botId, documents, health, onUpload
     setBulkDeleting(true);
     setError(null);
     try {
-      const response = await apiFetch(`/api/super-admin/bots/${botId}/documents/bulk-delete`, {
+      const response = await apiFetch(`/api/user/bots/${botId}/documents/bulk-delete`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ docIds }),
@@ -301,7 +337,7 @@ export default function BotDocumentsManager({ botId, documents, health, onUpload
       setSelectedDocIds([]);
       const wasOnLastPage = items.length === docIds.length && page > 1;
       if (wasOnLastPage) setPage((p) => Math.max(1, p - 1));
-      await refreshDocuments();
+      await refreshDocuments({ force: true });
     } catch {
       setError("Bulk delete failed. Please try again.");
     } finally {
@@ -314,7 +350,7 @@ export default function BotDocumentsManager({ botId, documents, health, onUpload
     setTogglingActiveId(docId);
     setError(null);
     try {
-      const response = await apiFetch(`/api/super-admin/bots/${botId}/documents/${docId}`, {
+      const response = await apiFetch(`/api/user/bots/${botId}/documents/${docId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ active }),
@@ -324,7 +360,7 @@ export default function BotDocumentsManager({ botId, documents, health, onUpload
         setError(data.error || "Update failed.");
         return;
       }
-      await refreshDocuments();
+      await refreshDocuments({ force: true });
     } catch {
       setError("Update failed. Please try again.");
     } finally {
@@ -338,14 +374,14 @@ export default function BotDocumentsManager({ botId, documents, health, onUpload
     setError(null);
     setJobRunMessage(null);
     try {
-      const response = await apiFetch(`/api/super-admin/bots/${botId}/documents/${docId}/embed`, { method: "POST" });
+      const response = await apiFetch(`/api/user/bots/${botId}/documents/${docId}/embed`, { method: "POST" });
       const data = (await response.json().catch(() => ({}))) as { error?: string };
       if (!response.ok) {
         setError(`Retry failed (${data.error || "request_failed"}).`);
         return;
       }
       setJobRunMessage("Retry queued for document.");
-      await refreshDocuments();
+      await refreshDocuments({ force: true });
     } catch {
       setError("Retry failed (network error).");
     } finally {
@@ -359,13 +395,13 @@ export default function BotDocumentsManager({ botId, documents, health, onUpload
     setError(null);
     setJobRunMessage(null);
     try {
-      const embedRes = await apiFetch(`/api/super-admin/bots/${botId}/documents/${docId}/embed`, { method: "POST" });
+      const embedRes = await apiFetch(`/api/user/bots/${botId}/documents/${docId}/embed`, { method: "POST" });
       const embedData = (await embedRes.json().catch(() => ({}))) as { error?: string };
       if (!embedRes.ok) {
         setError(`Force process failed (${embedData.error || "request_failed"}).`);
         return;
       }
-      const runRes = await apiFetch("/api/super-admin/jobs/run", {
+      const runRes = await apiFetch("/api/user/jobs/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ limit: 3 }),
@@ -374,7 +410,7 @@ export default function BotDocumentsManager({ botId, documents, health, onUpload
         const runData = (await runRes.json().catch(() => ({}))) as { error?: string };
         setError(`Process job failed (${runData.error || "request_failed"}).`);
       }
-      await refreshDocuments();
+      await refreshDocuments({ force: true });
     } catch {
       setError("Force process failed (network error).");
     } finally {
@@ -390,16 +426,16 @@ export default function BotDocumentsManager({ botId, documents, health, onUpload
     let retried = 0;
     try {
       for (const doc of failedDocs) {
-        const response = await apiFetch(`/api/super-admin/bots/${botId}/documents/${doc._id}/embed`, {
+        const response = await apiFetch(`/api/user/bots/${botId}/documents/${doc._id}/embed`, {
           method: "POST",
         });
         if (response.ok) retried += 1;
       }
       setJobRunMessage(`Retried ${retried} docs`);
-      await refreshDocuments();
+      await refreshDocuments({ force: true });
     } catch {
       setError("Retry all failed docs encountered a network error.");
-      await refreshDocuments();
+      await refreshDocuments({ force: true });
     } finally {
       setIsRetryingAll(false);
     }

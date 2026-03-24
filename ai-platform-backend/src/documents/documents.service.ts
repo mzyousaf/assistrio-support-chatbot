@@ -1,7 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { Chunk, DocumentModel } from '../models';
+import { DocumentModel } from '../models';
+import { KnowledgeBaseItemService } from '../knowledge/knowledge-base-item.service';
+import { KnowledgeBaseChunkService } from '../knowledge/knowledge-base-chunk.service';
 
 export interface CreateDocumentDto {
   botId: string;
@@ -23,7 +25,8 @@ export interface CreateDocumentDto {
 export class DocumentsService {
   constructor(
     @InjectModel(DocumentModel.name) private readonly documentModel: Model<DocumentModel>,
-    @InjectModel(Chunk.name) private readonly chunkModel: Model<Chunk>,
+    private readonly knowledgeBaseItemService: KnowledgeBaseItemService,
+    private readonly knowledgeBaseChunkService: KnowledgeBaseChunkService,
   ) {}
 
   async create(data: CreateDocumentDto) {
@@ -32,7 +35,24 @@ export class DocumentsService {
       botId: new Types.ObjectId(data.botId),
       status: data.status ?? 'queued',
     });
-    return doc.toObject ? doc.toObject() : (doc as unknown as Record<string, unknown>);
+    const docObj = doc.toObject ? doc.toObject() : (doc as unknown as Record<string, unknown>);
+    await this.knowledgeBaseItemService.upsertDocumentKnowledgeItem({
+      _id: (doc as { _id: Types.ObjectId })._id,
+      botId: (doc as { botId: Types.ObjectId }).botId,
+      title: data.title,
+      status: data.status ?? 'queued',
+      active: true,
+      text: data.text,
+      fileName: data.fileName,
+      fileType: data.fileType,
+      fileSize: data.fileSize,
+      url: data.url,
+      storage: data.storage,
+      s3Bucket: data.s3Bucket,
+      s3Key: data.s3Key,
+      uploadSessionId: data.uploadSessionId,
+    });
+    return docObj;
   }
 
   async findByBot(botId: string) {
@@ -134,6 +154,12 @@ export class DocumentsService {
   }
 
   async remove(id: string) {
+    const doc = await this.documentModel.findById(id).select('botId').lean();
+    if (doc) {
+      const botId = String((doc as { botId: Types.ObjectId }).botId);
+      await this.knowledgeBaseItemService.deactivateByDocumentIds(botId, [new Types.ObjectId(id)]);
+      await this.knowledgeBaseChunkService.removeDocumentKnowledgeChunksForDocument(botId, id);
+    }
     await this.documentModel.findByIdAndDelete(id);
     return { deleted: id };
   }
@@ -142,8 +168,9 @@ export class DocumentsService {
     if (!Types.ObjectId.isValid(botId) || !Types.ObjectId.isValid(docId)) return;
     const botOid = new Types.ObjectId(botId);
     const docOid = new Types.ObjectId(docId);
+    await this.knowledgeBaseItemService.deactivateByDocumentIds(botId, [docOid]);
+    await this.knowledgeBaseChunkService.removeDocumentKnowledgeChunksForDocument(botId, docId);
     await this.documentModel.deleteOne({ _id: docOid, botId: botOid });
-    await this.chunkModel.deleteMany({ documentId: docOid, botId: botOid });
   }
 
   async removeByBotAndDocIds(botId: string, docIds: string[]): Promise<number> {
@@ -153,7 +180,10 @@ export class DocumentsService {
       .filter((id) => Types.ObjectId.isValid(id))
       .map((id) => new Types.ObjectId(id));
     if (validIds.length === 0) return 0;
-    await this.chunkModel.deleteMany({ botId: botOid, documentId: { $in: validIds } });
+    await this.knowledgeBaseItemService.deactivateByDocumentIds(botId, validIds);
+    for (const docId of validIds) {
+      await this.knowledgeBaseChunkService.removeDocumentKnowledgeChunksForDocument(botId, docId.toString());
+    }
     const result = await this.documentModel.deleteMany({ _id: { $in: validIds }, botId: botOid });
     return result.deletedCount ?? 0;
   }
@@ -164,6 +194,7 @@ export class DocumentsService {
       { _id: new Types.ObjectId(docId), botId: new Types.ObjectId(botId) },
       { $set: { active } },
     );
+    await this.knowledgeBaseItemService.setDocumentKnowledgeItemStatus(botId, docId, { active });
   }
 
   async findActiveDocumentIds(botId: string): Promise<Types.ObjectId[]> {
@@ -181,6 +212,7 @@ export class DocumentsService {
       { _id: new Types.ObjectId(docId), botId: new Types.ObjectId(botId) },
       { $set: { status: 'queued', error: undefined } },
     );
+    await this.knowledgeBaseItemService.setDocumentKnowledgeItemStatus(botId, docId, { status: 'queued' });
   }
 
   async setFailed(botId: string, docId: string, errorMessage: string) {
@@ -189,15 +221,19 @@ export class DocumentsService {
       { _id: new Types.ObjectId(docId), botId: new Types.ObjectId(botId) },
       { $set: { status: 'failed', error: errorMessage } },
     );
+    await this.knowledgeBaseItemService.setDocumentKnowledgeItemStatus(botId, docId, { status: 'failed' });
   }
 
   async countChunksByDocumentId(docId: string): Promise<number> {
-    return this.chunkModel.countDocuments({ documentId: new Types.ObjectId(docId) });
+    const doc = await this.documentModel.findById(docId).select('botId').lean();
+    if (!doc) return 0;
+    const botId = String((doc as { botId: Types.ObjectId }).botId);
+    return this.knowledgeBaseChunkService.countChunksForDocument(botId, docId);
   }
 
   /**
-   * Verification for RAG ingestion integrity: document status, text length, chunk counts.
-   * Use to diagnose "ready but 0 chunks" or "0 chunks with valid embedding".
+   * Verification for ingestion integrity: document status, text length, KB chunk count.
+   * Uses KnowledgeBaseChunk (KB-only retrieval).
    */
   async getDocumentIntegrity(
     botId: string,
@@ -218,16 +254,10 @@ export class DocumentsService {
       .select({ status: 1, text: 1 })
       .lean();
     if (!doc) return null;
-    const [chunkCount, chunksWithValidEmbeddingCount] = await Promise.all([
-      this.chunkModel.countDocuments({ documentId: docOid, botId: botOid }),
-      this.chunkModel.countDocuments({
-        documentId: docOid,
-        botId: botOid,
-        'embedding.0': { $exists: true },
-      }),
-    ]);
+    const chunkCount = await this.knowledgeBaseChunkService.countChunksForDocument(botId, docId);
     const textLength = typeof (doc as { text?: string }).text === 'string' ? (doc as { text: string }).text.length : 0;
     const status = (doc as { status?: string }).status;
+    const chunksWithValidEmbeddingCount = chunkCount; // KB chunks are stored with embeddings
     return {
       documentId: docId,
       status,

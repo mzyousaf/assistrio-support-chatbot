@@ -5,20 +5,31 @@ import { Model, Types } from 'mongoose';
 import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
-import { Chunk, DocumentModel, IngestJob } from '../models';
-import { KbService } from '../kb/kb.service';
+import { DocumentModel, IngestJob } from '../models';
+import { KbService } from '../knowledge/kb.service';
+import { KnowledgeBaseItemService } from '../knowledge/knowledge-base-item.service';
+import { KnowledgeBaseChunkService } from '../knowledge/knowledge-base-chunk.service';
+import { RagService } from '../rag/rag.service';
 import { getObjectBody } from '../lib/s3';
 import type { IngestionRunResult } from './ingestion-runner.types';
+
+/** Max document chunks to embed and store (KB-only). */
+const MAX_DOC_CHUNKS = 50;
+/** Max total chars across chunks for one document. */
+const MAX_EMBED_TOTAL_CHARS = 100_000;
+const EMBED_BATCH_SIZE = 25;
 
 @Injectable()
 export class IngestionService {
   constructor(
     private readonly config: ConfigService,
     private readonly kbService: KbService,
+    private readonly ragService: RagService,
+    private readonly knowledgeBaseItemService: KnowledgeBaseItemService,
+    private readonly knowledgeBaseChunkService: KnowledgeBaseChunkService,
     @InjectModel(DocumentModel.name) private readonly documentModel: Model<DocumentModel>,
     @InjectModel(IngestJob.name) private readonly ingestJobModel: Model<IngestJob>,
-    @InjectModel(Chunk.name) private readonly chunkModel: Model<Chunk>,
-  ) {}
+  ) { }
 
   async runJob(secret: string, _jobId?: string): Promise<{ ok: boolean }> {
     const expected = this.config.get<string>('jobRunnerSecret');
@@ -77,6 +88,11 @@ export class IngestionService {
       { _id: job.docId, botId: job.botId },
       { $set: { status: 'processing', error: undefined } },
     );
+    await this.knowledgeBaseItemService.setDocumentKnowledgeItemStatus(
+      String(job.botId),
+      String(job.docId),
+      { status: 'processing' },
+    );
 
     let textToChunk: string;
 
@@ -108,7 +124,7 @@ export class IngestionService {
             }
             textToChunk = extractionResult.text;
           } finally {
-            await fs.unlink(filePath).catch(() => {});
+            await fs.unlink(filePath).catch(() => { });
           }
         } else if (doc.url) {
           const urlStr = String(doc.url).trim();
@@ -133,7 +149,7 @@ export class IngestionService {
               }
               textToChunk = extractionResult.text;
             } finally {
-              await fs.unlink(filePath).catch(() => {});
+              await fs.unlink(filePath).catch(() => { });
             }
           } else {
             const relativePath = urlStr.replace(/^\/+/, '');
@@ -157,6 +173,22 @@ export class IngestionService {
           { _id: document._id },
           { $set: { text: textToChunk } },
         );
+        await this.knowledgeBaseItemService.upsertDocumentKnowledgeItem({
+          _id: document._id as Types.ObjectId,
+          botId: document.botId as Types.ObjectId,
+          title: document.title,
+          status: 'queued',
+          active: document.active !== false,
+          text: textToChunk,
+          fileName: document.fileName,
+          fileType: document.fileType,
+          fileSize: document.fileSize,
+          url: document.url,
+          storage: document.storage,
+          s3Bucket: (document as { s3Bucket?: string }).s3Bucket,
+          s3Key: (document as { s3Key?: string }).s3Key,
+          uploadSessionId: (document as { uploadSessionId?: string }).uploadSessionId,
+        });
       }
     }
 
@@ -172,13 +204,24 @@ export class IngestionService {
       throw new Error('extraction_empty_text');
     }
 
-    const chunks = this.kbService.chunkText(textToChunk);
-    console.log(`[ingestion] processJob docId=${job.docId} chunkCountBeforeSave=${chunks.length}`);
+    const rawChunks = this.kbService.chunkText(textToChunk);
+    const limitedChunks = rawChunks.slice(0, MAX_DOC_CHUNKS);
+    const totalChars = limitedChunks.reduce((sum, c) => sum + c.length, 0);
+    console.log(`[ingestion] processJob docId=${job.docId} chunkCount=${limitedChunks.length} totalChars=${totalChars}`);
 
-    if (chunks.length === 0) {
+    if (limitedChunks.length === 0) {
+      await this.knowledgeBaseChunkService.removeDocumentKnowledgeChunksForDocument(
+        String(document.botId),
+        String(document._id),
+      );
       await this.documentModel.updateOne(
         { _id: document._id, botId: document.botId },
         { $set: { status: 'failed', error: 'no_chunks_created' } },
+      );
+      await this.knowledgeBaseItemService.setDocumentKnowledgeItemStatus(
+        String(document.botId),
+        String(document._id),
+        { status: 'failed' },
       );
       await this.ingestJobModel.updateOne(
         { _id: job._id },
@@ -187,23 +230,53 @@ export class IngestionService {
       throw new Error('no_chunks_created');
     }
 
-    const deleteResult = await this.chunkModel.deleteMany({
-      documentId: document._id,
-      botId: document.botId,
-    });
-    const chunksRemoved = deleteResult.deletedCount ?? 0;
+    if (totalChars > MAX_EMBED_TOTAL_CHARS) {
+      await this.knowledgeBaseChunkService.removeDocumentKnowledgeChunksForDocument(
+        String(document.botId),
+        String(document._id),
+      );
+      await this.documentModel.updateOne(
+        { _id: document._id, botId: document.botId },
+        { $set: { status: 'failed', error: 'too_large_for_embedding' } },
+      );
+      await this.knowledgeBaseItemService.setDocumentKnowledgeItemStatus(
+        String(document.botId),
+        String(document._id),
+        { status: 'failed' },
+      );
+      await this.ingestJobModel.updateOne(
+        { _id: job._id },
+        { $set: { status: 'failed', error: 'too_large_for_embedding', finishedAt: new Date() } },
+      );
+      throw new Error('too_large_for_embedding');
+    }
 
-    const embeddingResult = await this.kbService.embedAndStoreChunks({
-      botId: String(document.botId),
-      documentId: String(document._id),
-      chunks,
-    });
+    const apiKeyOverride = await this.knowledgeBaseChunkService.getBotApiKeyOverride(String(document.botId));
+    const embeddings: number[][] = [];
+    for (let i = 0; i < limitedChunks.length; i += EMBED_BATCH_SIZE) {
+      const batch = limitedChunks.slice(i, i + EMBED_BATCH_SIZE);
+      const batchEmbeds = await this.ragService.embedTexts(batch, apiKeyOverride);
+      embeddings.push(...batchEmbeds);
+    }
+    const chunksForKb = limitedChunks.slice(0, embeddings.length).map((text, i) => ({
+      text,
+      embedding: embeddings[i] ?? [],
+    })).filter((c) => c.embedding.length > 0);
 
-    if (!embeddingResult.embedded || embeddingResult.chunkCount <= 0) {
-      const reason = embeddingResult.reason || 'no_embeddings_saved';
+    if (chunksForKb.length === 0) {
+      const reason = 'no_embeddings_saved';
+      await this.knowledgeBaseChunkService.removeDocumentKnowledgeChunksForDocument(
+        String(document.botId),
+        String(document._id),
+      );
       await this.documentModel.updateOne(
         { _id: document._id, botId: document.botId },
         { $set: { status: 'failed', error: reason } },
+      );
+      await this.knowledgeBaseItemService.setDocumentKnowledgeItemStatus(
+        String(document.botId),
+        String(document._id),
+        { status: 'failed' },
       );
       await this.ingestJobModel.updateOne(
         { _id: job._id },
@@ -212,36 +285,13 @@ export class IngestionService {
       throw new Error(reason);
     }
 
-    // Post-insert integrity: verify chunks exist in DB with valid embeddings before marking ready.
-    const verifyDocId = document._id as Types.ObjectId;
-    const verifyBotId = document.botId as Types.ObjectId;
-    const chunksInDb = await this.chunkModel.countDocuments({
-      documentId: verifyDocId,
-      botId: verifyBotId,
-    });
-    const chunksWithEmbedding = await this.chunkModel.countDocuments({
-      documentId: verifyDocId,
-      botId: verifyBotId,
-      'embedding.0': { $exists: true },
-    });
-    if (chunksInDb === 0 || chunksWithEmbedding === 0) {
-      const reason = chunksInDb === 0 ? 'no_chunks_created' : 'no_embeddings_saved';
-      console.log(`[ingestion] integrity check failed docId=${document._id} chunksInDb=${chunksInDb} chunksWithEmbedding=${chunksWithEmbedding}`);
-      await this.documentModel.updateOne(
-        { _id: document._id, botId: document.botId },
-        { $set: { status: 'failed', error: reason } },
-      );
-      await this.ingestJobModel.updateOne(
-        { _id: job._id },
-        { $set: { status: 'failed', error: reason, finishedAt: new Date() } },
-      );
-      throw new Error(reason);
-    }
-
-    const chunksCreated = embeddingResult.chunkCount;
-    console.log(
-      `[ingestion] docId=${document._id} botId=${document.botId} chunksRemoved=${chunksRemoved} chunksCreated=${chunksCreated} embeddingsStored=${chunksCreated} verifiedInDb=${chunksWithEmbedding}`,
+    await this.knowledgeBaseChunkService.replaceDocumentKnowledgeChunks(
+      String(document.botId),
+      String(document._id),
+      chunksForKb,
     );
+    const chunksCreated = chunksForKb.length;
+    console.log(`[ingestion] docId=${document._id} botId=${document.botId} kbChunksCreated=${chunksCreated}`);
 
     const finishedAt = new Date();
     await this.documentModel.updateOne(
@@ -254,6 +304,22 @@ export class IngestionService {
         },
       },
     );
+    await this.knowledgeBaseItemService.upsertDocumentKnowledgeItem({
+      _id: document._id as Types.ObjectId,
+      botId: document.botId as Types.ObjectId,
+      title: document.title,
+      status: 'ready',
+      active: document.active !== false,
+      text: textToChunk,
+      fileName: document.fileName,
+      fileType: document.fileType,
+      fileSize: document.fileSize,
+      url: document.url,
+      storage: document.storage,
+      s3Bucket: (document as { s3Bucket?: string }).s3Bucket,
+      s3Key: (document as { s3Key?: string }).s3Key,
+      uploadSessionId: (document as { uploadSessionId?: string }).uploadSessionId,
+    });
 
     await this.ingestJobModel.updateOne(
       { _id: job._id },
@@ -305,6 +371,11 @@ export class IngestionService {
       { _id: job.docId, botId: job.botId },
       { $set: { status: 'failed', error: errorMessage } },
     );
+    await this.knowledgeBaseItemService.setDocumentKnowledgeItemStatus(
+      String(job.botId),
+      String(job.docId),
+      { status: 'failed' },
+    );
     await this.ingestJobModel.updateOne(
       { _id: job._id },
       { $set: { status: 'failed', error: errorMessage, finishedAt: new Date() } },
@@ -337,6 +408,11 @@ export class IngestionService {
         await this.documentModel.updateOne(
           { _id: job.docId, botId: job.botId },
           { $set: { status: 'failed', error: errorMessage } },
+        );
+        await this.knowledgeBaseItemService.setDocumentKnowledgeItemStatus(
+          String(job.botId),
+          String(job.docId),
+          { status: 'failed' },
         );
 
         await this.ingestJobModel.updateOne(

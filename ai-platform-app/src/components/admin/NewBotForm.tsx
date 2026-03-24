@@ -139,7 +139,7 @@ export default function NewBotForm({ action }: NewBotFormProps) {
         <Button type="submit" variant="secondary">
           Create bot
         </Button>
-        <Link className="text-sm text-slate-300 underline" href="/super-admin/bots">
+        <Link className="text-sm text-slate-300 underline" href="/admin/bots">
           Back to bots
         </Link>
       </div>

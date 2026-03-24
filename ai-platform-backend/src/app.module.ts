@@ -3,7 +3,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { ConfigModule as AppConfigModule } from './config/config.module';
 import { MongooseDbModule } from './db/mongoose.module';
 import { HealthController } from './health.controller';
-import { SuperAdminModule } from './super-admin/super-admin.module';
+import { UserModule } from './user/user.module';
 import { BotsModule } from './bots/bots.module';
 import { DocumentsModule } from './documents/documents.module';
 import { IngestionModule } from './ingestion/ingestion.module';
@@ -12,9 +12,7 @@ import { AnalyticsModule } from './analytics/analytics.module';
 import { VisitorsModule } from './visitors/visitors.module';
 import { RateLimitModule } from './rate-limit/rate-limit.module';
 import { LimitsModule } from './limits/limits.module';
-import { DemoModule } from './demo/demo.module';
-import { TrialModule } from './trial/trial.module';
-import { EmbeddingModule } from './embedding/embedding.module';
+import { KnowledgeModule } from './knowledge/knowledge.module';
 import { JobsCronService } from './worker/jobs-cron.service';
 
 @Module({
@@ -24,18 +22,16 @@ import { JobsCronService } from './worker/jobs-cron.service';
     MongooseDbModule,
     RateLimitModule,
     LimitsModule,
-    SuperAdminModule,
+    KnowledgeModule,
+    UserModule,
     BotsModule,
-    DemoModule,
-    TrialModule,
     DocumentsModule,
     IngestionModule,
     ChatModule,
     AnalyticsModule,
     VisitorsModule,
-    EmbeddingModule,
   ],
   controllers: [HealthController],
   providers: [JobsCronService],
 })
-export class AppModule {}
+export class AppModule { }

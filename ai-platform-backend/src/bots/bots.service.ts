@@ -1,14 +1,20 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
-import { Bot } from '../models';
-import { getDefaultBotCreatePayload } from '../super-admin/default-new-bot.payload';
-import { FaqNoteEmbeddingJobService } from '../embedding/faq-note-embedding-job.service';
+import { Model, Types } from 'mongoose';
 import {
-  mergeFaqsForSave,
-  getNoteEmbeddingStateForSave,
-} from '../embedding/faq-note-embedding.helper';
-import type { FaqWithEmbeddingMeta } from '../embedding/faq-note-embedding.helper';
+  Bot,
+  Conversation,
+  DocumentModel,
+  IngestJob,
+  KnowledgeBaseChunk,
+  KnowledgeBaseItem,
+  Message,
+  SummaryJob,
+  VisitorEvent,
+} from '../models';
+import { getDefaultBotCreatePayload } from '../user/default-new-bot.payload';
+import { KnowledgeBaseItemService } from '../knowledge/knowledge-base-item.service';
+import { KnowledgeBaseChunkService } from '../knowledge/knowledge-base-chunk.service';
 
 function slugify(input: string): string {
   const slug = input
@@ -44,14 +50,23 @@ export interface PublicBotDto {
 export class BotsService {
   constructor(
     @InjectModel(Bot.name) private readonly botModel: Model<Bot>,
-    private readonly faqNoteEmbeddingJobService: FaqNoteEmbeddingJobService,
-  ) {}
+    @InjectModel(DocumentModel.name) private readonly documentModel: Model<DocumentModel>,
+    @InjectModel(KnowledgeBaseItem.name) private readonly knowledgeBaseItemModel: Model<KnowledgeBaseItem>,
+    @InjectModel(KnowledgeBaseChunk.name) private readonly knowledgeBaseChunkModel: Model<KnowledgeBaseChunk>,
+    @InjectModel(IngestJob.name) private readonly ingestJobModel: Model<IngestJob>,
+    @InjectModel(SummaryJob.name) private readonly summaryJobModel: Model<SummaryJob>,
+    @InjectModel(Message.name) private readonly messageModel: Model<Message>,
+    @InjectModel(Conversation.name) private readonly conversationModel: Model<Conversation>,
+    @InjectModel(VisitorEvent.name) private readonly visitorEventModel: Model<VisitorEvent>,
+    private readonly knowledgeBaseItemService: KnowledgeBaseItemService,
+    private readonly knowledgeBaseChunkService: KnowledgeBaseChunkService,
+  ) { }
 
   async findAll() {
     return this.botModel.find().lean();
   }
 
-  /** List bots for super-admin with optional status filter (showcase only). */
+  /** List bots for user panel with optional status filter (showcase only). */
   async findForAdminList(status?: 'draft' | 'published' | 'all') {
     const filter: { type: string; status?: 'draft' | 'published' } = { type: 'showcase' };
     if (status && status !== 'all') filter.status = status;
@@ -103,23 +118,35 @@ export class BotsService {
     return this.botModel.findOne({ slug: slug.trim().toLowerCase() }).select('_id').lean();
   }
 
-  /** Find showcase bot by slug for chat (returns BotLike shape with knowledge + lead capture). */
+  /** Find showcase bot by slug for chat (returns BotLike shape; faqs and knowledgeDescription from KB). */
   async findOneBySlugForChat(slug: string) {
-    return this.botModel
+    const bot = await this.botModel
       .findOne({ slug: slug.trim().toLowerCase(), type: 'showcase' })
-      .select('_id slug name shortDescription description category openaiApiKeyOverride welcomeMessage knowledgeDescription leadCapture personality config faqs type limitOverrideMessages includeNameInKnowledge includeTaglineInKnowledge')
+      .select('_id slug name shortDescription description category openaiApiKeyOverride welcomeMessage leadCapture personality config type limitOverrideMessages includeNameInKnowledge includeTaglineInKnowledge')
       .lean();
+    if (!bot) return null;
+    const [faqs, knowledgeDescription] = await Promise.all([
+      this.knowledgeBaseItemService.getFaqsForBot(String((bot as { _id: unknown })._id)),
+      this.knowledgeBaseItemService.getNoteContentForBot(String((bot as { _id: unknown })._id)),
+    ]);
+    return { ...bot, faqs, knowledgeDescription } as Record<string, unknown>;
   }
 
-  /** Find visitor-own bot by slug for chat. */
+  /** Find visitor-own bot by slug for chat (faqs and knowledgeDescription from KB). */
   async findOneBySlugTrial(slug: string) {
-    return this.botModel
+    const bot = await this.botModel
       .findOne({ slug: slug.trim().toLowerCase(), type: 'visitor-own' })
-      .select('_id slug name shortDescription description category openaiApiKeyOverride welcomeMessage knowledgeDescription leadCapture personality config faqs type limitOverrideMessages includeNameInKnowledge includeTaglineInKnowledge')
+      .select('_id slug name shortDescription description category openaiApiKeyOverride welcomeMessage leadCapture personality config type limitOverrideMessages includeNameInKnowledge includeTaglineInKnowledge')
       .lean();
+    if (!bot) return null;
+    const [faqs, knowledgeDescription] = await Promise.all([
+      this.knowledgeBaseItemService.getFaqsForBot(String((bot as { _id: unknown })._id)),
+      this.knowledgeBaseItemService.getNoteContentForBot(String((bot as { _id: unknown })._id)),
+    ]);
+    return { ...bot, faqs, knowledgeDescription } as Record<string, unknown>;
   }
 
-  /** Find one bot by slug for demo/trial page (public shape for chat UI). */
+  /** Find one bot by slug for demo/trial page (public shape; faqs from KB). */
   async findOneBySlugForPage(
     slug: string,
     type: 'showcase' | 'visitor-own',
@@ -137,13 +164,15 @@ export class BotsService {
   } | null> {
     const doc = await this.botModel
       .findOne({ slug: slug.trim().toLowerCase(), type })
-      .select('_id slug name shortDescription avatarEmoji imageUrl welcomeMessage chatUI faqs exampleQuestions')
+      .select('_id slug name shortDescription avatarEmoji imageUrl welcomeMessage chatUI exampleQuestions')
       .lean();
     if (!doc) return null;
     const b = doc as Record<string, unknown>;
+    const botId = String(b._id);
+    const faqs = await this.knowledgeBaseItemService.getFaqsForBot(botId);
     const welcomeMsg = typeof b.welcomeMessage === 'string' && b.welcomeMessage.trim() ? b.welcomeMessage.trim() : undefined;
     return {
-      id: String(b._id),
+      id: botId,
       slug: String(b.slug ?? ''),
       name: String(b.name ?? ''),
       shortDescription: String(b.shortDescription ?? ''),
@@ -151,12 +180,7 @@ export class BotsService {
       imageUrl: String(b.imageUrl ?? ''),
       welcomeMessage: welcomeMsg,
       chatUI: b.chatUI as unknown,
-      faqs: Array.isArray(b.faqs)
-        ? (b.faqs as Array<{ question?: unknown; answer?: unknown }>).map((faq) => ({
-            question: String(faq?.question ?? '').trim(),
-            answer: String(faq?.answer ?? '').trim(),
-          }))
-        : [],
+      faqs,
       exampleQuestions: Array.isArray(b.exampleQuestions)
         ? (b.exampleQuestions as unknown[]).map((q) => String(q ?? '').trim()).filter(Boolean) as string[]
         : [],
@@ -188,12 +212,18 @@ export class BotsService {
     return `${normalized}-${Date.now()}`;
   }
 
-  /** Find showcase bot for super-admin GET (selected fields only). */
+  /** Find showcase bot for user panel GET (faqs and knowledgeDescription from KB). */
   async findOneShowcaseForAdmin(id: string) {
-    return this.botModel
+    const bot = await this.botModel
       .findById(id)
-      .select('slug name shortDescription description category categories imageUrl openaiApiKeyOverride whisperApiKeyOverride welcomeMessage knowledgeDescription status isPublic leadCapture chatUI faqs exampleQuestions personality type config limitOverrideMessages includeNameInKnowledge includeTaglineInKnowledge')
+      .select('slug name shortDescription description category categories imageUrl openaiApiKeyOverride whisperApiKeyOverride welcomeMessage status isPublic leadCapture chatUI exampleQuestions personality type config limitOverrideMessages includeNameInKnowledge includeTaglineInKnowledge includeNotesInKnowledge')
       .lean();
+    if (!bot) return null;
+    const [faqs, knowledgeDescription] = await Promise.all([
+      this.knowledgeBaseItemService.getFaqsForBot(id, { includeInactive: true }),
+      this.knowledgeBaseItemService.getNoteContentForBot(id),
+    ]);
+    return { ...bot, faqs, knowledgeDescription } as Record<string, unknown>;
   }
 
   async create(data: Record<string, unknown>) {
@@ -249,6 +279,7 @@ export class BotsService {
       isPublic: boolean;
       includeNameInKnowledge?: boolean;
       includeTaglineInKnowledge?: boolean;
+      includeNotesInKnowledge: boolean;
     },
   ): Promise<{ botId: string; slug: string }> {
     const finalName = normalized.name || 'Draft bot';
@@ -275,10 +306,8 @@ export class BotsService {
               openaiApiKeyOverride: normalized.openaiApiKeyOverride,
               whisperApiKeyOverride: normalized.whisperApiKeyOverride,
               welcomeMessage: normalized.welcomeMessage,
-              knowledgeDescription: normalized.knowledgeDescription,
               leadCapture: normalized.leadCapture,
               chatUI: normalized.chatUI,
-              faqs: normalized.faqs,
               exampleQuestions: normalized.exampleQuestions ?? [],
               personality: normalized.personality,
               config: normalized.config,
@@ -289,9 +318,23 @@ export class BotsService {
               isPublic: normalized.isPublic,
               includeNameInKnowledge: normalized.includeNameInKnowledge,
               includeTaglineInKnowledge: normalized.includeTaglineInKnowledge,
+              includeNotesInKnowledge: normalized.includeNotesInKnowledge,
             },
           );
-          return { botId: String((existing as { _id: unknown })._id), slug: finalSlug };
+          const botIdStr = String((existing as { _id: unknown })._id);
+          const finalFaqs = Array.isArray(normalized.faqs)
+            ? (normalized.faqs as Array<{ question?: string; answer?: string; active?: boolean }>).map((f) => ({
+              question: String(f?.question ?? '').trim(),
+              answer: String(f?.answer ?? '').trim(),
+              active: f?.active !== false,
+            })).filter((f) => f.question || f.answer)
+            : [];
+          const finalNote = String(normalized.knowledgeDescription ?? '').trim();
+          await this.knowledgeBaseItemService.upsertFaqKnowledgeItemsForBot(botIdStr, finalFaqs);
+          await this.knowledgeBaseItemService.upsertNoteKnowledgeItemForBot(botIdStr, finalNote);
+          await this.knowledgeBaseChunkService.replaceFaqKnowledgeChunksForBot(botIdStr);
+          await this.knowledgeBaseChunkService.replaceNoteKnowledgeChunksForBot(botIdStr);
+          return { botId: botIdStr, slug: finalSlug };
         } catch (err: unknown) {
           const e = err as { code?: number; keyPattern?: Record<string, number> };
           if (!(e.code === 11000 && e.keyPattern?.slug)) throw err;
@@ -314,10 +357,8 @@ export class BotsService {
           openaiApiKeyOverride: normalized.openaiApiKeyOverride,
           whisperApiKeyOverride: normalized.whisperApiKeyOverride,
           welcomeMessage: normalized.welcomeMessage,
-          knowledgeDescription: normalized.knowledgeDescription,
           leadCapture: normalized.leadCapture,
           chatUI: normalized.chatUI,
-          faqs: normalized.faqs,
           exampleQuestions: normalized.exampleQuestions ?? [],
           personality: normalized.personality,
           config: normalized.config,
@@ -327,9 +368,23 @@ export class BotsService {
           isPublic: normalized.isPublic,
           includeNameInKnowledge: normalized.includeNameInKnowledge,
           includeTaglineInKnowledge: normalized.includeTaglineInKnowledge,
+          includeNotesInKnowledge: normalized.includeNotesInKnowledge,
           createdAt: new Date(),
         });
-        return { botId: String((created as { _id: unknown })._id), slug: (created as { slug: string }).slug };
+        const botIdStr = String((created as { _id: unknown })._id);
+        const finalFaqs = Array.isArray(normalized.faqs)
+          ? (normalized.faqs as Array<{ question?: string; answer?: string; active?: boolean }>).map((f) => ({
+            question: String(f?.question ?? '').trim(),
+            answer: String(f?.answer ?? '').trim(),
+            active: f?.active !== false,
+          })).filter((f) => f.question || f.answer)
+          : [];
+        const finalNote = String(normalized.knowledgeDescription ?? '').trim();
+        await this.knowledgeBaseItemService.upsertFaqKnowledgeItemsForBot(botIdStr, finalFaqs);
+        await this.knowledgeBaseItemService.upsertNoteKnowledgeItemForBot(botIdStr, finalNote);
+        await this.knowledgeBaseChunkService.replaceFaqKnowledgeChunksForBot(botIdStr);
+        await this.knowledgeBaseChunkService.replaceNoteKnowledgeChunksForBot(botIdStr);
+        return { botId: botIdStr, slug: (created as { slug: string }).slug };
       } catch (err: unknown) {
         const e = err as { code?: number; keyPattern?: Record<string, number> };
         if (!(e.code === 11000 && e.keyPattern?.slug)) throw err;
@@ -361,8 +416,9 @@ export class BotsService {
       status?: 'draft' | 'published';
       includeNameInKnowledge?: boolean;
       includeTaglineInKnowledge?: boolean;
+      includeNotesInKnowledge: boolean;
     },
-  ): Promise<{ ok: true; botId: string; status: string; embeddingQueued?: boolean }> {
+  ): Promise<{ ok: true; botId: string; status: string }> {
     const existing = await this.botModel.findById(id).select('_id type name slug').lean();
     if (!existing || (existing as { type?: string }).type !== 'showcase') {
       throw new Error('Bot not found');
@@ -381,23 +437,13 @@ export class BotsService {
     }
 
     const newFaqs = Array.isArray(normalized.faqs)
-      ? (normalized.faqs as Array<{ question?: string; answer?: string }>).map((f) => ({
-          question: String(f?.question ?? '').trim(),
-          answer: String(f?.answer ?? '').trim(),
-        })).filter((f) => f.question || f.answer)
+      ? (normalized.faqs as Array<{ question?: string; answer?: string; active?: boolean }>).map((f) => ({
+        question: String(f?.question ?? '').trim(),
+        answer: String(f?.answer ?? '').trim(),
+        active: f?.active !== false,
+      })).filter((f) => f.question || f.answer)
       : [];
     const newKnowledgeDescription = String(normalized.knowledgeDescription ?? '').trim();
-
-    const currentForMerge = await this.botModel
-      .findById(id)
-      .select('faqs knowledgeDescription noteEmbeddingStatus noteEmbeddingInputHash')
-      .select('+faqs.embedding')
-      .lean();
-    const currentFaqs = (currentForMerge as { faqs?: FaqWithEmbeddingMeta[] } | null)?.faqs;
-    const mergedFaqs = mergeFaqsForSave(currentFaqs, newFaqs);
-    const currentNoteHash = (currentForMerge as { noteEmbeddingInputHash?: string } | null)?.noteEmbeddingInputHash;
-    const currentNoteStatus = (currentForMerge as { noteEmbeddingStatus?: 'pending' | 'ready' | 'failed' } | null)?.noteEmbeddingStatus;
-    const noteState = getNoteEmbeddingStateForSave(currentNoteHash, currentNoteStatus, newKnowledgeDescription);
 
     for (let attempt = 0; attempt < 5; attempt++) {
       try {
@@ -412,10 +458,6 @@ export class BotsService {
           openaiApiKeyOverride: normalized.openaiApiKeyOverride,
           whisperApiKeyOverride: normalized.whisperApiKeyOverride,
           welcomeMessage: normalized.welcomeMessage ?? '',
-          knowledgeDescription: newKnowledgeDescription,
-          faqs: mergedFaqs,
-          noteEmbeddingInputHash: noteState.noteEmbeddingInputHash,
-          noteEmbeddingStatus: noteState.noteEmbeddingStatus,
           exampleQuestions: normalized.exampleQuestions ?? [],
           leadCapture: normalized.leadCapture,
           chatUI: normalized.chatUI,
@@ -426,9 +468,13 @@ export class BotsService {
           status,
           includeNameInKnowledge: normalized.includeNameInKnowledge,
           includeTaglineInKnowledge: normalized.includeTaglineInKnowledge,
+          includeNotesInKnowledge: normalized.includeNotesInKnowledge,
         });
-        const { faqCount, noteCount } = await this.faqNoteEmbeddingJobService.enqueueForBot(id);
-        return { ok: true, botId: id, status, embeddingQueued: faqCount + noteCount > 0 };
+        await this.knowledgeBaseItemService.upsertFaqKnowledgeItemsForBot(id, newFaqs);
+        await this.knowledgeBaseItemService.upsertNoteKnowledgeItemForBot(id, newKnowledgeDescription);
+        await this.knowledgeBaseChunkService.replaceFaqKnowledgeChunksForBot(id);
+        await this.knowledgeBaseChunkService.replaceNoteKnowledgeChunksForBot(id);
+        return { ok: true, botId: id, status };
       } catch (err: unknown) {
         const e = err as { code?: number; keyPattern?: Record<string, number> };
         if (!(e.code === 11000 && e.keyPattern?.slug)) throw err;
@@ -445,7 +491,34 @@ export class BotsService {
   }
 
   async remove(id: string) {
-    await this.botModel.findByIdAndDelete(id);
+    const botOid = new Types.ObjectId(id);
+    const session = await this.botModel.db.startSession();
+    session.startTransaction();
+    try {
+      // Jobs / background pipelines
+      await this.ingestJobModel.deleteMany({ botId: botOid }).session(session);
+      await this.summaryJobModel.deleteMany({ botId: botOid }).session(session);
+
+      // Chat data
+      await this.messageModel.deleteMany({ botId: botOid }).session(session);
+      await this.conversationModel.deleteMany({ botId: botOid }).session(session);
+      await this.visitorEventModel.deleteMany({ botId: botOid }).session(session);
+
+      // RAG / knowledge data
+      await this.knowledgeBaseChunkModel.deleteMany({ botId: botOid }).session(session);
+      await this.knowledgeBaseItemModel.deleteMany({ botId: botOid }).session(session);
+      await this.documentModel.deleteMany({ botId: botOid }).session(session);
+
+      // Finally remove the bot itself.
+      await this.botModel.deleteOne({ _id: botOid }).session(session);
+
+      await session.commitTransaction();
+    } catch (err) {
+      await session.abortTransaction();
+      throw err;
+    } finally {
+      session.endSession();
+    }
     return { deleted: id };
   }
 }

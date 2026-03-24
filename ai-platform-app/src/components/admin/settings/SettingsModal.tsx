@@ -7,6 +7,8 @@ export interface SettingsModalProps {
   onClose: () => void;
   title: string;
   description?: string;
+  /** Optional icon shown beside the title (e.g. refresh action). */
+  icon?: React.ReactNode;
   children: React.ReactNode;
   /** Footer slot: e.g. Save / Cancel buttons */
   footer?: React.ReactNode;
@@ -19,6 +21,7 @@ export function SettingsModal({
   onClose,
   title,
   description,
+  icon,
   children,
   footer,
   maxWidthClass = "max-w-sm",
@@ -52,31 +55,41 @@ export function SettingsModal({
   return (
     <div
       ref={overlayRef}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6"
       role="dialog"
       aria-modal="true"
       aria-labelledby="settings-modal-title"
     >
       <div
-        className="absolute inset-0 bg-black/40 dark:bg-black/50"
+        className="absolute inset-0 bg-black/45 backdrop-blur-[3px] dark:bg-black/60"
         aria-hidden
         onClick={onClose}
       />
       <div
         ref={panelRef}
-        className={`relative w-full ${maxWidthClass} flex flex-col rounded-xl border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-900`}
+        className={`relative w-full ${maxWidthClass} flex flex-col overflow-hidden rounded-2xl border border-gray-200/90 bg-white shadow-2xl shadow-gray-900/[0.08] ring-1 ring-black/[0.04] dark:border-gray-700/90 dark:bg-gray-900 dark:shadow-black/50 dark:ring-white/[0.06]`}
       >
-        <div className="flex shrink-0 flex-col gap-1.5 border-b border-gray-200 px-5 py-4 dark:border-gray-700">
-          <h2 id="settings-modal-title" className="text-base font-semibold tracking-tight text-gray-900 dark:text-gray-100">
-            {title}
-          </h2>
-          {description ? (
-            <p className="mt-0.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">{description}</p>
+        <div className="flex shrink-0 gap-4 border-b border-gray-100 bg-white/90 px-5 py-4 dark:border-gray-800 dark:bg-gray-900/80 sm:px-6 sm:py-5">
+          {icon ? (
+            <div
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-50 via-white to-teal-50/90 text-emerald-700 shadow-sm dark:from-emerald-950/50 dark:via-gray-900 dark:to-teal-950/30 dark:text-emerald-400"
+              aria-hidden
+            >
+              {icon}
+            </div>
           ) : null}
+          <div className="min-w-0 flex-1 pt-0.5">
+            <h2 id="settings-modal-title" className="text-[1.05rem] font-semibold leading-snug tracking-tight text-gray-900 dark:text-gray-50">
+              {title}
+            </h2>
+            {description ? (
+              <p className="mt-1.5 text-sm leading-relaxed text-gray-500 dark:text-gray-400">{description}</p>
+            ) : null}
+          </div>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-5">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-6">{children}</div>
         {footer != null ? (
-          <div className="flex shrink-0 flex-wrap items-center justify-end gap-3 border-t border-gray-200 bg-gray-50/50 px-5 py-4 dark:border-gray-700 dark:bg-gray-800/30">
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-gray-100 bg-gray-50/80 px-5 py-4 backdrop-blur-[1px] dark:border-gray-800 dark:bg-gray-900/60 sm:gap-3 sm:px-6">
             {footer}
           </div>
         ) : null}

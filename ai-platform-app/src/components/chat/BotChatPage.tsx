@@ -109,7 +109,7 @@ export default function BotChatPage({ bot }: BotChatProps) {
   const bubbleBorderRadius =
     typeof bot.chatUI?.bubbleBorderRadius === "number"
       ? Math.max(0, Math.min(32, bot.chatUI.bubbleBorderRadius))
-      : bot.chatUI?.bubbleStyle === "squared"
+      : (bot.chatUI as { bubbleStyle?: string })?.bubbleStyle === "squared"
         ? 0
         : 20;
 
@@ -299,7 +299,7 @@ export default function BotChatPage({ bot }: BotChatProps) {
           }
           showSenderName={bot.chatUI?.showSenderName !== false}
           showTime={bot.chatUI?.showTime !== false}
-          timePosition={bot.chatUI?.timePosition === "bottom" || bot.chatUI?.timePosition === "bottom-right" ? "bottom" : "top"}
+          timePosition={bot.chatUI?.timePosition === "bottom" ? "bottom" : "top"}
           showCopyButton={bot.chatUI?.showCopyButton !== false}
           showSources={bot.chatUI?.showSources !== false}
           allowMarkdown

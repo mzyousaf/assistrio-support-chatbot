@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "build:embed": "node scripts/build-embed.mjs && npx @tailwindcss/cli -i ./src/embed/embed.css -o ./dist/embed/assistrio-chat.css --minify",
+    "build:embed:js": "node scripts/build-embed.mjs",
+    "build:embed:css": "npx @tailwindcss/cli -i ./src/embed/embed.css -o ./dist/embed/assistrio-chat.css --minify"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.700.0",
@@ -29,12 +32,14 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@tailwindcss/cli": "^4.2.2",
     "@tailwindcss/postcss": "^4",
     "@types/bcryptjs": "^2.4.6",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "esbuild": "^0.27.4",
     "eslint": "^9",
     "eslint-config-next": "^15.5.12",
     "tailwindcss": "^4",

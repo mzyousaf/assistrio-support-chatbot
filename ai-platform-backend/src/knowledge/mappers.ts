@@ -20,7 +20,7 @@ export interface DocumentChunkInput {
   active?: boolean;
 }
 
-/** Input for mapping an FAQ (e.g. from bot.faqs). */
+/** Input for mapping an FAQ (e.g. from FAQ list / KnowledgeBaseItem). */
 export interface FaqInput {
   id?: string;
   botId: string;

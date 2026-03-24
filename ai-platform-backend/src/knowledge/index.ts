@@ -25,6 +25,8 @@ export type {
   KnowledgeItem,
 } from './knowledge.types';
 
+export { KNOWLEDGE_SOURCE_TYPES } from './knowledge.types';
+
 export {
   mapDocumentChunkToKnowledgeItem,
   mapFaqToKnowledgeItem,

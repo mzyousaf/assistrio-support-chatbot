@@ -15,11 +15,11 @@ interface AdminShellProps {
 }
 
 const navItems = [
-  { href: "/super-admin/dashboard", label: "Dashboard" },
-  { href: "/super-admin/bots", label: "Bots" },
-  { href: "/super-admin/visitors", label: "Visitors" },
-  { href: "/super-admin/analytics", label: "Analytics" },
-  { href: "/super-admin/settings/limits", label: "Settings" },
+  { href: "/user/dashboard", label: "Dashboard" },
+  { href: "/user/bots", label: "Bots" },
+  { href: "/user/visitors", label: "Visitors" },
+  { href: "/user/analytics", label: "Analytics" },
+  { href: "/user/settings/limits", label: "Settings" },
 ];
 
 function isActivePath(pathname: string, href: string): boolean {
@@ -27,8 +27,8 @@ function isActivePath(pathname: string, href: string): boolean {
     return true;
   }
 
-  if (href === "/super-admin/settings/limits") {
-    return pathname.startsWith("/super-admin/settings");
+  if (href === "/user/settings/limits") {
+    return pathname.startsWith("/user/settings");
   }
 
   return pathname.startsWith(`${href}/`);
@@ -69,16 +69,16 @@ export default function AdminShell({ title, children, fullWidth }: AdminShellPro
   const router = useRouter();
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const pathSegments = pathname.split("/").filter(Boolean);
-  const adminSegments = pathSegments[0] === "super-admin" ? pathSegments.slice(1) : pathSegments;
+  const adminSegments = pathSegments[0] === "user" ? pathSegments.slice(1) : pathSegments;
   const breadcrumbs = adminSegments.map((segment, index) => {
-    const href = `/super-admin/${adminSegments.slice(0, index + 1).join("/")}`;
+    const href = `/user/${adminSegments.slice(0, index + 1).join("/")}`;
     const isLast = index === adminSegments.length - 1;
     const label = isLast && title ? title : formatBreadcrumbLabel(segment);
     return { href, label, isLast };
   });
-  const isDashboardPage = pathname === "/super-admin/dashboard";
+  const isDashboardPage = pathname === "/user/dashboard";
   const parentBreadcrumb = breadcrumbs.length > 1 ? breadcrumbs[breadcrumbs.length - 2] : null;
-  const backFallbackHref = parentBreadcrumb?.href ?? "/super-admin/dashboard";
+  const backFallbackHref = parentBreadcrumb?.href ?? "/user/dashboard";
   const backLabel = parentBreadcrumb ? `Back to ${parentBreadcrumb.label}` : "Back to Dashboard";
 
   useEffect(() => {
@@ -101,14 +101,14 @@ export default function AdminShell({ title, children, fullWidth }: AdminShellPro
   }
 
   async function handleLogout() {
-    await apiFetch("/api/super-admin/logout", { method: "POST" });
-    router.push("/super-admin/login");
+    await apiFetch("/api/user/logout", { method: "POST" });
+    router.push("/user/login");
   }
 
   function handleBack() {
     const referrer = document.referrer;
     const sameOrigin = referrer.startsWith(window.location.origin);
-    const fromAdminArea = referrer.includes("/super-admin");
+    const fromAdminArea = referrer.includes("/user");
     if (window.history.length > 1 && sameOrigin && fromAdminArea) {
       router.back();
       return;
@@ -185,7 +185,7 @@ export default function AdminShell({ title, children, fullWidth }: AdminShellPro
                 <nav aria-label="Breadcrumb" className="mb-0.5 overflow-x-auto">
                   <ol className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
                     <li>
-                      <Link href="/super-admin/dashboard" className="hover:text-brand-600 dark:hover:text-brand-300 transition-colors">
+                      <Link href="/user/dashboard" className="hover:text-brand-600 dark:hover:text-brand-300 transition-colors">
                         Dashboard
                       </Link>
                     </li>

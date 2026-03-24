@@ -115,28 +115,6 @@ export class BotChatUI {
   showMic?: boolean;
 }
 
-export type EmbeddingStatus = 'pending' | 'ready' | 'failed';
-
-@Schema({ _id: false })
-export class BotFaq {
-  @Prop({ required: true })
-  question: string;
-  @Prop({ required: true })
-  answer: string;
-  /** Embedding vector for semantic retrieval (when ready). */
-  @Prop({ type: [Number], select: false })
-  embedding?: number[];
-  @Prop({ enum: ['pending', 'ready', 'failed'], default: undefined })
-  embeddingStatus?: EmbeddingStatus;
-  @Prop()
-  embeddingUpdatedAt?: Date;
-  /** Hash of normalized embedding input; used to skip re-embed when unchanged. */
-  @Prop()
-  embeddingInputHash?: string;
-  @Prop({ type: String, default: null })
-  embeddingError?: string | null;
-}
-
 const BEHAVIOR_PRESET_VALUES = [
   'default', 'support', 'sales', 'technical', 'marketing',
   'consultative', 'teacher', 'empathetic', 'strict',
@@ -193,6 +171,9 @@ export class Bot {
   /** @deprecated Tagline is not injected into knowledge layer anymore. Kept for backward compatibility. */
   @Prop({ default: false })
   includeTaglineInKnowledge?: boolean;
+  /** When false, KnowledgeBaseItem sourceType='note' is excluded from RAG retrieval. */
+  @Prop({ default: true })
+  includeNotesInKnowledge?: boolean;
   @Prop()
   category?: string;
   @Prop({ type: [String], default: [] })
@@ -220,21 +201,6 @@ export class Bot {
   chatUI?: BotChatUI;
   @Prop()
   description?: string;
-  @Prop()
-  knowledgeDescription?: string;
-  /** Embedding for the single note (knowledgeDescription). */
-  @Prop({ type: [Number], select: false })
-  noteEmbedding?: number[];
-  @Prop({ enum: ['pending', 'ready', 'failed'], default: undefined })
-  noteEmbeddingStatus?: EmbeddingStatus;
-  @Prop()
-  noteEmbeddingUpdatedAt?: Date;
-  @Prop()
-  noteEmbeddingInputHash?: string;
-  @Prop({ type: String, default: null })
-  noteEmbeddingError?: string | null;
-  @Prop({ type: [BotFaq], default: [] })
-  faqs?: BotFaq[];
   @Prop({ type: [String], default: [] })
   exampleQuestions?: string[];
   @Prop({ type: BotPersonality })

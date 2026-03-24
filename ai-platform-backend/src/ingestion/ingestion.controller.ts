@@ -3,7 +3,7 @@ import { IngestionService } from './ingestion.service';
 
 @Controller('api/jobs')
 export class IngestionController {
-  constructor(private readonly ingestionService: IngestionService) {}
+  constructor(private readonly ingestionService: IngestionService) { }
 
   @Post('run')
   async run(

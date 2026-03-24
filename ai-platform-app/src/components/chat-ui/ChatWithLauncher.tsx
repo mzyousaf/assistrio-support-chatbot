@@ -8,6 +8,8 @@ import type { ChatProps } from "./Chat";
 import type { ChatLauncherBubbleProps } from "./ChatLauncherBubble";
 
 export interface ChatWithLauncherProps extends Omit<ChatProps, "onClose"> {
+  /** Called when chat panel is closed. */
+  onClose?: () => void;
   /** Launcher bubble position (default "bottom-right"). */
   launcherPosition?: ChatLauncherBubbleProps["position"];
   /** Unread count badge on bubble when chat is closed. */

@@ -10,13 +10,13 @@ import {
   VisitorEvent,
   VisitorEventSchema,
 } from '../models';
-import { SuperAdminModule } from '../super-admin/super-admin.module';
+import { AuthModule } from '../auth/auth.module';
 import { VisitorsController } from './visitors.controller';
 import { VisitorsService } from './visitors.service';
 
 @Module({
   imports: [
-    SuperAdminModule,
+    AuthModule,
     MongooseModule.forFeature([
       { name: Visitor.name, schema: VisitorSchema },
       { name: VisitorEvent.name, schema: VisitorEventSchema },
@@ -28,4 +28,4 @@ import { VisitorsService } from './visitors.service';
   providers: [VisitorsService],
   exports: [VisitorsService],
 })
-export class VisitorsModule {}
+export class VisitorsModule { }

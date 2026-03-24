@@ -5,8 +5,6 @@ import {
   BotSchema,
   Conversation,
   ConversationSchema,
-  DocumentModel,
-  DocumentSchema,
   Message,
   MessageSchema,
   SummaryJob,
@@ -24,7 +22,6 @@ import { SummaryJobService } from './summary-job.service';
     MongooseModule.forFeature([
       { name: Conversation.name, schema: ConversationSchema },
       { name: Message.name, schema: MessageSchema },
-      { name: DocumentModel.name, schema: DocumentSchema },
       { name: SummaryJob.name, schema: SummaryJobSchema },
       { name: Bot.name, schema: BotSchema },
     ]),
@@ -33,4 +30,4 @@ import { SummaryJobService } from './summary-job.service';
   providers: [ChatService, ChatEngineService, SummaryJobService],
   exports: [ChatService, ChatEngineService, SummaryJobService],
 })
-export class ChatModule {}
+export class ChatModule { }

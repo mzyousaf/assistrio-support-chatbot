@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { Bot, BotSchema, Visitor, VisitorSchema, VisitorEvent, VisitorEventSchema } from '../models';
-import { SuperAdminModule } from '../super-admin/super-admin.module';
+import { AuthModule } from '../auth/auth.module';
 import { VisitorsModule } from '../visitors/visitors.module';
 import { AnalyticsController } from './analytics.controller';
 import { AnalyticsTrackController } from './analytics-track.controller';
@@ -9,7 +9,7 @@ import { AnalyticsService } from './analytics.service';
 
 @Module({
   imports: [
-    SuperAdminModule,
+    AuthModule,
     MongooseModule.forFeature([
       { name: VisitorEvent.name, schema: VisitorEventSchema },
       { name: Visitor.name, schema: VisitorSchema },
@@ -21,4 +21,4 @@ import { AnalyticsService } from './analytics.service';
   providers: [AnalyticsService],
   exports: [AnalyticsService],
 })
-export class AnalyticsModule {}
+export class AnalyticsModule { }

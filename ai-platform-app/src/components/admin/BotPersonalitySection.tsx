@@ -96,7 +96,7 @@ export default function BotPersonalitySection({
                 setTestingKey(true);
                 setTestResult(null);
                 try {
-                  const res = await apiFetch("/api/super-admin/openai/test-key", {
+                  const res = await apiFetch("/api/user/openai/test-key", {
                     method: "POST",
                     headers: {
                       "Content-Type": "application/json",
@@ -134,92 +134,92 @@ export default function BotPersonalitySection({
             </p>
           </div>
           <div className="grid gap-4 md:grid-cols-2 rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950/40 p-3">
-          <label className="space-y-1 block md:col-span-2">
-            <span className="text-sm text-gray-800 dark:text-gray-200">Language</span>
-            <p className="text-xs text-gray-500 dark:text-gray-400">
-              Preferred response language for this bot.
-            </p>
-            <select
-              className={baseSelectClasses()}
-              value={personality.language ?? ""}
-              onChange={(event) =>
-                updatePersonality({
-                  ...personality,
-                  language: event.target.value || undefined,
-                })
-              }
-            >
-              <option value="">Auto</option>
-              <option value="en-US">English (US)</option>
-              <option value="en-GB">English (UK)</option>
-              <option value="es">Spanish</option>
-              <option value="fr">French</option>
-              <option value="de">German</option>
-              <option value="ar">Arabic</option>
-              <option value="ur">Urdu</option>
-              <option value="hi">Hindi</option>
-            </select>
-          </label>
+            <label className="space-y-1 block md:col-span-2">
+              <span className="text-sm text-gray-800 dark:text-gray-200">Language</span>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Preferred response language for this bot.
+              </p>
+              <select
+                className={baseSelectClasses()}
+                value={personality.language ?? ""}
+                onChange={(event) =>
+                  updatePersonality({
+                    ...personality,
+                    language: event.target.value || undefined,
+                  })
+                }
+              >
+                <option value="">Auto</option>
+                <option value="en-US">English (US)</option>
+                <option value="en-GB">English (UK)</option>
+                <option value="es">Spanish</option>
+                <option value="fr">French</option>
+                <option value="de">German</option>
+                <option value="ar">Arabic</option>
+                <option value="ur">Urdu</option>
+                <option value="hi">Hindi</option>
+              </select>
+            </label>
 
-          <label className="space-y-1 block">
-            <span className="text-sm text-gray-800 dark:text-gray-200">Creativity preset</span>
-            <p className="text-xs text-gray-500 dark:text-gray-400">
-              Control how strict vs creative answers should be.
-            </p>
-            <select
-              className={baseSelectClasses()}
-              value={String(config.temperature ?? 0.3)}
-              onChange={(event) =>
-                updateConfig({
-                  ...config,
-                  temperature: Number(event.target.value),
-                })
-              }
-            >
-              <option value="0.1">Low</option>
-              <option value="0.3">Balanced</option>
-              <option value="0.7">High</option>
-            </select>
-          </label>
+            <label className="space-y-1 block">
+              <span className="text-sm text-gray-800 dark:text-gray-200">Creativity preset</span>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Control how strict vs creative answers should be.
+              </p>
+              <select
+                className={baseSelectClasses()}
+                value={String(config.temperature ?? 0.3)}
+                onChange={(event) =>
+                  updateConfig({
+                    ...config,
+                    temperature: Number(event.target.value),
+                  })
+                }
+              >
+                <option value="0.1">Low</option>
+                <option value="0.3">Balanced</option>
+                <option value="0.7">High</option>
+              </select>
+            </label>
 
-          <label className="space-y-1 block">
-            <span className="text-sm text-gray-800 dark:text-gray-200">Answer length preset</span>
-            <p className="text-xs text-gray-500 dark:text-gray-400">
-              Choose how concise or detailed responses should be.
-            </p>
-            <select
-              className={baseSelectClasses()}
-              value={config.responseLength ?? "medium"}
-              onChange={(event) =>
-                updateConfig({
-                  ...config,
-                  responseLength: event.target.value as BotConfig["responseLength"],
-                })
-              }
-            >
-              <option value="short">Short</option>
-              <option value="medium">Medium</option>
-              <option value="long">Detailed</option>
-            </select>
-          </label>
+            <label className="space-y-1 block">
+              <span className="text-sm text-gray-800 dark:text-gray-200">Answer length preset</span>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Choose how concise or detailed responses should be.
+              </p>
+              <select
+                className={baseSelectClasses()}
+                value={config.responseLength ?? "medium"}
+                onChange={(event) =>
+                  updateConfig({
+                    ...config,
+                    responseLength: event.target.value as BotConfig["responseLength"],
+                  })
+                }
+              >
+                <option value="short">Short</option>
+                <option value="medium">Medium</option>
+                <option value="long">Detailed</option>
+              </select>
+            </label>
 
-          <label className="space-y-1 block">
-            <span className="text-sm text-gray-800 dark:text-gray-200">Max tokens</span>
-            <p className="text-xs text-gray-500 dark:text-gray-400">
-              Maximum response size.
-            </p>
-            <Input
-              type="number"
-              value={config.maxTokens ?? 512}
-              onChange={(event) => {
-                const raw = event.target.value.trim();
-                updateConfig({
-                  ...config,
-                  maxTokens: raw === "" ? 512 : Math.max(1, Math.floor(Number(raw))),
-                });
-              }}
-            />
-          </label>
+            <label className="space-y-1 block">
+              <span className="text-sm text-gray-800 dark:text-gray-200">Max tokens</span>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Maximum response size.
+              </p>
+              <Input
+                type="number"
+                value={config.maxTokens ?? 512}
+                onChange={(event) => {
+                  const raw = event.target.value.trim();
+                  updateConfig({
+                    ...config,
+                    maxTokens: raw === "" ? 512 : Math.max(1, Math.floor(Number(raw))),
+                  });
+                }}
+              />
+            </label>
           </div>
         </section>
       </div>

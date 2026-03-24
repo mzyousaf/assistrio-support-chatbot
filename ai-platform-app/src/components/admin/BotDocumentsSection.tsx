@@ -57,7 +57,7 @@ export default function BotDocumentsSection({ botId, documents }: BotDocumentsSe
         formData.append("title", title.trim());
       }
 
-      const response = await apiFetch("/api/super-admin/upload", {
+      const response = await apiFetch("/api/user/upload", {
         method: "POST",
         body: formData,
       });

@@ -1,4 +1,4 @@
-export const DRAFT_BOT_KEY = "assistrio_superadmin_draft_bot_id";
+export const DRAFT_BOT_KEY = "assistrio_user_draft_bot_id";
 export const SUPERADMIN_DRAFT_BOT_STORAGE_KEY = DRAFT_BOT_KEY;
 
 function isBrowser(): boolean {

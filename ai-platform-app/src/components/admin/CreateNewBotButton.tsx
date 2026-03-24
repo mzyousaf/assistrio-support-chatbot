@@ -25,7 +25,7 @@ export default function CreateNewBotButton({
       }
       onClick={() => {
         rotateDraftId();
-        router.push("/super-admin/bots/new?new=1");
+        router.push("/user/bots/new?new=1");
       }}
     >
       {label}

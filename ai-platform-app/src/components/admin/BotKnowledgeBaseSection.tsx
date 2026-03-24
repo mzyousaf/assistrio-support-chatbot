@@ -51,7 +51,7 @@ export default function BotKnowledgeBaseSection({
         formData.append("file", file);
       }
 
-      const res = await apiFetch("/api/super-admin/upload", {
+      const res = await apiFetch("/api/user/upload", {
         method: "POST",
         body: formData,
       });
@@ -75,7 +75,7 @@ export default function BotKnowledgeBaseSection({
     setDeletingId(docId);
     setError(null);
     try {
-      const res = await apiFetch(`/api/super-admin/bots/${botId}/documents/${docId}`, {
+      const res = await apiFetch(`/api/user/bots/${botId}/documents/${docId}`, {
         method: "DELETE",
       });
       if (!res.ok) {
@@ -105,11 +105,10 @@ export default function BotKnowledgeBaseSection({
         />
 
         <div
-          className={`border border-dashed rounded-2xl px-4 py-6 text-center cursor-pointer transition ${
-            dragOver
-              ? "border-emerald-500/70 bg-slate-900/60"
-              : "border-slate-700 bg-slate-950/60 hover:border-emerald-500/60"
-          }`}
+          className={`border border-dashed rounded-2xl px-4 py-6 text-center cursor-pointer transition ${dragOver
+            ? "border-emerald-500/70 bg-slate-900/60"
+            : "border-slate-700 bg-slate-950/60 hover:border-emerald-500/60"
+            }`}
           onClick={() => fileInputRef.current?.click()}
           onDragOver={(e) => {
             e.preventDefault();

@@ -1,0 +1,37 @@
+{
+  "name": "@assistrio/chat-widget",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Standalone Assistrio embeddable chat widget (assistrio-chat.js / assistrio-chat.css)",
+  "type": "module",
+  "main": "./dist/assistrio-chat.js",
+  "types": "./src/index.ts",
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "npm run build:js && npm run build:css && npm run copy:public",
+    "build:js": "node scripts/build-js.mjs",
+    "build:css": "npx @tailwindcss/cli -i ./src/styles/embed.css -o ./dist/assistrio-chat.css --minify",
+    "copy:public": "node -e \"const fs=require('fs'); fs.mkdirSync('public',{recursive:true}); fs.copyFileSync('dist/assistrio-chat.js','public/assistrio-chat.js'); fs.copyFileSync('dist/assistrio-chat.css','public/assistrio-chat.css'); console.log('Copied dist files to public/');\"",
+    "typecheck": "tsc --noEmit",
+    "test:local": "npx --yes serve . -l 3456"
+  },
+  "dependencies": {
+    "lucide-react": "^0.577.0",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.2.2",
+    "@tailwindcss/typography": "^0.5.19",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "esbuild": "^0.27.4",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}
