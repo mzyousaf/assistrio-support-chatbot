@@ -9,6 +9,8 @@ export function configFactory() {
     awsRegion: process.env.AWS_REGION ?? '',
     s3Bucket: process.env.S3_BUCKET ?? '',
     cloudfrontBaseUrl: process.env.CLOUDFRONT_BASE_URL?.trim().replace(/\/$/, '') ?? '',
+    /** Shared secret for landing site server-to-server calls (e.g. GET /api/public/landing/bots). */
+    landingSiteBotsApiKey: process.env.LANDING_SITE_BOTS_API_KEY?.trim() ?? '',
   };
 }
 

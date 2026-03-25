@@ -1,4 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
+import { Types } from 'mongoose';
 
 export type LeadFieldType = 'text' | 'email' | 'phone' | 'number' | 'url';
 
@@ -161,6 +162,9 @@ export class Bot {
   type: string;
   @Prop()
   ownerVisitorId?: string;
+  /** Platform user who created this bot (showcase flows from the admin app). */
+  @Prop({ type: Types.ObjectId, ref: 'User', index: true })
+  createdByUserId?: Types.ObjectId;
   @Prop({ default: false })
   isPublic: boolean;
   @Prop()

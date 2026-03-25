@@ -18,11 +18,15 @@ function normalizePosition(value: unknown): EmbedPosition | undefined {
 function parseObjectConfig(input: unknown): Partial<EmbedChatConfig> {
   if (!input || typeof input !== "object") return {};
   const cfg = input as Record<string, unknown>;
+  const widgetInitPath = toNonEmptyString(cfg.widgetInitPath);
+  const chatPostPath = toNonEmptyString(cfg.chatPostPath);
   return {
     botId: toNonEmptyString(cfg.botId),
     apiBaseUrl: toNonEmptyString(cfg.apiBaseUrl),
     accessKey: toNonEmptyString(cfg.accessKey),
     position: normalizePosition(cfg.position),
+    ...(widgetInitPath ? { widgetInitPath } : {}),
+    ...(chatPostPath ? { chatPostPath } : {}),
   };
 }
 

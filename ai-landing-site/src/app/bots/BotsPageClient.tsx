@@ -25,7 +25,6 @@ export function BotsPageClient({ bots }: BotsPageClientProps) {
   const { visitorId, loading } = useVisitorId();
   usePageView("/bots");
   const [activeBotId, setActiveBotId] = useState<string | null>(null);
-  const [configError, setConfigError] = useState<string | null>(null);
 
   const createBotUrl =
     visitorId && API_BASE_URL
@@ -35,19 +34,12 @@ export function BotsPageClient({ bots }: BotsPageClientProps) {
   const activeBot = bots.find((b) => b.id === activeBotId);
 
   function selectBot(id: string) {
-    setConfigError(null);
-    if (!API_BASE_URL) {
-      setConfigError(
-        "Configure NEXT_PUBLIC_API_BASE_URL so the chat widget can reach your API.",
-      );
-      return;
-    }
+    if (!API_BASE_URL) return;
     setActiveBotId(id);
   }
 
   function clearSelection() {
     setActiveBotId(null);
-    setConfigError(null);
   }
 
   return (
@@ -66,15 +58,6 @@ export function BotsPageClient({ bots }: BotsPageClientProps) {
             opens on this page—look for the launcher at the bottom corner.
           </p>
         </header>
-
-        {configError ? (
-          <p
-            className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
-            role="alert"
-          >
-            {configError}
-          </p>
-        ) : null}
 
         {activeBot && API_BASE_URL ? (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-brand/25 bg-brand-muted/60 px-4 py-3 text-sm text-neutral-800">
@@ -171,20 +154,6 @@ export function BotsPageClient({ bots }: BotsPageClientProps) {
             );
           })}
         </section>
-
-        {bots.length === 0 ? (
-          <p className="text-center text-sm text-neutral-600">
-            No public bots yet. Publish bots in the admin panel with{" "}
-            <code className="rounded bg-neutral-100 px-1.5 py-0.5 text-neutral-800">
-              isPublic
-            </code>{" "}
-            enabled, or check that{" "}
-            <code className="rounded bg-neutral-100 px-1.5 py-0.5 text-neutral-800">
-              NEXT_PUBLIC_API_BASE_URL
-            </code>{" "}
-            points at your API.
-          </p>
-        ) : null}
       </div>
     </main>
   );

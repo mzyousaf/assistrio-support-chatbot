@@ -10,4 +10,5 @@ export const configValidationSchema = Joi.object({
   AWS_REGION: Joi.string().optional(),
   S3_BUCKET: Joi.string().optional(),
   CLOUDFRONT_BASE_URL: Joi.string().uri().optional().allow(''),
+  LANDING_SITE_BOTS_API_KEY: Joi.string().optional().allow(''),
 });

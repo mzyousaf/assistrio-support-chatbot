@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { API_BASE_URL } from "@/lib/config";
+import { API_BASE_URL, LANDING_SITE_BOTS_API_KEY } from "@/lib/config";
 import { BotsPageClient, type PublicBot } from "./BotsPageClient";
 
 export const metadata: Metadata = {
@@ -9,20 +9,19 @@ export const metadata: Metadata = {
 };
 
 async function getPublicBots(): Promise<PublicBot[]> {
-  if (!API_BASE_URL) return [];
+  if (!API_BASE_URL || !LANDING_SITE_BOTS_API_KEY) return [];
   try {
-    const response = await fetch(`${API_BASE_URL}/api/public/bots`, {
+    const response = await fetch(`${API_BASE_URL}/api/public/landing/bots`, {
       cache: "no-store",
+      headers: { "X-API-Key": LANDING_SITE_BOTS_API_KEY },
     });
 
-    if (!response.ok) {
-      return [];
-    }
+    if (!response.ok) return [];
 
     const payload: unknown = await response.json();
     const rawBots = Array.isArray(payload) ? payload : [];
 
-    const bots: PublicBot[] = rawBots
+    return rawBots
       .map((bot): PublicBot | null => {
         if (!bot || typeof bot !== "object") return null;
 
@@ -57,8 +56,6 @@ async function getPublicBots(): Promise<PublicBot[]> {
         };
       })
       .filter((b): b is PublicBot => b !== null);
-
-    return bots;
   } catch {
     return [];
   }

@@ -4,15 +4,20 @@ import {
   HttpException,
   HttpStatus,
   Post,
+  Req,
   UseGuards,
 } from '@nestjs/common';
+import { FastifyRequest } from 'fastify';
+import { Types } from 'mongoose';
 import { BotsService } from '../bots/bots.service';
 import { DocumentsService } from '../documents/documents.service';
 import { IngestionService } from '../ingestion/ingestion.service';
 import { USER_ROLES, type UserRole } from '../models';
 import { SHOWCASE_BOTS } from './showcase-bots-seed.data';
 import { AuthService } from '../auth/auth.service';
-import { AuthGuard } from '../auth/auth.guard';
+import { AuthGuard, type RequestUser } from '../auth/auth.guard';
+
+type RequestWithUser = FastifyRequest & { user?: RequestUser };
 
 @Controller('api/user/seed')
 export class UserSeedController {
@@ -52,8 +57,12 @@ export class UserSeedController {
 
   @Post('showcase-bots')
   @UseGuards(AuthGuard)
-  async seedShowcaseBots() {
+  async seedShowcaseBots(@Req() req: RequestWithUser) {
     try {
+      const createdByUserId =
+        req.user?._id != null && Types.ObjectId.isValid(String(req.user._id))
+          ? new Types.ObjectId(String(req.user._id))
+          : undefined;
       const createdBots: { botId: string; slug: string; docsQueued: number }[] = [];
       const skippedBots: { slug: string; reason: string }[] = [];
 
@@ -86,6 +95,7 @@ export class UserSeedController {
           leadCapture: { enabled: false, fields: [] },
           faqs: [],
           categories: [],
+          ...(createdByUserId ? { createdByUserId } : {}),
         });
         const botId = (bot as { _id?: { toString?: () => string } })._id?.toString?.() ?? String((bot as { _id?: unknown })._id);
         let docsQueued = 0;

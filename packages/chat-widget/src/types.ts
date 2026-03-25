@@ -56,7 +56,7 @@ export interface NormalizedWidgetSettings {
 
 export interface EmbedRuntimeState {
   config: Required<Pick<EmbedChatConfig, "botId" | "apiBaseUrl">> &
-    Pick<EmbedChatConfig, "accessKey" | "position">;
+  Pick<EmbedChatConfig, "accessKey" | "position">;
   initResponse: WidgetInitResponse;
   settings: NormalizedWidgetSettings;
 }

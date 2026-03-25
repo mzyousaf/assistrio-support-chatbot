@@ -10,6 +10,7 @@ import {
   KnowledgeBaseItem,
   Message,
   SummaryJob,
+  User,
   VisitorEvent,
 } from '../models';
 import { getDefaultBotCreatePayload } from '../user/default-new-bot.payload';
@@ -49,6 +50,7 @@ export interface PublicBotDto {
 @Injectable()
 export class BotsService {
   constructor(
+    @InjectModel(User.name) private readonly userModel: Model<User>,
     @InjectModel(Bot.name) private readonly botModel: Model<Bot>,
     @InjectModel(DocumentModel.name) private readonly documentModel: Model<DocumentModel>,
     @InjectModel(KnowledgeBaseItem.name) private readonly knowledgeBaseItemModel: Model<KnowledgeBaseItem>,
@@ -86,6 +88,52 @@ export class BotsService {
       .find({
         isPublic: true,
         status: 'published',
+      })
+      .sort({ createdAt: -1 })
+      .select(
+        '_id name slug shortDescription category avatarEmoji imageUrl exampleQuestions chatUI createdAt',
+      )
+      .lean();
+
+    return docs.map((bot: Record<string, unknown>) => ({
+      id: String(bot._id),
+      name: String(bot.name ?? ''),
+      slug: String(bot.slug ?? ''),
+      shortDescription: bot.shortDescription != null ? String(bot.shortDescription) : undefined,
+      category: bot.category != null ? String(bot.category) : undefined,
+      avatarEmoji: bot.avatarEmoji != null ? String(bot.avatarEmoji) : undefined,
+      imageUrl: bot.imageUrl != null ? String(bot.imageUrl) : undefined,
+      exampleQuestions: Array.isArray(bot.exampleQuestions)
+        ? (bot.exampleQuestions as unknown[]).map((q) => String(q ?? '').trim()).filter(Boolean) as string[]
+        : [],
+      chatUI: bot.chatUI as PublicBotDto['chatUI'] | undefined,
+      createdAt:
+        bot.createdAt instanceof Date
+          ? bot.createdAt.toISOString()
+          : String(bot.createdAt ?? ''),
+    }));
+  }
+
+  /**
+   * Published public showcase bots whose creating user has role `superadmin`.
+   * Used by the marketing landing site with API-key auth (not for anonymous gallery).
+   */
+  async findPublicShowcaseBySuperAdminCreators(): Promise<PublicBotDto[]> {
+    const superAdmins = await this.userModel
+      .find({ role: 'superadmin' })
+      .select('_id')
+      .lean();
+    const creatorIds = (superAdmins as { _id: unknown }[])
+      .map((u) => u._id)
+      .filter((id) => id != null);
+    if (creatorIds.length === 0) return [];
+
+    const docs = await this.botModel
+      .find({
+        type: 'showcase',
+        isPublic: true,
+        status: 'published',
+        createdByUserId: { $in: creatorIds },
       })
       .sort({ createdAt: -1 })
       .select(
@@ -283,7 +331,10 @@ export class BotsService {
     return doc.toObject();
   }
 
-  async createDraft(clientDraftId: string): Promise<{ botId: string; slug: string }> {
+  async createDraft(
+    clientDraftId: string,
+    createdByUserId?: string,
+  ): Promise<{ botId: string; slug: string }> {
     const existing = await this.botModel
       .findOne({ clientDraftId, status: 'draft', type: 'showcase' })
       .select('_id slug')
@@ -291,11 +342,18 @@ export class BotsService {
     if (existing) {
       return { botId: String((existing as { _id: unknown })._id), slug: (existing as { slug: string }).slug };
     }
+    const creatorOid =
+      createdByUserId && Types.ObjectId.isValid(createdByUserId)
+        ? new Types.ObjectId(createdByUserId)
+        : undefined;
     for (let attempt = 0; attempt < 5; attempt++) {
       const slug = await this.generateUniqueSlug('ai-support-assistant');
       try {
         const payload = getDefaultBotCreatePayload(slug, clientDraftId);
-        const created = await this.botModel.create(payload as unknown as Record<string, unknown>);
+        const created = await this.botModel.create({
+          ...(payload as unknown as Record<string, unknown>),
+          ...(creatorOid ? { createdByUserId: creatorOid } : {}),
+        });
         return { botId: String((created as { _id: unknown })._id), slug: (created as { slug: string }).slug };
       } catch (err: unknown) {
         const e = err as { code?: number; keyPattern?: Record<string, number> };
@@ -333,10 +391,18 @@ export class BotsService {
       includeTaglineInKnowledge?: boolean;
       includeNotesInKnowledge: boolean;
     },
+    createdByUserId?: string,
   ): Promise<{ botId: string; slug: string }> {
     const finalName = normalized.name || 'Draft bot';
     const finalDescription = normalized.description || '';
-    const existing = await this.botModel.findOne({ clientDraftId }).select('_id slug name createdAt').lean();
+    const creatorOid =
+      createdByUserId && Types.ObjectId.isValid(createdByUserId)
+        ? new Types.ObjectId(createdByUserId)
+        : undefined;
+    const existing = await this.botModel
+      .findOne({ clientDraftId })
+      .select('_id slug name createdAt createdByUserId')
+      .lean();
     if (existing) {
       let finalSlug = (existing as { slug: string }).slug;
       const shouldUpdateSlug = finalName !== String((existing as { name?: string }).name ?? '');
@@ -345,6 +411,10 @@ export class BotsService {
       }
       for (let attempt = 0; attempt < 5; attempt++) {
         try {
+          const setCreatedBy =
+            creatorOid && !(existing as { createdByUserId?: unknown }).createdByUserId
+              ? { createdByUserId: creatorOid }
+              : {};
           await this.botModel.updateOne(
             { _id: (existing as { _id: unknown })._id },
             {
@@ -371,6 +441,7 @@ export class BotsService {
               includeNameInKnowledge: normalized.includeNameInKnowledge,
               includeTaglineInKnowledge: normalized.includeTaglineInKnowledge,
               includeNotesInKnowledge: normalized.includeNotesInKnowledge,
+              ...setCreatedBy,
             },
           );
           const botIdStr = String((existing as { _id: unknown })._id);
@@ -422,6 +493,7 @@ export class BotsService {
           includeTaglineInKnowledge: normalized.includeTaglineInKnowledge,
           includeNotesInKnowledge: normalized.includeNotesInKnowledge,
           createdAt: new Date(),
+          ...(creatorOid ? { createdByUserId: creatorOid } : {}),
         });
         const botIdStr = String((created as { _id: unknown })._id);
         const finalFaqs = Array.isArray(normalized.faqs)

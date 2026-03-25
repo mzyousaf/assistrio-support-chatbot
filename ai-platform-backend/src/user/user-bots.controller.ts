@@ -9,8 +9,10 @@ import {
   Patch,
   Post,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
+import { FastifyRequest } from 'fastify';
 import { Types } from 'mongoose';
 import { BotsService } from '../bots/bots.service';
 import { DocumentsService } from '../documents/documents.service';
@@ -18,7 +20,9 @@ import { KnowledgeBaseItemService } from '../knowledge/knowledge-base-item.servi
 import { KnowledgeBaseChunkService } from '../knowledge/knowledge-base-chunk.service';
 import { normalizeBotPayload } from './bot-payload';
 import { BotOnboardingService } from './bot-onboarding.service';
-import { AuthGuard } from '../auth/auth.guard';
+import { AuthGuard, type RequestUser } from '../auth/auth.guard';
+
+type RequestWithUser = FastifyRequest & { user?: RequestUser };
 
 @Controller('api/user/bots')
 @UseGuards(AuthGuard)
@@ -32,13 +36,14 @@ export class UserBotsController {
   ) { }
 
   @Post('draft')
-  async createDraft(@Body() body: { clientDraftId?: string }) {
+  async createDraft(@Body() body: { clientDraftId?: string }, @Req() req: RequestWithUser) {
     const clientDraftId = String(body?.clientDraftId ?? '').trim();
     if (!clientDraftId) {
       throw new HttpException({ error: 'clientDraftId is required' }, HttpStatus.BAD_REQUEST);
     }
+    const createdByUserId = req.user?._id != null ? String(req.user._id) : undefined;
     try {
-      const result = await this.botsService.createDraft(clientDraftId);
+      const result = await this.botsService.createDraft(clientDraftId, createdByUserId);
       await this.botOnboardingService.onboardNewBot(result.botId);
       return result;
     } catch (err) {
@@ -48,14 +53,18 @@ export class UserBotsController {
   }
 
   @Post('draft/finalize')
-  async finalizeDraft(@Body() body: { clientDraftId?: string; payload?: Record<string, unknown> }) {
+  async finalizeDraft(
+    @Body() body: { clientDraftId?: string; payload?: Record<string, unknown> },
+    @Req() req: RequestWithUser,
+  ) {
     const clientDraftId = String(body?.clientDraftId ?? '').trim();
     if (!clientDraftId) {
       throw new HttpException({ error: 'clientDraftId is required' }, HttpStatus.BAD_REQUEST);
     }
     const normalized = normalizeBotPayload(body?.payload ?? {});
+    const createdByUserId = req.user?._id != null ? String(req.user._id) : undefined;
     try {
-      return await this.botsService.finalizeDraft(clientDraftId, normalized);
+      return await this.botsService.finalizeDraft(clientDraftId, normalized, createdByUserId);
     } catch (err) {
       console.error('Finalize draft bot failed', err);
       throw new HttpException({ error: 'Internal server error' }, HttpStatus.INTERNAL_SERVER_ERROR);

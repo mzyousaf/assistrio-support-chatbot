@@ -2,7 +2,9 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { BotsController } from './bots.controller';
 import { PublicBotsController } from './public-bots.controller';
+import { LandingBotsController } from './landing-bots.controller';
 import { WidgetInitController } from './widget-init.controller';
+import { LandingSiteApiKeyGuard } from './landing-site-api-key.guard';
 import { BotsService } from './bots.service';
 import {
   Bot,
@@ -15,6 +17,8 @@ import {
   MessageSchema,
   SummaryJob,
   SummaryJobSchema,
+  User,
+  UserSchema,
   VisitorEvent,
   VisitorEventSchema,
 } from '../models';
@@ -23,6 +27,7 @@ import { KnowledgeModule } from '../knowledge/knowledge.module';
 @Module({
   imports: [
     MongooseModule.forFeature([
+      { name: User.name, schema: UserSchema },
       { name: Bot.name, schema: BotSchema },
       // Needed for bot cascade deletes (transactional) in BotsService.remove().
       { name: Conversation.name, schema: ConversationSchema },
@@ -33,8 +38,8 @@ import { KnowledgeModule } from '../knowledge/knowledge.module';
     ]),
     KnowledgeModule,
   ],
-  controllers: [BotsController, PublicBotsController, WidgetInitController],
-  providers: [BotsService],
+  controllers: [BotsController, PublicBotsController, LandingBotsController, WidgetInitController],
+  providers: [BotsService, LandingSiteApiKeyGuard],
   exports: [BotsService],
 })
 export class BotsModule { }
