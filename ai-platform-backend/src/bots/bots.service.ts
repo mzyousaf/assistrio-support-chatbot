@@ -77,10 +77,13 @@ export class BotsService {
       .lean();
   }
 
+  /**
+   * Public gallery: all published bots marked public (showcase and visitor-owned).
+   * Safe fields only — same shape as the legacy showcase list.
+   */
   async findPublicShowcase(): Promise<PublicBotDto[]> {
     const docs = await this.botModel
       .find({
-        type: 'showcase',
         isPublic: true,
         status: 'published',
       })
@@ -144,6 +147,55 @@ export class BotsService {
       this.knowledgeBaseItemService.getNoteContentForBot(String((bot as { _id: unknown })._id)),
     ]);
     return { ...bot, faqs, knowledgeDescription } as Record<string, unknown>;
+  }
+
+  /**
+   * Public embed widget bootstrap: same visibility rules as {@link findPublicShowcase}
+   * (published + public). Safe fields only — no API keys or internal config.
+   */
+  async findOneForPublicWidgetById(botId: string): Promise<{
+    id: string;
+    name: string;
+    shortDescription?: string;
+    description?: string;
+    avatarEmoji?: string;
+    imageUrl?: string;
+    welcomeMessage?: string;
+    chatUI: Record<string, unknown>;
+    exampleQuestions: string[];
+  } | null> {
+    const id = botId?.trim();
+    if (!id || !Types.ObjectId.isValid(id)) return null;
+    const doc = await this.botModel
+      .findOne({
+        _id: new Types.ObjectId(id),
+        isPublic: true,
+        status: 'published',
+      })
+      .select('_id name shortDescription description avatarEmoji imageUrl welcomeMessage chatUI exampleQuestions')
+      .lean();
+    if (!doc) return null;
+    const b = doc as Record<string, unknown>;
+    const exampleQuestions = Array.isArray(b.exampleQuestions)
+      ? (b.exampleQuestions as unknown[]).map((q) => String(q ?? '').trim()).filter(Boolean) as string[]
+      : [];
+    const welcomeMsg =
+      typeof b.welcomeMessage === 'string' && b.welcomeMessage.trim() ? b.welcomeMessage.trim() : undefined;
+    return {
+      id: String(b._id),
+      name: String(b.name ?? ''),
+      shortDescription:
+        b.shortDescription != null && String(b.shortDescription).trim()
+          ? String(b.shortDescription).trim()
+          : undefined,
+      description:
+        b.description != null && String(b.description).trim() ? String(b.description).trim() : undefined,
+      avatarEmoji: b.avatarEmoji != null ? String(b.avatarEmoji) : undefined,
+      imageUrl: b.imageUrl != null ? String(b.imageUrl) : undefined,
+      welcomeMessage: welcomeMsg,
+      chatUI: (b.chatUI && typeof b.chatUI === 'object' ? b.chatUI : {}) as Record<string, unknown>,
+      exampleQuestions,
+    };
   }
 
   /** Find one bot by slug for demo/trial page (public shape; faqs from KB). */

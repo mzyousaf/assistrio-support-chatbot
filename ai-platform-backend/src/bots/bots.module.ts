@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { BotsController } from './bots.controller';
 import { PublicBotsController } from './public-bots.controller';
+import { WidgetInitController } from './widget-init.controller';
 import { BotsService } from './bots.service';
 import {
   Bot,
@@ -32,7 +33,7 @@ import { KnowledgeModule } from '../knowledge/knowledge.module';
     ]),
     KnowledgeModule,
   ],
-  controllers: [BotsController, PublicBotsController],
+  controllers: [BotsController, PublicBotsController, WidgetInitController],
   providers: [BotsService],
   exports: [BotsService],
 })

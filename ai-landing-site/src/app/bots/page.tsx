@@ -1,15 +1,11 @@
+import type { Metadata } from "next";
 import { API_BASE_URL } from "@/lib/config";
-import { BotsPageClient } from "./BotsPageClient";
+import { BotsPageClient, type PublicBot } from "./BotsPageClient";
 
-type PublicBot = {
-  id: string;
-  name: string;
-  slug: string;
-  shortDescription?: string;
-  category?: string;
-  avatarEmoji?: string;
-  imageUrl?: string;
-  createdAt: string;
+export const metadata: Metadata = {
+  title: "AI Support Bots — Assistrio",
+  description:
+    "Browse public Assistrio bots or create your own. Open the embed widget from any card.",
 };
 
 async function getPublicBots(): Promise<PublicBot[]> {
