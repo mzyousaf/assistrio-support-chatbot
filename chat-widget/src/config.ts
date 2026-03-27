@@ -1,5 +1,6 @@
 import type { EmbedChatConfig, EmbedPosition, WidgetMode } from "./types";
 
+
 function toNonEmptyString(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
   const v = value.trim();
