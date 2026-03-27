@@ -20,6 +20,8 @@ export interface AssistrioEmbedConfig {
   disableRemoteConfig?: boolean;
   chatVisitorId?: string;
   authToken?: string;
+  /** Cookie session preview (same as platform Edit Bot); no JWT in body. */
+  sessionPreview?: boolean;
   persistChatSession?: boolean;
 }
 

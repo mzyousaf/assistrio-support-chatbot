@@ -36,8 +36,14 @@ export type EmbedChatConfig = {
   chatVisitorId?: string;
   authToken?: string;
   /**
+   * Preview mode: authenticate with the same `user_token` HttpOnly cookie as private APIs
+   * (`fetch` with `credentials: "include"` to the API origin). Omits keys and `chatVisitorId`
+   * from init; do not set `authToken` in the JSON body.
+   */
+  sessionPreview?: boolean;
+  /**
    * When false, `chatVisitorId` is not loaded from or saved to `localStorage`.
-   * Defaults to false when `authToken` is set (authenticated sessions), true otherwise.
+   * Defaults to false when `authToken` or `sessionPreview` is set, true otherwise.
    */
   persistChatSession?: boolean;
   position?: EmbedPosition;

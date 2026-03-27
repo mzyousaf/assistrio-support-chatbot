@@ -35,7 +35,8 @@ export function EmbedWidgetRoot({ rawConfig }: EmbedWidgetRootProps) {
         const normalized = normalizeEmbedConfig(rawConfig);
         const mode = normalized.mode ?? "runtime";
         const authPreview =
-          typeof normalized.authToken === "string" && normalized.authToken.trim() !== "";
+          (typeof normalized.authToken === "string" && normalized.authToken.trim() !== "") ||
+          normalized.sessionPreview === true;
 
         const storageKey = chatVisitorIdStorageKey(normalized.botId, mode);
         const persistChatSession = normalized.persistChatSession !== false;

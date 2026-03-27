@@ -19,16 +19,25 @@ function previewAuthToken(config: EmbedChatConfig): string | undefined {
   return t ? t : undefined;
 }
 
+function minimalPreviewInit(config: EmbedChatConfig): WidgetInitRequest {
+  return {
+    botId: config.botId,
+    mode: "preview",
+    ...(config.previewOverrides ? { previewOverrides: config.previewOverrides } : {}),
+  };
+}
+
 function toInitRequest(config: EmbedChatConfig): WidgetInitRequest {
   if ((config.mode ?? "runtime") === "preview") {
     const authToken = previewAuthToken(config);
     if (authToken) {
       return {
-        botId: config.botId,
-        mode: "preview",
+        ...minimalPreviewInit(config),
         authToken,
-        ...(config.previewOverrides ? { previewOverrides: config.previewOverrides } : {}),
       };
+    }
+    if (config.sessionPreview === true) {
+      return minimalPreviewInit(config);
     }
     return {
       botId: config.botId,
@@ -80,8 +89,8 @@ export async function validateAndInitWidget(
     method: "POST",
     headers,
     body: JSON.stringify(body),
-    credentials: "include",
     ...restInit,
+    credentials: "include",
   });
 
   let data: WidgetInitResponse | null = null;

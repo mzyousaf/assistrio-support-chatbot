@@ -2,7 +2,6 @@
 
 import React, { useEffect, useMemo } from "react";
 import type { BotChatUI } from "@/models/Bot";
-import { apiFetch } from "@/lib/api";
 import {
   mountAssistrioWidgetFromCdn,
   unmountAssistrioCdnWidget,
@@ -55,26 +54,16 @@ export function EditBotWorkspaceLayout({
     (typeof window !== "undefined" ? window.location.origin : "");
 
   useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      const res = await apiFetch("/api/user/embed-auth-token");
-      if (cancelled || !res.ok) return;
-      const data = (await res.json().catch(() => ({}))) as { authToken?: string };
-      const authToken = typeof data.authToken === "string" ? data.authToken.trim() : "";
-      if (!authToken || cancelled) return;
-
-      mountAssistrioWidgetFromCdn({
-        botId,
-        apiBaseUrl,
-        mode: "preview",
-        authToken,
-        previewOverrides,
-        position: "right",
-        persistChatSession: false,
-      });
-    })();
+    mountAssistrioWidgetFromCdn({
+      botId,
+      apiBaseUrl,
+      mode: "preview",
+      sessionPreview: true,
+      previewOverrides,
+      position: "right",
+      persistChatSession: false,
+    });
     return () => {
-      cancelled = true;
       unmountAssistrioCdnWidget();
     };
   }, [botId, apiBaseUrl, previewOverrides]);

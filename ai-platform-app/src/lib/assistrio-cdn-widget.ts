@@ -21,6 +21,8 @@ export type EmbedChatConfig = {
   platformVisitorId?: string;
   chatVisitorId?: string;
   authToken?: string;
+  /** Same cookie session as private APIs; no JWT in request body. */
+  sessionPreview?: boolean;
   /** When false, chat visitor id is not stored in localStorage. Defaults false if authToken is set. */
   persistChatSession?: boolean;
   position?: "left" | "right";
