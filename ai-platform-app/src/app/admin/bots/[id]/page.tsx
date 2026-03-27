@@ -284,9 +284,6 @@ export default function AdminEditBotPage() {
           botId={botId}
           botName={botName}
           botAvatarUrl={botImageUrl}
-          accessKey={typeof bot.accessKey === "string" ? bot.accessKey : undefined}
-          secretKey={typeof bot.secretKey === "string" ? bot.secretKey : undefined}
-          ownerVisitorId={typeof bot.ownerVisitorId === "string" ? bot.ownerVisitorId : undefined}
           livePreview={livePreview}
           defaultChatOpen={state === "ready" ? (bot?.chatUI as BotChatUI | undefined)?.openChatOnLoad !== false : true}
           expandHref={previewHref}

@@ -7,9 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "build:embed": "node scripts/build-embed.mjs && npx @tailwindcss/cli -i ./src/embed/embed.css -o ./dist/embed/assistrio-chat.css --minify",
-    "build:embed:js": "node scripts/build-embed.mjs",
-    "build:embed:css": "npx @tailwindcss/cli -i ./src/embed/embed.css -o ./dist/embed/assistrio-chat.css --minify"
+    "build:embed": "npm run build --prefix ../chat-widget",
+    "build:embed:js": "npm run build:js --prefix ../chat-widget",
+    "build:embed:css": "npm run build:css --prefix ../chat-widget"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.700.0",

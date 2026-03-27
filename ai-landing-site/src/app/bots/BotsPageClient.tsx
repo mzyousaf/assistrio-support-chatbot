@@ -257,11 +257,10 @@ export function BotsPageClient({ bots }: BotsPageClientProps) {
                 key={bot.id}
                 type="button"
                 onClick={() => selectBot(bot.id)}
-                className={`flex h-full min-h-[220px] flex-col gap-3 rounded-2xl border p-6 text-left shadow-sm transition ${
-                  selected
+                className={`flex h-full min-h-[220px] flex-col gap-3 rounded-2xl border p-6 text-left shadow-sm transition ${selected
                     ? "border-brand bg-brand-muted/40 ring-2 ring-brand/25"
                     : "border-neutral-200/90 bg-white hover:border-brand/20 hover:shadow-md"
-                }`}
+                  }`}
               >
                 <div className="flex items-start gap-3">
                   {bot.imageUrl ? (

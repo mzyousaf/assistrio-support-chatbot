@@ -1,28 +1,21 @@
-import Script from "next/script";
-import { getLandingAssistrioChatConfig } from "@/lib/assistrio-widget-defaults";
+"use client";
 
-const WIDGET_JS = "https://widget.assistrio.com/assistrio-chat.js";
+import { useEffect } from "react";
+import { getLandingAssistrioChatConfig } from "@/lib/assistrio-widget-defaults";
+import { mountAssistrioWidgetFromCdn } from "@/lib/assistrio-cdn-widget";
 
 /**
- * Direct embed: same as the static snippet (inline config + script).
- * Stylesheet is in root layout `<head>`. Uses `next/script` so config runs
- * before the widget bundle loads.
+ * Site-wide default widget from CDN (same `assistrio-chat.js` as production embeds).
  */
 export function AssistrioGlobalEmbed() {
-  const cfg = getLandingAssistrioChatConfig();
-  if (!cfg) {
-    // Expected env for production default widget:
-    // NEXT_PUBLIC_LANDING_WIDGET_ACCESS_KEY
-    return null;
-  }
-  const inline = `window.AssistrioChatConfig = ${JSON.stringify(cfg)};`;
+  useEffect(() => {
+    const cfg = getLandingAssistrioChatConfig();
+    if (!cfg) return;
+    mountAssistrioWidgetFromCdn(cfg);
+    return () => {
+      window.AssistrioChat?.unmount?.();
+    };
+  }, []);
 
-  return (
-    <>
-      <Script id="assistrio-global-config" strategy="afterInteractive">
-        {inline}
-      </Script>
-      <Script src={WIDGET_JS} strategy="afterInteractive" />
-    </>
-  );
+  return null;
 }

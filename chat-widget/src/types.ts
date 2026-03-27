@@ -35,6 +35,11 @@ export type EmbedChatConfig = {
    */
   chatVisitorId?: string;
   authToken?: string;
+  /**
+   * When false, `chatVisitorId` is not loaded from or saved to `localStorage`.
+   * Defaults to false when `authToken` is set (authenticated sessions), true otherwise.
+   */
+  persistChatSession?: boolean;
   position?: EmbedPosition;
   previewOverrides?: WidgetPreviewOverrides;
   disableRemoteConfig?: boolean;

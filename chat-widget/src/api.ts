@@ -14,14 +14,27 @@ function resolvePathWithBase(apiBaseUrl: string, path: string): string {
   return `${base}${p}`;
 }
 
+function previewAuthToken(config: EmbedChatConfig): string | undefined {
+  const t = typeof config.authToken === "string" ? config.authToken.trim() : "";
+  return t ? t : undefined;
+}
+
 function toInitRequest(config: EmbedChatConfig): WidgetInitRequest {
   if ((config.mode ?? "runtime") === "preview") {
+    const authToken = previewAuthToken(config);
+    if (authToken) {
+      return {
+        botId: config.botId,
+        mode: "preview",
+        authToken,
+        ...(config.previewOverrides ? { previewOverrides: config.previewOverrides } : {}),
+      };
+    }
     return {
       botId: config.botId,
       mode: "preview",
       ...(config.platformVisitorId ? { platformVisitorId: config.platformVisitorId } : {}),
       ...(config.chatVisitorId ? { chatVisitorId: config.chatVisitorId } : {}),
-      ...(config.authToken ? { authToken: config.authToken } : {}),
       ...(config.previewOverrides ? { previewOverrides: config.previewOverrides } : {}),
       ...(config.accessKey ? { accessKey: config.accessKey } : {}),
       ...(config.secretKey ? { secretKey: config.secretKey } : {}),
@@ -67,6 +80,7 @@ export async function validateAndInitWidget(
     method: "POST",
     headers,
     body: JSON.stringify(body),
+    credentials: "include",
     ...restInit,
   });
 

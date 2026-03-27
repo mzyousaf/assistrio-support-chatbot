@@ -30,13 +30,6 @@ export class UserSeedController {
 
   @Post()
   async seedUser(@Body() body: { email?: string; password?: string; role?: string }) {
-    const count = await this.authService.countUsers();
-    if (count > 0) {
-      throw new HttpException(
-        { error: 'Users already exist. Use login instead.' },
-        HttpStatus.CONFLICT,
-      );
-    }
     const email = typeof body?.email === 'string' ? body.email : '';
     const password = typeof body?.password === 'string' ? body.password : '';
     const roleInput = typeof body?.role === 'string' ? body.role.trim().toLowerCase() : 'admin';
@@ -45,13 +38,17 @@ export class UserSeedController {
       const user = await this.authService.createUser(email, password, role);
       return {
         ok: true,
-        message: 'First user created.',
+        message: 'User created.',
         email: (user as unknown as { email?: string }).email,
         role,
       };
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to create user';
-      throw new HttpException({ error: message }, HttpStatus.BAD_REQUEST);
+      const status =
+        message === 'User with this email already exists'
+          ? HttpStatus.CONFLICT
+          : HttpStatus.BAD_REQUEST;
+      throw new HttpException({ error: message }, status);
     }
   }
 

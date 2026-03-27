@@ -93,4 +93,17 @@ export class AuthController {
     if (!user) throw new HttpException({ error: 'Unauthorized' }, HttpStatus.UNAUTHORIZED);
     return { id: String(user._id), email: user.email, role: user.role };
   }
+
+  /**
+   * Returns a JWT for the current session so embed clients can send `authToken` in widget preview
+   * bodies (HttpOnly cookies are not readable from JS). Same signing as login cookie.
+   */
+  @Get('embed-auth-token')
+  @UseGuards(AuthGuard)
+  embedAuthToken(@Req() req: RequestWithUser) {
+    const user = req.user;
+    if (!user) throw new HttpException({ error: 'Unauthorized' }, HttpStatus.UNAUTHORIZED);
+    const authToken = this.authService.signToken(String(user._id), user.role as UserRole);
+    return { authToken };
+  }
 }

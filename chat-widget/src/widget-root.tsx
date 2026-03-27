@@ -34,15 +34,23 @@ export function EmbedWidgetRoot({ rawConfig }: EmbedWidgetRootProps) {
       try {
         const normalized = normalizeEmbedConfig(rawConfig);
         const mode = normalized.mode ?? "runtime";
+        const authPreview =
+          typeof normalized.authToken === "string" && normalized.authToken.trim() !== "";
 
         const storageKey = chatVisitorIdStorageKey(normalized.botId, mode);
+        const persistChatSession = normalized.persistChatSession !== false;
         const existingChatVisitorId =
-          typeof window !== "undefined" ? window.localStorage.getItem(storageKey) : null;
+          !authPreview && persistChatSession && typeof window !== "undefined"
+            ? window.localStorage.getItem(storageKey)
+            : null;
 
         const initRequestConfig: Partial<EmbedChatConfig> = {
           ...rawConfig,
           ...(existingChatVisitorId ? { chatVisitorId: existingChatVisitorId } : {}),
         };
+        if (authPreview) {
+          delete (initRequestConfig as { chatVisitorId?: string }).chatVisitorId;
+        }
 
         const init = await validateAndInitWidget(initRequestConfig);
         const normSettings = normalizeWidgetSettings(init, normalized);
@@ -55,7 +63,9 @@ export function EmbedWidgetRoot({ rawConfig }: EmbedWidgetRootProps) {
             : existingChatVisitorId;
 
         if (resolvedChatVisitorId) {
-          window.localStorage.setItem(storageKey, resolvedChatVisitorId);
+          if (persistChatSession) {
+            window.localStorage.setItem(storageKey, resolvedChatVisitorId);
+          }
           setChatVisitorId(resolvedChatVisitorId);
         }
         setPhase("ready");

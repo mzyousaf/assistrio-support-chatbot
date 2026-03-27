@@ -41,6 +41,7 @@ function parseObjectConfig(input: unknown): Partial<EmbedChatConfig> {
         : undefined,
     disableRemoteConfig:
       typeof cfg.disableRemoteConfig === "boolean" ? cfg.disableRemoteConfig : undefined,
+    ...(typeof cfg.persistChatSession === "boolean" ? { persistChatSession: cfg.persistChatSession } : {}),
     ...(widgetInitPath ? { widgetInitPath } : {}),
     ...(chatPostPath ? { chatPostPath } : {}),
   };
@@ -75,6 +76,10 @@ export function normalizeEmbedConfig(input: Partial<EmbedChatConfig>): EmbedChat
     platformVisitorId: toNonEmptyString(input.platformVisitorId),
     chatVisitorId: toNonEmptyString(input.chatVisitorId),
     authToken: toNonEmptyString(input.authToken),
+    persistChatSession:
+      typeof input.persistChatSession === "boolean"
+        ? input.persistChatSession
+        : !toNonEmptyString(input.authToken),
     position: normalizePosition(input.position),
     previewOverrides: input.previewOverrides,
     disableRemoteConfig:

@@ -25,9 +25,6 @@
     "paths": {
       "@/*": [
         "./src/*"
-      ],
-      "@assistrio/chat-widget": [
-        "../packages/chat-widget/src/index.ts"
       ]
     }
   },

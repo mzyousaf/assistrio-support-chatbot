@@ -5,6 +5,8 @@ import { getRequestId } from '../lib/request-id.helper';
 import { AuthService } from '../auth/auth.service';
 import { BotsService } from '../bots/bots.service';
 import { VisitorsService } from '../visitors/visitors.service';
+import { validateRuntimeBotAccess } from '../bots/runtime-bot-access.util';
+import { toRuntimeCredentialErrorCode } from '../bots/runtime-error-codes.util';
 import { ChatEngineService } from './chat-engine.service';
 import type { BotLike } from './chat-engine.types';
 
@@ -27,6 +29,8 @@ type PreviewOverrides = {
 
 type PreviewInitBody = {
   botId?: unknown;
+  accessKey?: unknown;
+  secretKey?: unknown;
   platformVisitorId?: unknown;
   chatVisitorId?: unknown;
   /**
@@ -130,6 +134,8 @@ function parseInitBody(
   body: unknown,
 ): {
   botId: string;
+  accessKey?: string;
+  secretKey?: string;
   platformVisitorId?: string;
   chatVisitorId?: string;
   authToken?: string;
@@ -143,6 +149,8 @@ function parseInitBody(
   if (!isPlainRecord(body)) return null;
   const botId = toNonEmptyString((body as PreviewInitBody).botId);
   if (!botId) return null;
+  const accessKey = toNonEmptyString((body as PreviewInitBody).accessKey);
+  const secretKey = toNonEmptyString((body as PreviewInitBody).secretKey);
   const platformVisitorId = toNonEmptyString((body as PreviewInitBody).platformVisitorId);
   const chatVisitorId = toNonEmptyString((body as PreviewInitBody).chatVisitorId);
   // legacy mapping
@@ -151,6 +159,8 @@ function parseInitBody(
   const previewOverrides = parsePreviewOverrides((body as PreviewInitBody).previewOverrides);
   return {
     botId,
+    ...(accessKey ? { accessKey } : {}),
+    ...(secretKey ? { secretKey } : {}),
     ...(platformVisitorId ? { platformVisitorId } : {}),
     ...(chatVisitorId ? { chatVisitorId } : {}),
     ...(visitorId ? { visitorId } : {}),
@@ -164,6 +174,8 @@ function parseChatBody(
 ): {
   botId: string;
   message: string;
+  accessKey?: string;
+  secretKey?: string;
   platformVisitorId?: string;
   chatVisitorId?: string;
   visitorId?: string;
@@ -214,6 +226,7 @@ export class WidgetPreviewController {
     bot: Record<string, unknown>,
     platformVisitorId?: string,
     authToken?: string,
+    runtimeCreds?: { accessKey?: string; secretKey?: string },
   ): Promise<{ runtimeVisitorId: string }> {
     const requestedPlatformVisitorId = String(platformVisitorId ?? '').trim();
 
@@ -226,6 +239,42 @@ export class WidgetPreviewController {
         );
       }
       return { runtimeVisitorId: requestedPlatformVisitorId };
+    }
+
+    const accessKey = String(runtimeCreds?.accessKey ?? '').trim();
+    const secretKey = String(runtimeCreds?.secretKey ?? '').trim();
+    if (accessKey || secretKey) {
+      const access = validateRuntimeBotAccess(
+        {
+          status: (bot.status as string | undefined) ?? undefined,
+          visibility: (bot.visibility as 'public' | 'private' | undefined) ?? undefined,
+          accessKey: (bot.accessKey as string | undefined) ?? undefined,
+          secretKey: (bot.secretKey as string | undefined) ?? undefined,
+        },
+        { accessKey: accessKey || undefined, secretKey: secretKey || undefined },
+      );
+      if (!access.ok) {
+        if (access.reason === 'unpublished') {
+          throw new HttpException(
+            {
+              error: 'Bot not found or not available for embedding',
+              status: 'error',
+              errorCode: 'BOT_NOT_PUBLISHED',
+            },
+            HttpStatus.NOT_FOUND,
+          );
+        }
+        throw new HttpException(
+          {
+            error: 'Invalid bot access credentials',
+            status: 'error',
+            errorCode: toRuntimeCredentialErrorCode(access),
+          },
+          HttpStatus.FORBIDDEN,
+        );
+      }
+      const ownerVisitorId = String(bot.ownerVisitorId ?? '').trim();
+      return { runtimeVisitorId: ownerVisitorId || `embed_${String(bot._id)}` };
     }
 
     const user = await this.resolveAuthenticatedUser(request, authToken);
@@ -403,6 +452,7 @@ export class WidgetPreviewController {
       bot,
       parsed.platformVisitorId ?? parsed.visitorId,
       parsed.authToken,
+      { accessKey: parsed.accessKey, secretKey: parsed.secretKey },
     );
 
     const chatVisitorId =
@@ -442,6 +492,7 @@ export class WidgetPreviewController {
       bot,
       parsed.platformVisitorId ?? parsed.visitorId,
       parsed.authToken,
+      { accessKey: parsed.accessKey, secretKey: parsed.secretKey },
     );
     if (runtimeVisitorId) {
       await this.visitorsService.getOrCreateVisitor(runtimeVisitorId);
