@@ -16,8 +16,18 @@ export class Message {
   conversationId: Types.ObjectId;
   @Prop({ type: Types.ObjectId, ref: 'Bot', required: true })
   botId: Types.ObjectId;
+  /**
+   * Chat identity for Message records (chatVisitorId).
+   */
   @Prop({ required: true })
-  visitorId: string;
+  chatVisitorId: string;
+
+  /**
+   * @deprecated Platform visitor id (legacy). Kept temporarily for visitor quota + visitor admin pages.
+   * During migration we store platformVisitorId here while Conversation uses chatVisitorId.
+   */
+  @Prop()
+  visitorId?: string;
   @Prop({ required: true, enum: ['user', 'assistant'] })
   role: string;
   @Prop({ required: true })

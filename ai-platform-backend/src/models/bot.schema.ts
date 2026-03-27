@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Types } from 'mongoose';
+import { generateBotAccessKey, generateBotSecretKey } from '../bots/bot-keys.util';
 
 export type LeadFieldType = 'text' | 'email' | 'phone' | 'number' | 'url';
 
@@ -36,6 +37,9 @@ export class BotLeadCaptureV2 {
 
 export type ChatBackgroundStyle = 'auto' | 'light' | 'dark';
 export type ChatLauncherPosition = 'bottom-right' | 'bottom-left';
+export type BotVisibility = 'public' | 'private';
+export type BotCreatorType = 'user' | 'visitor';
+export type BotMessageLimitMode = 'none' | 'fixed_total';
 /** Message bubble border radius in pixels (0–32). Affects message bubbles and suggested chips. */
 export const BUBBLE_RADIUS_MIN = 0;
 export const BUBBLE_RADIUS_MAX = 32;
@@ -160,6 +164,24 @@ export class Bot {
   slug: string;
   @Prop({ required: true, enum: ['showcase', 'visitor-own'] })
   type: string;
+  /**
+   * External access visibility gate.
+   * Default is "public" to preserve current behavior for existing creation flows.
+   */
+  @Prop({ enum: ['public', 'private'], default: 'public', index: true })
+  visibility?: BotVisibility;
+  /** Public-ish access credential used by external clients. */
+  @Prop({ required: true, unique: true, index: true, default: generateBotAccessKey })
+  accessKey: string;
+  /** Private credential for secure/private access modes (never expose via public APIs). */
+  @Prop({ required: true, default: generateBotSecretKey })
+  secretKey: string;
+  /** Distinguishes authenticated-user-created bots from visitor-created bots. */
+  @Prop({ enum: ['user', 'visitor'], default: 'user', index: true })
+  creatorType?: BotCreatorType;
+  /** Owner platform user (separate from createdByUserId for access ownership semantics). */
+  @Prop({ type: Types.ObjectId, ref: 'User', index: true })
+  ownerUserId?: Types.ObjectId;
   @Prop()
   ownerVisitorId?: string;
   /** Platform user who created this bot (showcase flows from the admin app). */
@@ -193,6 +215,15 @@ export class Bot {
   whisperApiKeyOverride?: string;
   @Prop()
   limitOverrideMessages?: number;
+  /** Bot-level usage policy mode; step-1 prepares storage only (no runtime enforcement yet). */
+  @Prop({ enum: ['none', 'fixed_total'], default: 'none' })
+  messageLimitMode?: BotMessageLimitMode;
+  /** Total allowed messages when messageLimitMode='fixed_total'. Null/undefined means unlimited. */
+  @Prop({ type: Number, default: null })
+  messageLimitTotal?: number | null;
+  /** Custom upgrade/upsell copy shown when bot-level quota is reached. */
+  @Prop({ type: String, default: null })
+  messageLimitUpgradeMessage?: string | null;
   @Prop()
   clientDraftId?: string;
   @Prop({ enum: ['draft', 'published'], default: 'draft', index: true })

@@ -42,7 +42,30 @@ interface SuperAdminChatResponse {
   sources?: ChatUISource[];
   conversationId?: string;
   error?: string;
+  errorCode?: string;
   debug?: SuperAdminChatDebug;
+}
+
+function getRuntimeErrorMessage(
+  response: Pick<SuperAdminChatResponse, "error" | "errorCode">,
+): string {
+  if (typeof response.error === "string" && response.error.trim()) {
+    return response.error;
+  }
+  switch (response.errorCode) {
+    case "BOT_NOT_PUBLISHED":
+      return "This bot is not available right now.";
+    case "INVALID_ACCESS_KEY":
+      return "Invalid chat access key.";
+    case "INVALID_SECRET_KEY":
+      return "Invalid chat secret key.";
+    case "VISITOR_ID_REQUIRED":
+      return "Visitor session is required for this chat.";
+    case "MESSAGE_LIMIT_REACHED":
+      return "This bot has reached its message limit.";
+    default:
+      return "No response.";
+  }
 }
 
 function truncateSubtitle(text: string, maxLen: number): string {
@@ -231,7 +254,10 @@ export function AdminLiveChatAdapter({
         const data = (await res.json().catch(() => ({}))) as SuperAdminChatResponse;
 
         const content =
-          data.assistantMessage ?? data.reply ?? data.content ?? data.error ?? "No response.";
+          data.assistantMessage ??
+          data.reply ??
+          data.content ??
+          getRuntimeErrorMessage(data);
         if (data.conversationId) {
           conversationIdRef.current = data.conversationId;
         }

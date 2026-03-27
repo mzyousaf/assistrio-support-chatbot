@@ -8,6 +8,7 @@ import { cx } from "./chat-ui/utils";
 import { apiFetch } from "../lib/apiFetch";
 import { resolveWelcomeMessage } from "../lib/welcomeMessage";
 import type { BotChatUI } from "../models/botChatUI";
+import type { WidgetPreviewOverrides } from "../types";
 
 function generateId(): string {
   return `msg_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
@@ -38,7 +39,30 @@ interface SuperAdminChatResponse {
   sources?: ChatUISource[];
   conversationId?: string;
   error?: string;
+  errorCode?: string;
   debug?: SuperAdminChatDebug;
+}
+
+function getRuntimeErrorMessage(
+  response: Pick<SuperAdminChatResponse, "error" | "errorCode">,
+): string {
+  if (typeof response.error === "string" && response.error.trim()) {
+    return response.error;
+  }
+  switch (response.errorCode) {
+    case "BOT_NOT_PUBLISHED":
+      return "This bot is not available for embedding right now.";
+    case "INVALID_ACCESS_KEY":
+      return "Chat access is invalid. Please verify your access key.";
+    case "INVALID_SECRET_KEY":
+      return "Chat access is invalid. Please verify your secret key.";
+    case "VISITOR_ID_REQUIRED":
+      return "A visitor session is required for this bot.";
+    case "MESSAGE_LIMIT_REACHED":
+      return "This bot has reached its message limit.";
+    default:
+      return "No response.";
+  }
 }
 
 function truncateSubtitle(text: string, maxLen: number): string {
@@ -49,6 +73,7 @@ function truncateSubtitle(text: string, maxLen: number): string {
 
 export interface AdminLiveChatAdapterProps {
   botId: string;
+  mode?: "runtime" | "preview";
   botName: string;
   avatarUrl?: string;
   avatarEmoji?: string;
@@ -62,7 +87,17 @@ export interface AdminLiveChatAdapterProps {
   onMenu?: () => void;
   expandHref?: string;
   apiBaseUrl?: string;
+  /**
+   * Optional chat endpoint override (relative or absolute URL).
+   * Primarily used when the host app proxies widget endpoints.
+   */
+  chatPostPath?: string;
   accessKey?: string;
+  secretKey?: string;
+  chatVisitorId: string;
+  platformVisitorId?: string;
+  authToken?: string;
+  previewOverrides?: WidgetPreviewOverrides;
   debug?: boolean;
   footerPrivacyText?: string;
   useFloatingLauncher?: boolean;
@@ -105,6 +140,7 @@ function composerBorderWidthFromChatUI(chatUI: BotChatUI | undefined): number {
 
 export function AdminLiveChatAdapter({
   botId,
+  mode = "runtime",
   botName,
   avatarUrl,
   avatarEmoji,
@@ -118,7 +154,13 @@ export function AdminLiveChatAdapter({
   onMenu,
   expandHref,
   apiBaseUrl,
+  chatPostPath,
   accessKey,
+  secretKey,
+  chatVisitorId,
+  platformVisitorId,
+  authToken,
+  previewOverrides,
   debug = true,
   footerPrivacyText,
   useFloatingLauncher = false,
@@ -126,8 +168,13 @@ export function AdminLiveChatAdapter({
   style,
 }: AdminLiveChatAdapterProps) {
   void expandHref;
+  void debug;
 
-  const chatPath = `/api/user/bots/${botId}/chat${debug ? "?debug=true" : ""}`;
+  const defaultChatPath =
+    mode === "preview"
+      ? "/api/widget/preview/chat"
+      : "/api/chat/message";
+  const chatPath = chatPostPath ?? defaultChatPath;
   const endpoint = apiBaseUrl
     ? `${apiBaseUrl.replace(/\/+$/, "")}${chatPath}`
     : chatPath;
@@ -188,9 +235,15 @@ export function AdminLiveChatAdapter({
 
       try {
         const bodyPayload = {
+          botId,
           message: value,
           ...(conversationIdRef.current && { conversationId: conversationIdRef.current }),
           ...(accessKey ? { accessKey } : {}),
+          ...(mode === "runtime" && secretKey ? { secretKey } : {}),
+          ...(chatVisitorId ? { chatVisitorId } : {}),
+          ...(platformVisitorId ? { platformVisitorId } : {}),
+          ...(mode === "preview" && authToken ? { authToken } : {}),
+          ...(mode === "preview" && previewOverrides ? { previewOverrides } : {}),
         };
         const res = apiBaseUrl
           ? await fetch(endpoint, {
@@ -209,7 +262,10 @@ export function AdminLiveChatAdapter({
         const data = (await res.json().catch(() => ({}))) as SuperAdminChatResponse;
 
         const content =
-          data.assistantMessage ?? data.reply ?? data.content ?? data.error ?? "No response.";
+          data.assistantMessage ??
+          data.reply ??
+          data.content ??
+          getRuntimeErrorMessage(data);
         if (data.conversationId) {
           conversationIdRef.current = data.conversationId;
         }
@@ -237,7 +293,19 @@ export function AdminLiveChatAdapter({
         setIsSending(false);
       }
     },
-    [endpoint, isSending, apiBaseUrl, accessKey]
+    [
+      endpoint,
+      isSending,
+      apiBaseUrl,
+      accessKey,
+      mode,
+      botId,
+      secretKey,
+      chatVisitorId,
+      platformVisitorId,
+      authToken,
+      previewOverrides,
+    ]
   );
 
   const privacyTextResolved =

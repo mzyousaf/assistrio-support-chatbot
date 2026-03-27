@@ -1,36 +1,44 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# AI Landing Site
 
-## Getting Started
+Next.js marketing/landing site that renders public bots and trial bot flows with the hosted widget.
 
-First, run the development server:
+## Environment
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+Copy `.env.example` to `.env.local`:
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+- `NEXT_PUBLIC_API_BASE_URL` - backend API origin used for landing data and widget runtime
+- `LANDING_SITE_BOTS_API_KEY` - server-side key used when calling `GET /api/public/landing/bots`
+- `NEXT_PUBLIC_LANDING_WIDGET_BOT_ID` - default global widget bot id
+- `NEXT_PUBLIC_LANDING_WIDGET_ACCESS_KEY` - access key for the default global widget bot
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Global/default widget mounting is intentionally skipped when `NEXT_PUBLIC_LANDING_WIDGET_ACCESS_KEY` is missing.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Runtime Access Contract (Landing Usage)
 
-## Learn More
+- Listed/public demo bots: widget receives `botId` + `accessKey`
+- Private bots are not used by anonymous landing list flows
+- Trial visitor-owned chat flow uses `visitorId` in runtime chat calls
 
-To learn more about Next.js, take a look at the following resources:
+## Visitor Trial Flow
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+High-level sequence:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+1. Landing creates a trial bot via `POST /api/trial/bots`
+2. Response includes runtime-safe context (`botId`, `visitorId`, `accessKey`, visibility/creator metadata)
+3. Landing stores this context locally and reuses it for widget runtime
+4. Chat uses trial policy (`fixed_total`) and returns limit state when exhausted
 
-## Deploy on Vercel
+Limit behavior:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- trial bot message cap is enforced server-side
+- when exhausted, chat response includes `limitReached: true` and `errorCode: MESSAGE_LIMIT_REACHED`
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Runtime Error Codes
+
+Landing/widget flows may receive runtime-safe `errorCode` values:
+
+- `BOT_NOT_PUBLISHED`
+- `INVALID_ACCESS_KEY`
+- `INVALID_SECRET_KEY`
+- `VISITOR_ID_REQUIRED`
+- `MESSAGE_LIMIT_REACHED`

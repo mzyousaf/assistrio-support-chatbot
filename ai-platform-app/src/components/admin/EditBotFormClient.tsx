@@ -36,6 +36,14 @@ type EditBotFormClientProps = {
     openaiApiKeyOverride?: string;
     whisperApiKeyOverride?: string;
     isPublic?: boolean;
+    visibility?: "public" | "private";
+    accessKey?: string;
+    secretKey?: string;
+    creatorType?: "user" | "visitor";
+    ownerVisitorId?: string;
+    messageLimitMode?: "none" | "fixed_total";
+    messageLimitTotal?: number | null;
+    messageLimitUpgradeMessage?: string | null;
     leadCapture?: BotLeadCaptureV2;
     chatUI?: BotChatUI;
     personality?: BotPersonality;

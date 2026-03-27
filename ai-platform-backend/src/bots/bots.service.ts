@@ -16,6 +16,7 @@ import {
 import { getDefaultBotCreatePayload } from '../user/default-new-bot.payload';
 import { KnowledgeBaseItemService } from '../knowledge/knowledge-base-item.service';
 import { KnowledgeBaseChunkService } from '../knowledge/knowledge-base-chunk.service';
+import { generateBotAccessKey, generateBotSecretKey } from './bot-keys.util';
 
 function slugify(input: string): string {
   const slug = input
@@ -27,10 +28,25 @@ function slugify(input: string): string {
   return slug || 'bot';
 }
 
+function getCreatorDefaultsForUserFlow(createdByUserId?: Types.ObjectId) {
+  return {
+    creatorType: 'user' as const,
+    visibility: 'public' as const,
+    messageLimitMode: 'none' as const,
+    messageLimitTotal: null as number | null,
+    messageLimitUpgradeMessage: null as string | null,
+    accessKey: generateBotAccessKey(),
+    secretKey: generateBotSecretKey(),
+    ...(createdByUserId ? { ownerUserId: createdByUserId } : {}),
+  };
+}
+
 export interface PublicBotDto {
   id: string;
   name: string;
   slug: string;
+  visibility: 'public';
+  accessKey: string;
   shortDescription?: string;
   category?: string;
   avatarEmoji?: string;
@@ -45,6 +61,25 @@ export interface PublicBotDto {
     timePosition?: 'top' | 'bottom';
   };
   createdAt: string;
+}
+
+export interface CreateVisitorTrialBotInput {
+  platformVisitorId?: string;
+  /** @deprecated legacy alias for platformVisitorId */
+  visitorId?: string;
+  name?: string;
+  welcomeMessage?: string;
+  shortDescription?: string;
+  description?: string;
+  imageUrl?: string;
+  avatarEmoji?: string;
+}
+
+export interface ShowcaseAccessSettingsInput {
+  visibility: 'public' | 'private';
+  messageLimitMode: 'none' | 'fixed_total';
+  messageLimitTotal?: number | null;
+  messageLimitUpgradeMessage?: string | null;
 }
 
 @Injectable()
@@ -65,7 +100,7 @@ export class BotsService {
   ) { }
 
   async findAll() {
-    return this.botModel.find().lean();
+    return this.botModel.find().select('-secretKey').lean();
   }
 
   /** List bots for user panel with optional status filter (showcase only). */
@@ -75,7 +110,7 @@ export class BotsService {
     return this.botModel
       .find(filter)
       .sort({ createdAt: -1 })
-      .select('name type category status isPublic createdAt _id slug')
+      .select('name type category status isPublic createdAt _id slug visibility creatorType messageLimitMode messageLimitTotal')
       .lean();
   }
 
@@ -88,10 +123,11 @@ export class BotsService {
       .find({
         isPublic: true,
         status: 'published',
+        visibility: 'public',
       })
       .sort({ createdAt: -1 })
       .select(
-        '_id name slug shortDescription category avatarEmoji imageUrl exampleQuestions chatUI createdAt',
+        '_id name slug shortDescription category avatarEmoji imageUrl exampleQuestions chatUI createdAt visibility accessKey',
       )
       .lean();
 
@@ -99,6 +135,8 @@ export class BotsService {
       id: String(bot._id),
       name: String(bot.name ?? ''),
       slug: String(bot.slug ?? ''),
+      visibility: 'public',
+      accessKey: String(bot.accessKey ?? ''),
       shortDescription: bot.shortDescription != null ? String(bot.shortDescription) : undefined,
       category: bot.category != null ? String(bot.category) : undefined,
       avatarEmoji: bot.avatarEmoji != null ? String(bot.avatarEmoji) : undefined,
@@ -133,11 +171,12 @@ export class BotsService {
         type: 'showcase',
         isPublic: true,
         status: 'published',
+        visibility: 'public',
         createdByUserId: { $in: creatorIds },
       })
       .sort({ createdAt: -1 })
       .select(
-        '_id name slug shortDescription category avatarEmoji imageUrl exampleQuestions chatUI createdAt',
+        '_id name slug shortDescription category avatarEmoji imageUrl exampleQuestions chatUI createdAt visibility accessKey',
       )
       .lean();
 
@@ -145,6 +184,8 @@ export class BotsService {
       id: String(bot._id),
       name: String(bot.name ?? ''),
       slug: String(bot.slug ?? ''),
+      visibility: 'public',
+      accessKey: String(bot.accessKey ?? ''),
       shortDescription: bot.shortDescription != null ? String(bot.shortDescription) : undefined,
       category: bot.category != null ? String(bot.category) : undefined,
       avatarEmoji: bot.avatarEmoji != null ? String(bot.avatarEmoji) : undefined,
@@ -161,7 +202,7 @@ export class BotsService {
   }
 
   async findOne(id: string) {
-    return this.botModel.findById(id).lean();
+    return this.botModel.findById(id).select('-secretKey').lean();
   }
 
   /** Check if a slug exists (any type). */
@@ -219,6 +260,7 @@ export class BotsService {
         _id: new Types.ObjectId(id),
         isPublic: true,
         status: 'published',
+        visibility: 'public',
       })
       .select('_id name shortDescription description avatarEmoji imageUrl welcomeMessage chatUI exampleQuestions')
       .lean();
@@ -246,6 +288,22 @@ export class BotsService {
     };
   }
 
+  /** External runtime bot lookup (widget init/chat): includes access/policy fields. */
+  async findOneByIdForExternalRuntime(botId: string): Promise<Record<string, unknown> | null> {
+    const id = botId?.trim();
+    if (!id || !Types.ObjectId.isValid(id)) return null;
+    const bot = await this.botModel
+      .findById(new Types.ObjectId(id))
+      .select('_id slug name shortDescription description category avatarEmoji imageUrl openaiApiKeyOverride welcomeMessage leadCapture personality config chatUI type status isPublic visibility accessKey secretKey creatorType ownerUserId createdByUserId ownerVisitorId messageLimitMode messageLimitTotal messageLimitUpgradeMessage includeNameInKnowledge includeTaglineInKnowledge')
+      .lean();
+    if (!bot) return null;
+    const [faqs, knowledgeDescription] = await Promise.all([
+      this.knowledgeBaseItemService.getFaqsForBot(String((bot as { _id: unknown })._id)),
+      this.knowledgeBaseItemService.getNoteContentForBot(String((bot as { _id: unknown })._id)),
+    ]);
+    return { ...bot, faqs, knowledgeDescription } as Record<string, unknown>;
+  }
+
   /** Find one bot by slug for demo/trial page (public shape; faqs from KB). */
   async findOneBySlugForPage(
     slug: string,
@@ -254,6 +312,8 @@ export class BotsService {
     id: string;
     slug: string;
     name: string;
+    visibility: 'public';
+    accessKey: string;
     shortDescription: string;
     avatarEmoji: string;
     imageUrl: string;
@@ -263,8 +323,16 @@ export class BotsService {
     exampleQuestions: string[];
   } | null> {
     const doc = await this.botModel
-      .findOne({ slug: slug.trim().toLowerCase(), type })
-      .select('_id slug name shortDescription avatarEmoji imageUrl welcomeMessage chatUI exampleQuestions')
+      .findOne({
+        slug: slug.trim().toLowerCase(),
+        type,
+        isPublic: true,
+        status: 'published',
+        visibility: 'public',
+      })
+      .select(
+        '_id slug name shortDescription avatarEmoji imageUrl welcomeMessage chatUI exampleQuestions visibility accessKey',
+      )
       .lean();
     if (!doc) return null;
     const b = doc as Record<string, unknown>;
@@ -275,6 +343,8 @@ export class BotsService {
       id: botId,
       slug: String(b.slug ?? ''),
       name: String(b.name ?? ''),
+      visibility: 'public',
+      accessKey: String(b.accessKey ?? ''),
       shortDescription: String(b.shortDescription ?? ''),
       avatarEmoji: String(b.avatarEmoji ?? '💬'),
       imageUrl: String(b.imageUrl ?? ''),
@@ -316,7 +386,7 @@ export class BotsService {
   async findOneShowcaseForAdmin(id: string) {
     const bot = await this.botModel
       .findById(id)
-      .select('slug name shortDescription description category categories imageUrl openaiApiKeyOverride whisperApiKeyOverride welcomeMessage status isPublic leadCapture chatUI exampleQuestions personality type config limitOverrideMessages includeNameInKnowledge includeTaglineInKnowledge includeNotesInKnowledge')
+      .select('slug name shortDescription description category categories imageUrl openaiApiKeyOverride whisperApiKeyOverride welcomeMessage status isPublic leadCapture chatUI exampleQuestions personality type config limitOverrideMessages visibility accessKey secretKey creatorType ownerUserId ownerVisitorId messageLimitMode messageLimitTotal messageLimitUpgradeMessage includeNameInKnowledge includeTaglineInKnowledge includeNotesInKnowledge')
       .lean();
     if (!bot) return null;
     const [faqs, knowledgeDescription] = await Promise.all([
@@ -329,6 +399,189 @@ export class BotsService {
   async create(data: Record<string, unknown>) {
     const doc = await this.botModel.create(data);
     return doc.toObject();
+  }
+
+  async createVisitorTrialBot(input: CreateVisitorTrialBotInput): Promise<{
+    botId: string;
+    platformVisitorId: string;
+    /** @deprecated legacy alias for platformVisitorId */
+    visitorId?: string;
+    accessKey: string;
+    status: 'published';
+    visibility: 'public';
+    isPublic: true;
+    type: 'visitor-own';
+    slug: string;
+    name: string;
+    welcomeMessage?: string;
+    imageUrl?: string;
+    avatarEmoji?: string;
+    messageLimitMode: 'fixed_total';
+    messageLimitTotal: number;
+    messageLimitUpgradeMessage: string;
+  }> {
+    const platformVisitorId = String((input.platformVisitorId ?? input.visitorId) || '').trim();
+    if (!platformVisitorId) {
+      throw new Error('platformVisitorId is required.');
+    }
+
+    const safeName = String(input.name ?? '').trim() || 'Trial Assistant';
+    const safeWelcome = String(input.welcomeMessage ?? '').trim();
+    const safeShortDescription = String(input.shortDescription ?? '').trim();
+    const safeDescription = String(input.description ?? '').trim();
+    const safeImageUrl = String(input.imageUrl ?? '').trim();
+    const safeAvatarEmoji = String(input.avatarEmoji ?? '').trim();
+
+    let slug = await this.generateUniqueSlug(safeName || 'trial-bot');
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        const created = await this.botModel.create({
+          name: safeName,
+          slug,
+          type: 'visitor-own',
+          creatorType: 'visitor',
+          ownerVisitorId: platformVisitorId,
+          visibility: 'public',
+          accessKey: generateBotAccessKey(),
+          secretKey: generateBotSecretKey(),
+          status: 'published',
+          isPublic: true,
+          shortDescription: safeShortDescription || undefined,
+          description: safeDescription || undefined,
+          welcomeMessage: safeWelcome || undefined,
+          imageUrl: safeImageUrl || undefined,
+          avatarEmoji: safeAvatarEmoji || undefined,
+          messageLimitMode: 'fixed_total',
+          messageLimitTotal: 20,
+          messageLimitUpgradeMessage:
+            'This trial bot has reached its message limit. Please contact Assistrio to continue.',
+          includeNotesInKnowledge: true,
+          createdAt: new Date(),
+        });
+        return {
+          botId: String((created as { _id: unknown })._id),
+          platformVisitorId,
+          // Deprecated alias for compatibility:
+          visitorId: platformVisitorId,
+          accessKey: (created as { accessKey: string }).accessKey,
+          status: 'published',
+          visibility: 'public',
+          isPublic: true,
+          type: 'visitor-own',
+          slug: (created as { slug: string }).slug,
+          name: (created as { name: string }).name,
+          welcomeMessage: (created as { welcomeMessage?: string }).welcomeMessage,
+          imageUrl: (created as { imageUrl?: string }).imageUrl,
+          avatarEmoji: (created as { avatarEmoji?: string }).avatarEmoji,
+          messageLimitMode: 'fixed_total',
+          messageLimitTotal: 20,
+          messageLimitUpgradeMessage:
+            'This trial bot has reached its message limit. Please contact Assistrio to continue.',
+        };
+      } catch (err: unknown) {
+        const e = err as { code?: number; keyPattern?: Record<string, number> };
+        if (e.code === 11000 && (e.keyPattern?.slug || e.keyPattern?.accessKey)) {
+          slug = await this.generateUniqueSlug(safeName || 'trial-bot');
+          continue;
+        }
+        throw err;
+      }
+    }
+    throw new Error('Failed to allocate unique trial bot credentials.');
+  }
+
+  async updateShowcaseAccessSettings(
+    id: string,
+    input: ShowcaseAccessSettingsInput,
+  ): Promise<{
+    ok: true;
+    botId: string;
+    visibility: 'public' | 'private';
+    accessKey: string;
+    secretKey: string;
+    creatorType: 'user' | 'visitor';
+    ownerVisitorId?: string;
+    messageLimitMode: 'none' | 'fixed_total';
+    messageLimitTotal: number | null;
+    messageLimitUpgradeMessage: string | null;
+  }> {
+    const existing = await this.botModel
+      .findById(id)
+      .select('_id type visibility accessKey secretKey creatorType ownerVisitorId messageLimitMode messageLimitTotal messageLimitUpgradeMessage')
+      .lean();
+    if (!existing || (existing as { type?: string }).type !== 'showcase') {
+      throw new Error('Bot not found');
+    }
+    const visibility = input.visibility === 'private' ? 'private' : 'public';
+    const messageLimitMode = input.messageLimitMode === 'fixed_total' ? 'fixed_total' : 'none';
+    const parsedTotal =
+      typeof input.messageLimitTotal === 'number' && Number.isFinite(input.messageLimitTotal)
+        ? Math.floor(input.messageLimitTotal)
+        : null;
+    if (messageLimitMode === 'fixed_total' && (!parsedTotal || parsedTotal <= 0)) {
+      throw new Error('messageLimitTotal must be a positive integer when messageLimitMode is fixed_total.');
+    }
+    const messageLimitTotal = messageLimitMode === 'fixed_total' ? parsedTotal : null;
+    const upgradeMessageRaw =
+      typeof input.messageLimitUpgradeMessage === 'string'
+        ? input.messageLimitUpgradeMessage.trim()
+        : '';
+    const messageLimitUpgradeMessage = upgradeMessageRaw ? upgradeMessageRaw : null;
+
+    const updated = await this.botModel
+      .findByIdAndUpdate(
+        id,
+        {
+          visibility,
+          messageLimitMode,
+          messageLimitTotal,
+          messageLimitUpgradeMessage,
+        },
+        { new: true },
+      )
+      .select('_id visibility accessKey secretKey creatorType ownerVisitorId messageLimitMode messageLimitTotal messageLimitUpgradeMessage')
+      .lean();
+    if (!updated) throw new Error('Bot not found');
+    const bot = updated as Record<string, unknown>;
+    return {
+      ok: true,
+      botId: String(bot._id),
+      visibility: bot.visibility === 'private' ? 'private' : 'public',
+      accessKey: String(bot.accessKey ?? ''),
+      secretKey: String(bot.secretKey ?? ''),
+      creatorType: bot.creatorType === 'visitor' ? 'visitor' : 'user',
+      ownerVisitorId: typeof bot.ownerVisitorId === 'string' ? bot.ownerVisitorId : undefined,
+      messageLimitMode: bot.messageLimitMode === 'fixed_total' ? 'fixed_total' : 'none',
+      messageLimitTotal: typeof bot.messageLimitTotal === 'number' ? bot.messageLimitTotal : null,
+      messageLimitUpgradeMessage:
+        typeof bot.messageLimitUpgradeMessage === 'string' ? bot.messageLimitUpgradeMessage : null,
+    };
+  }
+
+  async rotateShowcaseAccessKey(id: string): Promise<{ ok: true; botId: string; accessKey: string }> {
+    const updated = await this.botModel
+      .findOneAndUpdate(
+        { _id: new Types.ObjectId(id), type: 'showcase' },
+        { accessKey: generateBotAccessKey() },
+        { new: true },
+      )
+      .select('_id accessKey')
+      .lean();
+    if (!updated) throw new Error('Bot not found');
+    return { ok: true, botId: String((updated as { _id: unknown })._id), accessKey: String((updated as { accessKey?: unknown }).accessKey ?? '') };
+  }
+
+  async rotateShowcaseSecretKey(id: string): Promise<{ ok: true; botId: string; secretKey: string }> {
+    const updated = await this.botModel
+      .findOneAndUpdate(
+        { _id: new Types.ObjectId(id), type: 'showcase' },
+        { secretKey: generateBotSecretKey() },
+        { new: true },
+      )
+      .select('_id secretKey')
+      .lean();
+    if (!updated) throw new Error('Bot not found');
+    return { ok: true, botId: String((updated as { _id: unknown })._id), secretKey: String((updated as { secretKey?: unknown }).secretKey ?? '') };
   }
 
   async createDraft(
@@ -352,6 +605,7 @@ export class BotsService {
         const payload = getDefaultBotCreatePayload(slug, clientDraftId);
         const created = await this.botModel.create({
           ...(payload as unknown as Record<string, unknown>),
+          ...getCreatorDefaultsForUserFlow(creatorOid),
           ...(creatorOid ? { createdByUserId: creatorOid } : {}),
         });
         return { botId: String((created as { _id: unknown })._id), slug: (created as { slug: string }).slug };
@@ -361,7 +615,7 @@ export class BotsService {
           const dup = await this.botModel.findOne({ clientDraftId, status: 'draft', type: 'showcase' }).select('_id slug').lean();
           if (dup) return { botId: String((dup as { _id: unknown })._id), slug: (dup as { slug: string }).slug };
         }
-        if (!(e.code === 11000 && e.keyPattern?.slug)) throw err;
+        if (!(e.code === 11000 && (e.keyPattern?.slug || e.keyPattern?.accessKey))) throw err;
       }
     }
     throw new Error('Failed to allocate unique slug.');
@@ -390,6 +644,10 @@ export class BotsService {
       includeNameInKnowledge?: boolean;
       includeTaglineInKnowledge?: boolean;
       includeNotesInKnowledge: boolean;
+      visibility?: 'public' | 'private';
+      messageLimitMode?: 'none' | 'fixed_total';
+      messageLimitTotal?: number | null;
+      messageLimitUpgradeMessage?: string | null;
     },
     createdByUserId?: string,
   ): Promise<{ botId: string; slug: string }> {
@@ -401,7 +659,7 @@ export class BotsService {
         : undefined;
     const existing = await this.botModel
       .findOne({ clientDraftId })
-      .select('_id slug name createdAt createdByUserId')
+      .select('_id slug name createdAt createdByUserId accessKey secretKey creatorType ownerUserId visibility messageLimitMode messageLimitTotal messageLimitUpgradeMessage')
       .lean();
     if (existing) {
       let finalSlug = (existing as { slug: string }).slug;
@@ -441,6 +699,23 @@ export class BotsService {
               includeNameInKnowledge: normalized.includeNameInKnowledge,
               includeTaglineInKnowledge: normalized.includeTaglineInKnowledge,
               includeNotesInKnowledge: normalized.includeNotesInKnowledge,
+              creatorType: (existing as { creatorType?: string }).creatorType ?? 'user',
+              ownerUserId:
+                (existing as { ownerUserId?: unknown }).ownerUserId ??
+                creatorOid ??
+                undefined,
+              visibility: normalized.visibility ?? (existing as { visibility?: 'public' | 'private' }).visibility ?? 'public',
+              accessKey: (existing as { accessKey?: string }).accessKey || generateBotAccessKey(),
+              secretKey: (existing as { secretKey?: string }).secretKey || generateBotSecretKey(),
+              messageLimitMode: normalized.messageLimitMode ?? (existing as { messageLimitMode?: 'none' | 'fixed_total' }).messageLimitMode ?? 'none',
+              messageLimitTotal:
+                normalized.messageLimitTotal !== undefined
+                  ? normalized.messageLimitTotal
+                  : (existing as { messageLimitTotal?: number | null }).messageLimitTotal ?? null,
+              messageLimitUpgradeMessage:
+                normalized.messageLimitUpgradeMessage !== undefined
+                  ? normalized.messageLimitUpgradeMessage
+                  : (existing as { messageLimitUpgradeMessage?: string | null }).messageLimitUpgradeMessage ?? null,
               ...setCreatedBy,
             },
           );
@@ -460,7 +735,7 @@ export class BotsService {
           return { botId: botIdStr, slug: finalSlug };
         } catch (err: unknown) {
           const e = err as { code?: number; keyPattern?: Record<string, number> };
-          if (!(e.code === 11000 && e.keyPattern?.slug)) throw err;
+          if (!(e.code === 11000 && (e.keyPattern?.slug || e.keyPattern?.accessKey))) throw err;
           finalSlug = await this.generateUniqueSlug(finalName || 'draft-bot', String((existing as { _id: unknown })._id));
         }
       }
@@ -492,6 +767,11 @@ export class BotsService {
           includeNameInKnowledge: normalized.includeNameInKnowledge,
           includeTaglineInKnowledge: normalized.includeTaglineInKnowledge,
           includeNotesInKnowledge: normalized.includeNotesInKnowledge,
+          ...getCreatorDefaultsForUserFlow(creatorOid),
+          ...(normalized.visibility ? { visibility: normalized.visibility } : {}),
+          ...(normalized.messageLimitMode ? { messageLimitMode: normalized.messageLimitMode } : {}),
+          ...(normalized.messageLimitTotal !== undefined ? { messageLimitTotal: normalized.messageLimitTotal } : {}),
+          ...(normalized.messageLimitUpgradeMessage !== undefined ? { messageLimitUpgradeMessage: normalized.messageLimitUpgradeMessage } : {}),
           createdAt: new Date(),
           ...(creatorOid ? { createdByUserId: creatorOid } : {}),
         });
@@ -511,7 +791,7 @@ export class BotsService {
         return { botId: botIdStr, slug: (created as { slug: string }).slug };
       } catch (err: unknown) {
         const e = err as { code?: number; keyPattern?: Record<string, number> };
-        if (!(e.code === 11000 && e.keyPattern?.slug)) throw err;
+        if (!(e.code === 11000 && (e.keyPattern?.slug || e.keyPattern?.accessKey))) throw err;
       }
     }
     throw new Error('Failed to allocate unique slug.');
@@ -541,6 +821,10 @@ export class BotsService {
       includeNameInKnowledge?: boolean;
       includeTaglineInKnowledge?: boolean;
       includeNotesInKnowledge: boolean;
+      visibility?: 'public' | 'private';
+      messageLimitMode?: 'none' | 'fixed_total';
+      messageLimitTotal?: number | null;
+      messageLimitUpgradeMessage?: string | null;
     },
   ): Promise<{ ok: true; botId: string; status: string }> {
     const existing = await this.botModel.findById(id).select('_id type name slug').lean();
@@ -548,6 +832,19 @@ export class BotsService {
       throw new Error('Bot not found');
     }
     const status = normalized.status === 'published' ? 'published' : 'draft';
+    const messageLimitMode = normalized.messageLimitMode === 'fixed_total' ? 'fixed_total' : 'none';
+    const parsedMessageLimitTotal =
+      typeof normalized.messageLimitTotal === 'number' && Number.isFinite(normalized.messageLimitTotal)
+        ? Math.floor(normalized.messageLimitTotal)
+        : null;
+    if (messageLimitMode === 'fixed_total' && (!parsedMessageLimitTotal || parsedMessageLimitTotal <= 0)) {
+      throw new Error('messageLimitTotal must be a positive integer when messageLimitMode is fixed_total.');
+    }
+    const messageLimitTotal = messageLimitMode === 'fixed_total' ? parsedMessageLimitTotal : null;
+    const messageLimitUpgradeMessage =
+      typeof normalized.messageLimitUpgradeMessage === 'string' && normalized.messageLimitUpgradeMessage.trim()
+        ? normalized.messageLimitUpgradeMessage.trim()
+        : null;
     const finalName = normalized.name?.trim() || 'New bot';
     const description = String(normalized.description ?? '').trim();
     if (status === 'published') {
@@ -593,6 +890,10 @@ export class BotsService {
           includeNameInKnowledge: normalized.includeNameInKnowledge,
           includeTaglineInKnowledge: normalized.includeTaglineInKnowledge,
           includeNotesInKnowledge: normalized.includeNotesInKnowledge,
+          ...(normalized.visibility ? { visibility: normalized.visibility } : {}),
+          messageLimitMode,
+          messageLimitTotal,
+          messageLimitUpgradeMessage,
         });
         await this.knowledgeBaseItemService.upsertFaqKnowledgeItemsForBot(id, newFaqs);
         await this.knowledgeBaseItemService.upsertNoteKnowledgeItemForBot(id, newKnowledgeDescription);

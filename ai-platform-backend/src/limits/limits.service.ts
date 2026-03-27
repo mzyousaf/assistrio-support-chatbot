@@ -11,6 +11,9 @@ export interface LimitsConfig {
 interface LimitBot {
   type?: 'showcase' | 'visitor-own' | string;
   limitOverrideMessages?: number;
+  creatorType?: 'user' | 'visitor' | string;
+  messageLimitMode?: 'none' | 'fixed_total' | string;
+  messageLimitTotal?: number | null;
 }
 
 interface LimitVisitor {
@@ -89,6 +92,8 @@ export class LimitsService {
     visitor: LimitVisitor;
     hasUserApiKey: boolean;
   }): number {
+    // TODO(step-2 enforcement): apply bot.messageLimitMode/bot.messageLimitTotal here first.
+    // This step intentionally keeps existing behavior unchanged.
     const visitorOverride =
       typeof params.visitor?.limitOverrideMessages === 'number' &&
       Number.isFinite(params.visitor.limitOverrideMessages)

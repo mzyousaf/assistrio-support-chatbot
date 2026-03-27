@@ -1,4 +1,4 @@
-import type { EmbedChatConfig, EmbedPosition } from "./types";
+import type { EmbedChatConfig, EmbedPosition, WidgetMode } from "./types";
 
 function toNonEmptyString(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
@@ -15,6 +15,11 @@ function normalizePosition(value: unknown): EmbedPosition | undefined {
   return undefined;
 }
 
+function normalizeMode(value: unknown): WidgetMode | undefined {
+  if (value === "runtime" || value === "preview") return value;
+  return undefined;
+}
+
 function parseObjectConfig(input: unknown): Partial<EmbedChatConfig> {
   if (!input || typeof input !== "object") return {};
   const cfg = input as Record<string, unknown>;
@@ -23,8 +28,19 @@ function parseObjectConfig(input: unknown): Partial<EmbedChatConfig> {
   return {
     botId: toNonEmptyString(cfg.botId),
     apiBaseUrl: toNonEmptyString(cfg.apiBaseUrl),
+    mode: normalizeMode(cfg.mode),
     accessKey: toNonEmptyString(cfg.accessKey),
+    secretKey: toNonEmptyString(cfg.secretKey),
+    platformVisitorId: toNonEmptyString(cfg.platformVisitorId),
+    chatVisitorId: toNonEmptyString(cfg.chatVisitorId),
+    authToken: toNonEmptyString(cfg.authToken),
     position: normalizePosition(cfg.position),
+    previewOverrides:
+      cfg.previewOverrides && typeof cfg.previewOverrides === "object"
+        ? (cfg.previewOverrides as EmbedChatConfig["previewOverrides"])
+        : undefined,
+    disableRemoteConfig:
+      typeof cfg.disableRemoteConfig === "boolean" ? cfg.disableRemoteConfig : undefined,
     ...(widgetInitPath ? { widgetInitPath } : {}),
     ...(chatPostPath ? { chatPostPath } : {}),
   };
@@ -51,8 +67,18 @@ export function normalizeEmbedConfig(input: Partial<EmbedChatConfig>): EmbedChat
   return {
     botId: input.botId.trim(),
     apiBaseUrl: normalizeApiBaseUrl(input.apiBaseUrl.trim()),
+    mode: normalizeMode(input.mode) ?? "runtime",
     accessKey: toNonEmptyString(input.accessKey),
+    secretKey: toNonEmptyString(input.secretKey),
+    widgetInitPath: toNonEmptyString(input.widgetInitPath),
+    chatPostPath: toNonEmptyString(input.chatPostPath),
+    platformVisitorId: toNonEmptyString(input.platformVisitorId),
+    chatVisitorId: toNonEmptyString(input.chatVisitorId),
+    authToken: toNonEmptyString(input.authToken),
     position: normalizePosition(input.position),
+    previewOverrides: input.previewOverrides,
+    disableRemoteConfig:
+      typeof input.disableRemoteConfig === "boolean" ? input.disableRemoteConfig : undefined,
   };
 }
 

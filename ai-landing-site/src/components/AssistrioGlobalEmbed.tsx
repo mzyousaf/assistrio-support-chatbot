@@ -10,6 +10,11 @@ const WIDGET_JS = "https://widget.assistrio.com/assistrio-chat.js";
  */
 export function AssistrioGlobalEmbed() {
   const cfg = getLandingAssistrioChatConfig();
+  if (!cfg) {
+    // Expected env for production default widget:
+    // NEXT_PUBLIC_LANDING_WIDGET_ACCESS_KEY
+    return null;
+  }
   const inline = `window.AssistrioChatConfig = ${JSON.stringify(cfg)};`;
 
   return (

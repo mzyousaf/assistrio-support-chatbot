@@ -250,6 +250,23 @@ export default function SuperAdminEditBotPage() {
         lastFailedDoc: undefined,
       },
     isPublic: Boolean(bot.isPublic),
+    visibility:
+      bot.visibility === "private" || bot.visibility === "public"
+        ? (bot.visibility as "public" | "private")
+        : "public",
+    accessKey: typeof bot.accessKey === "string" ? bot.accessKey : "",
+    secretKey: typeof bot.secretKey === "string" ? bot.secretKey : "",
+    creatorType: (bot.creatorType === "visitor" ? "visitor" : "user") as "user" | "visitor",
+    ownerVisitorId:
+      typeof bot.ownerVisitorId === "string" ? bot.ownerVisitorId : undefined,
+    messageLimitMode:
+      (bot.messageLimitMode === "fixed_total" ? "fixed_total" : "none") as "none" | "fixed_total",
+    messageLimitTotal:
+      typeof bot.messageLimitTotal === "number" ? bot.messageLimitTotal : null,
+    messageLimitUpgradeMessage:
+      typeof bot.messageLimitUpgradeMessage === "string"
+        ? bot.messageLimitUpgradeMessage
+        : null,
     includeNameInKnowledge: Boolean((bot as { includeNameInKnowledge?: boolean }).includeNameInKnowledge),
     includeTaglineInKnowledge: Boolean((bot as { includeTaglineInKnowledge?: boolean }).includeTaglineInKnowledge),
     leadCapture: (bot.leadCapture as BotLeadCaptureV2 | undefined) ?? undefined,
@@ -267,6 +284,9 @@ export default function SuperAdminEditBotPage() {
           botId={botId}
           botName={botName}
           botAvatarUrl={botImageUrl}
+          accessKey={typeof bot.accessKey === "string" ? bot.accessKey : undefined}
+          secretKey={typeof bot.secretKey === "string" ? bot.secretKey : undefined}
+          ownerVisitorId={typeof bot.ownerVisitorId === "string" ? bot.ownerVisitorId : undefined}
           livePreview={livePreview}
           defaultChatOpen={state === "ready" ? (bot?.chatUI as BotChatUI | undefined)?.openChatOnLoad !== false : true}
           expandHref={previewHref}

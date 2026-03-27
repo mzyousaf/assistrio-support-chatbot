@@ -29,15 +29,21 @@ async function getPublicBots(): Promise<PublicBot[]> {
         const id = typeof typedBot.id === "string" ? typedBot.id : "";
         const name = typeof typedBot.name === "string" ? typedBot.name : "";
         const slug = typeof typedBot.slug === "string" ? typedBot.slug : "";
+        const accessKey =
+          typeof typedBot.accessKey === "string" ? typedBot.accessKey : "";
+        const visibility =
+          typedBot.visibility === "public" ? "public" : "";
         const createdAt =
           typeof typedBot.createdAt === "string" ? typedBot.createdAt : "";
 
-        if (!id || !name || !slug || !createdAt) return null;
+        if (!id || !name || !slug || !createdAt || !accessKey || !visibility) return null;
 
         return {
           id,
           name,
           slug,
+          accessKey,
+          visibility: "public",
           createdAt,
           shortDescription:
             typeof typedBot.shortDescription === "string"

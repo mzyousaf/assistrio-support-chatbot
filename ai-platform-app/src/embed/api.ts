@@ -52,10 +52,11 @@ export async function validateAndInitWidget(
   }
 
   if (!response.ok) {
+    const code = typeof data?.errorCode === "string" ? data.errorCode : "";
     const message =
       data?.error ||
       `Widget init failed with status ${response.status}`;
-    throw new Error(message);
+    throw new Error(code ? `${message} (${code})` : message);
   }
 
   if (!data) {
@@ -63,7 +64,9 @@ export async function validateAndInitWidget(
   }
 
   if (data.status === "error") {
-    throw new Error(data.error ?? "Widget init failed.");
+    const code = typeof data.errorCode === "string" ? data.errorCode : "";
+    const message = data.error ?? "Widget init failed.";
+    throw new Error(code ? `${message} (${code})` : message);
   }
 
   return data;

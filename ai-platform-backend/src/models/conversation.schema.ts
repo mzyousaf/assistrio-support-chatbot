@@ -25,8 +25,19 @@ export interface LeadCaptureMeta {
 export class Conversation {
   @Prop({ type: Types.ObjectId, ref: 'Bot', required: true })
   botId: Types.ObjectId;
+  /**
+   * Chat identity for Conversation history + message association.
+   * This must come from the embedded widget's chat visitor (chatVisitorId).
+   */
   @Prop({ required: true })
-  visitorId: string;
+  chatVisitorId: string;
+
+  /**
+   * @deprecated Platform visitor id (legacy). Kept temporarily so existing visitor/quota logic can keep working.
+   * During migration we store platformVisitorId here while Conversation uses chatVisitorId.
+   */
+  @Prop()
+  visitorId?: string;
   @Prop({ default: Date.now })
   createdAt: Date;
   /** Lead capture: field key -> value collected from this conversation. */

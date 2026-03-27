@@ -82,6 +82,11 @@ export class UserBotsController {
       category: b.category ?? '',
       status: b.status ?? 'draft',
       isPublic: Boolean(b.isPublic),
+      visibility: b.visibility ?? 'public',
+      creatorType: b.creatorType ?? 'user',
+      messageLimitMode: b.messageLimitMode ?? 'none',
+      messageLimitTotal:
+        typeof b.messageLimitTotal === 'number' ? b.messageLimitTotal : null,
       createdAt: (b.createdAt as Date)?.toISOString?.() ?? null,
       slug: b.slug ?? '',
     }));
@@ -175,6 +180,28 @@ export class UserBotsController {
         personality: b.personality ?? {},
         config: b.config ?? {},
         limitOverrideMessages: typeof b.limitOverrideMessages === 'number' ? b.limitOverrideMessages : undefined,
+        visibility:
+          b.visibility === 'private' || b.visibility === 'public'
+            ? b.visibility
+            : 'public',
+        accessKey:
+          typeof b.accessKey === 'string' ? b.accessKey : '',
+        secretKey:
+          typeof b.secretKey === 'string' ? b.secretKey : '',
+        creatorType:
+          b.creatorType === 'visitor' ? 'visitor' : 'user',
+        ownerUserId:
+          b.ownerUserId != null ? String(b.ownerUserId) : undefined,
+        ownerVisitorId:
+          typeof b.ownerVisitorId === 'string' ? b.ownerVisitorId : undefined,
+        messageLimitMode:
+          b.messageLimitMode === 'fixed_total' ? 'fixed_total' : 'none',
+        messageLimitTotal:
+          typeof b.messageLimitTotal === 'number' ? b.messageLimitTotal : null,
+        messageLimitUpgradeMessage:
+          typeof b.messageLimitUpgradeMessage === 'string'
+            ? b.messageLimitUpgradeMessage
+            : null,
         includeNameInKnowledge: Boolean(b.includeNameInKnowledge),
         includeTaglineInKnowledge: Boolean(b.includeTaglineInKnowledge),
         includeNotesInKnowledge: (b.includeNotesInKnowledge as boolean | undefined) !== false,
@@ -207,6 +234,10 @@ export class UserBotsController {
         personality: normalized.personality,
         config: normalized.config,
         limitOverrideMessages: normalized.limitOverrideMessages,
+        visibility: normalized.visibility,
+        messageLimitMode: normalized.messageLimitMode,
+        messageLimitTotal: normalized.messageLimitTotal,
+        messageLimitUpgradeMessage: normalized.messageLimitUpgradeMessage,
         isPublic: normalized.isPublic,
         status: normalized.status,
         includeNameInKnowledge: normalized.includeNameInKnowledge,
@@ -216,9 +247,99 @@ export class UserBotsController {
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Update failed';
       if (msg === 'Bot not found') throw new HttpException({ error: 'Bot not found' }, HttpStatus.NOT_FOUND);
-      if (msg.includes('Name is required') || msg.includes('Description is required')) {
+      if (
+        msg.includes('Name is required') ||
+        msg.includes('Description is required') ||
+        msg.includes('messageLimitTotal must be a positive integer')
+      ) {
         throw new HttpException({ error: msg }, HttpStatus.BAD_REQUEST);
       }
+      throw new HttpException({ error: 'Internal server error' }, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  @Patch(':id/access-settings')
+  async patchAccessSettings(
+    @Param('id') id: string,
+    @Body()
+    body: {
+      visibility?: unknown;
+      messageLimitMode?: unknown;
+      messageLimitTotal?: unknown;
+      messageLimitUpgradeMessage?: unknown;
+    },
+  ) {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new HttpException({ error: 'Invalid id' }, HttpStatus.BAD_REQUEST);
+    }
+    const visibility = body?.visibility === 'private' ? 'private' : body?.visibility === 'public' ? 'public' : null;
+    const messageLimitMode =
+      body?.messageLimitMode === 'fixed_total'
+        ? 'fixed_total'
+        : body?.messageLimitMode === 'none'
+          ? 'none'
+          : null;
+    if (!visibility) {
+      throw new HttpException({ error: 'visibility must be public or private.' }, HttpStatus.BAD_REQUEST);
+    }
+    if (!messageLimitMode) {
+      throw new HttpException({ error: 'messageLimitMode must be none or fixed_total.' }, HttpStatus.BAD_REQUEST);
+    }
+    const messageLimitTotal =
+      body?.messageLimitTotal == null
+        ? null
+        : typeof body.messageLimitTotal === 'number' && Number.isFinite(body.messageLimitTotal)
+          ? Math.floor(body.messageLimitTotal)
+          : Number.isFinite(Number(body.messageLimitTotal))
+            ? Math.floor(Number(body.messageLimitTotal))
+            : null;
+    if (messageLimitMode === 'fixed_total' && (!messageLimitTotal || messageLimitTotal <= 0)) {
+      throw new HttpException(
+        { error: 'messageLimitTotal must be a positive integer when messageLimitMode is fixed_total.' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const messageLimitUpgradeMessage =
+      typeof body?.messageLimitUpgradeMessage === 'string'
+        ? body.messageLimitUpgradeMessage.trim() || null
+        : null;
+    try {
+      return await this.botsService.updateShowcaseAccessSettings(id, {
+        visibility,
+        messageLimitMode,
+        messageLimitTotal,
+        messageLimitUpgradeMessage,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Update failed';
+      if (msg === 'Bot not found') throw new HttpException({ error: 'Bot not found' }, HttpStatus.NOT_FOUND);
+      if (msg.includes('messageLimitTotal must be a positive integer')) {
+        throw new HttpException({ error: msg }, HttpStatus.BAD_REQUEST);
+      }
+      throw new HttpException({ error: 'Internal server error' }, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  @Post(':id/rotate-access-key')
+  async rotateAccessKey(@Param('id') id: string) {
+    if (!Types.ObjectId.isValid(id)) throw new HttpException({ error: 'Invalid id' }, HttpStatus.BAD_REQUEST);
+    try {
+      return await this.botsService.rotateShowcaseAccessKey(id);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Rotate failed';
+      if (msg === 'Bot not found') throw new HttpException({ error: 'Bot not found' }, HttpStatus.NOT_FOUND);
+      throw new HttpException({ error: 'Internal server error' }, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  @Post(':id/rotate-secret-key')
+  async rotateSecretKey(@Param('id') id: string) {
+    if (!Types.ObjectId.isValid(id)) throw new HttpException({ error: 'Invalid id' }, HttpStatus.BAD_REQUEST);
+    try {
+      return await this.botsService.rotateShowcaseSecretKey(id);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Rotate failed';
+      if (msg === 'Bot not found') throw new HttpException({ error: 'Bot not found' }, HttpStatus.NOT_FOUND);
       throw new HttpException({ error: 'Internal server error' }, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }

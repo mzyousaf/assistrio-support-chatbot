@@ -127,6 +127,10 @@ export interface NormalizedBotPayload {
   openaiApiKeyOverride?: string;
   whisperApiKeyOverride?: string;
   limitOverrideMessages?: number;
+  visibility?: 'public' | 'private';
+  messageLimitMode?: 'none' | 'fixed_total';
+  messageLimitTotal?: number | null;
+  messageLimitUpgradeMessage?: string | null;
   isPublic: boolean;
   status?: 'draft' | 'published';
   includeNameInKnowledge?: boolean;
@@ -150,6 +154,26 @@ export function normalizeBotPayload(input: Record<string, unknown>): NormalizedB
     typeof input.limitOverrideMessages === 'number' && Number.isFinite(input.limitOverrideMessages)
       ? Math.max(0, Math.floor(input.limitOverrideMessages))
       : undefined;
+  const visibility =
+    input.visibility === 'private' || input.visibility === 'public'
+      ? input.visibility
+      : undefined;
+  const messageLimitMode =
+    input.messageLimitMode === 'none' || input.messageLimitMode === 'fixed_total'
+      ? input.messageLimitMode
+      : undefined;
+  const messageLimitTotal =
+    input.messageLimitTotal == null
+      ? null
+      : typeof input.messageLimitTotal === 'number' && Number.isFinite(input.messageLimitTotal)
+        ? Math.max(0, Math.floor(input.messageLimitTotal))
+        : undefined;
+  const messageLimitUpgradeMessage =
+    input.messageLimitUpgradeMessage == null
+      ? null
+      : typeof input.messageLimitUpgradeMessage === 'string'
+        ? input.messageLimitUpgradeMessage.trim() || null
+        : undefined;
   const isPublic = input.isPublic !== false;
   const status = input.status === 'draft' || input.status === 'published' ? input.status : undefined;
   const includeNameInKnowledge = input.includeNameInKnowledge === true;
@@ -235,6 +259,10 @@ export function normalizeBotPayload(input: Record<string, unknown>): NormalizedB
     openaiApiKeyOverride: openaiApiKeyOverride || undefined,
     whisperApiKeyOverride: whisperApiKeyOverride || undefined,
     limitOverrideMessages,
+    visibility,
+    messageLimitMode,
+    messageLimitTotal,
+    messageLimitUpgradeMessage,
     isPublic,
     status,
     includeNameInKnowledge,

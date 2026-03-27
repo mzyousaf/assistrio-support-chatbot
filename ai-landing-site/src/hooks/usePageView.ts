@@ -5,11 +5,11 @@ import { useVisitorId } from "@/hooks/useVisitorId";
 import { API_BASE_URL } from "@/lib/config";
 
 export function usePageView(path: string) {
-  const { visitorId, loading } = useVisitorId();
+  const { platformVisitorId, loading } = useVisitorId();
 
   useEffect(() => {
     if (loading) return;
-    if (!visitorId) return;
+    if (!platformVisitorId) return;
     if (!API_BASE_URL) return;
 
     const controller = new AbortController();
@@ -18,7 +18,7 @@ export function usePageView(path: string) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        visitorId,
+        platformVisitorId,
         type: "page_view",
         path,
       }),
@@ -28,5 +28,5 @@ export function usePageView(path: string) {
     });
 
     return () => controller.abort();
-  }, [visitorId, loading, path]);
+  }, [platformVisitorId, loading, path]);
 }

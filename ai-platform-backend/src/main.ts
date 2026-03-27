@@ -36,7 +36,8 @@ async function bootstrap() {
       cb(null, isAllowedCorsOrigin(origin) ? origin : false);
     },
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    // Needed because widget testing uses header `X-API-Key` and browsers require it in preflight.
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key'],
     credentials: true,
   });
   const maxDocUploadBytes = 5 * 1024 * 1024; // 5MB for docs (pdf, doc, txt, md)

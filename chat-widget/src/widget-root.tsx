@@ -8,6 +8,12 @@ import type { EmbedChatConfig, NormalizedWidgetSettings } from "./types";
 
 type Phase = "loading" | "error" | "ready";
 
+function chatVisitorIdStorageKey(botId: string, mode: "runtime" | "preview"): string {
+  return mode === "preview"
+    ? `assistrio_chat_visitor_preview_id:${botId}`
+    : `assistrio_chat_visitor_id:${botId}`;
+}
+
 export interface EmbedWidgetRootProps {
   rawConfig: Partial<EmbedChatConfig>;
 }
@@ -16,6 +22,7 @@ export function EmbedWidgetRoot({ rawConfig }: EmbedWidgetRootProps) {
   const [phase, setPhase] = useState<Phase>("loading");
   const [config, setConfig] = useState<EmbedChatConfig | null>(null);
   const [settings, setSettings] = useState<NormalizedWidgetSettings | null>(null);
+  const [chatVisitorId, setChatVisitorId] = useState<string | null>(null);
 
   const configKey = useMemo(() => JSON.stringify(rawConfig ?? {}), [rawConfig]);
 
@@ -26,11 +33,31 @@ export function EmbedWidgetRoot({ rawConfig }: EmbedWidgetRootProps) {
     void (async () => {
       try {
         const normalized = normalizeEmbedConfig(rawConfig);
-        const init = await validateAndInitWidget(rawConfig);
+        const mode = normalized.mode ?? "runtime";
+
+        const storageKey = chatVisitorIdStorageKey(normalized.botId, mode);
+        const existingChatVisitorId =
+          typeof window !== "undefined" ? window.localStorage.getItem(storageKey) : null;
+
+        const initRequestConfig: Partial<EmbedChatConfig> = {
+          ...rawConfig,
+          ...(existingChatVisitorId ? { chatVisitorId: existingChatVisitorId } : {}),
+        };
+
+        const init = await validateAndInitWidget(initRequestConfig);
         const normSettings = normalizeWidgetSettings(init, normalized);
         if (cancelled) return;
         setConfig(normalized);
         setSettings(normSettings);
+        const resolvedChatVisitorId =
+          typeof init.chatVisitorId === "string" && init.chatVisitorId.trim()
+            ? init.chatVisitorId
+            : existingChatVisitorId;
+
+        if (resolvedChatVisitorId) {
+          window.localStorage.setItem(storageKey, resolvedChatVisitorId);
+          setChatVisitorId(resolvedChatVisitorId);
+        }
         setPhase("ready");
       } catch (e) {
         if (cancelled) return;
@@ -63,6 +90,9 @@ export function EmbedWidgetRoot({ rawConfig }: EmbedWidgetRootProps) {
   if (phase === "error" || !config || !settings) {
     return null;
   }
+  if (!chatVisitorId) {
+    return null;
+  }
 
   const chatUIWithBranding = {
     ...settings.chatUI,
@@ -74,6 +104,7 @@ export function EmbedWidgetRoot({ rawConfig }: EmbedWidgetRootProps) {
   return (
     <AdminLiveChatAdapter
       botId={settings.botId}
+      mode={config.mode ?? "runtime"}
       botName={settings.botName}
       avatarUrl={settings.avatarUrl}
       avatarEmoji={settings.avatarEmoji}
@@ -83,7 +114,13 @@ export function EmbedWidgetRoot({ rawConfig }: EmbedWidgetRootProps) {
       welcomeMessage={settings.welcomeMessage}
       suggestedQuestions={settings.suggestedQuestions}
       apiBaseUrl={config.apiBaseUrl}
+      chatPostPath={config.chatPostPath}
       accessKey={config.accessKey}
+      secretKey={config.secretKey}
+      chatVisitorId={chatVisitorId}
+      platformVisitorId={config.platformVisitorId}
+      authToken={config.authToken}
+      previewOverrides={config.mode === "preview" ? config.previewOverrides : undefined}
       debug={false}
       footerPrivacyText={settings.privacyText}
       useFloatingLauncher

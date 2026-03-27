@@ -14,6 +14,8 @@ export type {
   WidgetInitRequest,
   WidgetInitResponse,
   WidgetInitStatus,
+  WidgetMode,
+  WidgetPreviewOverrides,
 } from "./types";
 
 export type { EmbedWidgetRootProps } from "./widget-root";

@@ -233,7 +233,8 @@ export class ChatEngineService {
 
   async runChat({
     bot,
-    visitorId,
+    chatVisitorId,
+    platformVisitorId,
     message,
     mode,
     userApiKey,
@@ -248,7 +249,8 @@ export class ChatEngineService {
       event: 'chat.request_started',
       level: 'info',
       botId: bot._id.toString(),
-      visitorId,
+      chatVisitorId,
+      platformVisitorId,
       requestId,
       endpoint,
     });
@@ -270,16 +272,26 @@ export class ChatEngineService {
     const maxTokens = typeof cfg.maxTokens === 'number' ? cfg.maxTokens : 512;
 
     const now = new Date();
+    // chatVisitorId is the identity for Conversation/Message records.
+    // Backward compat: older docs stored chat identity in `visitorId`.
     let conversation = await this.conversationModel.findOne({
       botId: bot._id,
-      visitorId,
+      chatVisitorId,
     });
-    let isNewConversation = false;
+    if (!conversation) {
+      conversation = await this.conversationModel.findOne({
+        botId: bot._id,
+        visitorId: chatVisitorId,
+      });
+    }
 
+    let isNewConversation = false;
     if (!conversation) {
       conversation = await this.conversationModel.create({
         botId: bot._id,
-        visitorId,
+        chatVisitorId,
+        // Deprecated platform visitor id for legacy visitor/quota logic.
+        visitorId: platformVisitorId,
         createdAt: now,
       });
       isNewConversation = true;
@@ -294,7 +306,8 @@ export class ChatEngineService {
         await this.messageModel.create({
           conversationId: conversation._id,
           botId: bot._id,
-          visitorId,
+          chatVisitorId,
+          visitorId: platformVisitorId,
           role: 'assistant',
           content: welcomeText,
           createdAt: now,
@@ -321,7 +334,7 @@ export class ChatEngineService {
             level: 'info',
             botId: bot._id.toString(),
             conversationId: conversation._id.toString(),
-            visitorId,
+            chatVisitorId,
             requestId,
             endpoint,
           });
@@ -339,7 +352,8 @@ export class ChatEngineService {
     await this.messageModel.create({
       conversationId: conversation._id,
       botId: bot._id,
-      visitorId,
+      chatVisitorId,
+      visitorId: platformVisitorId,
       role: 'user',
       content: message,
       createdAt: now,
@@ -382,7 +396,7 @@ export class ChatEngineService {
         level: 'warn',
         botId: bot._id.toString(),
         conversationId: conversation._id.toString(),
-        visitorId,
+        chatVisitorId,
         requestId,
         reason: msg.slice(0, 80),
       });
@@ -465,7 +479,7 @@ export class ChatEngineService {
         level: 'info',
         botId: bot._id.toString(),
         conversationId: conversation._id.toString(),
-        visitorId,
+        chatVisitorId,
         requestId,
         leadFieldsCapturedCount,
       });
@@ -595,7 +609,7 @@ export class ChatEngineService {
         level: 'error',
         botId: bot._id.toString(),
         conversationId: conversation._id.toString(),
-        visitorId,
+        chatVisitorId,
         requestId,
         endpoint,
         reason: errMsg.slice(0, 80),
@@ -629,7 +643,8 @@ export class ChatEngineService {
     await this.messageModel.create({
       conversationId: conversation._id,
       botId: bot._id,
-      visitorId,
+      chatVisitorId,
+      visitorId: platformVisitorId,
       role: 'assistant',
       content: assistantMessage,
       sources: messageSources,
@@ -653,7 +668,7 @@ export class ChatEngineService {
       level: 'info',
       botId: bot._id.toString(),
       conversationId: conversation._id.toString(),
-      visitorId,
+      chatVisitorId,
       requestId,
       endpoint,
       retrievalConfidence,

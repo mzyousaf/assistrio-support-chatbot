@@ -65,19 +65,29 @@ function loadScript(): Promise<void> {
 type AssistrioChatEmbedProps = {
   botId: string | null;
   apiBaseUrl: string;
+  accessKey?: string;
+  secretKey?: string;
+  platformVisitorId?: string;
 };
 
 /**
  * Loads the hosted Assistrio embed and mounts chat for the given bot.
  * Updates when `botId` changes; unmounts when `botId` is null.
  */
-export function AssistrioChatEmbed({ botId, apiBaseUrl }: AssistrioChatEmbedProps) {
+export function AssistrioChatEmbed({
+  botId,
+  apiBaseUrl,
+  accessKey,
+  secretKey,
+  platformVisitorId,
+}: AssistrioChatEmbedProps) {
   /** When preview unmounts, put the site default widget back (same as global embed). */
   useEffect(() => {
     return () => {
       if (typeof window === "undefined") return;
       window.AssistrioChat?.unmount();
       const cfg = getLandingAssistrioChatConfig();
+      if (!cfg) return;
       window.AssistrioChatConfig = { ...cfg };
       window.AssistrioChat?.mount();
     };
@@ -102,6 +112,9 @@ export function AssistrioChatEmbed({ botId, apiBaseUrl }: AssistrioChatEmbedProp
         window.AssistrioChatConfig = {
           botId,
           apiBaseUrl,
+          ...(accessKey ? { accessKey } : {}),
+          ...(secretKey ? { secretKey } : {}),
+          ...(platformVisitorId ? { platformVisitorId } : {}),
           position: "right",
         };
 
@@ -116,7 +129,7 @@ export function AssistrioChatEmbed({ botId, apiBaseUrl }: AssistrioChatEmbedProp
       cancelled = true;
       window.AssistrioChat?.unmount();
     };
-  }, [botId, apiBaseUrl]);
+  }, [botId, apiBaseUrl, accessKey, secretKey, platformVisitorId]);
 
   return null;
 }

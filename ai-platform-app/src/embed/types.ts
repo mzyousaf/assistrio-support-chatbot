@@ -9,7 +9,36 @@ export type WidgetInitStatus = "ok" | "error";
 export type EmbedChatConfig = {
   botId: string;
   apiBaseUrl: string;
+  mode?: "runtime" | "preview";
   accessKey?: string;
+  secretKey?: string;
+  /**
+   * Platform visitor identity (platformVisitorId).
+   * Used for trial quota enforcement + preview authorization.
+   */
+  platformVisitorId?: string;
+  /**
+   * Optional chat visitor identity (chatVisitorId).
+   * The widget will load/create it from localStorage when omitted.
+   */
+  chatVisitorId?: string;
+  authToken?: string;
+  previewOverrides?: {
+    botName?: string;
+    avatarUrl?: string;
+    avatarEmoji?: string;
+    tagline?: string;
+    description?: string;
+    welcomeMessage?: string;
+    suggestedQuestions?: string[];
+    brandingMessage?: string;
+    privacyText?: string;
+    launcherPosition?: "bottom-left" | "bottom-right";
+    chatUI?: Partial<BotChatUI>;
+  };
+  widgetInitPath?: string;
+  chatPostPath?: string;
+  disableRemoteConfig?: boolean;
   position?: EmbedPosition;
 };
 
@@ -25,6 +54,7 @@ export interface WidgetInitRequest {
 export interface WidgetInitResponse {
   status?: WidgetInitStatus;
   error?: string;
+  errorCode?: string;
   bot?: {
     id?: string;
     name?: string;

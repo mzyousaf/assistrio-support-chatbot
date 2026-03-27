@@ -11,4 +11,6 @@ export const configValidationSchema = Joi.object({
   S3_BUCKET: Joi.string().optional(),
   CLOUDFRONT_BASE_URL: Joi.string().uri().optional().allow(''),
   LANDING_SITE_BOTS_API_KEY: Joi.string().optional().allow(''),
+  /** Auth for widget-only testing endpoints (returns an embeddable botId). */
+  CHAT_WIDGET_API_KEY: Joi.string().min(16).optional().allow(''),
 });

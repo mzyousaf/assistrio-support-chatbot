@@ -122,6 +122,13 @@ const BEHAVIOR_PRESETS = [
   { value: "strict", label: "Strict policy-based" },
 ];
 
+function maskRuntimeKey(value: string): string {
+  const normalized = String(value ?? "");
+  if (!normalized) return "";
+  if (normalized.length <= 8) return "********";
+  return `${normalized.slice(0, 4)}${"*".repeat(Math.max(4, normalized.length - 8))}${normalized.slice(-4)}`;
+}
+
 const DEFAULT_CHAT_UI: Required<Omit<BotChatUI, "menuQuickLinks" | "launcherAvatarUrl">> & {
   menuQuickLinks: BotChatUI["menuQuickLinks"];
   launcherAvatarUrl?: string;
@@ -185,6 +192,10 @@ export interface BotFormSubmitPayload {
   includeNameInKnowledge?: boolean;
   includeTaglineInKnowledge?: boolean;
   includeNotesInKnowledge?: boolean;
+  visibility?: "public" | "private";
+  messageLimitMode?: "none" | "fixed_total";
+  messageLimitTotal?: number | null;
+  messageLimitUpgradeMessage?: string | null;
 }
 
 interface BotFormProps {
@@ -206,6 +217,14 @@ interface BotFormProps {
     openaiApiKeyOverride?: string;
     whisperApiKeyOverride?: string;
     isPublic?: boolean;
+    visibility?: "public" | "private";
+    accessKey?: string;
+    secretKey?: string;
+    creatorType?: "user" | "visitor";
+    ownerVisitorId?: string;
+    messageLimitMode?: "none" | "fixed_total";
+    messageLimitTotal?: number | null;
+    messageLimitUpgradeMessage?: string | null;
     includeNameInKnowledge?: boolean;
     includeTaglineInKnowledge?: boolean;
     includeNotesInKnowledge?: boolean;
@@ -311,6 +330,32 @@ export default function BotForm({
   const [includeNameInKnowledge, setIncludeNameInKnowledge] = useState(initialBot?.includeNameInKnowledge ?? false);
   const [description, setDescription] = useState(initialBot?.description ?? "");
   const [isPublic, setIsPublic] = useState(initialBot?.isPublic ?? true);
+  const [visibility, setVisibility] = useState<"public" | "private">(
+    initialBot?.visibility === "private" ? "private" : "public",
+  );
+  const [accessKey, setAccessKey] = useState(initialBot?.accessKey ?? "");
+  const [secretKey, setSecretKey] = useState(initialBot?.secretKey ?? "");
+  const [creatorType] = useState<"user" | "visitor">(
+    initialBot?.creatorType === "visitor" ? "visitor" : "user",
+  );
+  const [ownerVisitorId] = useState<string | undefined>(initialBot?.ownerVisitorId);
+  const [messageLimitMode, setMessageLimitMode] = useState<"none" | "fixed_total">(
+    initialBot?.messageLimitMode === "fixed_total" ? "fixed_total" : "none",
+  );
+  const [messageLimitTotal, setMessageLimitTotal] = useState<string>(
+    typeof initialBot?.messageLimitTotal === "number" && initialBot.messageLimitTotal > 0
+      ? String(initialBot.messageLimitTotal)
+      : "",
+  );
+  const [messageLimitUpgradeMessage, setMessageLimitUpgradeMessage] = useState<string>(
+    initialBot?.messageLimitUpgradeMessage ?? "",
+  );
+  const [accessActionLoading, setAccessActionLoading] = useState<
+    "save" | "rotate-access" | "rotate-secret" | null
+  >(null);
+  const [accessActionMessage, setAccessActionMessage] = useState<string | null>(null);
+  const [secretKeyVisible, setSecretKeyVisible] = useState(false);
+  const [snippetCopyMessage, setSnippetCopyMessage] = useState<string | null>(null);
   const [categories, setCategories] = useState<string[]>(
     initialBot?.categories?.length ? initialBot.categories : initialBot?.category ? [initialBot.category] : [],
   );
@@ -636,6 +681,16 @@ export default function BotForm({
       includeNameInKnowledge,
       includeTaglineInKnowledge: false,
       includeNotesInKnowledge,
+      visibility,
+      messageLimitMode,
+      messageLimitTotal:
+        messageLimitMode === "fixed_total"
+          ? (() => {
+              const parsed = Math.floor(Number(messageLimitTotal));
+              return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+            })()
+          : null,
+      messageLimitUpgradeMessage: messageLimitUpgradeMessage.trim() || null,
     } satisfies BotFormSubmitPayload;
   }
 
@@ -673,6 +728,98 @@ export default function BotForm({
       setSubmitError(error instanceof Error ? error.message : "Failed to save bot. Please try again.");
     } finally {
       onSavingChange?.(false);
+    }
+  }
+
+  async function saveAccessSettings() {
+    if (!botId) return;
+    setAccessActionLoading("save");
+    setAccessActionMessage(null);
+    try {
+      const total =
+        messageLimitMode === "fixed_total"
+          ? Math.floor(Number(messageLimitTotal))
+          : null;
+      const res = await apiFetch(`/api/user/bots/${botId}/access-settings`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          visibility,
+          messageLimitMode,
+          messageLimitTotal: total,
+          messageLimitUpgradeMessage: messageLimitUpgradeMessage.trim() || null,
+        }),
+      });
+      const json = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        accessKey?: string;
+        secretKey?: string;
+      };
+      if (!res.ok) {
+        throw new Error(json.error || "Failed to save access settings.");
+      }
+      if (typeof json.accessKey === "string") setAccessKey(json.accessKey);
+      if (typeof json.secretKey === "string") setSecretKey(json.secretKey);
+      setAccessActionMessage("Access settings saved.");
+    } catch (error) {
+      setAccessActionMessage(error instanceof Error ? error.message : "Failed to save access settings.");
+    } finally {
+      setAccessActionLoading(null);
+    }
+  }
+
+  async function rotateAccessKey() {
+    if (!botId) return;
+    setAccessActionLoading("rotate-access");
+    setAccessActionMessage(null);
+    try {
+      const res = await apiFetch(`/api/user/bots/${botId}/rotate-access-key`, {
+        method: "POST",
+      });
+      const json = (await res.json().catch(() => ({}))) as { error?: string; accessKey?: string };
+      if (!res.ok || typeof json.accessKey !== "string") {
+        throw new Error(json.error || "Failed to rotate access key.");
+      }
+      setAccessKey(json.accessKey);
+      setAccessActionMessage("Access key rotated.");
+    } catch (error) {
+      setAccessActionMessage(error instanceof Error ? error.message : "Failed to rotate access key.");
+    } finally {
+      setAccessActionLoading(null);
+    }
+  }
+
+  async function rotateSecretKey() {
+    if (!botId) return;
+    setAccessActionLoading("rotate-secret");
+    setAccessActionMessage(null);
+    try {
+      const res = await apiFetch(`/api/user/bots/${botId}/rotate-secret-key`, {
+        method: "POST",
+      });
+      const json = (await res.json().catch(() => ({}))) as { error?: string; secretKey?: string };
+      if (!res.ok || typeof json.secretKey !== "string") {
+        throw new Error(json.error || "Failed to rotate secret key.");
+      }
+      setSecretKey(json.secretKey);
+      setAccessActionMessage("Secret key rotated.");
+    } catch (error) {
+      setAccessActionMessage(error instanceof Error ? error.message : "Failed to rotate secret key.");
+    } finally {
+      setAccessActionLoading(null);
+    }
+  }
+
+  async function copyRuntimeKey(kind: "access" | "secret") {
+    const value = kind === "access" ? accessKey : secretKey;
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      setAccessActionMessage(kind === "access" ? "Access key copied." : "Secret key copied.");
+    } catch {
+      setAccessActionMessage(
+        kind === "access" ? "Failed to copy access key." : "Failed to copy secret key.",
+      );
     }
   }
 
@@ -742,6 +889,31 @@ export default function BotForm({
     botImageObjectUrl ||
     (botImageUrl.trim().length > 0 && previewVisible ? botImageUrl.trim() : "");
   const isPublishBlocked = !name.trim() || !description.trim();
+  const runtimeApiBaseUrl =
+    (typeof process !== "undefined" && process.env.NEXT_PUBLIC_API_BASE_URL
+      ? process.env.NEXT_PUBLIC_API_BASE_URL.trim()
+      : "") || "";
+  const runtimeSnippet = (() => {
+    const configLines = [
+      `botId: "${botId ?? ""}"`,
+      `apiBaseUrl: "${runtimeApiBaseUrl}"`,
+      ...(accessKey ? [`accessKey: "${accessKey}"`] : []),
+      ...(visibility === "private" && secretKey ? [`secretKey: "${secretKey}"`] : []),
+      ...(creatorType === "visitor" && ownerVisitorId
+        ? [`platformVisitorId: "${ownerVisitorId}"`]
+        : []),
+      `position: "right"`,
+    ];
+    return [
+      `<link rel="stylesheet" href="https://widget.assistrio.com/assistrio-chat.css" />`,
+      `<script>`,
+      `  window.AssistrioChatConfig = {`,
+      `    ${configLines.join(",\n    ")}`,
+      `  };`,
+      `</script>`,
+      `<script src="https://widget.assistrio.com/assistrio-chat.js" async></script>`,
+    ].join("\n");
+  })();
 
   // Dirty state: compare current form state to initial
   React.useEffect(() => {
@@ -764,6 +936,15 @@ export default function BotForm({
       botImageFile !== null ||
       status !== (initial.status ?? "draft") ||
       isPublic !== (initial.isPublic ?? true) ||
+      visibility !== (initial.visibility === "private" ? "private" : "public") ||
+      messageLimitMode !== (initial.messageLimitMode === "fixed_total" ? "fixed_total" : "none") ||
+      (messageLimitMode === "fixed_total"
+        ? (messageLimitTotal || "") !==
+          (typeof initial.messageLimitTotal === "number" && initial.messageLimitTotal > 0
+            ? String(initial.messageLimitTotal)
+            : "")
+        : false) ||
+      (messageLimitUpgradeMessage || "") !== (initial.messageLimitUpgradeMessage || "") ||
       JSON.stringify(categories) !== JSON.stringify(initial.categories ?? []) ||
       JSON.stringify(faqs) !== JSON.stringify(initial.faqs ?? []) ||
       JSON.stringify(exampleQuestions) !== JSON.stringify(initial.exampleQuestions ?? []) ||
@@ -787,6 +968,10 @@ export default function BotForm({
     botImageFile,
     status,
     isPublic,
+    visibility,
+    messageLimitMode,
+    messageLimitTotal,
+    messageLimitUpgradeMessage,
     categories,
     faqs,
     exampleQuestions,
@@ -2557,6 +2742,174 @@ export default function BotForm({
                     <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Enabled</span>
                   </label>
                 </SettingsToggleRow>
+                <SettingsFieldRow
+                  label="Runtime access visibility"
+                  htmlFor="runtime-visibility"
+                  helperText="Public requires accessKey; Private requires accessKey + secretKey in external runtime."
+                >
+                  <select
+                    id="runtime-visibility"
+                    className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+                    value={visibility}
+                    onChange={(event) =>
+                      setVisibility(event.target.value === "private" ? "private" : "public")
+                    }
+                  >
+                    <option value="public">Public</option>
+                    <option value="private">Private</option>
+                  </select>
+                </SettingsFieldRow>
+              </SettingsSectionCard>
+
+              <SettingsSectionCard
+                title="Access & usage policy"
+                description="Manage runtime keys and visitor trial message-limit policy."
+              >
+                <SettingsFieldRow
+                  label="Message limit mode"
+                  htmlFor="message-limit-mode"
+                  helperText="Use fixed_total for capped trial bots."
+                >
+                  <select
+                    id="message-limit-mode"
+                    className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+                    value={messageLimitMode}
+                    onChange={(event) =>
+                      setMessageLimitMode(
+                        event.target.value === "fixed_total" ? "fixed_total" : "none",
+                      )
+                    }
+                  >
+                    <option value="none">None</option>
+                    <option value="fixed_total">Fixed total</option>
+                  </select>
+                </SettingsFieldRow>
+
+                {messageLimitMode === "fixed_total" ? (
+                  <SettingsFieldRow
+                    label="Message limit total"
+                    htmlFor="message-limit-total"
+                    helperText="Positive integer total message allowance."
+                  >
+                    <Input
+                      id="message-limit-total"
+                      type="number"
+                      min={1}
+                      step={1}
+                      value={messageLimitTotal}
+                      onChange={(event) => setMessageLimitTotal(event.target.value)}
+                    />
+                  </SettingsFieldRow>
+                ) : null}
+
+                <SettingsFieldRow
+                  label="Upgrade message"
+                  htmlFor="message-limit-upgrade-message"
+                  helperText="Shown when fixed_total limit is reached."
+                >
+                  <Textarea
+                    id="message-limit-upgrade-message"
+                    rows={3}
+                    value={messageLimitUpgradeMessage}
+                    onChange={(event) => setMessageLimitUpgradeMessage(event.target.value)}
+                    placeholder="This trial bot has reached its message limit. Please contact Assistrio to continue."
+                  />
+                </SettingsFieldRow>
+
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <SettingsFieldRow
+                    label="Access key"
+                    htmlFor="access-key-readonly"
+                    helperText="Used by public runtime init/chat access checks."
+                  >
+                    <div className="flex items-center gap-2">
+                      <Input id="access-key-readonly" value={accessKey} readOnly />
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => void copyRuntimeKey("access")}
+                        disabled={!accessKey}
+                      >
+                        Copy
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => void rotateAccessKey()}
+                        disabled={!botId || accessActionLoading !== null}
+                      >
+                        {accessActionLoading === "rotate-access" ? "Rotating..." : "Rotate"}
+                      </Button>
+                    </div>
+                  </SettingsFieldRow>
+
+                  <SettingsFieldRow
+                    label="Secret key"
+                    htmlFor="secret-key-readonly"
+                    helperText="Required only when runtime visibility is private."
+                  >
+                    <div className="flex items-center gap-2">
+                      <Input
+                        id="secret-key-readonly"
+                        value={secretKeyVisible ? secretKey : maskRuntimeKey(secretKey)}
+                        readOnly
+                      />
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => setSecretKeyVisible((v) => !v)}
+                        disabled={!secretKey}
+                      >
+                        {secretKeyVisible ? "Hide" : "Reveal"}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => void copyRuntimeKey("secret")}
+                        disabled={!secretKey}
+                      >
+                        Copy
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => void rotateSecretKey()}
+                        disabled={!botId || accessActionLoading !== null}
+                      >
+                        {accessActionLoading === "rotate-secret" ? "Rotating..." : "Rotate"}
+                      </Button>
+                    </div>
+                  </SettingsFieldRow>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="rounded-lg border border-gray-200 bg-gray-50/50 px-3 py-2.5 dark:border-gray-700 dark:bg-gray-800/50">
+                    <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Creator type</p>
+                    <p className="mt-0.5 text-sm font-medium text-gray-900 dark:text-gray-100">
+                      {creatorType === "visitor" ? "Visitor" : "User"}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-gray-200 bg-gray-50/50 px-3 py-2.5 dark:border-gray-700 dark:bg-gray-800/50">
+                    <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Owner visitor ID</p>
+                    <p className="mt-0.5 text-sm font-medium text-gray-900 dark:text-gray-100">
+                      {ownerVisitorId || "—"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => void saveAccessSettings()}
+                    disabled={!botId || accessActionLoading !== null}
+                  >
+                    {accessActionLoading === "save" ? "Saving..." : "Save access settings"}
+                  </Button>
+                  {accessActionMessage ? (
+                    <p className="text-xs text-gray-600 dark:text-gray-300">{accessActionMessage}</p>
+                  ) : null}
+                </div>
               </SettingsSectionCard>
 
               {mode === "edit" && (
@@ -2570,7 +2923,7 @@ export default function BotForm({
                         Visibility
                       </p>
                       <p className="mt-0.5 text-sm font-medium text-gray-900 dark:text-gray-100">
-                        {isPublic ? "Public" : "Private"}
+                        {visibility === "private" ? "Private" : "Public"}
                       </p>
                     </div>
                     <div className="rounded-lg border border-gray-200 bg-gray-50/50 px-3 py-2.5 dark:border-gray-700 dark:bg-gray-800/50">
@@ -2630,6 +2983,39 @@ export default function BotForm({
                     >
                       Published
                     </button>
+                  </div>
+                </div>
+              </SettingsSectionCard>
+
+              <SettingsSectionCard
+                title="Embed snippet"
+                description="Use this production runtime snippet on your website. It updates automatically when keys or visibility change."
+              >
+                <div className="space-y-3">
+                  <Textarea
+                    readOnly
+                    value={runtimeSnippet}
+                    rows={10}
+                    className="font-mono text-xs"
+                  />
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard.writeText(runtimeSnippet);
+                          setSnippetCopyMessage("Snippet copied.");
+                        } catch {
+                          setSnippetCopyMessage("Failed to copy snippet.");
+                        }
+                      }}
+                    >
+                      Copy snippet
+                    </Button>
+                    {snippetCopyMessage ? (
+                      <p className="text-xs text-gray-600 dark:text-gray-300">{snippetCopyMessage}</p>
+                    ) : null}
                   </div>
                 </div>
               </SettingsSectionCard>

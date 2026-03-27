@@ -6,10 +6,11 @@ const DEFAULT_API_BASE =
 export type AssistrioChatConfigShape = {
   botId: string;
   apiBaseUrl: string;
+  accessKey: string;
   position: "right";
 };
 
-export function getLandingAssistrioChatConfig(): AssistrioChatConfigShape {
+export function getLandingAssistrioChatConfig(): AssistrioChatConfigShape | null {
   const botId =
     typeof process.env.NEXT_PUBLIC_LANDING_WIDGET_BOT_ID === "string" &&
     process.env.NEXT_PUBLIC_LANDING_WIDGET_BOT_ID.trim() !== ""
@@ -21,10 +22,21 @@ export function getLandingAssistrioChatConfig(): AssistrioChatConfigShape {
       ? process.env.NEXT_PUBLIC_API_BASE_URL.trim()
       : "";
   const apiBaseUrl = raw !== "" ? raw.replace(/\/$/, "") : DEFAULT_API_BASE;
+  const accessKey =
+    typeof process.env.NEXT_PUBLIC_LANDING_WIDGET_ACCESS_KEY === "string"
+      ? process.env.NEXT_PUBLIC_LANDING_WIDGET_ACCESS_KEY.trim()
+      : "";
+
+  // Runtime hardening: external widget contract requires accessKey for public bots.
+  // Graceful fallback for missing env in non-widget environments.
+  if (!accessKey) {
+    return null;
+  }
 
   return {
     botId,
     apiBaseUrl,
+    accessKey,
     position: "right",
   };
 }

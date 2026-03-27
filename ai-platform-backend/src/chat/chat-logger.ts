@@ -10,7 +10,8 @@ export interface ChatLogEvent {
   level: ChatLogLevel;
   botId?: string;
   conversationId?: string;
-  visitorId?: string;
+  chatVisitorId?: string;
+  platformVisitorId?: string;
   requestId?: string;
   retrievalConfidence?: string;
   messageCount?: number;

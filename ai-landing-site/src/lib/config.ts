@@ -14,3 +14,13 @@ export const LANDING_SITE_BOTS_API_KEY =
   typeof landingKeyRaw === "string" && landingKeyRaw.trim() !== ""
     ? landingKeyRaw.trim()
     : "";
+
+/**
+ * Public runtime key for the landing's default/global widget bot.
+ * Required for `AssistrioGlobalEmbed` under the runtime contract.
+ */
+const landingWidgetAccessKeyRaw = process.env.NEXT_PUBLIC_LANDING_WIDGET_ACCESS_KEY;
+export const LANDING_WIDGET_ACCESS_KEY =
+  typeof landingWidgetAccessKeyRaw === "string" && landingWidgetAccessKeyRaw.trim() !== ""
+    ? landingWidgetAccessKeyRaw.trim()
+    : "";

@@ -26,7 +26,7 @@ function formatEventTime(value: unknown): string {
 
 type EventRow = {
   _id: string;
-  visitorId?: string | null;
+  platformVisitorId?: string | null;
   type?: string;
   path?: string;
   botSlug?: string;
@@ -117,7 +117,7 @@ export default function UserAnalyticsPage() {
                     {recentEvents.map((event) => (
                       <tr key={String(event._id)} className="hover:bg-gray-50/80 dark:hover:bg-gray-800/40 transition-colors">
                         <td className="px-4 py-3">{formatEventTime(event.createdAt)}</td>
-                        <td className="px-4 py-3">{event.visitorId ?? "-"}</td>
+                        <td className="px-4 py-3">{event.platformVisitorId ?? "-"}</td>
                         <td className="px-4 py-3">
                           <span className="inline-flex items-center rounded-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-2.5 py-1 text-xs font-medium text-gray-700 dark:text-gray-200">
                             {event.type || "-"}

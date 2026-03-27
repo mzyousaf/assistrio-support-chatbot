@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chat Widget Local Test</title>
+  <link rel="stylesheet" href="/public/assistrio-chat.css" />
+  <style>
+    body {
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      padding: 24px;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>Chat Widget Local Test</h1>
+  <p>
+    Open DevTools console + Network to confirm the widget loaded your latest bundle.
+  </p>
+
+  <script>
+    // TODO(step-8 cleanup): this local harness is legacy/manual and should be replaced
+    // by automated runtime smoke tests once preview deprecation is completed.
+    // 1) Fetch runtime-safe bot metadata from the secured widget-testing API
+    // 2) Set `window.AssistrioChatConfig`
+    // 3) Load the widget bundle (so it auto-mounts with the correct botId)
+
+    // const API_BASE_URL = "https://erythrismal-giovanni-unscorching.ngrok-free.dev";
+
+    const API_BASE_URL = "http://localhost:8080";
+    const ENDPOINT = `${API_BASE_URL}/api/widget/testing/bot`;
+
+    // Recommended: pass ?key=... in the URL to avoid editing this file every time.
+    // Example: http://localhost:3456/test.html?key=YOUR_CHAT_WIDGET_API_KEY
+    const CHAT_WIDGET_API_KEY =
+      new URLSearchParams(window.location.search).get("key") || "d7500623124b4efe8c3ed0e43bf2c12c3d36fae3270d4a8391fb88d3c2568bb5";
+
+    function loadWidgetScript() {
+      const existing = document.querySelector('script[src="/public/assistrio-chat.js"]');
+      if (existing) return;
+
+      const script = document.createElement("script");
+      script.src = "/public/assistrio-chat.js";
+      script.async = true;
+      document.body.appendChild(script);
+    }
+
+    async function main() {
+      if (!CHAT_WIDGET_API_KEY || CHAT_WIDGET_API_KEY.includes("PUT_CHAT_WIDGET_API_KEY_HERE")) {
+        console.error("[Chat Widget Test] Missing CHAT_WIDGET_API_KEY. Pass ?key=... in the URL.");
+        const el = document.createElement("pre");
+        el.style.color = "crimson";
+        el.textContent =
+          "Missing CHAT_WIDGET_API_KEY. Open: /test.html?key=YOUR_CHAT_WIDGET_API_KEY";
+        document.body.appendChild(el);
+        return;
+      }
+
+      try {
+        const res = await fetch(ENDPOINT, {
+          method: "GET",
+          headers: { "X-API-Key": CHAT_WIDGET_API_KEY },
+        });
+
+        const data = await res.json().catch(() => null);
+        const accessKey = typeof data?.bot?.accessKey === "string" ? data.bot.accessKey : "";
+        if (!res.ok || !data || data.status !== "ok" || !data.botId || !accessKey) {
+          throw new Error(
+            `Widget test init failed (status=${res.status}). Response: ${JSON.stringify(data)}`
+          );
+        }
+
+        window.AssistrioChatConfig = {
+          botId: data.botId,
+          apiBaseUrl: API_BASE_URL,
+          accessKey,
+          position: "right",
+        };
+
+        loadWidgetScript();
+      } catch (e) {
+        console.error("[Chat Widget Test]", e);
+        const el = document.createElement("pre");
+        el.style.color = "crimson";
+        el.textContent = `Error: ${e instanceof Error ? e.message : String(e)}`;
+        document.body.appendChild(el);
+      }
+    }
+
+    main();
+  </script>
+</body>
+
+</html>

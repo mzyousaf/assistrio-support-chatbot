@@ -27,7 +27,7 @@ export class AnalyticsTrackController {
     }
 
     try {
-      await this.visitorsService.getOrCreateVisitor(parsed.visitorId);
+      await this.visitorsService.getOrCreateVisitor(parsed.platformVisitorId);
       await this.analyticsService.trackEvent(parsed);
       return { success: true };
     } catch (error) {

@@ -4,25 +4,25 @@ import { useEffect, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
 
 export function useVisitorId() {
-  const [visitorId, setVisitorId] = useState<string | null>(null);
+  const [platformVisitorId, setPlatformVisitorId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     try {
-      const key = "visitor_id";
+      const key = "platform_visitor_id";
       let id = localStorage.getItem(key);
       if (!id) {
         id = uuidv4();
         localStorage.setItem(key, id);
       }
-      setVisitorId(id);
+      setPlatformVisitorId(id);
     } catch (err) {
-      console.error("Failed to initialize visitorId", err);
-      setVisitorId(null);
+      console.error("Failed to initialize platformVisitorId", err);
+      setPlatformVisitorId(null);
     } finally {
       setLoading(false);
     }
   }, []);
 
-  return { visitorId, loading };
+  return { platformVisitorId, loading };
 }

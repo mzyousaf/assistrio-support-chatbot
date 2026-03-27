@@ -46,7 +46,7 @@ export class UserChatController {
       throw new HttpException({ error: 'Invalid request body' }, HttpStatus.BAD_REQUEST);
     }
     const adminUser = req.user;
-    const visitorId = adminUser?._id != null ? String(adminUser._id) : 'anonymous';
+    const chatVisitorId = adminUser?._id != null ? String(adminUser._id) : 'anonymous';
 
     const bot = await this.botsService.findOneShowcaseForAdmin(botId);
     if (!bot || (bot as { type?: string }).type !== 'showcase') {
@@ -72,7 +72,10 @@ export class UserChatController {
     const debug = debugQuery === 'true' || debugQuery === '1';
     const chatResult = await this.chatEngineService.runChat({
       bot: botLike,
-      visitorId,
+      chatVisitorId,
+      // For admin chat we treat the platform identity as both identities temporarily.
+      // (chat identity migration can be made stricter later.)
+      platformVisitorId: chatVisitorId,
       message: parsed.message,
       mode: 'user',
       requestId: getRequestId(req),

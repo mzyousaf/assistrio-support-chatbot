@@ -32,16 +32,16 @@ type PageData = {
 
 export default function VisitorDetailPage() {
   const params = useParams();
-  const visitorId = typeof params?.visitorId === "string" ? params.visitorId : "";
+  const platformVisitorId = typeof params?.visitorId === "string" ? params.visitorId : "";
   const { user, loading: authLoading } = useAdminUser();
   const [data, setData] = useState<PageData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!user || !visitorId) return;
+    if (!user || !platformVisitorId) return;
     let cancelled = false;
-    apiFetch(`/api/user/visitors/${encodeURIComponent(visitorId)}`)
+    apiFetch(`/api/user/visitors/${encodeURIComponent(platformVisitorId)}`)
       .then(async (res) => {
         if (cancelled) return;
         if (!res.ok) {
@@ -58,7 +58,7 @@ export default function VisitorDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [user, visitorId]);
+  }, [user, platformVisitorId]);
 
   if (authLoading || !user) {
     return (
@@ -78,7 +78,7 @@ export default function VisitorDetailPage() {
 
   if (loading || !data) {
     return (
-      <AdminShell title={`Visitor ${visitorId}`}>
+      <AdminShell title={`Visitor ${platformVisitorId}`}>
         <p className="text-sm text-gray-500">Loading…</p>
       </AdminShell>
     );
@@ -87,7 +87,7 @@ export default function VisitorDetailPage() {
   const { visitor, events, bots, conversationsCount } = data;
 
   return (
-    <AdminShell title={`Visitor ${visitorId}`}>
+    <AdminShell title={`Visitor ${platformVisitorId}`}>
       <div className="grid gap-4 md:grid-cols-3">
         <Card title="Profile">
           <dl className="space-y-1 text-xs text-gray-700 dark:text-gray-300">

@@ -14,7 +14,7 @@ function formatDate(value: string | Date | null | undefined): string {
 }
 
 type VisitorRow = {
-  visitorId: string;
+  platformVisitorId: string;
   name?: string;
   email?: string;
   phone?: string;
@@ -40,8 +40,19 @@ export default function AdminVisitorsPage() {
           setError("Failed to load visitors.");
           return;
         }
-        const raw = (await res.json()) as unknown[];
-        const all = (raw ?? []) as VisitorRow[];
+        const raw = (await res.json()) as Array<{ platformVisitorId?: unknown } & Record<string, unknown>>;
+        const all: VisitorRow[] = (raw ?? [])
+          .map((r) => ({
+            platformVisitorId: String(r.platformVisitorId ?? ""),
+            name: typeof r.name === "string" ? r.name : undefined,
+            email: typeof r.email === "string" ? r.email : undefined,
+            phone: typeof r.phone === "string" ? r.phone : undefined,
+            showcaseMessageCount: typeof r.showcaseMessageCount === "number" ? r.showcaseMessageCount : undefined,
+            ownBotMessageCount: typeof r.ownBotMessageCount === "number" ? r.ownBotMessageCount : undefined,
+            createdAt: typeof r.createdAt === "string" ? r.createdAt : (r.createdAt as string | null | undefined),
+            lastSeenAt: typeof r.lastSeenAt === "string" ? r.lastSeenAt : (r.lastSeenAt as string | null | undefined),
+          }))
+          .filter((v) => Boolean(v.platformVisitorId));
         const sorted = [...all]
           .sort((a, b) => new Date(b.lastSeenAt ?? 0).getTime() - new Date(a.lastSeenAt ?? 0).getTime())
           .slice(0, 100);
@@ -104,13 +115,13 @@ export default function AdminVisitorsPage() {
               ) : (
                 <>
                   {visitors.map((visitor) => (
-                    <tr key={visitor.visitorId} className="hover:bg-gray-50/80 dark:hover:bg-gray-800/40 transition-colors">
+                    <tr key={visitor.platformVisitorId} className="hover:bg-gray-50/80 dark:hover:bg-gray-800/40 transition-colors">
                       <td className="px-4 py-3">
                         <Link
-                          href={`/user/visitors/${visitor.visitorId}`}
+                          href={`/user/visitors/${visitor.platformVisitorId}`}
                           className="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium text-brand-700 dark:text-brand-300 bg-brand-50 dark:bg-brand-500/15 hover:bg-brand-100 dark:hover:bg-brand-500/25 transition-colors"
                         >
-                          {visitor.visitorId}
+                          {visitor.platformVisitorId}
                         </Link>
                       </td>
                       <td className="px-4 py-3">{visitor.name || "-"}</td>

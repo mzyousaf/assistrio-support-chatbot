@@ -82,7 +82,7 @@ function buildWelcomeMessage(bot: BotChatProps["bot"]): ChatUIMessage | null {
 }
 
 export default function BotChatPage({ bot }: BotChatProps) {
-  const { visitorId } = useVisitorId();
+  const { platformVisitorId } = useVisitorId();
   const preferredScheme = usePreferredColorScheme();
   const welcomeMsg = useMemo(() => buildWelcomeMessage(bot), [bot.id, bot.welcomeMessage]);
   const [messages, setMessages] = useState<ChatUIMessage[]>(() =>
@@ -131,7 +131,7 @@ export default function BotChatPage({ bot }: BotChatProps) {
   const onSend = useCallback(
     async (text: string) => {
       const value = text.trim();
-      if (!value || isSending || limitReached || !visitorId) return;
+      if (!value || isSending || limitReached || !platformVisitorId) return;
 
       const userMsg: ChatUIMessage = {
         id: generateId(),
@@ -150,7 +150,7 @@ export default function BotChatPage({ bot }: BotChatProps) {
           body: JSON.stringify({
             botSlug: bot.slug,
             message: value,
-            visitorId,
+            platformVisitorId,
           }),
         });
 
@@ -238,7 +238,7 @@ export default function BotChatPage({ bot }: BotChatProps) {
         setIsSending(false);
       }
     },
-    [bot.mode, bot.slug, isSending, limitReached, visitorId]
+    [bot.mode, bot.slug, isSending, limitReached, platformVisitorId]
   );
 
   const emptyState =

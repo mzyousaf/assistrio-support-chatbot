@@ -9,7 +9,7 @@ const VISITOR_EVENT_TYPES: VisitorEventType[] = [
 ];
 
 export interface TrackAnalyticsPayload {
-  visitorId: string;
+  platformVisitorId: string;
   type: VisitorEventType;
   path?: string;
   botSlug?: string;
@@ -20,8 +20,12 @@ export interface TrackAnalyticsPayload {
 export function parseTrackPayload(body: unknown): TrackAnalyticsPayload | null {
   if (body == null || typeof body !== 'object') return null;
   const o = body as Record<string, unknown>;
-  const visitorId = typeof o.visitorId === 'string' ? o.visitorId.trim() : '';
-  if (!visitorId) return null;
+  const platformVisitorId =
+    typeof o.platformVisitorId === 'string' ? o.platformVisitorId.trim() : '';
+  const legacyVisitorId =
+    typeof o.visitorId === 'string' ? o.visitorId.trim() : '';
+  const resolvedVisitorId = platformVisitorId || legacyVisitorId;
+  if (!resolvedVisitorId) return null;
   const type = o.type;
   if (typeof type !== 'string' || !VISITOR_EVENT_TYPES.includes(type as VisitorEventType)) {
     return null;
@@ -38,5 +42,12 @@ export function parseTrackPayload(body: unknown): TrackAnalyticsPayload | null {
   if (o.metadata != null && typeof o.metadata === 'object' && !Array.isArray(o.metadata)) {
     metadata = o.metadata as Record<string, unknown>;
   }
-  return { visitorId, type: type as VisitorEventType, path, botSlug, botId, metadata };
+  return {
+    platformVisitorId: resolvedVisitorId,
+    type: type as VisitorEventType,
+    path,
+    botSlug,
+    botId,
+    metadata,
+  };
 }

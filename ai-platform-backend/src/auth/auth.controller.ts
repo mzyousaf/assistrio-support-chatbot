@@ -16,6 +16,26 @@ import type { UserRole } from '../models';
 
 type RequestWithUser = FastifyRequest & { user?: RequestUser };
 
+function isCrossSiteRequest(request: FastifyRequest): boolean {
+  const originHeader = request.headers.origin;
+  const hostHeader = request.headers.host;
+  if (!originHeader || !hostHeader) return false;
+  try {
+    const originHost = new URL(originHeader).host;
+    return originHost !== hostHeader;
+  } catch {
+    return false;
+  }
+}
+
+function getCookieSecuritySuffix(request: FastifyRequest): string {
+  const isProduction = process.env.NODE_ENV === 'production';
+  const crossSite = isCrossSiteRequest(request);
+  const sameSite = crossSite ? 'None' : 'Lax';
+  const secure = isProduction || crossSite;
+  return `HttpOnly; SameSite=${sameSite}` + (secure ? '; Secure' : '');
+}
+
 function parseLoginBody(body: unknown): { email: string; password: string } | null {
   if (body == null || typeof body !== 'object') return null;
   const o = body as Record<string, unknown>;
@@ -30,7 +50,11 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('login')
-  async login(@Body() body: unknown, @Res({ passthrough: false }) reply: FastifyReply) {
+  async login(
+    @Body() body: unknown,
+    @Req() request: FastifyRequest,
+    @Res({ passthrough: false }) reply: FastifyReply,
+  ) {
     const parsed = parseLoginBody(body);
     if (!parsed) {
       throw new HttpException(
@@ -47,18 +71,18 @@ export class AuthController {
     }
     const u = user as unknown as { _id: unknown; role: string };
     const token = this.authService.signToken(String(u._id), u.role as UserRole);
-    const isProduction = process.env.NODE_ENV === 'production';
     const maxAge = 60 * 60 * 24 * 7;
+    const securitySuffix = getCookieSecuritySuffix(request);
     const cookie =
-      `user_token=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}` +
-      (isProduction ? '; Secure' : '');
+      `user_token=${encodeURIComponent(token)}; Path=/; ${securitySuffix}; Max-Age=${maxAge}`;
     reply.header('Set-Cookie', cookie);
     return reply.send({ success: true });
   }
 
   @Post('logout')
-  async logout(@Res({ passthrough: false }) reply: FastifyReply) {
-    reply.header('Set-Cookie', 'user_token=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax');
+  async logout(@Req() request: FastifyRequest, @Res({ passthrough: false }) reply: FastifyReply) {
+    const securitySuffix = getCookieSecuritySuffix(request);
+    reply.header('Set-Cookie', `user_token=; Path=/; Max-Age=0; ${securitySuffix}`);
     return reply.send({ success: true });
   }
 

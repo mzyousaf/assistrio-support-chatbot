@@ -2,6 +2,8 @@
  * Default payload for a newly created bot (e.g. from POST /api/user/bots/draft).
  * Maps to the nested API shape; getDefaultBotCreatePayload() converts to the flat Bot schema.
  */
+import { generateBotAccessKey, generateBotSecretKey } from '../bots/bot-keys.util';
+
 export const DEFAULT_NEW_BOT_PAYLOAD = {
   general: {
     name: 'AI Support Assistant',
@@ -160,6 +162,10 @@ export type DefaultBotCreatePayload = {
   name: string;
   slug: string;
   type: 'showcase';
+  visibility: 'public' | 'private';
+  accessKey: string;
+  secretKey: string;
+  creatorType: 'user' | 'visitor';
   status: 'draft';
   clientDraftId: string;
   isPublic: boolean;
@@ -185,6 +191,9 @@ export type DefaultBotCreatePayload = {
   config: { temperature: number; maxTokens: number; responseLength?: string };
   openaiApiKeyOverride?: string | null;
   whisperApiKeyOverride?: string | null;
+  messageLimitMode: 'none' | 'fixed_total';
+  messageLimitTotal?: number | null;
+  messageLimitUpgradeMessage?: string | null;
   createdAt: Date;
 };
 
@@ -204,6 +213,10 @@ export function getDefaultBotCreatePayload(
     name: g.name,
     slug,
     type: 'showcase',
+    visibility: 'public',
+    accessKey: generateBotAccessKey(),
+    secretKey: generateBotSecretKey(),
+    creatorType: 'user',
     status: pub.status as 'draft',
     clientDraftId,
     isPublic: pub.public,
@@ -267,6 +280,9 @@ export function getDefaultBotCreatePayload(
       maxTokens: ai.maxTokens,
       responseLength: 'medium',
     },
+    messageLimitMode: 'none',
+    messageLimitTotal: null,
+    messageLimitUpgradeMessage: null,
     openaiApiKeyOverride: ai.openAiApiKeyOverride ?? undefined,
     whisperApiKeyOverride: ai.whisperApiKey ?? undefined,
     createdAt: new Date(),

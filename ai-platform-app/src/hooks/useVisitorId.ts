@@ -3,36 +3,36 @@
 import { useEffect, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
 
-const VISITOR_ID_STORAGE_KEY = "visitor_id";
+const PLATFORM_VISITOR_ID_STORAGE_KEY = "platform_visitor_id";
 
 export function useVisitorId() {
-  const [visitorId, setVisitorId] = useState<string | null>(null);
+  const [platformVisitorId, setPlatformVisitorId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search);
-    const visitorIdFromQuery = searchParams.get("visitorId");
+    const platformVisitorIdFromQuery = searchParams.get("platformVisitorId");
 
-    if (visitorIdFromQuery) {
-      localStorage.setItem(VISITOR_ID_STORAGE_KEY, visitorIdFromQuery);
-      setVisitorId(visitorIdFromQuery);
+    if (platformVisitorIdFromQuery) {
+      localStorage.setItem(PLATFORM_VISITOR_ID_STORAGE_KEY, platformVisitorIdFromQuery);
+      setPlatformVisitorId(platformVisitorIdFromQuery);
       setLoading(false);
       return;
     }
 
-    const visitorIdFromStorage = localStorage.getItem(VISITOR_ID_STORAGE_KEY);
+    const platformVisitorIdFromStorage = localStorage.getItem(PLATFORM_VISITOR_ID_STORAGE_KEY);
 
-    if (visitorIdFromStorage) {
-      setVisitorId(visitorIdFromStorage);
+    if (platformVisitorIdFromStorage) {
+      setPlatformVisitorId(platformVisitorIdFromStorage);
       setLoading(false);
       return;
     }
 
-    const generatedVisitorId = uuidv4();
-    localStorage.setItem(VISITOR_ID_STORAGE_KEY, generatedVisitorId);
-    setVisitorId(generatedVisitorId);
+    const generatedPlatformVisitorId = uuidv4();
+    localStorage.setItem(PLATFORM_VISITOR_ID_STORAGE_KEY, generatedPlatformVisitorId);
+    setPlatformVisitorId(generatedPlatformVisitorId);
     setLoading(false);
   }, []);
 
-  return { visitorId, loading };
+  return { platformVisitorId, loading };
 }

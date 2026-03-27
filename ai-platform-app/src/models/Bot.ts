@@ -142,6 +142,14 @@ export interface BotDocument {
   slug: string;
   type: "showcase" | "visitor-own";
   ownerVisitorId?: string;
+  ownerUserId?: string;
+  creatorType?: "user" | "visitor";
+  visibility?: "public" | "private";
+  accessKey?: string;
+  secretKey?: string;
+  messageLimitMode?: "none" | "fixed_total";
+  messageLimitTotal?: number | null;
+  messageLimitUpgradeMessage?: string | null;
   isPublic: boolean;
   shortDescription?: string;
   category?: string;

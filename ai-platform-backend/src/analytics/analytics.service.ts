@@ -12,7 +12,7 @@ export class AnalyticsService {
   ) {}
 
   async logVisitorEvent(params: {
-    visitorId: string;
+    platformVisitorId: string;
     type: VisitorEventType;
     path?: string;
     botSlug?: string;
@@ -20,7 +20,7 @@ export class AnalyticsService {
     metadata?: Record<string, unknown>;
   }): Promise<void> {
     try {
-      if (!params.visitorId) {
+      if (!params.platformVisitorId) {
         return;
       }
 
@@ -33,7 +33,7 @@ export class AnalyticsService {
         metadata?: Record<string, unknown>;
         createdAt: Date;
       } = {
-        visitorId: params.visitorId,
+        visitorId: params.platformVisitorId,
         type: params.type,
         path: params.path,
         botSlug: params.botSlug,
@@ -52,8 +52,13 @@ export class AnalyticsService {
   }
 
   async getSummary() {
+    const platformVisitorFilter: Record<string, unknown> = {
+      $or: [{ visitorType: 'platform' }, { visitorType: { $exists: false } }],
+    };
+
     const [
       totalVisitors,
+      totalChatVisitors,
       totalPageViews,
       trialBotsCreated,
       demoChatsStarted,
@@ -61,7 +66,8 @@ export class AnalyticsService {
       showcaseBots,
       visitorOwnedBots,
     ] = await Promise.all([
-      this.visitorModel.countDocuments(),
+      this.visitorModel.countDocuments(platformVisitorFilter),
+      this.visitorModel.countDocuments({ visitorType: 'chat' }),
       this.visitorEventModel.countDocuments({ type: 'page_view' }),
       this.visitorEventModel.countDocuments({ type: 'trial_bot_created' }),
       this.visitorEventModel.countDocuments({ type: 'demo_chat_started' }),
@@ -77,6 +83,7 @@ export class AnalyticsService {
       .lean();
     const metrics = [
       { label: 'Total Visitors', value: totalVisitors },
+      { label: 'Chat widget identities', value: totalChatVisitors },
       { label: 'Total Page Views', value: totalPageViews },
       { label: 'Trial Bots Created', value: trialBotsCreated },
       { label: 'Demo Chats Started', value: demoChatsStarted },
@@ -88,6 +95,8 @@ export class AnalyticsService {
       metrics,
       recentEvents: (recentEvents as Record<string, unknown>[]).map((e) => ({
         _id: String(e._id),
+        platformVisitorId: e.visitorId ?? null,
+        /** @deprecated legacy alias */
         visitorId: e.visitorId ?? null,
         type: e.type,
         path: e.path,
@@ -99,7 +108,7 @@ export class AnalyticsService {
 
   /** Create visitor event for /api/analytics/track (throws on error). */
   async trackEvent(params: {
-    visitorId: string;
+    platformVisitorId: string;
     type: VisitorEventType;
     path?: string;
     botSlug?: string;
@@ -115,7 +124,7 @@ export class AnalyticsService {
       metadata?: Record<string, unknown>;
       createdAt: Date;
     } = {
-      visitorId: params.visitorId,
+      visitorId: params.platformVisitorId,
       type: params.type,
       path: params.path,
       botSlug: params.botSlug,

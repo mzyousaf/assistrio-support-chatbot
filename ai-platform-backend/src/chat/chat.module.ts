@@ -11,7 +11,11 @@ import {
   SummaryJobSchema,
 } from '../models';
 import { RagModule } from '../rag/rag.module';
+import { BotsModule } from '../bots/bots.module';
+import { VisitorsModule } from '../visitors/visitors.module';
+import { AuthModule } from '../auth/auth.module';
 import { ChatController } from './chat.controller';
+import { WidgetPreviewController } from './widget-preview.controller';
 import { ChatEngineService } from './chat-engine.service';
 import { ChatService } from './chat.service';
 import { SummaryJobService } from './summary-job.service';
@@ -19,6 +23,9 @@ import { SummaryJobService } from './summary-job.service';
 @Module({
   imports: [
     RagModule,
+    BotsModule,
+    VisitorsModule,
+    AuthModule,
     MongooseModule.forFeature([
       { name: Conversation.name, schema: ConversationSchema },
       { name: Message.name, schema: MessageSchema },
@@ -26,7 +33,7 @@ import { SummaryJobService } from './summary-job.service';
       { name: Bot.name, schema: BotSchema },
     ]),
   ],
-  controllers: [ChatController],
+  controllers: [ChatController, WidgetPreviewController],
   providers: [ChatService, ChatEngineService, SummaryJobService],
   exports: [ChatService, ChatEngineService, SummaryJobService],
 })

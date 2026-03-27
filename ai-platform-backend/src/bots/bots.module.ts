@@ -4,7 +4,10 @@ import { BotsController } from './bots.controller';
 import { PublicBotsController } from './public-bots.controller';
 import { LandingBotsController } from './landing-bots.controller';
 import { WidgetInitController } from './widget-init.controller';
+import { TrialBotsController } from './trial-bots.controller';
 import { LandingSiteApiKeyGuard } from './landing-site-api-key.guard';
+import { ChatWidgetApiKeyGuard } from './chat-widget-api-key.guard';
+import { WidgetTestingBotController } from './widget-testing-bot.controller';
 import { BotsService } from './bots.service';
 import {
   Bot,
@@ -23,6 +26,7 @@ import {
   VisitorEventSchema,
 } from '../models';
 import { KnowledgeModule } from '../knowledge/knowledge.module';
+import { VisitorsModule } from '../visitors/visitors.module';
 
 @Module({
   imports: [
@@ -37,9 +41,10 @@ import { KnowledgeModule } from '../knowledge/knowledge.module';
       { name: VisitorEvent.name, schema: VisitorEventSchema },
     ]),
     KnowledgeModule,
+    VisitorsModule,
   ],
-  controllers: [BotsController, PublicBotsController, LandingBotsController, WidgetInitController],
-  providers: [BotsService, LandingSiteApiKeyGuard],
+  controllers: [BotsController, PublicBotsController, LandingBotsController, WidgetInitController, WidgetTestingBotController, TrialBotsController],
+  providers: [BotsService, LandingSiteApiKeyGuard, ChatWidgetApiKeyGuard],
   exports: [BotsService],
 })
 export class BotsModule { }

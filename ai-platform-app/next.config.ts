@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  experimental: {
+    externalDir: true,
+  },
   async redirects() {
     return [
       { source: "/super-admin", destination: "/user/dashboard", permanent: true },

@@ -43,7 +43,17 @@ export interface BotLike {
 
 export interface RunChatInput {
   bot: BotLike;
-  visitorId: string;
+  /**
+   * Chat identity for Conversation/Message association (chatVisitorId).
+   * This identity is managed by the embedded widget.
+   */
+  chatVisitorId: string;
+
+  /**
+   * Optional platform visitor id for quota + platform analytics.
+   * Only used when bot.creatorType === 'visitor' (trial bots).
+   */
+  platformVisitorId?: string;
   message: string;
   mode: ChatMode;
   userApiKey?: string;
