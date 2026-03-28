@@ -34,7 +34,11 @@ export function EmbedWidgetRoot({ rawConfig }: EmbedWidgetRootProps) {
   const [initResponse, setInitResponse] = useState<WidgetInitResponse | null>(null);
   const [chatVisitorId, setChatVisitorId] = useState<string | null>(null);
 
-  const config = useMemo(() => normalizeEmbedConfig(rawConfig), [rawConfig]);
+  const rawPreviewOverridesKey = JSON.stringify(
+    (rawConfig as { previewOverrides?: unknown })?.previewOverrides ?? null,
+  );
+
+  const config = useMemo(() => normalizeEmbedConfig(rawConfig), [rawConfig, rawPreviewOverridesKey]);
 
   const initKey = useMemo(() => initKeyFromRawConfig(rawConfig), [rawConfig]);
 

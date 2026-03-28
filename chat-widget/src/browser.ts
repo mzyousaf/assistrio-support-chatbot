@@ -23,8 +23,8 @@ function mergeConfig(override?: Partial<EmbedChatConfig>): Partial<EmbedChatConf
 function safeMount(override?: Partial<EmbedChatConfig>): void {
   try {
     const merged = mergeConfig(override);
-    readEmbedConfig(merged);
-    mountEmbedWidget(merged);
+    const normalized = readEmbedConfig(merged);
+    mountEmbedWidget(normalized);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     if (typeof console !== "undefined" && console.error) {

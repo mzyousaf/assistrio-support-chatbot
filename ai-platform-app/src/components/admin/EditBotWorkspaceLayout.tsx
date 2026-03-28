@@ -33,6 +33,9 @@ export function EditBotWorkspaceLayout({
   void defaultChatOpen;
   void expandHref;
 
+  // Deep signature so nested chatUI / chips changes re-run even if livePreview ref is reused.
+  const livePreviewSignature = JSON.stringify(livePreview ?? null);
+
   const previewOverrides = useMemo(() => {
     const fallbackName = botName.trim();
     const fallbackAvatar = botAvatarUrl?.trim();
@@ -47,12 +50,14 @@ export function EditBotWorkspaceLayout({
         : undefined,
       chatUI: livePreview?.chatUI ?? undefined,
     };
-  }, [botName, botAvatarUrl, livePreview]);
+  }, [botName, botAvatarUrl, livePreviewSignature]);
 
   const apiBaseUrl =
     (process.env.NEXT_PUBLIC_API_BASE_URL || "").trim() ||
     (typeof window !== "undefined" ? window.location.origin : "");
 
+  // Mount / update config without unmounting on every previewOverrides tweak — unmount only on
+  // layout unmount (below). Otherwise each edit destroyed the embed and re-ran init (bad UX).
   useEffect(() => {
     mountAssistrioWidgetFromCdn(
       {
@@ -66,10 +71,13 @@ export function EditBotWorkspaceLayout({
       },
       { injectStylesheet: false }
     );
+  }, [botId, apiBaseUrl, previewOverrides]);
+
+  useEffect(() => {
     return () => {
       unmountAssistrioCdnWidget();
     };
-  }, [botId, apiBaseUrl, previewOverrides]);
+  }, []);
 
   return (
     <div className="max-w-[1400px] w-full mx-auto px-6 xl:px-8 py-6">
