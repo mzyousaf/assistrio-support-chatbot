@@ -50,18 +50,46 @@ const defaultIds: AssistrioCdnElementIds = {
   scriptId: "assistrio-chat-js",
 };
 
+/** Options when mounting the CDN widget (second argument). */
+export type MountAssistrioWidgetOptions = {
+  ids?: AssistrioCdnElementIds;
+  /**
+   * When false, do not inject the hosted `assistrio-chat.css` link.
+   * That stylesheet bundles Tailwind preflight and resets typography/layout for the entire host page.
+   * Use on in-app previews where the host app already compiles widget utilities (see `globals.css` @source).
+   * @default true
+   */
+  injectStylesheet?: boolean;
+};
+
+function resolveMountOptions(
+  options?: AssistrioCdnElementIds | MountAssistrioWidgetOptions
+): { ids: AssistrioCdnElementIds; injectStylesheet: boolean } {
+  if (!options) return { ids: defaultIds, injectStylesheet: true };
+  if ("injectStylesheet" in options || "ids" in options) {
+    const o = options as MountAssistrioWidgetOptions;
+    return {
+      ids: o.ids ?? defaultIds,
+      injectStylesheet: o.injectStylesheet !== false,
+    };
+  }
+  return { ids: options as AssistrioCdnElementIds, injectStylesheet: true };
+}
+
 /**
  * Injects the hosted Assistrio widget script/CSS (same as customer embed snippet) and mounts with `config`.
  */
 export function mountAssistrioWidgetFromCdn(
   config: Partial<EmbedChatConfig>,
-  ids: AssistrioCdnElementIds = defaultIds
+  options?: AssistrioCdnElementIds | MountAssistrioWidgetOptions
 ): void {
   if (typeof window === "undefined" || typeof document === "undefined") return;
 
+  const { ids, injectStylesheet } = resolveMountOptions(options);
+
   window.AssistrioChatConfig = config;
 
-  if (!document.getElementById(ids.linkId)) {
+  if (injectStylesheet && !document.getElementById(ids.linkId)) {
     const link = document.createElement("link");
     link.id = ids.linkId;
     link.rel = "stylesheet";
@@ -70,7 +98,8 @@ export function mountAssistrioWidgetFromCdn(
   }
 
   const mountWidget = () => {
-    window.AssistrioChat?.unmount?.();
+    // Do not unmount here: config updates (e.g. live preview overrides) should re-render the
+    // existing embed root so init re-runs; unmount+mount was slower and could race the singleton.
     window.AssistrioChat?.mount?.(window.AssistrioChatConfig);
   };
 

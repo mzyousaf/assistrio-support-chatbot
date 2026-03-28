@@ -215,9 +215,9 @@ export default function UserEditBotPage() {
     status,
     faqs: (Array.isArray(bot.faqs)
       ? (bot.faqs as Array<{ question?: unknown; answer?: unknown }>).map((faq) => ({
-          question: String(faq?.question ?? ""),
-          answer: String(faq?.answer ?? ""),
-        }))
+        question: String(faq?.question ?? ""),
+        answer: String(faq?.answer ?? ""),
+      }))
       : []) as { question: string; answer: string }[],
     exampleQuestions: Array.isArray(bot.exampleQuestions)
       ? (bot.exampleQuestions as string[]).map((q) => String(q ?? "").trim()).filter(Boolean)
@@ -225,30 +225,30 @@ export default function UserEditBotPage() {
     documents: docsMapped,
     health: health
       ? {
-          docsTotal: health.docsTotal ?? 0,
-          docsQueued: health.docsQueued ?? 0,
-          docsProcessing: health.docsProcessing ?? 0,
-          docsReady: health.docsReady ?? 0,
-          docsFailed: health.docsFailed ?? 0,
-          lastIngestedAt: health.lastIngestedAt,
-          lastFailedDoc: health.lastFailedDoc
-            ? {
-                docId: health.lastFailedDoc.docId ?? "",
-                title: health.lastFailedDoc.title ?? "",
-                error: health.lastFailedDoc.error,
-                updatedAt: health.lastFailedDoc.updatedAt,
-              }
-            : undefined,
-        }
+        docsTotal: health.docsTotal ?? 0,
+        docsQueued: health.docsQueued ?? 0,
+        docsProcessing: health.docsProcessing ?? 0,
+        docsReady: health.docsReady ?? 0,
+        docsFailed: health.docsFailed ?? 0,
+        lastIngestedAt: health.lastIngestedAt,
+        lastFailedDoc: health.lastFailedDoc
+          ? {
+            docId: health.lastFailedDoc.docId ?? "",
+            title: health.lastFailedDoc.title ?? "",
+            error: health.lastFailedDoc.error,
+            updatedAt: health.lastFailedDoc.updatedAt,
+          }
+          : undefined,
+      }
       : {
-          docsTotal: documents.length,
-          docsQueued: 0,
-          docsProcessing: 0,
-          docsReady: 0,
-          docsFailed: 0,
-          lastIngestedAt: undefined,
-          lastFailedDoc: undefined,
-        },
+        docsTotal: documents.length,
+        docsQueued: 0,
+        docsProcessing: 0,
+        docsReady: 0,
+        docsFailed: 0,
+        lastIngestedAt: undefined,
+        lastFailedDoc: undefined,
+      },
     isPublic: Boolean(bot.isPublic),
     visibility:
       bot.visibility === "private" || bot.visibility === "public"

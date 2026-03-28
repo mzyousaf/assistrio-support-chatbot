@@ -18,7 +18,7 @@ export function SettingsGrid({
 }: SettingsGridProps) {
   return (
     <div
-      className={`grid grid-cols-1 gap-5 md:grid-cols-2 md:gap-x-6 md:gap-y-5 ${className}`.trim()}
+      className={`grid grid-cols-1 items-start gap-5 md:grid-cols-2 md:gap-x-6 md:gap-y-5 ${className}`.trim()}
     >
       {children}
     </div>

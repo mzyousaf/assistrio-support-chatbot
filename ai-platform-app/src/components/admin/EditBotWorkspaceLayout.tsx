@@ -54,15 +54,18 @@ export function EditBotWorkspaceLayout({
     (typeof window !== "undefined" ? window.location.origin : "");
 
   useEffect(() => {
-    mountAssistrioWidgetFromCdn({
-      botId,
-      apiBaseUrl,
-      mode: "preview",
-      sessionPreview: true,
-      previewOverrides,
-      position: "right",
-      persistChatSession: false,
-    });
+    mountAssistrioWidgetFromCdn(
+      {
+        botId,
+        apiBaseUrl,
+        mode: "preview",
+        sessionPreview: true,
+        previewOverrides,
+        position: "right",
+        persistChatSession: false,
+      },
+      { injectStylesheet: false }
+    );
     return () => {
       unmountAssistrioCdnWidget();
     };

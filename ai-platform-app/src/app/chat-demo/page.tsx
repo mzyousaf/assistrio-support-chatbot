@@ -30,7 +30,7 @@ export default function ChatDemoPage() {
         apiBaseUrl,
         position: "right",
       },
-      DEMO_IDS
+      { ids: DEMO_IDS, injectStylesheet: false }
     );
 
     return () => {

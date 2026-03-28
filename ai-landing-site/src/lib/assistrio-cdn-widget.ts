@@ -76,7 +76,6 @@ export function mountAssistrioWidgetFromCdn(
   findOrCreateStylesheet(ids);
 
   const mountWidget = () => {
-    window.AssistrioChat?.unmount?.();
     window.AssistrioChat?.mount?.(window.AssistrioChatConfig);
   };
 

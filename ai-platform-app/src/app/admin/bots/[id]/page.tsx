@@ -215,9 +215,9 @@ export default function AdminEditBotPage() {
     status,
     faqs: (Array.isArray(bot.faqs)
       ? (bot.faqs as Array<{ question?: unknown; answer?: unknown }>).map((faq) => ({
-          question: String(faq?.question ?? ""),
-          answer: String(faq?.answer ?? ""),
-        }))
+        question: String(faq?.question ?? ""),
+        answer: String(faq?.answer ?? ""),
+      }))
       : []) as { question: string; answer: string }[],
     exampleQuestions: Array.isArray(bot.exampleQuestions)
       ? (bot.exampleQuestions as string[]).map((q) => String(q ?? "").trim()).filter(Boolean)

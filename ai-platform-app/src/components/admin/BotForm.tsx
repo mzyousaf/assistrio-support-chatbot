@@ -686,9 +686,9 @@ export default function BotForm({
       messageLimitTotal:
         messageLimitMode === "fixed_total"
           ? (() => {
-              const parsed = Math.floor(Number(messageLimitTotal));
-              return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
-            })()
+            const parsed = Math.floor(Number(messageLimitTotal));
+            return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+          })()
           : null,
       messageLimitUpgradeMessage: messageLimitUpgradeMessage.trim() || null,
     } satisfies BotFormSubmitPayload;
@@ -940,9 +940,9 @@ export default function BotForm({
       messageLimitMode !== (initial.messageLimitMode === "fixed_total" ? "fixed_total" : "none") ||
       (messageLimitMode === "fixed_total"
         ? (messageLimitTotal || "") !==
-          (typeof initial.messageLimitTotal === "number" && initial.messageLimitTotal > 0
-            ? String(initial.messageLimitTotal)
-            : "")
+        (typeof initial.messageLimitTotal === "number" && initial.messageLimitTotal > 0
+          ? String(initial.messageLimitTotal)
+          : "")
         : false) ||
       (messageLimitUpgradeMessage || "") !== (initial.messageLimitUpgradeMessage || "") ||
       JSON.stringify(categories) !== JSON.stringify(initial.categories ?? []) ||
@@ -993,8 +993,8 @@ export default function BotForm({
       {submitError ? <p className="text-sm text-red-500">{submitError}</p> : null}
 
       <Tabs defaultValue="general" value={activeTab} onValueChange={(v) => setActiveTab(v)} className="space-y-0">
-        <div className="border-b border-gray-200 dark:border-gray-700 bg-gray-50/60 dark:bg-gray-800/40">
-          <TabsList className="w-full justify-start rounded-none border-0 bg-transparent p-0 gap-0 min-h-0">
+        <div className="border-b border-gray-200 dark:border-gray-700 bg-gray-50/60 dark:bg-gray-800/40 overflow-x-auto">
+          <TabsList className="w-full min-w-0 flex flex-wrap justify-start rounded-none border-0 bg-transparent p-0 gap-x-0 gap-y-1 min-h-0">
             {TAB_IDS.map((tab) => (
               <TabsTrigger
                 key={tab.value}
@@ -1493,15 +1493,14 @@ export default function BotForm({
                       <Tooltip content="Refresh these notes so the assistant uses the latest version.">
                         <button
                           type="button"
-                          className={`inline-flex h-8 w-8 items-center justify-center rounded-md bg-transparent transition outline-none focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 ${
-                            noteSyncStatus === "processing"
+                          className={`inline-flex h-8 w-8 items-center justify-center rounded-md bg-transparent transition outline-none focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 ${noteSyncStatus === "processing"
                               ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 cursor-not-allowed animate-pulse"
                               : noteSyncStatus === "failed"
                                 ? "text-red-700 hover:bg-red-100 dark:text-red-300 dark:hover:bg-red-900/30"
                                 : noteSyncStatus === "ready"
                                   ? "text-emerald-700 hover:bg-emerald-100 dark:text-emerald-300 dark:hover:bg-emerald-900/30"
                                   : "text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
-                          }`}
+                            }`}
                           onClick={() => setRefreshNotesConfirmOpen(true)}
                           disabled={noteSyncStatus === "processing"}
                           aria-label="Refresh notes in knowledge base"
@@ -1987,7 +1986,7 @@ export default function BotForm({
                       </select>
                     </SettingsFieldRow>
                     {(chatUI.statusIndicator === "live" || chatUI.statusIndicator === "active") ? (
-                      <>
+                      <div className="contents">
                         <SettingsFieldRow label="Style" htmlFor="live-indicator-style">
                           <select
                             id="live-indicator-style"
@@ -2020,9 +2019,9 @@ export default function BotForm({
                             <option value="static">Static</option>
                           </select>
                         </SettingsFieldRow>
-                      </>
+                      </div>
                     ) : (
-                      <>
+                      <div className="contents">
                         <SettingsFieldRow
                           label="Style"
                           htmlFor="live-indicator-style-disabled"
@@ -2043,7 +2042,7 @@ export default function BotForm({
                             <option>—</option>
                           </select>
                         </SettingsFieldRow>
-                      </>
+                      </div>
                     )}
                   </SettingsGrid>
                 </div>
@@ -3153,11 +3152,10 @@ export default function BotForm({
           eyebrow="Knowledge notes"
           badge={
             <span
-              className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-semibold ${
-                includeNotesInKnowledge
+              className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-semibold ${includeNotesInKnowledge
                   ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-900/35 dark:text-emerald-300"
                   : "border-gray-200 bg-gray-100 text-gray-600 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-400"
-              }`}
+                }`}
             >
               {includeNotesInKnowledge ? "Included in KB" : "Excluded from KB"}
             </span>

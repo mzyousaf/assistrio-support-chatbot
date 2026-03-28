@@ -14,11 +14,15 @@ let instance: MountInstance | null = null;
 const MOUNT_ID = "assistrio-embed-widget-root";
 
 /**
- * Singleton: second mount is a no-op until {@link unmountEmbedWidget}.
+ * Singleton: one React root. If already mounted, re-renders {@link EmbedWidgetRoot} with the new
+ * `rawConfig` (e.g. preview overrides changed) instead of ignoring the call.
  */
 export function mountEmbedWidget(rawConfig: Partial<EmbedChatConfig>): void {
   if (typeof document === "undefined") return;
-  if (instance) return;
+  if (instance) {
+    instance.root.render(React.createElement(EmbedWidgetRoot, { rawConfig }));
+    return;
+  }
 
   const mountEl = document.createElement("div");
   mountEl.id = MOUNT_ID;
