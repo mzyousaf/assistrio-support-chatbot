@@ -18,6 +18,7 @@ import {
 } from './embed-runtime-rate-limit.util';
 import { normalizeVisitorMultiChatMax } from './visitor-multi-chat.util';
 import { EmbedSessionService } from './embed-session.service';
+import { resolveWidgetEmbedRateLimitPerMinute } from '../models/bot.schema';
 
 type WidgetInitBody = {
   botId?: unknown;
@@ -121,7 +122,7 @@ export class WidgetInitController {
       );
     }
 
-    const limit = this.configService.get<number>('widgetEmbedRateLimitPerMinute') ?? 0;
+    const limit = resolveWidgetEmbedRateLimitPerMinute(row);
     const ip = getClientIpForRateLimit(req);
     if (
       !consumeEmbedRuntimeRateLimitToken(`${EMBED_RUNTIME_RATE_LIMIT_KEY_PREFIX}:${ip}`, limit)

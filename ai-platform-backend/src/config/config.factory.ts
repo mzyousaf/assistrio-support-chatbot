@@ -1,4 +1,4 @@
-import { ENV_CHAT_WIDGET_API_KEY, ENV_WIDGET_EMBED_RATE_LIMIT_PER_MINUTE } from '../lib/env-var-names';
+import { ENV_CHAT_WIDGET_API_KEY } from '../lib/env-var-names';
 
 /**
  * Base hostnames allowed to call `/api/widget/preview/*` (browser Origin / Referer).
@@ -48,14 +48,6 @@ export function configFactory() {
      * Enabled only when NODE_ENV is development.
      */
     allowLoopbackEmbedOrigin: nodeEnv === 'development',
-    /**
-     * Runtime embed: max combined requests per minute per IP (widget init + chat endpoints that enforce embed domain).
-     * `0` = disabled. In-process only; multi-instance deployments should use a shared limiter or edge rate limits.
-     */
-    widgetEmbedRateLimitPerMinute: Math.max(
-      0,
-      parseInt(process.env[ENV_WIDGET_EMBED_RATE_LIMIT_PER_MINUTE] ?? '0', 10) || 0,
-    ),
   };
 }
 

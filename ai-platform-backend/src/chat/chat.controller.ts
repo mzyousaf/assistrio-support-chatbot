@@ -17,6 +17,7 @@ import {
   getClientIpForRateLimit,
 } from '../bots/embed-runtime-rate-limit.util';
 import { normalizeVisitorMultiChatMax } from '../bots/visitor-multi-chat.util';
+import { resolveWidgetEmbedRateLimitPerMinute } from '../models/bot.schema';
 import { getRequestId } from '../lib/request-id.helper';
 import { VisitorsService } from '../visitors/visitors.service';
 import { ChatEngineService } from './chat-engine.service';
@@ -77,8 +78,11 @@ export class ChatController {
     }
   }
 
-  private assertEmbedDomainGateForBot(bot: { allowedDomains?: unknown }, req: FastifyRequest): void {
-    const limit = this.configService.get<number>('widgetEmbedRateLimitPerMinute') ?? 0;
+  private assertEmbedDomainGateForBot(
+    bot: { allowedDomains?: unknown; widgetEmbedRateLimitPerMinute?: unknown },
+    req: FastifyRequest,
+  ): void {
+    const limit = resolveWidgetEmbedRateLimitPerMinute(bot);
     const ip = getClientIpForRateLimit(req);
     if (
       !consumeEmbedRuntimeRateLimitToken(`${EMBED_RUNTIME_RATE_LIMIT_KEY_PREFIX}:${ip}`, limit)
@@ -238,7 +242,10 @@ export class ChatController {
       secretKey: parsed.secretKey,
     }, resolvedChatVisitorId);
 
-    this.assertEmbedDomainGateForBot(bot as { allowedDomains?: unknown }, req);
+    this.assertEmbedDomainGateForBot(
+      bot as { allowedDomains?: unknown; widgetEmbedRateLimitPerMinute?: unknown },
+      req,
+    );
 
     const creatorType = bot.creatorType === 'visitor' ? 'visitor' : 'user';
     const resolvedPlatformVisitorId =
@@ -340,7 +347,10 @@ export class ChatController {
       secretKey: parsed.secretKey,
     }, resolvedChatVisitorId);
 
-    this.assertEmbedDomainGateForBot(bot as { allowedDomains?: unknown }, req);
+    this.assertEmbedDomainGateForBot(
+      bot as { allowedDomains?: unknown; widgetEmbedRateLimitPerMinute?: unknown },
+      req,
+    );
 
     const creatorType = bot.creatorType === 'visitor' ? 'visitor' : 'user';
     const resolvedPlatformVisitorId =
@@ -417,7 +427,10 @@ export class ChatController {
       secretKey: parsed.secretKey,
     }, resolvedChatVisitorId);
 
-    this.assertEmbedDomainGateForBot(bot as { allowedDomains?: unknown }, req);
+    this.assertEmbedDomainGateForBot(
+      bot as { allowedDomains?: unknown; widgetEmbedRateLimitPerMinute?: unknown },
+      req,
+    );
 
     const creatorType = bot.creatorType === 'visitor' ? 'visitor' : 'user';
 

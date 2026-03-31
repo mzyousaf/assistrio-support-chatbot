@@ -43,6 +43,17 @@ export type ChatLauncherPosition = 'bottom-right' | 'bottom-left';
 export type BotVisibility = 'public' | 'private';
 export type BotCreatorType = 'user' | 'visitor';
 export type BotMessageLimitMode = 'none' | 'fixed_total';
+
+/** Default max embed API requests per minute per IP when not set on the bot document. */
+export const DEFAULT_WIDGET_EMBED_RATE_LIMIT_PER_MINUTE = 90;
+
+export function resolveWidgetEmbedRateLimitPerMinute(
+  bot: { widgetEmbedRateLimitPerMinute?: unknown } | null | undefined,
+): number {
+  const v = bot?.widgetEmbedRateLimitPerMinute;
+  if (typeof v === 'number' && Number.isFinite(v) && v >= 0) return Math.floor(v);
+  return DEFAULT_WIDGET_EMBED_RATE_LIMIT_PER_MINUTE;
+}
 /** Message bubble border radius in pixels (0–32). Affects message bubbles and suggested chips. */
 export const BUBBLE_RADIUS_MIN = 0;
 export const BUBBLE_RADIUS_MAX = 32;
@@ -322,6 +333,12 @@ export class Bot {
    */
   @Prop({ type: [String], default: [] })
   allowedDomains?: string[];
+  /**
+   * Max combined embed requests per minute per IP for this bot (widget init + gated chat).
+   * `0` = disabled. Not exposed in the admin UI yet; set on the document (e.g. DB) when needed.
+   */
+  @Prop({ type: Number, min: 0, default: DEFAULT_WIDGET_EMBED_RATE_LIMIT_PER_MINUTE })
+  widgetEmbedRateLimitPerMinute?: number;
   @Prop({ default: Date.now })
   createdAt: Date;
 }
