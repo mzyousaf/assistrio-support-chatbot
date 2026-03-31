@@ -7,6 +7,7 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @source "../components/chat-ui/**/*.tsx";
+@source "../components/chat-ui/chatShadowStyles.ts";
 @source "../components/AdminLiveChatAdapter.tsx";
 @source "../hooks/usePreferredColorScheme.ts";
 @source "../*.tsx";
@@ -51,7 +52,7 @@
 }
 
 .chat-ui-messages-scroll::-webkit-scrollbar {
-  width: 6px;
+  width: 4px;
 }
 
 .chat-ui-messages-scroll::-webkit-scrollbar-track {
@@ -60,7 +61,7 @@
 
 .chat-ui-messages-scroll::-webkit-scrollbar-thumb {
   background: var(--chat-accent, #6366f1);
-  border-radius: 3px;
+  border-radius: 9999px;
 }
 
 .chat-ui-messages-scroll::-webkit-scrollbar-thumb:hover {
@@ -77,6 +78,24 @@
   display: none;
 }
 
+/**
+ * Message list: scrollbar visually hidden; overflow-y still scrolls.
+ * !important: host sites often set scrollbar-width/color; these rules must win for the embed.
+ * Do not remove — part of the widget contract (see ChatMessages data-assistrio-msg-scroll).
+ */
+.chat-ui-messages-scroll-hidden {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+  scrollbar-color: transparent transparent !important;
+}
+
+.chat-ui-messages-scroll-hidden::-webkit-scrollbar {
+  width: 0 !important;
+  height: 0 !important;
+  display: none !important;
+  background: transparent !important;
+}
+
 .chat-bubble-content,
 .chat-composer-textarea {
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif,
@@ -88,6 +107,37 @@
   word-break: break-word;
   overflow-wrap: break-word;
   max-width: 100%;
+}
+
+/* Panel + launcher shadow (chatShadowStyles.ts). Do not rely on Tailwind shadow-[…] here — it may be omitted from the embed bundle. */
+.assistrio-chat-shadow-none {
+  box-shadow: none;
+}
+
+.assistrio-chat-shadow-low {
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+}
+
+.assistrio-chat-shadow-medium {
+  box-shadow:
+    0 10px 35px rgba(0, 0, 0, 0.28),
+    0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+
+.assistrio-chat-shadow-high {
+  box-shadow:
+    0 16px 48px rgba(0, 0, 0, 0.38),
+    0 0 0 1px rgba(0, 0, 0, 0.1);
+}
+
+/* Bubble shell: inline-block + max-width from parent column — avoids width:fit-content which prevents wrapping */
+.chat-bubble-surface {
+  display: inline-block;
+  max-width: 100%;
+  min-width: 0;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .chat-emoji-picker-cdn {
@@ -108,4 +158,92 @@
   border-width: var(--composer-border-width-focus, 2px) !important;
   border-color: var(--composer-border-color-focus) !important;
   box-shadow: none;
+}
+
+/**
+ * Root class on chat panel / inline embed (see Chat.tsx, ChatWithLauncher, AdminLiveChatAdapter).
+ * Pointer cursor on hover for interactive controls.
+ */
+.assistrio-chat-widget button:hover:not(:disabled),
+.assistrio-chat-widget a[href]:hover,
+.assistrio-chat-widget [role="button"]:hover,
+.assistrio-chat-widget [role="menuitem"]:hover,
+.assistrio-chat-widget [role="option"]:hover,
+.assistrio-chat-widget [role="tab"]:hover,
+.assistrio-chat-widget summary:hover,
+.assistrio-chat-widget label[for]:hover {
+  cursor: pointer;
+}
+
+/* Conversation loading skeleton: soft neutral shimmer (no brand/accent color) */
+@keyframes assistrio-skeleton-shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.assistrio-chat-skeleton-shimmer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.assistrio-chat-skeleton-shimmer::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 55%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.085) 50%,
+    transparent 100%
+  );
+  transform: translateX(-100%);
+  animation: assistrio-skeleton-shimmer 1.65s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.assistrio-chat-skeleton-shimmer--light::before {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(0, 0, 0, 0.065) 50%,
+    transparent 100%
+  );
+}
+
+.assistrio-chat-skeleton-block:nth-child(1) .assistrio-chat-skeleton-shimmer::before {
+  animation-delay: 0s;
+}
+
+.assistrio-chat-skeleton-block:nth-child(2) .assistrio-chat-skeleton-shimmer::before {
+  animation-delay: 0.14s;
+}
+
+.assistrio-chat-skeleton-block:nth-child(3) .assistrio-chat-skeleton-shimmer::before {
+  animation-delay: 0.28s;
+}
+
+.assistrio-chat-skeleton-block:nth-child(4) .assistrio-chat-skeleton-shimmer::before {
+  animation-delay: 0.42s;
+}
+
+.assistrio-chat-skeleton-block:nth-child(5) .assistrio-chat-skeleton-shimmer::before {
+  animation-delay: 0.56s;
+}
+
+.assistrio-chat-skeleton-block:nth-child(6) .assistrio-chat-skeleton-shimmer::before {
+  animation-delay: 0.7s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .assistrio-chat-skeleton-shimmer::before {
+    animation: none;
+    opacity: 0;
+  }
 }

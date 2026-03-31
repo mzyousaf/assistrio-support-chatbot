@@ -1,4 +1,5 @@
 import type { BotChatUI } from "./models/botChatUI";
+import type { WidgetStrings } from "./lib/widgetStrings";
 
 export type EmbedPosition = "left" | "right";
 export type WidgetMode = "runtime" | "preview";
@@ -34,6 +35,10 @@ export type EmbedChatConfig = {
    * Usually omitted by callers; the widget will load/create it from localStorage.
    */
   chatVisitorId?: string;
+  /**
+   * Override for embed origin checks (defaults to `window.location.origin` in the browser on runtime).
+   */
+  embedOrigin?: string;
   authToken?: string;
   /**
    * Preview mode: authenticate with the same `user_token` HttpOnly cookie as private APIs
@@ -49,13 +54,23 @@ export type EmbedChatConfig = {
   position?: EmbedPosition;
   previewOverrides?: WidgetPreviewOverrides;
   disableRemoteConfig?: boolean;
+  /**
+   * BCP 47-ish locale hint (default `"en"`). Reserved for future translations; strings still merge from `widgetStrings`.
+   */
+  locale?: string;
+  /** Override default English labels for embed shell + chat UI. */
+  widgetStrings?: Partial<WidgetStrings>;
 };
+
+export type { WidgetStrings };
 
 export interface WidgetInitRequest {
   botId: string;
   mode?: WidgetMode;
   accessKey?: string;
   secretKey?: string;
+  /** Page origin (e.g. https://www.example.com). Sent on runtime init when the embedding site is known. */
+  embedOrigin?: string;
   chatVisitorId?: string;
   platformVisitorId?: string;
   authToken?: string;
@@ -68,6 +83,7 @@ export interface WidgetChatRequest {
   mode?: WidgetMode;
   accessKey?: string;
   secretKey?: string;
+  embedOrigin?: string;
   chatVisitorId: string;
   platformVisitorId?: string;
   authToken?: string;
@@ -94,6 +110,10 @@ export interface WidgetInitResponse {
     chatUI?: BotChatUI;
     brandingMessage?: string;
     privacyText?: string;
+    /** Owner allows multiple saved threads per site visitor */
+    visitorMultiChatEnabled?: boolean;
+    /** Max threads when enabled; null = unlimited */
+    visitorMultiChatMax?: number | null;
   };
 }
 
@@ -110,6 +130,8 @@ export interface NormalizedWidgetSettings {
   launcherPosition: LauncherPosition;
   brandingMessage?: string;
   privacyText?: string;
+  visitorMultiChatEnabled: boolean;
+  visitorMultiChatMax: number | null;
 }
 
 export interface WidgetPreviewOverrides {
@@ -124,6 +146,9 @@ export interface WidgetPreviewOverrides {
   privacyText?: string;
   launcherPosition?: LauncherPosition;
   chatUI?: Partial<BotChatUI>;
+  /** When set, overrides `settings` from preview/init so the editor matches unsaved access toggles. */
+  visitorMultiChatEnabled?: boolean;
+  visitorMultiChatMax?: number | null;
 }
 
 export interface EmbedRuntimeState {

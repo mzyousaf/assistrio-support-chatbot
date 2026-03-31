@@ -40,6 +40,9 @@ export class Conversation {
   visitorId?: string;
   @Prop({ default: Date.now })
   createdAt: Date;
+  /** Updated on each message for ordering “recent” threads (multi-chat). */
+  @Prop({ default: Date.now })
+  lastActivityAt?: Date;
   /** Lead capture: field key -> value collected from this conversation. */
   @Prop({ type: Object, default: undefined })
   capturedLeadData?: CapturedLeadData;

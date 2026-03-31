@@ -1,14 +1,32 @@
-import { Body, Controller, HttpException, HttpStatus, Post } from '@nestjs/common';
+import { Body, Controller, HttpException, HttpStatus, Post, Req, Res } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
+import type { FastifyReply, FastifyRequest } from 'fastify';
 import { VisitorsService } from '../visitors/visitors.service';
 import { BotsService } from './bots.service';
 import { validateRuntimeBotAccess } from './runtime-bot-access.util';
 import { toRuntimeCredentialErrorCode } from './runtime-error-codes.util';
+import {
+  checkEmbedDomainGate,
+  parseAllowedDomainRulesFromStoredArray,
+  resolveRuntimeEmbedOriginFromHeaders,
+} from './embed-domain.util';
+import {
+  consumeEmbedRuntimeRateLimitToken,
+  EMBED_RUNTIME_RATE_LIMIT_KEY_PREFIX,
+  getClientIpForRateLimit,
+} from './embed-runtime-rate-limit.util';
+import { normalizeVisitorMultiChatMax } from './visitor-multi-chat.util';
+import { EmbedSessionService } from './embed-session.service';
 
 type WidgetInitBody = {
   botId?: unknown;
   accessKey?: unknown;
   secretKey?: unknown;
+  /**
+   * Page origin of the embedding site (e.g. https://www.example.com). Required when the bot has allowedDomains configured.
+   */
+  embedOrigin?: unknown;
   /**
    * Optional chat identity (chatVisitorId).
    * When omitted, backend generates one so the widget can persist it locally.
@@ -18,7 +36,7 @@ type WidgetInitBody = {
 
 function parseInitBody(
   body: unknown,
-): { botId: string; accessKey?: string; secretKey?: string; chatVisitorId?: string } | null {
+): { botId: string; accessKey?: string; secretKey?: string; chatVisitorId?: string; embedOrigin?: string } | null {
   if (body == null || typeof body !== 'object') return null;
   const o = body as WidgetInitBody;
   const botId = typeof o.botId === 'string' ? o.botId.trim() : '';
@@ -26,11 +44,13 @@ function parseInitBody(
   const accessKey = typeof o.accessKey === 'string' ? o.accessKey.trim() : '';
   const secretKey = typeof o.secretKey === 'string' ? o.secretKey.trim() : '';
   const chatVisitorId = typeof o.chatVisitorId === 'string' ? o.chatVisitorId.trim() : '';
+  const embedOrigin = typeof o.embedOrigin === 'string' ? o.embedOrigin.trim() : '';
   return {
     botId,
     ...(accessKey ? { accessKey } : {}),
     ...(secretKey ? { secretKey } : {}),
     ...(chatVisitorId ? { chatVisitorId } : {}),
+    ...(embedOrigin ? { embedOrigin } : {}),
   };
 }
 
@@ -40,12 +60,18 @@ function parseInitBody(
 @Controller('api/widget')
 export class WidgetInitController {
   constructor(
+    private readonly configService: ConfigService,
     private readonly botsService: BotsService,
     private readonly visitorsService: VisitorsService,
-  ) {}
+    private readonly embedSessionService: EmbedSessionService,
+  ) { }
 
   @Post('init')
-  async init(@Body() body: unknown) {
+  async init(
+    @Body() body: unknown,
+    @Req() req: FastifyRequest,
+    @Res({ passthrough: true }) res: FastifyReply,
+  ) {
     const parsed = parseInitBody(body);
     if (!parsed) {
       throw new HttpException(
@@ -95,10 +121,64 @@ export class WidgetInitController {
       );
     }
 
+    const limit = this.configService.get<number>('widgetEmbedRateLimitPerMinute') ?? 0;
+    const ip = getClientIpForRateLimit(req);
+    if (
+      !consumeEmbedRuntimeRateLimitToken(`${EMBED_RUNTIME_RATE_LIMIT_KEY_PREFIX}:${ip}`, limit)
+    ) {
+      throw new HttpException(
+        { error: 'Too many requests', status: 'error', errorCode: 'RATE_LIMITED' },
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    const allowedRules = parseAllowedDomainRulesFromStoredArray((row as { allowedDomains?: unknown }).allowedDomains);
+    const embedOriginResolved = resolveRuntimeEmbedOriginFromHeaders(req.headers);
+    if (!embedOriginResolved) {
+      throw new HttpException(
+        {
+          error: 'Origin header is required for embed requests',
+          status: 'error' as const,
+          errorCode: 'EMBED_ORIGIN_HEADER_REQUIRED',
+        },
+        HttpStatus.FORBIDDEN,
+      );
+    }
+    const allowLoopback =
+      this.configService.get<boolean>('allowLoopbackEmbedOrigin') === true;
+    const domainGate = checkEmbedDomainGate(allowedRules, embedOriginResolved, {
+      allowLoopbackOriginWhenLocalDev: allowLoopback,
+    });
+    if (!domainGate.ok) {
+      const errorCode =
+        domainGate.reason === 'no_allowlist'
+          ? 'EMBED_NO_ALLOWLIST'
+          : domainGate.reason === 'missing_origin'
+            ? 'EMBED_ORIGIN_REQUIRED'
+            : domainGate.reason === 'bad_origin'
+              ? 'EMBED_ORIGIN_INVALID'
+              : 'EMBED_DOMAIN_NOT_ALLOWED';
+      const error =
+        domainGate.reason === 'no_allowlist'
+          ? 'This bot has no valid allowed embed rules configured'
+          : domainGate.reason === 'missing_origin'
+            ? 'Origin header is required for embed requests'
+            : domainGate.reason === 'bad_origin'
+              ? 'embedOrigin could not be parsed'
+              : 'This chat widget is not allowed on this site';
+      throw new HttpException({ error, status: 'error' as const, errorCode }, HttpStatus.FORBIDDEN);
+    }
+
     const chatUI = (row.chatUI ?? {}) as Record<string, unknown>;
 
     const brandingMessage =
       typeof chatUI.brandingMessage === 'string' ? chatUI.brandingMessage.trim() : undefined;
+    const privacyText =
+      typeof chatUI.privacyText === 'string' ? chatUI.privacyText.trim() : undefined;
+    const visitorMultiChatEnabled = (row as { visitorMultiChatEnabled?: unknown }).visitorMultiChatEnabled === true;
+    const visitorMultiChatMax = normalizeVisitorMultiChatMax(
+      (row as { visitorMultiChatMax?: unknown }).visitorMultiChatMax,
+    );
 
     const chatVisitorId =
       parsed.chatVisitorId && parsed.chatVisitorId.trim()
@@ -110,6 +190,8 @@ export class WidgetInitController {
     } catch (err) {
       console.error('[widget/init] getOrCreateChatVisitor failed', err);
     }
+
+    this.embedSessionService.refreshSessionCookie(res, String(row._id ?? ''), chatVisitorId);
 
     return {
       status: 'ok' as const,
@@ -127,6 +209,9 @@ export class WidgetInitController {
       settings: {
         chatUI,
         ...(brandingMessage ? { brandingMessage } : {}),
+        ...(privacyText ? { privacyText } : {}),
+        visitorMultiChatEnabled,
+        visitorMultiChatMax,
       },
       chatVisitorId,
     };

@@ -17,8 +17,6 @@ type EditBotFormClientProps = {
   onSavingChange?: (saving: boolean) => void;
   /** Called after successful save. */
   onSaveSuccess?: (result: Record<string, unknown>) => void;
-  /** Called when name, imageUrl, or chatUI change for live chat preview. */
-  onLivePreviewChange?: (preview: { name: string; imageUrl?: string; chatUI: BotChatUI; tagline?: string; description?: string; welcomeMessage?: string }) => void;
   initialBot: {
     id?: string;
     name?: string;
@@ -27,6 +25,7 @@ type EditBotFormClientProps = {
     category?: string;
     categories?: string[];
     imageUrl?: string;
+    avatarEmoji?: string;
     welcomeMessage?: string;
     knowledgeDescription?: string;
     status?: "draft" | "published";
@@ -44,6 +43,9 @@ type EditBotFormClientProps = {
     messageLimitMode?: "none" | "fixed_total";
     messageLimitTotal?: number | null;
     messageLimitUpgradeMessage?: string | null;
+    visitorMultiChatEnabled?: boolean;
+    visitorMultiChatMax?: number | null;
+    allowedDomains?: string[];
     leadCapture?: BotLeadCaptureV2;
     chatUI?: BotChatUI;
     personality?: BotPersonality;
@@ -71,7 +73,6 @@ export default function EditBotFormClient({
   onDirtyChange,
   onSavingChange,
   onSaveSuccess,
-  onLivePreviewChange,
 }: EditBotFormClientProps) {
   const router = useRouter();
 
@@ -107,7 +108,6 @@ export default function EditBotFormClient({
       formId={formId}
       onDirtyChange={onDirtyChange}
       onSavingChange={onSavingChange}
-      onLivePreviewChange={onLivePreviewChange}
       initialBot={{
         ...initialBot,
         config: {

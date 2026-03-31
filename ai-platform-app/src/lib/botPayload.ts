@@ -1,8 +1,9 @@
 import { normalizeLeadCapture } from "@/lib/leadCapture";
 import type { BotChatUI, BotConfig, BotLeadCaptureV2, BotPersonality } from "@/models/Bot";
 import type { ChatMenuQuickLink } from "@/models/Bot";
+import { normalizeQuickLinkIcon } from "@/lib/quickLinkIconNormalize";
 
-const MENU_QUICK_LINKS_MAX = 3;
+const MENU_QUICK_LINKS_MAX = 10;
 
 function normalizeMenuQuickLinks(input: unknown): ChatMenuQuickLink[] {
   if (!Array.isArray(input)) return [];
@@ -13,7 +14,9 @@ function normalizeMenuQuickLinks(input: unknown): ChatMenuQuickLink[] {
       if (!o) return null;
       const text = typeof o.text === "string" ? String(o.text).trim() : "";
       const route = typeof o.route === "string" ? String(o.route).trim() : "";
-      return text && route ? { text, route } : null;
+      if (!text || !route) return null;
+      const icon = normalizeQuickLinkIcon(o.icon);
+      return icon ? { text, route, icon } : { text, route };
     })
     .filter((x): x is ChatMenuQuickLink => x != null);
 }
@@ -97,6 +100,7 @@ export function normalizeBotPayload(input: BotPayloadInput): NormalizedBotPayloa
 
   const leadCapture = normalizeLeadCapture(input.leadCapture);
   const chatUIInput = (input.chatUI ?? {}) as BotChatUI;
+  const menuQuickLinksMenuIcon = normalizeQuickLinkIcon(chatUIInput.menuQuickLinksMenuIcon);
   const chatUI: BotChatUI = {
     primaryColor:
       typeof chatUIInput.primaryColor === "string" && /^#[0-9a-fA-F]{6}$/.test(chatUIInput.primaryColor.trim())
@@ -121,10 +125,17 @@ export function normalizeBotPayload(input: BotPayloadInput): NormalizedBotPayloa
     shadowIntensity:
       chatUIInput.shadowIntensity === "none" ||
         chatUIInput.shadowIntensity === "low" ||
+        chatUIInput.shadowIntensity === "medium" ||
         chatUIInput.shadowIntensity === "high"
         ? chatUIInput.shadowIntensity
         : "medium",
     showChatBorder: chatUIInput.showChatBorder !== false,
+    chatPanelBorderWidth:
+      typeof chatUIInput.chatPanelBorderWidth === "number" &&
+        chatUIInput.chatPanelBorderWidth >= 0 &&
+        chatUIInput.chatPanelBorderWidth <= 5
+        ? Math.round(chatUIInput.chatPanelBorderWidth)
+        : 1,
     launcherIcon:
       chatUIInput.launcherIcon === "bot-avatar" || chatUIInput.launcherIcon === "custom"
         ? chatUIInput.launcherIcon
@@ -141,6 +152,10 @@ export function normalizeBotPayload(input: BotPayloadInput): NormalizedBotPayloa
       typeof chatUIInput.launcherSize === "number" && chatUIInput.launcherSize >= 32 && chatUIInput.launcherSize <= 96
         ? Math.round(chatUIInput.launcherSize)
         : 48,
+    launcherWhenOpen:
+      chatUIInput.launcherWhenOpen === "close" || chatUIInput.launcherWhenOpen === "same"
+        ? chatUIInput.launcherWhenOpen
+        : "chevron-down",
     chatOpenAnimation:
       chatUIInput.chatOpenAnimation === "fade"
         ? "fade"
@@ -150,6 +165,8 @@ export function normalizeBotPayload(input: BotPayloadInput): NormalizedBotPayloa
     openChatOnLoad: chatUIInput.openChatOnLoad !== false,
     showBranding: chatUIInput.showBranding !== false,
     brandingMessage: typeof chatUIInput.brandingMessage === "string" ? chatUIInput.brandingMessage.trim() : "",
+    showPrivacyText: chatUIInput.showPrivacyText !== false,
+    privacyText: typeof chatUIInput.privacyText === "string" ? chatUIInput.privacyText.trim() : "",
     liveIndicatorStyle:
       chatUIInput.liveIndicatorStyle === "dot-only" ? "dot-only" : "label",
     statusIndicator:
@@ -159,6 +176,9 @@ export function normalizeBotPayload(input: BotPayloadInput): NormalizedBotPayloa
     statusDotStyle:
       chatUIInput.statusDotStyle === "static" ? "static" : "blinking",
     showScrollToBottom: chatUIInput.showScrollToBottom !== false,
+    showScrollToBottomLabel: chatUIInput.showScrollToBottomLabel !== false,
+    scrollToBottomLabel:
+      typeof chatUIInput.scrollToBottomLabel === "string" ? chatUIInput.scrollToBottomLabel.trim() : "",
     showScrollbar: chatUIInput.showScrollbar !== false,
     composerAsSeparateBox: chatUIInput.composerAsSeparateBox !== false,
     composerBorderWidth:
@@ -174,7 +194,9 @@ export function normalizeBotPayload(input: BotPayloadInput): NormalizedBotPayloa
           : 1,
     composerBorderColor: chatUIInput.composerBorderColor === "default" ? "default" : "primary",
     showMenuExpand: chatUIInput.showMenuExpand !== false,
+    showMenuQuickLinks: chatUIInput.showMenuQuickLinks !== false,
     menuQuickLinks: normalizeMenuQuickLinks(chatUIInput.menuQuickLinks),
+    ...(menuQuickLinksMenuIcon ? { menuQuickLinksMenuIcon } : {}),
     showComposerWithSuggestedQuestions: chatUIInput.showComposerWithSuggestedQuestions === true,
     showAvatarInHeader: chatUIInput.showAvatarInHeader !== false,
     senderName: typeof chatUIInput.senderName === "string" ? chatUIInput.senderName.trim() : "",

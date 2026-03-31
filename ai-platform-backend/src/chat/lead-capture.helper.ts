@@ -13,6 +13,7 @@ interface LeadFieldLike {
   type?: string;
   required?: boolean;
   aliases?: string[];
+  disabled?: boolean;
 }
 
 /** Minimal lead capture config (compatible with BotLeadCaptureV2). */
@@ -86,6 +87,7 @@ export function getLeadStateFromConversation(
   }
 
   for (const f of leadConfig.fields) {
+    if (f.disabled) continue;
     const key = (f.key || '').trim();
     if (!key) continue;
     fieldLabels[key] = (f.label || key).trim();
@@ -160,7 +162,6 @@ export function buildLeadCaptureContext(
     postponedFields?: string[];
     shouldAskThisTurn?: boolean;
     askStrategy?: 'soft' | 'balanced' | 'direct';
-    politeMode?: boolean;
   },
 ): ChatContextLeadCapture {
   const missingRequired = requiredFields.filter((k) => !(collected[k] && String(collected[k]).trim()));
@@ -207,7 +208,6 @@ export function buildLeadCaptureContext(
     missingRequired,
     shouldAskNow: !!shouldAskNow,
     fieldLabels: { ...fieldLabels },
-    politeMode: options.politeMode,
     askStrategy: options.askStrategy,
   };
 }
@@ -314,7 +314,7 @@ export function getFieldOverwritePolicy(fieldKey: string, fieldType?: string): n
 
 /** Derive search words from field key, label, and optional bot-level aliases for spontaneous matching. */
 function getFieldSearchWords(key: string, label: string, botAliases?: string[]): string[] {
-  const k = key.toLowerCase().replace(/_/g, ' ');
+  const k = key.toLowerCase().replace(/[-_]/g, ' ');
   const l = (label || k).toLowerCase();
   const words = new Set<string>([...k.split(/\s+/), ...l.split(/\s+/)].filter((w) => w.length > 1));
   if (Array.isArray(botAliases)) botAliases.forEach((a) => words.add(a.trim().toLowerCase()));
@@ -326,7 +326,8 @@ function getFieldSearchWords(key: string, label: string, botAliases?: string[]):
     budget: ['budget', 'around', 'about', '$', 'usd'],
     timeline: ['timeline', 'by', 'within', 'next month', 'deadline', 'asap'],
   };
-  const extra = builtIn[key];
+  const keyUnderscore = key.replace(/-/g, '_');
+  const extra = builtIn[key] ?? builtIn[keyUnderscore];
   if (extra) extra.forEach((w) => words.add(w));
   return Array.from(words);
 }

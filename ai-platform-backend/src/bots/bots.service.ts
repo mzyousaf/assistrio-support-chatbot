@@ -17,6 +17,9 @@ import { getDefaultBotCreatePayload } from '../user/default-new-bot.payload';
 import { KnowledgeBaseItemService } from '../knowledge/knowledge-base-item.service';
 import { KnowledgeBaseChunkService } from '../knowledge/knowledge-base-chunk.service';
 import { generateBotAccessKey, generateBotSecretKey } from './bot-keys.util';
+import { parseAllowedDomainRulesFromStoredArray, validateAllowedDomainEntry } from './embed-domain.util';
+import { normalizeVisitorMultiChatMax } from './visitor-multi-chat.util';
+import { WorkspacesService } from '../workspaces/workspaces.service';
 
 function slugify(input: string): string {
   const slug = input
@@ -67,6 +70,11 @@ export interface CreateVisitorTrialBotInput {
   platformVisitorId?: string;
   /** @deprecated legacy alias for platformVisitorId */
   visitorId?: string;
+  /**
+   * Required. Single hostname where the embedded widget is allowed (same limit as non–super-admin accounts).
+   * Example: window.location.hostname from the page that creates the trial.
+   */
+  allowedDomain: string;
   name?: string;
   welcomeMessage?: string;
   shortDescription?: string;
@@ -80,6 +88,8 @@ export interface ShowcaseAccessSettingsInput {
   messageLimitMode: 'none' | 'fixed_total';
   messageLimitTotal?: number | null;
   messageLimitUpgradeMessage?: string | null;
+  visitorMultiChatEnabled?: boolean;
+  visitorMultiChatMax?: number | null;
 }
 
 @Injectable()
@@ -97,20 +107,56 @@ export class BotsService {
     @InjectModel(VisitorEvent.name) private readonly visitorEventModel: Model<VisitorEvent>,
     private readonly knowledgeBaseItemService: KnowledgeBaseItemService,
     private readonly knowledgeBaseChunkService: KnowledgeBaseChunkService,
+    private readonly workspacesService: WorkspacesService,
   ) { }
 
   async findAll() {
     return this.botModel.find().select('-secretKey').lean();
   }
 
-  /** List bots for user panel with optional status filter (showcase only). */
-  async findForAdminList(status?: 'draft' | 'published' | 'all') {
-    const filter: { type: string; status?: 'draft' | 'published' } = { type: 'showcase' };
-    if (status && status !== 'all') filter.status = status;
+  /** Lookup showcase bot by client draft id (for access checks before finalize). */
+  async findShowcaseByClientDraftId(clientDraftId: string): Promise<Record<string, unknown> | null> {
+    const trimmed = clientDraftId?.trim();
+    if (!trimmed) return null;
+    const b = await this.botModel.findOne({ clientDraftId: trimmed, type: 'showcase' }).lean();
+    return b ? (b as Record<string, unknown>) : null;
+  }
+
+  /**
+   * List bots for user panel with optional status filter (showcase only).
+   * `superadmin` sees all showcase bots; `customer` sees bots in their workspaces or legacy owner/created bots without workspaceId.
+   */
+  async findForAdminList(
+    status?: 'draft' | 'published' | 'all',
+    access?: { userId: string; platformRole: string; workspaceIds: Types.ObjectId[] },
+  ) {
+    const base: Record<string, unknown> = { type: 'showcase' };
+    if (status && status !== 'all') base.status = status;
+
+    if (!access || access.platformRole === 'superadmin') {
+      return this.botModel
+        .find(base)
+        .sort({ createdAt: -1 })
+        .select('name type category status isPublic createdAt _id slug visibility creatorType messageLimitMode messageLimitTotal workspaceId')
+        .lean();
+    }
+
+    const userOid = new Types.ObjectId(access.userId);
+    const orClause: Record<string, unknown>[] = [];
+    if (access.workspaceIds.length > 0) {
+      orClause.push({ workspaceId: { $in: access.workspaceIds } });
+    }
+    orClause.push({
+      $and: [
+        { $or: [{ workspaceId: { $exists: false } }, { workspaceId: null }] },
+        { $or: [{ ownerUserId: userOid }, { createdByUserId: userOid }] },
+      ],
+    });
+
     return this.botModel
-      .find(filter)
+      .find({ ...base, $or: orClause })
       .sort({ createdAt: -1 })
-      .select('name type category status isPublic createdAt _id slug visibility creatorType messageLimitMode messageLimitTotal')
+      .select('name type category status isPublic createdAt _id slug visibility creatorType messageLimitMode messageLimitTotal workspaceId')
       .lean();
   }
 
@@ -294,7 +340,9 @@ export class BotsService {
     if (!id || !Types.ObjectId.isValid(id)) return null;
     const bot = await this.botModel
       .findById(new Types.ObjectId(id))
-      .select('_id slug name shortDescription description category avatarEmoji imageUrl openaiApiKeyOverride welcomeMessage leadCapture personality config chatUI type status isPublic visibility accessKey secretKey creatorType ownerUserId createdByUserId ownerVisitorId messageLimitMode messageLimitTotal messageLimitUpgradeMessage includeNameInKnowledge includeTaglineInKnowledge')
+      .select(
+        '_id slug name shortDescription description category avatarEmoji imageUrl openaiApiKeyOverride welcomeMessage leadCapture personality config chatUI type status isPublic visibility accessKey secretKey creatorType ownerUserId createdByUserId ownerVisitorId messageLimitMode messageLimitTotal messageLimitUpgradeMessage includeNameInKnowledge includeTaglineInKnowledge exampleQuestions allowedDomains visitorMultiChatEnabled visitorMultiChatMax',
+      )
       .lean();
     if (!bot) return null;
     const [faqs, knowledgeDescription] = await Promise.all([
@@ -386,7 +434,7 @@ export class BotsService {
   async findOneShowcaseForAdmin(id: string) {
     const bot = await this.botModel
       .findById(id)
-      .select('slug name shortDescription description category categories imageUrl openaiApiKeyOverride whisperApiKeyOverride welcomeMessage status isPublic leadCapture chatUI exampleQuestions personality type config limitOverrideMessages visibility accessKey secretKey creatorType ownerUserId ownerVisitorId messageLimitMode messageLimitTotal messageLimitUpgradeMessage includeNameInKnowledge includeTaglineInKnowledge includeNotesInKnowledge')
+      .select('slug name shortDescription description category categories imageUrl openaiApiKeyOverride whisperApiKeyOverride welcomeMessage status isPublic leadCapture chatUI exampleQuestions personality type config limitOverrideMessages visibility accessKey secretKey creatorType ownerUserId ownerVisitorId messageLimitMode messageLimitTotal messageLimitUpgradeMessage visitorMultiChatEnabled visitorMultiChatMax includeNameInKnowledge includeTaglineInKnowledge includeNotesInKnowledge allowedDomains workspaceId')
       .lean();
     if (!bot) return null;
     const [faqs, knowledgeDescription] = await Promise.all([
@@ -416,9 +464,9 @@ export class BotsService {
     welcomeMessage?: string;
     imageUrl?: string;
     avatarEmoji?: string;
-    messageLimitMode: 'fixed_total';
-    messageLimitTotal: number;
-    messageLimitUpgradeMessage: string;
+    messageLimitMode: 'none';
+    messageLimitTotal: null;
+    messageLimitUpgradeMessage: null;
   }> {
     const platformVisitorId = String((input.platformVisitorId ?? input.visitorId) || '').trim();
     if (!platformVisitorId) {
@@ -431,6 +479,13 @@ export class BotsService {
     const safeDescription = String(input.description ?? '').trim();
     const safeImageUrl = String(input.imageUrl ?? '').trim();
     const safeAvatarEmoji = String(input.avatarEmoji ?? '').trim();
+
+    const allowedDomainNorm = validateAllowedDomainEntry(String(input.allowedDomain ?? ''));
+    if (!allowedDomainNorm) {
+      throw new Error(
+        'allowedDomain is required and must be a valid hostname (e.g. www.example.com or localhost).',
+      );
+    }
 
     let slug = await this.generateUniqueSlug(safeName || 'trial-bot');
     for (let attempt = 0; attempt < 5; attempt++) {
@@ -451,11 +506,11 @@ export class BotsService {
           welcomeMessage: safeWelcome || undefined,
           imageUrl: safeImageUrl || undefined,
           avatarEmoji: safeAvatarEmoji || undefined,
-          messageLimitMode: 'fixed_total',
-          messageLimitTotal: 20,
-          messageLimitUpgradeMessage:
-            'This trial bot has reached its message limit. Please contact Assistrio to continue.',
+          messageLimitMode: 'none',
+          messageLimitTotal: null,
+          messageLimitUpgradeMessage: null,
           includeNotesInKnowledge: true,
+          allowedDomains: [allowedDomainNorm],
           createdAt: new Date(),
         });
         return {
@@ -473,10 +528,9 @@ export class BotsService {
           welcomeMessage: (created as { welcomeMessage?: string }).welcomeMessage,
           imageUrl: (created as { imageUrl?: string }).imageUrl,
           avatarEmoji: (created as { avatarEmoji?: string }).avatarEmoji,
-          messageLimitMode: 'fixed_total',
-          messageLimitTotal: 20,
-          messageLimitUpgradeMessage:
-            'This trial bot has reached its message limit. Please contact Assistrio to continue.',
+          messageLimitMode: 'none',
+          messageLimitTotal: null,
+          messageLimitUpgradeMessage: null,
         };
       } catch (err: unknown) {
         const e = err as { code?: number; keyPattern?: Record<string, number> };
@@ -504,6 +558,8 @@ export class BotsService {
     messageLimitMode: 'none' | 'fixed_total';
     messageLimitTotal: number | null;
     messageLimitUpgradeMessage: string | null;
+    visitorMultiChatEnabled: boolean;
+    visitorMultiChatMax: number | null;
   }> {
     const existing = await this.botModel
       .findById(id)
@@ -528,6 +584,15 @@ export class BotsService {
         : '';
     const messageLimitUpgradeMessage = upgradeMessageRaw ? upgradeMessageRaw : null;
 
+    const visitorMultiChatEnabled = input.visitorMultiChatEnabled === true;
+    const rawVisitorMax = input.visitorMultiChatMax;
+    const visitorMultiChatMax =
+      !visitorMultiChatEnabled
+        ? null
+        : rawVisitorMax === null || rawVisitorMax === undefined
+          ? null
+          : normalizeVisitorMultiChatMax(rawVisitorMax);
+
     const updated = await this.botModel
       .findByIdAndUpdate(
         id,
@@ -536,10 +601,12 @@ export class BotsService {
           messageLimitMode,
           messageLimitTotal,
           messageLimitUpgradeMessage,
+          visitorMultiChatEnabled,
+          visitorMultiChatMax,
         },
         { new: true },
       )
-      .select('_id visibility accessKey secretKey creatorType ownerVisitorId messageLimitMode messageLimitTotal messageLimitUpgradeMessage')
+      .select('_id visibility accessKey secretKey creatorType ownerVisitorId messageLimitMode messageLimitTotal messageLimitUpgradeMessage visitorMultiChatEnabled visitorMultiChatMax')
       .lean();
     if (!updated) throw new Error('Bot not found');
     const bot = updated as Record<string, unknown>;
@@ -555,6 +622,8 @@ export class BotsService {
       messageLimitTotal: typeof bot.messageLimitTotal === 'number' ? bot.messageLimitTotal : null,
       messageLimitUpgradeMessage:
         typeof bot.messageLimitUpgradeMessage === 'string' ? bot.messageLimitUpgradeMessage : null,
+      visitorMultiChatEnabled: (bot as { visitorMultiChatEnabled?: boolean }).visitorMultiChatEnabled === true,
+      visitorMultiChatMax: normalizeVisitorMultiChatMax((bot as { visitorMultiChatMax?: unknown }).visitorMultiChatMax),
     };
   }
 
@@ -599,6 +668,10 @@ export class BotsService {
       createdByUserId && Types.ObjectId.isValid(createdByUserId)
         ? new Types.ObjectId(createdByUserId)
         : undefined;
+    let workspaceOid: Types.ObjectId | undefined;
+    if (creatorOid) {
+      workspaceOid = await this.workspacesService.ensurePersonalWorkspaceForUser(String(creatorOid));
+    }
     for (let attempt = 0; attempt < 5; attempt++) {
       const slug = await this.generateUniqueSlug('ai-support-assistant');
       try {
@@ -607,6 +680,7 @@ export class BotsService {
           ...(payload as unknown as Record<string, unknown>),
           ...getCreatorDefaultsForUserFlow(creatorOid),
           ...(creatorOid ? { createdByUserId: creatorOid } : {}),
+          ...(workspaceOid ? { workspaceId: workspaceOid } : {}),
         });
         return { botId: String((created as { _id: unknown })._id), slug: (created as { slug: string }).slug };
       } catch (err: unknown) {
@@ -648,18 +722,23 @@ export class BotsService {
       messageLimitMode?: 'none' | 'fixed_total';
       messageLimitTotal?: number | null;
       messageLimitUpgradeMessage?: string | null;
+      allowedDomains?: string[];
     },
     createdByUserId?: string,
   ): Promise<{ botId: string; slug: string }> {
     const finalName = normalized.name || 'Draft bot';
     const finalDescription = normalized.description || '';
+    const publishRules = parseAllowedDomainRulesFromStoredArray(normalized.allowedDomains ?? []);
+    if (publishRules.length === 0) {
+      throw new Error('At least one allowed embed domain is required to publish.');
+    }
     const creatorOid =
       createdByUserId && Types.ObjectId.isValid(createdByUserId)
         ? new Types.ObjectId(createdByUserId)
         : undefined;
     const existing = await this.botModel
       .findOne({ clientDraftId })
-      .select('_id slug name createdAt createdByUserId accessKey secretKey creatorType ownerUserId visibility messageLimitMode messageLimitTotal messageLimitUpgradeMessage')
+      .select('_id slug name createdAt createdByUserId accessKey secretKey creatorType ownerUserId visibility messageLimitMode messageLimitTotal messageLimitUpgradeMessage workspaceId')
       .lean();
     if (existing) {
       let finalSlug = (existing as { slug: string }).slug;
@@ -673,6 +752,10 @@ export class BotsService {
             creatorOid && !(existing as { createdByUserId?: unknown }).createdByUserId
               ? { createdByUserId: creatorOid }
               : {};
+          const existingWs = (existing as { workspaceId?: Types.ObjectId }).workspaceId;
+          const workspaceIdResolved =
+            existingWs ??
+            (creatorOid ? await this.workspacesService.ensurePersonalWorkspaceForUser(String(creatorOid)) : undefined);
           await this.botModel.updateOne(
             { _id: (existing as { _id: unknown })._id },
             {
@@ -716,6 +799,8 @@ export class BotsService {
                 normalized.messageLimitUpgradeMessage !== undefined
                   ? normalized.messageLimitUpgradeMessage
                   : (existing as { messageLimitUpgradeMessage?: string | null }).messageLimitUpgradeMessage ?? null,
+              ...(normalized.allowedDomains !== undefined ? { allowedDomains: normalized.allowedDomains } : {}),
+              ...(workspaceIdResolved ? { workspaceId: workspaceIdResolved } : {}),
               ...setCreatedBy,
             },
           );
@@ -744,6 +829,8 @@ export class BotsService {
     for (let attempt = 0; attempt < 5; attempt++) {
       const slug = await this.generateUniqueSlug(finalName || 'draft-bot');
       try {
+        const wsForCreate =
+          creatorOid ? await this.workspacesService.ensurePersonalWorkspaceForUser(String(creatorOid)) : undefined;
         const created = await this.botModel.create({
           name: finalName,
           slug,
@@ -772,6 +859,8 @@ export class BotsService {
           ...(normalized.messageLimitMode ? { messageLimitMode: normalized.messageLimitMode } : {}),
           ...(normalized.messageLimitTotal !== undefined ? { messageLimitTotal: normalized.messageLimitTotal } : {}),
           ...(normalized.messageLimitUpgradeMessage !== undefined ? { messageLimitUpgradeMessage: normalized.messageLimitUpgradeMessage } : {}),
+          ...(normalized.allowedDomains !== undefined ? { allowedDomains: normalized.allowedDomains } : {}),
+          ...(wsForCreate ? { workspaceId: wsForCreate } : {}),
           createdAt: new Date(),
           ...(creatorOid ? { createdByUserId: creatorOid } : {}),
         });
@@ -805,6 +894,7 @@ export class BotsService {
       description?: string;
       categories: string[];
       imageUrl?: string;
+      avatarEmoji?: string;
       openaiApiKeyOverride?: string;
       whisperApiKeyOverride?: string;
       welcomeMessage?: string;
@@ -825,9 +915,12 @@ export class BotsService {
       messageLimitMode?: 'none' | 'fixed_total';
       messageLimitTotal?: number | null;
       messageLimitUpgradeMessage?: string | null;
+      allowedDomains?: string[];
+      visitorMultiChatEnabled?: boolean;
+      visitorMultiChatMax?: number | null;
     },
   ): Promise<{ ok: true; botId: string; status: string }> {
-    const existing = await this.botModel.findById(id).select('_id type name slug').lean();
+    const existing = await this.botModel.findById(id).select('_id type name slug allowedDomains').lean();
     if (!existing || (existing as { type?: string }).type !== 'showcase') {
       throw new Error('Bot not found');
     }
@@ -850,6 +943,16 @@ export class BotsService {
     if (status === 'published') {
       if (!normalized.name?.trim()) throw new Error('Name is required to publish.');
       if (!description) throw new Error('Description is required to publish.');
+      const rawMerged =
+        normalized.allowedDomains !== undefined
+          ? normalized.allowedDomains
+          : Array.isArray((existing as { allowedDomains?: unknown }).allowedDomains)
+            ? ((existing as { allowedDomains: string[] }).allowedDomains as string[])
+            : [];
+      const publishRules = parseAllowedDomainRulesFromStoredArray(rawMerged);
+      if (publishRules.length === 0) {
+        throw new Error('At least one allowed embed domain is required to publish.');
+      }
     }
     let nextSlug = String((existing as { slug?: string }).slug ?? '');
     const shouldUpdateSlug = finalName !== String((existing as { name?: string }).name ?? '');
@@ -876,6 +979,7 @@ export class BotsService {
           categories: normalized.categories,
           category: normalized.categories?.[0],
           imageUrl: normalized.imageUrl ?? '',
+          avatarEmoji: normalized.avatarEmoji ?? '',
           openaiApiKeyOverride: normalized.openaiApiKeyOverride,
           whisperApiKeyOverride: normalized.whisperApiKeyOverride,
           welcomeMessage: normalized.welcomeMessage ?? '',
@@ -894,6 +998,14 @@ export class BotsService {
           messageLimitMode,
           messageLimitTotal,
           messageLimitUpgradeMessage,
+          ...(normalized.allowedDomains !== undefined ? { allowedDomains: normalized.allowedDomains } : {}),
+          ...(normalized.visitorMultiChatEnabled !== undefined
+            ? {
+              visitorMultiChatEnabled: normalized.visitorMultiChatEnabled === true,
+              visitorMultiChatMax:
+                normalized.visitorMultiChatEnabled === true ? normalized.visitorMultiChatMax ?? null : null,
+            }
+            : {}),
         });
         await this.knowledgeBaseItemService.upsertFaqKnowledgeItemsForBot(id, newFaqs);
         await this.knowledgeBaseItemService.upsertNoteKnowledgeItemForBot(id, newKnowledgeDescription);

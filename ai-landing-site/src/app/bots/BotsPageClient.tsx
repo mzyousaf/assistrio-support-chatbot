@@ -113,6 +113,10 @@ export function BotsPageClient({ bots }: BotsPageClientProps) {
         body: JSON.stringify({
           platformVisitorId,
           name: "Trial Assistant",
+          allowedDomain:
+            typeof window !== "undefined" && window.location?.hostname
+              ? window.location.hostname
+              : "",
         }),
       });
       const data = (await res.json().catch(() => ({}))) as {

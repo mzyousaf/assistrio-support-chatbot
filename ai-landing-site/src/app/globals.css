@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* Optional: Tailwind can scan the published widget bundle for class names if layout drops CDN CSS. */
+@source "../../node_modules/@assistrio/chat-widget/dist/index.mjs";
+
 :root {
   --background: #ffffff;
   --foreground: #0f172a;

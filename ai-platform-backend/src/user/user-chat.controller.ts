@@ -15,6 +15,7 @@ import { BotsService } from '../bots/bots.service';
 import { ChatEngineService } from '../chat/chat-engine.service';
 import type { BotLike } from '../chat/chat-engine.types';
 import { AuthGuard, type RequestUser } from '../auth/auth.guard';
+import { WorkspacesService } from '../workspaces/workspaces.service';
 
 type RequestWithUser = FastifyRequest & { user?: RequestUser };
 
@@ -32,6 +33,7 @@ export class UserChatController {
   constructor(
     private readonly botsService: BotsService,
     private readonly chatEngineService: ChatEngineService,
+    private readonly workspacesService: WorkspacesService,
   ) {}
 
   @Post(':botId/chat')
@@ -51,6 +53,15 @@ export class UserChatController {
     const bot = await this.botsService.findOneShowcaseForAdmin(botId);
     if (!bot || (bot as { type?: string }).type !== 'showcase') {
       throw new HttpException({ error: 'Bot not found' }, HttpStatus.NOT_FOUND);
+    }
+    const uid = adminUser?._id != null ? String(adminUser._id) : '';
+    const can = await this.workspacesService.canUserAccessShowcaseBot(
+      uid,
+      adminUser?.role ?? 'customer',
+      bot as Record<string, unknown>,
+    );
+    if (!can) {
+      throw new HttpException({ error: 'Forbidden' }, HttpStatus.FORBIDDEN);
     }
 
     const b = bot as Record<string, unknown>;

@@ -14,6 +14,9 @@ export class BotLeadField {
   type: LeadFieldType;
   @Prop({ default: true })
   required?: boolean;
+  /** When true, field is kept but excluded from capture and prompts. */
+  @Prop({ default: false })
+  disabled?: boolean;
   /** Optional aliases for spontaneous extraction (e.g. ["employees", "staff", "headcount"] for team_size). */
   @Prop({ type: [String], default: undefined })
   aliases?: string[];
@@ -57,13 +60,45 @@ export class BotChatUI {
   backgroundStyle?: ChatBackgroundStyle;
   @Prop({ min: 0, max: 32, default: 20 })
   bubbleBorderRadius?: number;
+  /** Chat panel outer border width in px when border is shown (0–5, default 1). */
+  @Prop({ min: 0, max: 5, default: 1 })
+  chatPanelBorderWidth?: number;
   @Prop({ enum: ['bottom-right', 'bottom-left'], default: 'bottom-right' })
   launcherPosition?: ChatLauncherPosition;
+  @Prop({ enum: ['none', 'low', 'medium', 'high'], default: 'medium' })
+  shadowIntensity?: 'none' | 'low' | 'medium' | 'high';
+  @Prop({ default: true })
+  showChatBorder?: boolean;
+  @Prop({ enum: ['default', 'bot-avatar', 'custom'], default: 'default' })
+  launcherIcon?: 'default' | 'bot-avatar' | 'custom';
+  @Prop({ default: '' })
+  launcherAvatarUrl?: string;
+  @Prop({ min: 0, max: 30, default: 18 })
+  launcherAvatarRingWidth?: number;
+  @Prop({ min: 32, max: 96, default: 48 })
+  launcherSize?: number;
+  /** Launcher while chat is open: X, down arrow (default), or same as closed */
+  @Prop({ enum: ['close', 'chevron-down', 'same'], default: 'chevron-down' })
+  launcherWhenOpen?: 'close' | 'chevron-down' | 'same';
+  @Prop({ enum: ['slide-up-fade', 'fade', 'expand'], default: 'slide-up-fade' })
+  chatOpenAnimation?: 'slide-up-fade' | 'fade' | 'expand';
+  @Prop({ default: true })
+  openChatOnLoad?: boolean;
+  @Prop({ min: 0, max: 6, default: 1 })
+  composerBorderWidth?: number;
+  @Prop({ enum: ['default', 'primary'], default: 'primary' })
+  composerBorderColor?: 'default' | 'primary';
   @Prop({ default: true })
   showBranding?: boolean;
   /** Editable text shown in footer when showBranding is true (e.g. "Powered by ...") */
   @Prop({ default: '' })
   brandingMessage?: string;
+  /** When false, hide the privacy/footer line even if privacyText is set (default true). */
+  @Prop({ default: true })
+  showPrivacyText?: boolean;
+  /** Optional second footer line (privacy / legal). Shown when showPrivacyText is true. */
+  @Prop({ default: '' })
+  privacyText?: string;
   /** How to show the status indicator: "label" = dot + text next to title; "dot-only" = dot on avatar */
   @Prop({ enum: ['label', 'dot-only'], default: 'label' })
   liveIndicatorStyle?: LiveIndicatorStyle;
@@ -76,15 +111,39 @@ export class BotChatUI {
   /** Show scroll-to-bottom button when user scrolls up (default true) */
   @Prop({ default: true })
   showScrollToBottom?: boolean;
+  /** When true, show label text beside the scroll-to-bottom arrow (default true). */
+  @Prop({ default: true })
+  showScrollToBottomLabel?: boolean;
+  /** Custom scroll-to-bottom label; empty string uses widget default copy. */
+  @Prop({ default: '' })
+  scrollToBottomLabel?: string;
+  /** Show scrollbar in message list (default true). When false, scrollbar is hidden but content still scrolls. */
+  @Prop({ default: true })
+  showScrollbar?: boolean;
   /** When true, message input is a separate box (border-top + bg). When false, no border and no bg (default true). */
   @Prop({ default: true })
   composerAsSeparateBox?: boolean;
   /** Show "Expand chat" option in header menu (default true) */
   @Prop({ default: true })
   showMenuExpand?: boolean;
-  /** Quick links in header menu (max 3): text + route */
-  @Prop({ type: [{ text: String, route: String }], default: [] })
-  menuQuickLinks?: Array<{ text: string; route: string }>;
+  /** When false, hide the quick links header control (default true). */
+  @Prop({ default: true })
+  showMenuQuickLinks?: boolean;
+  /** Quick links in header menu (max 10): text + route + optional icon id */
+  @Prop({
+    type: [
+      {
+        text: { type: String, required: true },
+        route: { type: String, required: true },
+        icon: { type: String, required: false },
+      },
+    ],
+    default: [],
+  })
+  menuQuickLinks?: Array<{ text: string; route: string; icon?: string }>;
+  /** Icon id for the header control that opens the quick links menu (default link-2). */
+  @Prop({ type: String, required: false })
+  menuQuickLinksMenuIcon?: string;
   /** When true, show chat input with suggested questions on first message. When false, only quick-question chips until user picks one (default false). */
   @Prop({ default: false })
   showComposerWithSuggestedQuestions?: boolean;
@@ -224,6 +283,18 @@ export class Bot {
   /** Custom upgrade/upsell copy shown when bot-level quota is reached. */
   @Prop({ type: String, default: null })
   messageLimitUpgradeMessage?: string | null;
+  /**
+   * When true, embed visitors may keep multiple chat threads (start new / recent chats).
+   * When false, one conversation per chatVisitorId (legacy).
+   */
+  @Prop({ default: false })
+  visitorMultiChatEnabled?: boolean;
+  /**
+   * Max concurrent saved threads per embed visitor when visitorMultiChatEnabled is true.
+   * null/undefined = unlimited.
+   */
+  @Prop({ type: Number, default: null })
+  visitorMultiChatMax?: number | null;
   @Prop()
   clientDraftId?: string;
   @Prop({ enum: ['draft', 'published'], default: 'draft', index: true })
@@ -242,6 +313,15 @@ export class Bot {
   personality?: BotPersonality;
   @Prop({ type: BotConfig })
   config?: BotConfig;
+  /** Tenant workspace for showcase bots (multi-user edit via membership). */
+  @Prop({ type: Types.ObjectId, ref: 'Workspace', index: true })
+  workspaceId?: Types.ObjectId;
+  /**
+   * Runtime embed allowlist. Each entry is either a hostname (domain mode: includes subdomains)
+   * or `exact:<canonicalOrigin>` for a single origin (scheme + host + port).
+   */
+  @Prop({ type: [String], default: [] })
+  allowedDomains?: string[];
   @Prop({ default: Date.now })
   createdAt: Date;
 }

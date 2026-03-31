@@ -1,4 +1,7 @@
 import React from "react";
+import { ChevronDown, MessageCircle } from "lucide-react";
+import type { ChatLauncherWhenOpen } from "../../models/botChatUI";
+import { chatShadowIntensityClass } from "./chatShadowStyles";
 import { cx } from "./utils";
 
 export interface ChatLauncherBubbleProps {
@@ -14,13 +17,18 @@ export interface ChatLauncherBubbleProps {
   position?: "bottom-right" | "bottom-left" | "top-right" | "top-left";
   /** Optional unread count badge (e.g. new messages). Hidden when 0 or undefined. */
   unreadCount?: number;
-  /** Custom icon when closed (chat). If not provided, default chat icon is used. */
+  /** Custom icon when closed. If not provided, default chat icon is used. */
   closedIcon?: React.ReactNode;
-  /** Custom icon when open (close). If not provided, default X icon is used. Ignored when alwaysShowSameIcon. */
+  /** Custom icon when open and `launcherWhenOpen` is "close". If not provided, default X icon is used. */
   openIcon?: React.ReactNode;
-  /** When set, shown in the bubble (e.g. bot avatar). When alwaysShowSameIcon, this or closedIcon/chat icon is always shown instead of close icon. */
+  /** When set, shown in the bubble when closed (e.g. bot avatar). */
   avatar?: React.ReactNode;
-  /** When true, always show avatar or closedIcon/default chat icon; never show close (X) icon when open. */
+  /**
+   * What to show when chat is open: X, down arrow (default), or same content as when closed.
+   * Ignored legacy: `alwaysShowSameIcon` maps to "same" when `launcherWhenOpen` is omitted.
+   */
+  launcherWhenOpen?: ChatLauncherWhenOpen;
+  /** @deprecated Prefer `launcherWhenOpen: "same"`. When true and `launcherWhenOpen` is omitted, open state matches closed. */
   alwaysShowSameIcon?: boolean;
   /** Accessible label when closed (default "Open chat"). */
   openLabel?: string;
@@ -32,6 +40,8 @@ export interface ChatLauncherBubbleProps {
   size?: number;
   /** Shadow intensity: "none" | "low" | "medium" | "high" (default "medium"). */
   shadowIntensity?: "none" | "low" | "medium" | "high";
+  /** Return focus here when the panel closes (accessibility). */
+  buttonRef?: React.Ref<HTMLButtonElement>;
   /** When true and avatar is set, avatar is inset so button background shows as a ring (e.g. bot avatar with background). */
   avatarWithBackground?: boolean;
   /** When avatarWithBackground, ring width as percentage (0–30). 0 = no ring; default 18. */
@@ -40,19 +50,9 @@ export interface ChatLauncherBubbleProps {
   style?: React.CSSProperties;
 }
 
-const ChatIcon = () => (
-  <svg
-    className="w-6 h-6"
-    fill="none"
-    viewBox="0 0 24 24"
-    stroke="currentColor"
-    strokeWidth={2}
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    aria-hidden
-  >
-    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-  </svg>
+/** Default launcher: chat bubble icon when mode is “default” (no avatar image). */
+const DefaultChatLauncherGlyph = () => (
+  <MessageCircle className="w-6 h-6" strokeWidth={2} aria-hidden />
 );
 
 const CloseIcon = () => (
@@ -77,13 +77,6 @@ const positionClasses = {
   "top-left": "top-4 left-4",
 } as const;
 
-const shadowClasses: Record<"none" | "low" | "medium" | "high", string> = {
-  none: "",
-  low: "shadow-[0_2px_12px_rgba(0,0,0,0.15)]",
-  medium: "shadow-[0_10px_35px_rgba(0,0,0,0.28),0_0_0_1px_rgba(0,0,0,0.08)]",
-  high: "shadow-[0_16px_48px_rgba(0,0,0,0.38),0_0_0_1px_rgba(0,0,0,0.1)]",
-};
-
 export function ChatLauncherBubble({
   isOpen,
   onToggle,
@@ -94,6 +87,7 @@ export function ChatLauncherBubble({
   closedIcon,
   openIcon,
   avatar,
+  launcherWhenOpen: launcherWhenOpenProp,
   alwaysShowSameIcon = false,
   openLabel = "Open chat",
   closeLabel = "Close chat",
@@ -102,6 +96,7 @@ export function ChatLauncherBubble({
   shadowIntensity = "medium",
   avatarWithBackground = false,
   avatarRingWidth = 18,
+  buttonRef,
   className,
   style,
 }: ChatLauncherBubbleProps) {
@@ -109,31 +104,47 @@ export function ChatLauncherBubble({
     typeof unreadCount === "number" && unreadCount > 0 && !isOpen;
   const label = isOpen ? closeLabel : openLabel;
 
-  const showSameIcon = alwaysShowSameIcon || avatar != null;
-  const intensity = shadowIntensity === "none" || shadowIntensity === "low" || shadowIntensity === "high" ? shadowIntensity : "medium";
-  const iconContent = showSameIcon
-    ? (avatar ?? closedIcon ?? <ChatIcon />)
-    : isOpen
-      ? (openIcon ?? <CloseIcon />)
-      : (closedIcon ?? <ChatIcon />);
+  const whenOpen: ChatLauncherWhenOpen =
+    launcherWhenOpenProp ?? (alwaysShowSameIcon ? "same" : "chevron-down");
+
+  const closedGlyph = avatar ?? closedIcon ?? <DefaultChatLauncherGlyph />;
+  const openGlyph =
+    whenOpen === "same"
+      ? closedGlyph
+      : whenOpen === "close"
+        ? (openIcon ?? <CloseIcon />)
+        : (
+          <ChevronDown className="w-6 h-6" strokeWidth={2} aria-hidden />
+        );
+
+  const intensity =
+    shadowIntensity === "none" || shadowIntensity === "low" || shadowIntensity === "medium" || shadowIntensity === "high"
+      ? shadowIntensity
+      : "medium";
+  const iconContent = isOpen ? openGlyph : closedGlyph;
 
   const sizePx = typeof size === "number" && size > 0 ? Math.round(size) : 48;
+  const useAvatarRing =
+    avatarWithBackground &&
+    avatar != null &&
+    (!isOpen || whenOpen === "same");
   const ringPct =
-    avatarWithBackground && avatar != null && typeof avatarRingWidth === "number" && avatarRingWidth >= 0 && avatarRingWidth <= 30
+    useAvatarRing && typeof avatarRingWidth === "number" && avatarRingWidth >= 0 && avatarRingWidth <= 30
       ? avatarRingWidth
-      : avatarWithBackground && avatar != null
+      : useAvatarRing
         ? 18
         : 0;
 
   return (
     <button
+      ref={buttonRef}
       type="button"
       onClick={onToggle}
       aria-label={label}
       aria-expanded={isOpen}
       className={cx(
         "flex items-center justify-center rounded-full transition-transform hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 overflow-hidden",
-        shadowClasses[intensity],
+        chatShadowIntensityClass(intensity),
         dark
           ? "text-white focus-visible:ring-offset-gray-900"
           : "text-white focus-visible:ring-offset-white",

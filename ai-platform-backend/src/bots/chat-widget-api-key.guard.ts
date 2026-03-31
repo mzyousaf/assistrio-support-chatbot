@@ -9,6 +9,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { timingSafeEqual } from 'crypto';
 import { FastifyRequest } from 'fastify';
+import { ENV_CHAT_WIDGET_API_KEY } from '../lib/env-var-names';
 
 function safeCompare(expected: string, provided: string): boolean {
   const a = Buffer.from(expected, 'utf8');
@@ -18,28 +19,38 @@ function safeCompare(expected: string, provided: string): boolean {
 }
 
 /**
- * Guard for widget-only testing endpoints.
- * Expects header `X-API-Key: <CHAT_WIDGET_API_KEY value>`.
+ * Guard for widget runtime + testing endpoints.
+ * Accepts `X-API-Key` or `Authorization: Bearer` using the key from `ENV_CHAT_WIDGET_API_KEY` (see `src/lib/env-var-names.ts`).
  */
 @Injectable()
 export class ChatWidgetApiKeyGuard implements CanActivate {
   constructor(private readonly configService: ConfigService) {}
 
+  private extractProvidedKey(request: FastifyRequest): string {
+    const raw = request.headers['x-api-key'];
+    const fromX = typeof raw === 'string' ? raw.trim() : Array.isArray(raw) ? String(raw[0]).trim() : '';
+    if (fromX) return fromX;
+    const auth = request.headers.authorization;
+    if (typeof auth === 'string' && auth.startsWith('Bearer ')) {
+      return auth.slice(7).trim();
+    }
+    return '';
+  }
+
   canActivate(context: ExecutionContext): boolean {
     const expected = this.configService.get<string>('chatWidgetApiKey')?.trim() ?? '';
     if (!expected) {
       throw new HttpException(
-        { error: 'Chat widget testing API is not configured' },
+        { error: `Chat widget runtime API is not configured (set ${ENV_CHAT_WIDGET_API_KEY})` },
         HttpStatus.SERVICE_UNAVAILABLE,
       );
     }
 
     const request = context.switchToHttp().getRequest<FastifyRequest>();
-    const raw = request.headers['x-api-key'];
-    const provided = Array.isArray(raw) ? raw[0] : raw;
+    const provided = this.extractProvidedKey(request);
 
-    if (typeof provided !== 'string' || !safeCompare(expected, provided.trim())) {
-      throw new UnauthorizedException({ error: 'Unauthorized' });
+    if (!provided || !safeCompare(expected, provided)) {
+      throw new UnauthorizedException({ error: 'Invalid or missing widget API key' });
     }
 
     return true;

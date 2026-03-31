@@ -16,6 +16,7 @@ import { USER_ROLES, type UserRole } from '../models';
 import { SHOWCASE_BOTS } from './showcase-bots-seed.data';
 import { AuthService } from '../auth/auth.service';
 import { AuthGuard, type RequestUser } from '../auth/auth.guard';
+import { WorkspacesService } from '../workspaces/workspaces.service';
 
 type RequestWithUser = FastifyRequest & { user?: RequestUser };
 
@@ -26,14 +27,15 @@ export class UserSeedController {
     private readonly documentsService: DocumentsService,
     private readonly ingestionService: IngestionService,
     private readonly authService: AuthService,
+    private readonly workspacesService: WorkspacesService,
   ) { }
 
   @Post()
   async seedUser(@Body() body: { email?: string; password?: string; role?: string }) {
     const email = typeof body?.email === 'string' ? body.email : '';
     const password = typeof body?.password === 'string' ? body.password : '';
-    const roleInput = typeof body?.role === 'string' ? body.role.trim().toLowerCase() : 'admin';
-    const role: UserRole = (USER_ROLES as readonly string[]).includes(roleInput) ? (roleInput as UserRole) : 'admin';
+    const roleInput = typeof body?.role === 'string' ? body.role.trim().toLowerCase() : 'customer';
+    const role: UserRole = (USER_ROLES as readonly string[]).includes(roleInput) ? (roleInput as UserRole) : 'customer';
     try {
       const user = await this.authService.createUser(email, password, role);
       return {
@@ -59,6 +61,10 @@ export class UserSeedController {
       const createdByUserId =
         req.user?._id != null && Types.ObjectId.isValid(String(req.user._id))
           ? new Types.ObjectId(String(req.user._id))
+          : undefined;
+      const workspaceId =
+        req.user?._id != null
+          ? await this.workspacesService.ensurePersonalWorkspaceForUser(String(req.user._id))
           : undefined;
       const createdBots: { botId: string; slug: string; docsQueued: number }[] = [];
       const skippedBots: { slug: string; reason: string }[] = [];
@@ -93,6 +99,7 @@ export class UserSeedController {
           faqs: [],
           categories: [],
           ...(createdByUserId ? { createdByUserId } : {}),
+          ...(workspaceId ? { workspaceId } : {}),
         });
         const botId = (bot as { _id?: { toString?: () => string } })._id?.toString?.() ?? String((bot as { _id?: unknown })._id);
         let docsQueued = 0;

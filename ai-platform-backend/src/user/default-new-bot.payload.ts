@@ -37,7 +37,6 @@ export const DEFAULT_NEW_BOT_PAYLOAD = {
         { label: 'Phone', key: 'phone', type: 'phone', required: false },
       ],
       askStrategy: 'balanced' as const,
-      politeMode: true,
       captureMode: 'chat' as const,
     },
   },
@@ -97,7 +96,8 @@ export const DEFAULT_NEW_BOT_PAYLOAD = {
     showCopyButton: true,
     showSources: true,
     showSenderName: true,
-    assistantName: 'Assistrio',
+    /** Empty = widget uses bot name + " - AI" for the sender label */
+    assistantName: '',
     showMessageTime: true,
     timePosition: 'bottom',
     showAvatarInHeader: true,
@@ -129,7 +129,8 @@ export const DEFAULT_NEW_BOT_PAYLOAD = {
     composerBorderWidth: 1,
     composerBorderColor: 'default',
     showBranding: true,
-    brandingMessage: 'Powered by Assistrio',
+    /** Empty = no default footer line; admins can add attribution later */
+    brandingMessage: '',
   },
   publish: {
     public: false,
@@ -182,7 +183,6 @@ export type DefaultBotCreatePayload = {
     enabled: boolean;
     fields: Array<{ key: string; label: string; type: string; required: boolean }>;
     askStrategy?: 'soft' | 'balanced' | 'direct';
-    politeMode?: boolean;
     captureMode?: 'chat' | 'form' | 'hybrid';
   };
   chatUI: Record<string, unknown>;
@@ -238,13 +238,13 @@ export function getDefaultBotCreatePayload(
         required: f.required ?? false,
       })),
       askStrategy: b.leadCapture.askStrategy,
-      politeMode: b.leadCapture.politeMode,
       captureMode: b.leadCapture.captureMode,
     },
     chatUI: {
       primaryColor: ap.primaryColor,
       backgroundStyle: ap.backgroundStyle,
       bubbleBorderRadius: ap.bubbleRadius,
+      chatPanelBorderWidth: 1,
       launcherPosition: ap.launcherPosition,
       showBranding: ap.showBranding,
       brandingMessage: ap.brandingMessage,

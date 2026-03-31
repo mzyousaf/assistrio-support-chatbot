@@ -14,6 +14,7 @@ import { RagModule } from '../rag/rag.module';
 import { BotsModule } from '../bots/bots.module';
 import { VisitorsModule } from '../visitors/visitors.module';
 import { AuthModule } from '../auth/auth.module';
+import { WorkspacesModule } from '../workspaces/workspaces.module';
 import { ChatController } from './chat.controller';
 import { WidgetPreviewController } from './widget-preview.controller';
 import { ChatEngineService } from './chat-engine.service';
@@ -26,6 +27,7 @@ import { SummaryJobService } from './summary-job.service';
     BotsModule,
     VisitorsModule,
     AuthModule,
+    WorkspacesModule,
     MongooseModule.forFeature([
       { name: Conversation.name, schema: ConversationSchema },
       { name: Message.name, schema: MessageSchema },

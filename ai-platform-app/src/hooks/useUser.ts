@@ -5,7 +5,13 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 /** Logged-in user (from User table). No role restriction. */
-export type User = { id: string; email: string; role?: string } | null;
+export type User = {
+  id: string;
+  email: string;
+  role?: string;
+  /** Workspace ids the user belongs to (from GET /api/user/me). */
+  workspaceIds?: string[];
+} | null;
 
 export function useUser(): { user: User; loading: boolean } {
   const router = useRouter();
@@ -21,9 +27,19 @@ export function useUser(): { user: User; loading: boolean } {
           router.replace("/user/login");
           return;
         }
-        const data = (await res.json()) as { id?: string; email?: string; role?: string };
+        const data = (await res.json()) as {
+          id?: string;
+          email?: string;
+          role?: string;
+          workspaceIds?: string[];
+        };
         if (typeof data?.id === "string" && typeof data?.email === "string") {
-          setUser({ id: data.id, email: data.email, role: data.role });
+          setUser({
+            id: data.id,
+            email: data.email,
+            role: data.role,
+            workspaceIds: Array.isArray(data.workspaceIds) ? data.workspaceIds : undefined,
+          });
         } else {
           router.replace("/user/login");
         }

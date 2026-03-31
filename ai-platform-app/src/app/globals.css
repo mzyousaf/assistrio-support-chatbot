@@ -2,7 +2,8 @@
 @plugin "@tailwindcss/typography";
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* Compile Tailwind utilities used by the CDN chat widget when we skip loading hosted assistrio-chat.css (avoids global preflight on admin pages). */
+/* Compile Tailwind utilities used by the chat widget (npm package and/or monorepo source when skipping hosted assistrio-chat.css). */
+@source "../../node_modules/@assistrio/chat-widget/dist/index.mjs";
 @source "../../chat-widget/src/**/*.tsx";
 @source "../../chat-widget/src/**/*.ts";
 

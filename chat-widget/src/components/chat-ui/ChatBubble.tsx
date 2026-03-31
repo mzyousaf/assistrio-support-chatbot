@@ -36,6 +36,10 @@ export interface ChatBubbleProps {
   showSources?: boolean;
   sourcesLabel?: string;
   onSourceClick?: (source: ChatUISource) => void;
+  /** When user message failed to send */
+  messageSendFailedLabel?: string;
+  retrySendLabel?: string;
+  onRetrySend?: (messageId: string) => void;
   className?: string;
 }
 
@@ -68,11 +72,16 @@ export function ChatBubble({
   showSources = true,
   sourcesLabel = "Sources",
   onSourceClick,
+  messageSendFailedLabel = "Couldn’t send",
+  retrySendLabel = "Retry",
+  onRetrySend,
   className,
 }: ChatBubbleProps) {
   const [copied, setCopied] = useState(false);
   const isUser = message.role === "user";
   const isAssistant = message.role === "assistant";
+  const userFailed = isUser && message.status === "error";
+  const userSending = isUser && message.status === "sending";
   const radiusPx = Math.max(0, Math.min(32, bubbleBorderRadius ?? 20));
 
   const roleLabel = isAssistant && senderName ? senderName : isUser ? "User" : "Assistant";
@@ -98,10 +107,9 @@ export function ChatBubble({
     isUser && "flex-row-reverse"
   );
 
-  const bubbleBaseClass = cx(
-    "px-3 py-2.5 text-sm leading-relaxed text-left box-border",
-    "min-w-0 max-w-full w-full overflow-hidden",
-    "break-words",
+  const bubbleSurfaceClass = cx(
+    "chat-bubble-surface inline-block max-w-full min-w-0 align-top box-border px-3 py-2.5 text-left text-sm leading-relaxed",
+    "break-words [overflow-wrap:anywhere]",
     isUser && "text-white",
     isAssistant &&
     (dark
@@ -111,40 +119,52 @@ export function ChatBubble({
 
   const bubbleInlineStyle: React.CSSProperties =
     isUser && accentColor
-      ? { backgroundColor: accentColor, color: "#fff", borderRadius: `${radiusPx}px` }
+      ? {
+          backgroundColor: userFailed ? undefined : accentColor,
+          color: "#fff",
+          borderRadius: `${radiusPx}px`,
+          ...(userFailed
+            ? {
+                backgroundColor: dark ? "rgb(31 41 55 / 0.95)" : "rgb(243 244 246)",
+                color: dark ? "rgb(243 244 246)" : "rgb(17 24 39)",
+                boxShadow: "inset 0 0 0 2px rgb(239 68 68 / 0.55)",
+              }
+            : {}),
+          ...(userSending ? { opacity: 0.88 } : {}),
+        }
       : { borderRadius: `${radiusPx}px` };
 
   const contentWrapperClass = cx(
-    "text-left min-w-0 max-w-full w-full overflow-hidden chat-bubble-content",
+    "text-left min-w-0 max-w-full chat-bubble-content",
     "[&>*]:min-w-0 [&>*]:max-w-full",
     dark ? "[&>code]:bg-gray-600 [&>code]:text-gray-200" : "[&>code]:bg-gray-300 [&>code]:text-gray-800",
     "[&>code]:rounded [&>code]:px-1 [&>code]:py-0.5 [&>code]:break-all"
   );
 
-  // Same text width classes for both user and assistant (emoji-friendly font for display)
-  const plainTextClass = "whitespace-pre-wrap min-w-0 max-w-full w-full overflow-hidden break-words chat-bubble-content";
+  const plainTextClass =
+    "whitespace-pre-wrap min-w-0 max-w-full break-words [overflow-wrap:anywhere] chat-bubble-content";
 
-  // Row/column: constrain width so bubble stays inside; min-w-0 allows flex children to shrink.
-  const rowClass = cx(
-    "flex items-start gap-2 w-full min-w-0 max-w-[85%]",
-    isUser ? "flex-row-reverse self-end" : ""
+  const messageRowClass = cx(
+    "flex w-full min-w-0 max-w-full items-start gap-2",
+    isUser ? "justify-end" : "justify-start"
   );
-  const columnClass = cx(
-    "flex flex-col gap-0.5 min-w-0 max-w-full w-full",
-    isUser ? "items-end" : "items-start"
+
+  const bubbleColumnClass = cx(
+    "flex min-w-0 max-w-[85%] flex-col gap-0.5",
+    isAssistant && "flex-1",
+    isUser ? "w-full items-end" : "items-start"
   );
 
   return (
     <article
       className={cx(
-        "flex flex-col gap-1",
+        "flex w-full min-w-0 max-w-full flex-col gap-1",
         isUser ? "items-end" : "items-start",
         className
       )}
       data-message-id={message.id}
       aria-label={`${roleLabel} message`}
     >
-      {/* Metadata above bubble */}
       {showMetadata && (showSenderName || showTimeAbove) && (
         <div className={metaClass} aria-hidden>
           {showSenderName && <span>{roleLabel}</span>}
@@ -152,65 +172,87 @@ export function ChatBubble({
         </div>
       )}
 
-      <div className={rowClass}>
-        <div className={columnClass}>
-          <div
-            className={bubbleBaseClass}
-            style={bubbleInlineStyle}
-            role="article"
-          >
+      <div className={messageRowClass}>
+        <div className={bubbleColumnClass}>
+          <div className={bubbleSurfaceClass} style={bubbleInlineStyle} role="article">
             {showMarkdown ? (
               <div
                 className={cx(
                   contentWrapperClass,
                   "prose prose-sm max-w-full dark:prose-invert",
+                  dark
+                    ? "text-gray-100 [&_p]:text-gray-100 [&_li]:text-gray-100 [&_strong]:text-white [&_em]:text-gray-200 [&_blockquote]:text-gray-300 [&_h1]:text-gray-50 [&_h2]:text-gray-50 [&_h3]:text-gray-100 [&_pre]:text-gray-100"
+                    : "text-gray-900 [&_p]:text-gray-900 [&_pre]:text-gray-800",
                   "[&_a]:text-blue-400 [&_a]:underline [&_a]:break-all",
                   "[&_pre]:text-sm [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_pre]:rounded",
                   "[&_table]:max-w-full [&_table]:block [&_table]:overflow-x-auto"
                 )}
               >
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                  {message.content}
-                </ReactMarkdown>
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
               </div>
             ) : (
-              <div className={plainTextClass}>
-                {message.content}
-              </div>
+              <div className={plainTextClass}>{message.content}</div>
             )}
           </div>
+          {userFailed ? (
+            <div
+              className={cx(
+                "mt-1 flex max-w-full flex-col items-end gap-1 text-xs",
+                dark ? "text-red-300" : "text-red-700",
+              )}
+            >
+              <span>{messageSendFailedLabel}</span>
+              {onRetrySend ? (
+                <button
+                  type="button"
+                  className={cx(
+                    "rounded-lg px-2 py-1 font-semibold underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2",
+                    dark
+                      ? "text-red-200 focus-visible:ring-red-400"
+                      : "text-red-800 focus-visible:ring-red-500",
+                  )}
+                  onClick={() => onRetrySend(message.id)}
+                >
+                  {retrySendLabel}
+                </button>
+              ) : null}
+            </div>
+          ) : null}
         </div>
         {isAssistant && showCopyButton && message.content && renderCopyInBubble && (
           <button
             type="button"
             onClick={handleCopy}
             className={cx(
-              "p-1.5 rounded transition-colors flex-shrink-0 mt-1",
+              "mt-1 flex-shrink-0 rounded p-1.5 transition-colors",
               dark
-                ? "text-gray-400 hover:text-gray-300 hover:bg-gray-700/50"
-                : "text-gray-500 hover:text-gray-700 hover:bg-gray-200"
+                ? "text-gray-400 hover:bg-gray-700/50 hover:text-gray-300"
+                : "text-gray-500 hover:bg-gray-200 hover:text-gray-700"
             )}
             aria-label={copied ? copiedLabel : copyLabel}
             title={copied ? copiedLabel : copyLabel}
           >
             {copied ? (
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
               </svg>
             ) : (
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                />
               </svg>
             )}
           </button>
         )}
       </div>
 
-      {/* Single sources row: always present for both actor types; alignment and content by role */}
       <div
         className={cx(
-          "flex flex-wrap items-center gap-2 w-full min-w-0 max-w-[85%] mt-1.5",
-          isUser ? "justify-end" : "justify-start"
+          "flex min-w-0 max-w-[85%] flex-wrap items-center gap-2",
+          isUser ? "justify-end self-end" : "justify-start self-start"
         )}
         data-sources-row
       >
@@ -229,31 +271,32 @@ export function ChatBubble({
             type="button"
             onClick={handleCopy}
             className={cx(
-              "p-1.5 rounded transition-colors flex-shrink-0",
+              "flex-shrink-0 rounded p-1.5 transition-colors",
               dark
-                ? "text-gray-400 hover:text-gray-300 hover:bg-gray-700/50"
-                : "text-gray-500 hover:text-gray-700 hover:bg-gray-200"
+                ? "text-gray-400 hover:bg-gray-700/50 hover:text-gray-300"
+                : "text-gray-500 hover:bg-gray-200 hover:text-gray-700"
             )}
             aria-label={copied ? copiedLabel : copyLabel}
             title={copied ? copiedLabel : copyLabel}
           >
             {copied ? (
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
               </svg>
             ) : (
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                />
               </svg>
             )}
           </button>
         )}
         {showMetadata && showTimeBelow && (
           <span
-            className={cx(
-              "text-xs flex-shrink-0",
-              dark ? "text-gray-400" : "text-gray-500"
-            )}
+            className={cx("flex-shrink-0 text-xs", dark ? "text-gray-400" : "text-gray-500")}
             aria-hidden
           >
             <time dateTime={message.createdAt}>{formatTime(message.createdAt)}</time>

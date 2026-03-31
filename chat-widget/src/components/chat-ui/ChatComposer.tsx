@@ -1,4 +1,5 @@
 import React, { useCallback, useRef, useEffect, useState } from "react";
+import type { Ref } from "react";
 import { cx } from "./utils";
 
 const LINE_HEIGHT = 16;
@@ -39,6 +40,8 @@ export interface ChatComposerProps {
   onAttach?: () => void;
   onEmoji?: () => void;
   onMic?: () => void;
+  /** Optional ref to the message textarea (e.g. focus when panel opens). */
+  textAreaRef?: Ref<HTMLTextAreaElement>;
   className?: string;
 }
 
@@ -62,9 +65,22 @@ export function ChatComposer({
   onAttach,
   onEmoji,
   onMic,
+  textAreaRef: externalTextAreaRef,
   className,
 }: ChatComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const setTextareaRef = useCallback(
+    (el: HTMLTextAreaElement | null) => {
+      textareaRef.current = el;
+      if (!externalTextAreaRef) return;
+      if (typeof externalTextAreaRef === "function") {
+        externalTextAreaRef(el);
+      } else {
+        (externalTextAreaRef as React.MutableRefObject<HTMLTextAreaElement | null>).current = el;
+      }
+    },
+    [externalTextAreaRef],
+  );
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   const emojiPickerContainerRef = useRef<HTMLDivElement>(null);
@@ -221,7 +237,7 @@ export function ChatComposer({
             {/* Left column: icons + textarea (one group), row-aligned with send */}
             <div className="flex flex-1 flex-col items-start min-w-0 gap-1">
               <textarea
-                ref={textareaRef}
+                ref={setTextareaRef}
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
                 onKeyDown={handleKeyDown}

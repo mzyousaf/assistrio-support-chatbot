@@ -13,7 +13,7 @@ export type AssistrioChatConfigShape = {
 export function getLandingAssistrioChatConfig(): AssistrioChatConfigShape | null {
   const botId =
     typeof process.env.NEXT_PUBLIC_LANDING_WIDGET_BOT_ID === "string" &&
-    process.env.NEXT_PUBLIC_LANDING_WIDGET_BOT_ID.trim() !== ""
+      process.env.NEXT_PUBLIC_LANDING_WIDGET_BOT_ID.trim() !== ""
       ? process.env.NEXT_PUBLIC_LANDING_WIDGET_BOT_ID.trim()
       : DEFAULT_BOT_ID;
 

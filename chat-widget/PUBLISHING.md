@@ -14,6 +14,16 @@
 
 ## Release safety (small checklist)
 
-- Run **`npm run build`** from `packages/chat-widget` and ship the **new** `dist/` pair together (JS + CSS from the same build).
-- Smoke-test with **`npm run test:local`** and the sample page under `examples/local-test/`.
-- Confirm your **API** CORS and cookie behavior match how customers embed (see codebase review: credentials on chat requests).
+- Run **`npm run build`** from the `chat-widget` package root and ship the **new** `dist/` assets together (JS + CSS + `index.mjs` + `.d.ts` from the same build).
+- Smoke-test with **`npm run test:local`** if you use a local static server.
+- Confirm your **API** CORS and cookie behavior match how customers embed (credentials on chat requests).
+
+## npm (`@assistrio/chat-widget`)
+
+- **Build:** `npm run build` produces `dist/index.mjs` (ESM library), `dist/index.d.ts` (and sibling `.d.ts` files), plus the CDN `assistrio-chat.js` / `assistrio-chat.css`.
+- **Peer deps:** consumers must install **`react`** and **`react-dom`** (see `peerDependencies` in `package.json`).
+- **Import:** `import { EmbedWidgetRoot, mountEmbedWidget } from "@assistrio/chat-widget"`.
+- **CDN paths in package:** `import "@assistrio/chat-widget/assistrio-chat.css"` or use the subpath `assistrio-chat.js` from `exports` if you host via npm `exports` (usually you still host the IIFE on your CDN).
+- **Publish:** log in to npm, ensure the **`@assistrio`** scope exists on your org (or change the package `name`). First publish of a scoped public package:  
+  `npm publish --access public`
+- **`prepublishOnly`** runs `npm run build` automatically before publish.

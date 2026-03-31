@@ -15,12 +15,15 @@ import {
 import { FastifyRequest } from 'fastify';
 import { Types } from 'mongoose';
 import { BotsService } from '../bots/bots.service';
+import { normalizeVisitorMultiChatMax } from '../bots/visitor-multi-chat.util';
 import { DocumentsService } from '../documents/documents.service';
 import { KnowledgeBaseItemService } from '../knowledge/knowledge-base-item.service';
 import { KnowledgeBaseChunkService } from '../knowledge/knowledge-base-chunk.service';
 import { normalizeBotPayload } from './bot-payload';
+import { assertAllowedDomainsPolicy } from './allowed-domains-policy';
 import { BotOnboardingService } from './bot-onboarding.service';
 import { AuthGuard, type RequestUser } from '../auth/auth.guard';
+import { WorkspacesService } from '../workspaces/workspaces.service';
 
 type RequestWithUser = FastifyRequest & { user?: RequestUser };
 
@@ -33,7 +36,20 @@ export class UserBotsController {
     private readonly botOnboardingService: BotOnboardingService,
     private readonly knowledgeBaseItemService: KnowledgeBaseItemService,
     private readonly knowledgeBaseChunkService: KnowledgeBaseChunkService,
+    private readonly workspacesService: WorkspacesService,
   ) { }
+
+  private async assertCanAccessShowcaseBot(req: RequestWithUser, botId: string): Promise<void> {
+    const bot = await this.botsService.findOne(botId);
+    if (!bot || (bot as { type?: string }).type !== 'showcase') {
+      throw new HttpException({ error: 'Bot not found' }, HttpStatus.NOT_FOUND);
+    }
+    const uid = req.user?._id != null ? String(req.user._id) : '';
+    const ok = await this.workspacesService.canUserAccessShowcaseBot(uid, req.user?.role ?? '', bot as Record<string, unknown>);
+    if (!ok) {
+      throw new HttpException({ error: 'Forbidden' }, HttpStatus.FORBIDDEN);
+    }
+  }
 
   @Post('draft')
   async createDraft(@Body() body: { clientDraftId?: string }, @Req() req: RequestWithUser) {
@@ -62,19 +78,38 @@ export class UserBotsController {
       throw new HttpException({ error: 'clientDraftId is required' }, HttpStatus.BAD_REQUEST);
     }
     const normalized = normalizeBotPayload(body?.payload ?? {});
+    if (normalized.allowedDomains !== undefined) {
+      assertAllowedDomainsPolicy(normalized.allowedDomains, req.user?.role);
+    }
+    const draftBot = await this.botsService.findShowcaseByClientDraftId(clientDraftId);
+    if (draftBot?._id != null) {
+      await this.assertCanAccessShowcaseBot(req, String(draftBot._id));
+    }
     const createdByUserId = req.user?._id != null ? String(req.user._id) : undefined;
     try {
       return await this.botsService.finalizeDraft(clientDraftId, normalized, createdByUserId);
     } catch (err) {
       console.error('Finalize draft bot failed', err);
+      const msg = err instanceof Error ? err.message : '';
+      if (msg.includes('allowed domain') || msg.includes('allowed embed domain')) {
+        throw new HttpException({ error: msg }, HttpStatus.BAD_REQUEST);
+      }
       throw new HttpException({ error: 'Internal server error' }, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 
   @Get()
-  async listBots(@Query('status') status?: string) {
+  async listBots(@Req() req: RequestWithUser, @Query('status') status?: string) {
     const filter = status === 'draft' || status === 'published' ? status : 'all';
-    const bots = await this.botsService.findForAdminList(filter);
+    const userId = req?.user?._id != null ? String(req.user._id) : '';
+    const role = req?.user?.role ?? 'customer';
+    await this.workspacesService.ensurePersonalWorkspaceForUser(userId);
+    const workspaceIds = await this.workspacesService.getWorkspaceIdsForUser(userId);
+    const bots = await this.botsService.findForAdminList(filter, {
+      userId,
+      platformRole: role,
+      workspaceIds,
+    });
     return (bots as Record<string, unknown>[]).map((b) => ({
       _id: String(b._id),
       name: b.name ?? '',
@@ -99,12 +134,14 @@ export class UserBotsController {
   @Get(':id/knowledge-poll')
   async getKnowledgePoll(
     @Param('id') id: string,
+    @Req() req: RequestWithUser,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
     if (!Types.ObjectId.isValid(id)) {
       throw new HttpException({ error: 'Invalid id' }, HttpStatus.BAD_REQUEST);
     }
+    await this.assertCanAccessShowcaseBot(req, id);
     const bot = await this.botsService.findOneShowcaseForAdmin(id);
     if (!bot || (bot as { type?: string }).type !== 'showcase') {
       throw new HttpException({ error: 'Bot not found' }, HttpStatus.NOT_FOUND);
@@ -137,10 +174,11 @@ export class UserBotsController {
   }
 
   @Get(':id')
-  async getBot(@Param('id') id: string) {
+  async getBot(@Param('id') id: string, @Req() req: RequestWithUser) {
     if (!Types.ObjectId.isValid(id)) {
       throw new HttpException({ error: 'Invalid id' }, HttpStatus.BAD_REQUEST);
     }
+    await this.assertCanAccessShowcaseBot(req, id);
     const bot = await this.botsService.findOneShowcaseForAdmin(id);
     if (!bot || (bot as { type?: string }).type !== 'showcase') {
       throw new HttpException({ error: 'Bot not found' }, HttpStatus.NOT_FOUND);
@@ -205,17 +243,29 @@ export class UserBotsController {
         includeNameInKnowledge: Boolean(b.includeNameInKnowledge),
         includeTaglineInKnowledge: Boolean(b.includeTaglineInKnowledge),
         includeNotesInKnowledge: (b.includeNotesInKnowledge as boolean | undefined) !== false,
+        allowedDomains: Array.isArray(b.allowedDomains)
+          ? (b.allowedDomains as unknown[]).map((d) => String(d ?? '').trim()).filter(Boolean)
+          : [],
+        workspaceId: b.workspaceId != null ? String(b.workspaceId) : undefined,
       },
       health,
     };
   }
 
   @Patch(':id')
-  async patchBot(@Param('id') id: string, @Body() body: Record<string, unknown>) {
+  async patchBot(
+    @Param('id') id: string,
+    @Body() body: Record<string, unknown>,
+    @Req() req: RequestWithUser,
+  ) {
     if (!Types.ObjectId.isValid(id)) {
       throw new HttpException({ error: 'Invalid id' }, HttpStatus.BAD_REQUEST);
     }
+    await this.assertCanAccessShowcaseBot(req, id);
     const normalized = normalizeBotPayload(body);
+    if (normalized.allowedDomains !== undefined) {
+      assertAllowedDomainsPolicy(normalized.allowedDomains, req.user?.role);
+    }
     try {
       return await this.botsService.updateShowcase(id, {
         name: normalized.name,
@@ -223,6 +273,7 @@ export class UserBotsController {
         description: normalized.description,
         categories: normalized.categories,
         imageUrl: normalized.imageUrl,
+        avatarEmoji: normalized.avatarEmoji,
         openaiApiKeyOverride: normalized.openaiApiKeyOverride,
         whisperApiKeyOverride: normalized.whisperApiKeyOverride,
         welcomeMessage: normalized.welcomeMessage,
@@ -243,6 +294,14 @@ export class UserBotsController {
         includeNameInKnowledge: normalized.includeNameInKnowledge,
         includeTaglineInKnowledge: normalized.includeTaglineInKnowledge,
         includeNotesInKnowledge: normalized.includeNotesInKnowledge,
+        ...(normalized.allowedDomains !== undefined ? { allowedDomains: normalized.allowedDomains } : {}),
+        ...(normalized.visitorMultiChatEnabled !== undefined
+          ? {
+            visitorMultiChatEnabled: normalized.visitorMultiChatEnabled === true,
+            visitorMultiChatMax:
+              normalized.visitorMultiChatEnabled === true ? normalized.visitorMultiChatMax ?? null : null,
+          }
+          : {}),
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Update failed';
@@ -250,7 +309,10 @@ export class UserBotsController {
       if (
         msg.includes('Name is required') ||
         msg.includes('Description is required') ||
-        msg.includes('messageLimitTotal must be a positive integer')
+        msg.includes('messageLimitTotal must be a positive integer') ||
+        msg.includes('allowed domain') ||
+        msg.includes('allowed embed domain') ||
+        msg.includes('Localhost and loopback')
       ) {
         throw new HttpException({ error: msg }, HttpStatus.BAD_REQUEST);
       }
@@ -267,11 +329,15 @@ export class UserBotsController {
       messageLimitMode?: unknown;
       messageLimitTotal?: unknown;
       messageLimitUpgradeMessage?: unknown;
+      visitorMultiChatEnabled?: unknown;
+      visitorMultiChatMax?: unknown;
     },
+    @Req() req: RequestWithUser,
   ) {
     if (!Types.ObjectId.isValid(id)) {
       throw new HttpException({ error: 'Invalid id' }, HttpStatus.BAD_REQUEST);
     }
+    await this.assertCanAccessShowcaseBot(req, id);
     const visibility = body?.visibility === 'private' ? 'private' : body?.visibility === 'public' ? 'public' : null;
     const messageLimitMode =
       body?.messageLimitMode === 'fixed_total'
@@ -303,12 +369,17 @@ export class UserBotsController {
       typeof body?.messageLimitUpgradeMessage === 'string'
         ? body.messageLimitUpgradeMessage.trim() || null
         : null;
+    const visitorMultiChatEnabled = body?.visitorMultiChatEnabled === true;
+    const rawVisitorMax = body?.visitorMultiChatMax;
+    const visitorMultiChatMax = normalizeVisitorMultiChatMax(rawVisitorMax);
     try {
       return await this.botsService.updateShowcaseAccessSettings(id, {
         visibility,
         messageLimitMode,
         messageLimitTotal,
         messageLimitUpgradeMessage,
+        visitorMultiChatEnabled,
+        visitorMultiChatMax: visitorMultiChatEnabled ? visitorMultiChatMax : null,
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Update failed';
@@ -321,8 +392,9 @@ export class UserBotsController {
   }
 
   @Post(':id/rotate-access-key')
-  async rotateAccessKey(@Param('id') id: string) {
+  async rotateAccessKey(@Param('id') id: string, @Req() req: RequestWithUser) {
     if (!Types.ObjectId.isValid(id)) throw new HttpException({ error: 'Invalid id' }, HttpStatus.BAD_REQUEST);
+    await this.assertCanAccessShowcaseBot(req, id);
     try {
       return await this.botsService.rotateShowcaseAccessKey(id);
     } catch (err) {
@@ -333,8 +405,9 @@ export class UserBotsController {
   }
 
   @Post(':id/rotate-secret-key')
-  async rotateSecretKey(@Param('id') id: string) {
+  async rotateSecretKey(@Param('id') id: string, @Req() req: RequestWithUser) {
     if (!Types.ObjectId.isValid(id)) throw new HttpException({ error: 'Invalid id' }, HttpStatus.BAD_REQUEST);
+    await this.assertCanAccessShowcaseBot(req, id);
     try {
       return await this.botsService.rotateShowcaseSecretKey(id);
     } catch (err) {
@@ -345,8 +418,9 @@ export class UserBotsController {
   }
 
   @Get(':id/embedding-status')
-  async getEmbeddingStatus(@Param('id') id: string) {
+  async getEmbeddingStatus(@Param('id') id: string, @Req() req: RequestWithUser) {
     if (!Types.ObjectId.isValid(id)) throw new HttpException({ error: 'Invalid id' }, HttpStatus.BAD_REQUEST);
+    await this.assertCanAccessShowcaseBot(req, id);
     const bot = await this.botsService.findOne(id);
     if (!bot || (bot as { type?: string }).type !== 'showcase') {
       throw new HttpException({ error: 'Bot not found' }, HttpStatus.NOT_FOUND);
@@ -355,8 +429,9 @@ export class UserBotsController {
   }
 
   @Post(':id/embed/retry-faq')
-  async retryFaqEmbedding(@Param('id') id: string) {
+  async retryFaqEmbedding(@Param('id') id: string, @Req() req: RequestWithUser) {
     if (!Types.ObjectId.isValid(id)) throw new HttpException({ error: 'Invalid id' }, HttpStatus.BAD_REQUEST);
+    await this.assertCanAccessShowcaseBot(req, id);
     const bot = await this.botsService.findOne(id);
     if (!bot || (bot as { type?: string }).type !== 'showcase') {
       throw new HttpException({ error: 'Bot not found' }, HttpStatus.NOT_FOUND);
@@ -366,8 +441,9 @@ export class UserBotsController {
   }
 
   @Post(':id/embed/retry-note')
-  async retryNoteEmbedding(@Param('id') id: string) {
+  async retryNoteEmbedding(@Param('id') id: string, @Req() req: RequestWithUser) {
     if (!Types.ObjectId.isValid(id)) throw new HttpException({ error: 'Invalid id' }, HttpStatus.BAD_REQUEST);
+    await this.assertCanAccessShowcaseBot(req, id);
     const bot = await this.botsService.findOne(id);
     if (!bot || (bot as { type?: string }).type !== 'showcase') {
       throw new HttpException({ error: 'Bot not found' }, HttpStatus.NOT_FOUND);
@@ -377,8 +453,9 @@ export class UserBotsController {
   }
 
   @Delete(':id')
-  async deleteBot(@Param('id') id: string) {
+  async deleteBot(@Param('id') id: string, @Req() req: RequestWithUser) {
     if (!Types.ObjectId.isValid(id)) throw new HttpException({ error: 'Invalid id' }, HttpStatus.BAD_REQUEST);
+    await this.assertCanAccessShowcaseBot(req, id);
     const bot = await this.botsService.findOne(id);
     if (!bot) throw new HttpException({ error: 'Bot not found' }, HttpStatus.NOT_FOUND);
     if ((bot as { type?: string }).type !== 'showcase') {

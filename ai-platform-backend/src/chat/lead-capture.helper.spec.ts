@@ -43,6 +43,20 @@ describe('getLeadStateFromConversation', () => {
     const state = getLeadStateFromConversation({}, config);
     expect(state.fieldAliases.team_size).toEqual(['employees', 'staff']);
   });
+
+  it('skips disabled fields for required/optional and labels', () => {
+    const config = {
+      enabled: true,
+      fields: [
+        { key: 'email', label: 'Email', required: true, disabled: true },
+        { key: 'name', label: 'Name', required: true },
+      ],
+    };
+    const state = getLeadStateFromConversation({}, config);
+    expect(state.requiredFields).toEqual(['name']);
+    expect(state.fieldLabels.email).toBeUndefined();
+    expect(state.fieldLabels.name).toBe('Name');
+  });
 });
 
 describe('extractLeadFieldsFromMessage', () => {

@@ -10,6 +10,7 @@ import type { BotDocumentItem } from "@/components/admin/BotDocumentsManager";
 import { EditBotWorkspaceLayout } from "@/components/admin/EditBotWorkspaceLayout";
 import { Card } from "@/components/ui/Card";
 import { apiFetch } from "@/lib/api";
+import { normalizeVisitorMultiChatMax } from "@/lib/visitorMultiChatMax";
 import { useUser } from "@/hooks/useUser";
 import type { BotChatUI, BotLeadCaptureV2 } from "@/models/Bot";
 const EDIT_BOT_FORM_ID = "edit-bot-form";
@@ -51,15 +52,6 @@ export default function UserEditBotPage() {
   const [botType, setBotType] = useState<string>("");
   const [unsaved, setUnsaved] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [livePreview, setLivePreview] = useState<{
-    name: string;
-    imageUrl?: string;
-    chatUI?: BotChatUI;
-    tagline?: string;
-    description?: string;
-    welcomeMessage?: string;
-    suggestedQuestions?: string[];
-  } | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -109,28 +101,6 @@ export default function UserEditBotPage() {
       cancelled = true;
     };
   }, [user, botId]);
-
-  useEffect(() => {
-    if (state !== "ready" || !bot) return;
-    const name = String(bot.name ?? "Bot");
-    const imageUrl = typeof bot.imageUrl === "string" ? bot.imageUrl : undefined;
-    const chatUI = (bot.chatUI as BotChatUI | undefined) ?? undefined;
-    const tagline = [bot.tagline, bot.shortDescription].find((v) => typeof v === "string" && v.trim()) as string | undefined;
-    const description = typeof bot.description === "string" ? bot.description : undefined;
-    const welcomeMessage = typeof bot.welcomeMessage === "string" && bot.welcomeMessage.trim() ? bot.welcomeMessage.trim() : undefined;
-    const exampleQuestions = Array.isArray(bot.exampleQuestions)
-      ? (bot.exampleQuestions as string[]).map((q) => String(q ?? "").trim()).filter(Boolean).slice(0, 6)
-      : [];
-    setLivePreview({
-      name,
-      imageUrl,
-      chatUI,
-      tagline,
-      description,
-      welcomeMessage,
-      suggestedQuestions: exampleQuestions.length > 0 ? exampleQuestions : undefined,
-    });
-  }, [state, bot]);
 
   if (authLoading || !user) {
     return (
@@ -208,6 +178,7 @@ export default function UserEditBotPage() {
     category: (bot.category as string) || undefined,
     categories: (Array.isArray(bot.categories) ? bot.categories : []) as string[],
     imageUrl: botImageUrl,
+    avatarEmoji: typeof bot.avatarEmoji === "string" ? bot.avatarEmoji : undefined,
     openaiApiKeyOverride: (bot.openaiApiKeyOverride as string) || undefined,
     whisperApiKeyOverride: (bot.whisperApiKeyOverride as string) || undefined,
     welcomeMessage: (bot.welcomeMessage as string) || undefined,
@@ -267,6 +238,15 @@ export default function UserEditBotPage() {
       typeof bot.messageLimitUpgradeMessage === "string"
         ? bot.messageLimitUpgradeMessage
         : null,
+    visitorMultiChatEnabled: (bot as { visitorMultiChatEnabled?: boolean }).visitorMultiChatEnabled === true,
+    visitorMultiChatMax: normalizeVisitorMultiChatMax(
+      (bot as { visitorMultiChatMax?: unknown }).visitorMultiChatMax,
+    ),
+    allowedDomains: Array.isArray((bot as { allowedDomains?: unknown }).allowedDomains)
+      ? ((bot as { allowedDomains: unknown[] }).allowedDomains as unknown[])
+        .map((d) => String(d ?? "").trim())
+        .filter(Boolean)
+      : [],
     includeNameInKnowledge: Boolean((bot as { includeNameInKnowledge?: boolean }).includeNameInKnowledge),
     includeTaglineInKnowledge: Boolean((bot as { includeTaglineInKnowledge?: boolean }).includeTaglineInKnowledge),
     leadCapture: (bot.leadCapture as BotLeadCaptureV2 | undefined) ?? undefined,
@@ -280,14 +260,7 @@ export default function UserEditBotPage() {
   return (
     <AdminShell title="Edit Bot" fullWidth>
       <div className="flex-1 min-h-0 flex flex-col bg-gray-50 dark:bg-gray-950">
-        <EditBotWorkspaceLayout
-          botId={botId}
-          botName={botName}
-          botAvatarUrl={botImageUrl}
-          livePreview={livePreview}
-          defaultChatOpen={state === "ready" ? (bot?.chatUI as BotChatUI | undefined)?.openChatOnLoad !== false : true}
-          expandHref={previewHref}
-        >
+        <EditBotWorkspaceLayout>
           <BotEditorPane
             botName={botName}
             status={status}
@@ -305,7 +278,6 @@ export default function UserEditBotPage() {
                 setSaveMessage("Saved.");
                 window.setTimeout(() => setSaveMessage(null), 4000);
               }}
-              onLivePreviewChange={setLivePreview}
               initialBot={initialBot}
             />
           </BotEditorPane>

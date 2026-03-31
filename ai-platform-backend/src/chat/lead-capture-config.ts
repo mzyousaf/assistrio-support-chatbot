@@ -15,6 +15,8 @@ export interface NormalizedLeadField {
   options?: string[];
   /** Normalized aliases for spontaneous extraction (label not used as alias in prompt). */
   aliases?: string[];
+  /** When true, excluded from required/optional lists and from active capture. */
+  disabled?: boolean;
 }
 
 export interface NormalizedLeadCaptureConfig {
@@ -33,7 +35,16 @@ const CAPTURE_MODES: CaptureMode[] = ['chat', 'form', 'hybrid'];
 /** Minimal input shape: enabled, fields[] with key/label/required/type/aliases, optional askStrategy, politeMode, captureMode. */
 interface LeadCaptureInput {
   enabled?: boolean;
-  fields?: Array<{ key?: string; label?: string; type?: string; required?: boolean; placeholder?: string; options?: string[]; aliases?: string[] }>;
+  fields?: Array<{
+    key?: string;
+    label?: string;
+    type?: string;
+    required?: boolean;
+    disabled?: boolean;
+    placeholder?: string;
+    options?: string[];
+    aliases?: string[];
+  }>;
   askStrategy?: string;
   politeMode?: boolean;
   captureMode?: string;
@@ -61,10 +72,17 @@ export function normalizeLeadCaptureConfig(input: LeadCaptureInput | undefined):
 
   for (const f of rawFields) {
     if (!f || typeof f !== 'object') continue;
-    const keyRaw = (f.key || f.label || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_') || 'field';
+    const keyRaw =
+      (f.key || f.label || '')
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .replace(/-+/g, '-') || 'field';
     const key = ensureUniqueKey(keyRaw, used);
-    const label = (f.label || key.replace(/_/g, ' ')).trim();
+    const label = (f.label || key.replace(/-/g, ' ')).trim();
     const required = f.required !== false;
+    const disabled = (f as { disabled?: boolean }).disabled === true;
     const aliases = Array.isArray((f as { aliases?: string[] }).aliases)
       ? (f as { aliases: string[] }).aliases.map((a) => String(a).trim().toLowerCase()).filter((a) => a.length > 0)
       : undefined;
@@ -72,13 +90,16 @@ export function normalizeLeadCaptureConfig(input: LeadCaptureInput | undefined):
       key,
       label,
       required,
+      disabled: disabled || undefined,
       type: typeof f.type === 'string' ? f.type : 'text',
       placeholder: typeof f.placeholder === 'string' ? f.placeholder.trim() : undefined,
       options: Array.isArray(f.options) ? f.options.map((o) => String(o).trim()).filter(Boolean) : undefined,
       aliases: aliases?.length ? aliases : undefined,
     });
-    if (required) out.requiredFields.push(key);
-    else out.optionalFields.push(key);
+    if (!disabled) {
+      if (required) out.requiredFields.push(key);
+      else out.optionalFields.push(key);
+    }
   }
 
   out.enabled = typeof input.enabled === 'boolean' ? input.enabled : out.fields.length > 0;
@@ -95,8 +116,8 @@ function ensureUniqueKey(base: string, used: Set<string>): string {
     return base;
   }
   let i = 2;
-  while (used.has(`${base}_${i}`)) i++;
-  const k = `${base}_${i}`;
+  while (used.has(`${base}-${i}`)) i++;
+  const k = `${base}-${i}`;
   used.add(k);
   return k;
 }

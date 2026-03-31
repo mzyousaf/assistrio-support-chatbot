@@ -1,27 +1,48 @@
 {
   "name": "@assistrio/chat-widget",
-  "version": "0.1.0",
-  "private": true,
-  "description": "Standalone Assistrio embeddable chat widget (assistrio-chat.js / assistrio-chat.css)",
+  "version": "0.1.7",
+  "description": "Assistrio embeddable chat widget: CDN bundle (assistrio-chat.js) and npm ESM entry for React apps.",
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
-  "main": "./dist/assistrio-chat.js",
-  "types": "./src/index.ts",
+  "main": "./dist/index.mjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "default": "./dist/index.mjs"
+    },
+    "./assistrio-chat.js": "./dist/assistrio-chat.js",
+    "./assistrio-chat.css": "./dist/assistrio-chat.css"
+  },
+  "sideEffects": [
+    "./dist/assistrio-chat.js",
+    "**/*.css"
+  ],
   "files": [
     "dist",
-    "src"
+    "README.md"
   ],
   "scripts": {
-    "build": "npm run build:js && npm run build:css && npm run copy:public",
+    "build": "npm run build:js && npm run build:css && npm run build:lib && npm run build:types && npm run copy:public",
     "build:js": "node scripts/build-js.mjs",
+    "build:lib": "node scripts/build-lib.mjs",
+    "build:types": "tsc -p tsconfig.dts.json",
     "build:css": "npx @tailwindcss/cli -i ./src/styles/embed.css -o ./dist/assistrio-chat.css --minify",
     "copy:public": "node -e \"const fs=require('fs'); fs.mkdirSync('public',{recursive:true}); fs.copyFileSync('dist/assistrio-chat.js','public/assistrio-chat.js'); fs.copyFileSync('dist/assistrio-chat.css','public/assistrio-chat.css'); console.log('Copied dist files to public/');\"",
     "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build",
     "test:local": "npx --yes serve . -l 3456"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0 || ^19.0.0",
+    "react-dom": "^18.0.0 || ^19.0.0"
   },
   "dependencies": {
     "lucide-react": "^0.577.0",
-    "react": "^19.2.3",
-    "react-dom": "^19.2.3",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1"
   },
@@ -31,6 +52,8 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "esbuild": "^0.27.4",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

@@ -136,6 +136,11 @@ function buildGroundingSection(input: SystemPromptInput): string {
       : ' If the available information does not contain the answer, politely say you do not have that detail right now. Do not invent company-specific facts. Do not mention "knowledge base", "documents", or other internal concepts when explaining uncertainty.';
   }
 
+  if (input.leadCapture?.enabled) {
+    grounding +=
+      ' Lead capture may ask for contact or follow-up details when the Lead capture section below applies; that is separate from stating company facts and does not excuse inventing policies, prices, or capabilities from the Knowledge context.';
+  }
+
   return '\n--- Grounding ---\n' + grounding.trim();
 }
 
@@ -143,27 +148,39 @@ function buildLeadCaptureSection(leadCapture: ChatContextLeadCapture): string {
   if (!leadCapture.enabled) return '';
 
   const lc = leadCapture;
-  const parts: string[] = ['\n--- Lead capture ---'];
+  const parts: string[] = [
+    '\n--- Lead capture (works with your answers from Knowledge) ---',
+    'Lead capture is ON. Behave like a normal helpful assistant: answer questions using the Knowledge context when it applies (pricing, hours, how to get help, links, etc.).',
+    'Collecting contact or follow-up details is an add-on to that—not a replacement. Do not sound like a form; weave requests naturally into helpful replies.',
+    'When the user shows intent such as scheduling a call, talking to a person, demos, pricing follow-up, sales, or “how do I get in touch?”, do not stop at only “use the website” or “I cannot schedule” if required contact fields below are still missing—combine your accurate answer with a short, natural request for the next missing field (e.g. email) when this turn allows asking.',
+    'If Knowledge mentions contact channels (Help, Contact Us, forms), you may still cite them honestly, but prefer to offer taking their details in chat when fields are missing and asking is allowed—unless the user clearly refuses.',
+  ];
 
   const collectedList = Object.entries(lc.collected)
     .filter(([, v]) => v && String(v).trim())
     .map(([k]) => `${k}=${lc.collected[k]}`);
   if (collectedList.length) {
     parts.push(
-      `Collected: ${collectedList.join('; ')}. Do not ask for these again; if the user already provided name, email, phone, company, or any custom field listed here, acknowledge naturally and move forward.`
+      `Already collected: ${collectedList.join('; ')}. Do not ask for these again; acknowledge if relevant and continue.`,
     );
   }
   if (lc.missingRequired.length) {
     const label = lc.fieldLabels[lc.missingRequired[0]] || lc.missingRequired[0];
     if (lc.shouldAskNow) {
-      parts.push(`Ask once for missing field (${label}) if natural; do not repeat if already asked.`);
-      if (lc.politeMode !== false) parts.push('Use polite, non-pushy wording when asking for lead info.');
+      parts.push(
+        `Next missing required field: "${label}" (key: ${lc.missingRequired[0]}). Include one concise, natural ask for this in your reply when it fits (same message as your main answer). Do not repeat the same ask if you already asked recently in the thread.`,
+      );
+      parts.push(
+        'When asking for contact details, match the tone and style from the Behavior section above (e.g. friendly, formal, playful). Keep the ask short—typically one sentence or clause. Avoid pushy sales pressure unless the Behavior section calls for it.',
+      );
     } else {
-      parts.push('Do not ask for lead info this turn.');
+      parts.push(
+        'Do not proactively ask for missing lead info in this reply (scheduling rules). Still extract anything the user volunteers in their message.',
+      );
     }
   }
   parts.push(
-    'Extract lead data from user messages; if user declines, continue helping. If the user already introduced themselves, do not ask for their name again unless clarification is needed.'
+    'Always extract lead-related values from the user message when present (email, phone, name patterns, etc.). If the user declines to share, respect that and continue helping without arguing.',
   );
   return parts.join('\n');
 }

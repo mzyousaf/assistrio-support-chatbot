@@ -6,6 +6,10 @@ import { VisitorsService } from '../visitors/visitors.service';
 type TrialBotCreateBody = {
   platformVisitorId?: unknown;
   visitorId?: unknown;
+  /** Single hostname where the widget may load (required). */
+  allowedDomain?: unknown;
+  /** Alternative: first entry used if allowedDomain is omitted. */
+  allowedDomains?: unknown;
   name?: unknown;
   welcomeMessage?: unknown;
   shortDescription?: unknown;
@@ -25,9 +29,20 @@ function isLikelyVisitorId(value: string): boolean {
   return /^[a-zA-Z0-9._:-]{6,120}$/.test(value);
 }
 
+function parseAllowedDomainForTrial(input: TrialBotCreateBody): string {
+  const single = typeof input.allowedDomain === 'string' ? input.allowedDomain.trim() : '';
+  if (single) return single;
+  if (Array.isArray(input.allowedDomains) && input.allowedDomains.length > 0) {
+    const first = input.allowedDomains[0];
+    if (typeof first === 'string' && first.trim()) return first.trim();
+  }
+  return '';
+}
+
 function parseCreateBody(body: unknown): {
   platformVisitorId?: string;
   visitorId?: string;
+  allowedDomain: string;
   name?: string;
   welcomeMessage?: string;
   shortDescription?: string;
@@ -35,7 +50,9 @@ function parseCreateBody(body: unknown): {
   imageUrl?: string;
   avatarEmoji?: string;
 } {
-  if (body == null || typeof body !== 'object') return {};
+  if (body == null || typeof body !== 'object') {
+    return { allowedDomain: '' };
+  }
   const input = body as TrialBotCreateBody;
   const platformVisitorIdRaw = typeof input.platformVisitorId === 'string' ? input.platformVisitorId.trim() : '';
   const platformVisitorId =
@@ -48,6 +65,7 @@ function parseCreateBody(body: unknown): {
   return {
     platformVisitorId,
     visitorId,
+    allowedDomain: parseAllowedDomainForTrial(input),
     name: sanitizeOptionalString(input.name, 100),
     welcomeMessage: sanitizeOptionalString(input.welcomeMessage, 500),
     shortDescription: sanitizeOptionalString(input.shortDescription, 180),
@@ -69,10 +87,21 @@ export class TrialBotsController {
     const parsed = parseCreateBody(body);
     const platformVisitorId = parsed.platformVisitorId ?? parsed.visitorId ?? `v_${randomUUID().replace(/-/g, '')}`;
 
+    if (!parsed.allowedDomain.trim()) {
+      throw new HttpException(
+        {
+          error:
+            'allowedDomain is required: pass the hostname where the widget may load (e.g. window.location.hostname).',
+        },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
     try {
       await this.visitorsService.getOrCreateVisitor(platformVisitorId);
       const created = await this.botsService.createVisitorTrialBot({
         platformVisitorId,
+        allowedDomain: parsed.allowedDomain,
         name: parsed.name,
         welcomeMessage: parsed.welcomeMessage,
         shortDescription: parsed.shortDescription,
@@ -111,7 +140,12 @@ export class TrialBotsController {
         },
       };
     } catch (error) {
+      if (error instanceof HttpException) throw error;
       console.error('Create visitor trial bot failed', error);
+      const msg = error instanceof Error ? error.message : '';
+      if (msg.includes('allowedDomain')) {
+        throw new HttpException({ error: msg }, HttpStatus.BAD_REQUEST);
+      }
       throw new HttpException(
         { error: 'Failed to create trial bot' },
         HttpStatus.INTERNAL_SERVER_ERROR,

@@ -18,6 +18,28 @@ Outputs:
 
 - `dist/assistrio-chat.js` — IIFE, exposes `window.AssistrioChat`
 - `dist/assistrio-chat.css` — Tailwind + widget-scoped utilities
+- `dist/index.mjs` — ESM library (`EmbedWidgetRoot`, `mountEmbedWidget`, config helpers) for bundlers
+
+## npm / React (Next.js App Router)
+
+The ESM bundle targets the browser. **Do not** statically import `EmbedWidgetRoot` from a Server Component or from a file that Next will evaluate on the server — that can throw (`document is not defined`).
+
+Use `next/dynamic` with `ssr: false`, or a small client wrapper:
+
+```tsx
+"use client";
+
+import dynamic from "next/dynamic";
+import type { ComponentType } from "react";
+import type { EmbedWidgetRootProps } from "@assistrio/chat-widget";
+
+export const AssistrioEmbedWidgetRoot: ComponentType<EmbedWidgetRootProps> = dynamic(
+  () => import("@assistrio/chat-widget").then((m) => m.EmbedWidgetRoot),
+  { ssr: false },
+);
+```
+
+Then render `<AssistrioEmbedWidgetRoot rawConfig={{ ... }} />` from client components.
 
 ## Host snippet
 

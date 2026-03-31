@@ -97,12 +97,14 @@ export function TabsTrigger({ value, children, className: customClass }: TabsTri
 
 interface TabsContentProps {
   value: string;
-  children: React.ReactNode;
+  /** Function child = lazy; inactive tabs never mount (large forms stay fast). */
+  children: React.ReactNode | (() => React.ReactNode);
   className?: string;
 }
 
 export function TabsContent({ value, children, className }: TabsContentProps) {
   const { value: active } = useTabs();
   if (active !== value) return null;
-  return <div className={cx("mt-4", className)}>{children}</div>;
+  const content = typeof children === "function" ? (children as () => React.ReactNode)() : children;
+  return <div className={cx("mt-4", className)}>{content}</div>;
 }

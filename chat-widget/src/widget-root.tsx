@@ -4,6 +4,7 @@ import { AdminLiveChatAdapter } from "./components/AdminLiveChatAdapter";
 import { validateAndInitWidget } from "./api";
 import { normalizeEmbedConfig } from "./config";
 import { mergePreviewInitResponse } from "./lib/preview-display-merge";
+import { mergeWidgetStrings } from "./lib/widgetStrings";
 import { normalizeWidgetSettings } from "./normalize";
 import type { EmbedChatConfig, NormalizedWidgetSettings, WidgetInitResponse } from "./types";
 
@@ -33,18 +34,26 @@ export function EmbedWidgetRoot({ rawConfig }: EmbedWidgetRootProps) {
   const [phase, setPhase] = useState<Phase>("loading");
   const [initResponse, setInitResponse] = useState<WidgetInitResponse | null>(null);
   const [chatVisitorId, setChatVisitorId] = useState<string | null>(null);
+  const [initErrorMessage, setInitErrorMessage] = useState<string>("");
+  const [retryNonce, setRetryNonce] = useState(0);
 
   const rawPreviewOverridesKey = JSON.stringify(
     (rawConfig as { previewOverrides?: unknown })?.previewOverrides ?? null,
   );
 
+  const initKey = useMemo(() => initKeyFromRawConfig(rawConfig), [rawConfig]);
+
   const config = useMemo(() => normalizeEmbedConfig(rawConfig), [rawConfig, rawPreviewOverridesKey]);
 
-  const initKey = useMemo(() => initKeyFromRawConfig(rawConfig), [rawConfig]);
+  const shellStrings = useMemo(
+    () => mergeWidgetStrings(config.widgetStrings, config.locale),
+    [config.widgetStrings, config.locale],
+  );
 
   useEffect(() => {
     let cancelled = false;
     setPhase("loading");
+    setInitErrorMessage("");
 
     void (async () => {
       try {
@@ -76,16 +85,23 @@ export function EmbedWidgetRoot({ rawConfig }: EmbedWidgetRootProps) {
         if (cancelled) return;
         setInitResponse(init);
 
-        const resolvedChatVisitorId =
-          typeof init.chatVisitorId === "string" && init.chatVisitorId.trim()
-            ? init.chatVisitorId
-            : existingChatVisitorId;
-
-        if (resolvedChatVisitorId) {
-          if (persistChatSession) {
-            window.localStorage.setItem(storageKey, resolvedChatVisitorId);
+        if (authPreview && !(typeof init.chatVisitorId === "string" && init.chatVisitorId.trim())) {
+          setChatVisitorId("");
+        } else if (typeof init.chatVisitorId === "string" && init.chatVisitorId.trim()) {
+          const id = init.chatVisitorId.trim();
+          if (
+            persistChatSession &&
+            !authPreview &&
+            typeof window !== "undefined" &&
+            typeof window.localStorage !== "undefined"
+          ) {
+            window.localStorage.setItem(storageKey, id);
           }
-          setChatVisitorId(resolvedChatVisitorId);
+          setChatVisitorId(id);
+        } else if (existingChatVisitorId) {
+          setChatVisitorId(existingChatVisitorId);
+        } else {
+          setChatVisitorId(null);
         }
         setPhase("ready");
       } catch (e) {
@@ -94,6 +110,8 @@ export function EmbedWidgetRoot({ rawConfig }: EmbedWidgetRootProps) {
         if (typeof console !== "undefined" && console.error) {
           console.error("[Assistrio embed]", msg);
         }
+        setInitResponse(null);
+        setInitErrorMessage(msg);
         setPhase("error");
       }
     })();
@@ -102,7 +120,7 @@ export function EmbedWidgetRoot({ rawConfig }: EmbedWidgetRootProps) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- previewOverrides excluded from initKey; rawConfig read when initKey changes
-  }, [initKey]);
+  }, [initKey, retryNonce]);
 
   const displaySettings = useMemo((): NormalizedWidgetSettings | null => {
     if (!initResponse) return null;
@@ -125,10 +143,33 @@ export function EmbedWidgetRoot({ rawConfig }: EmbedWidgetRootProps) {
     );
   }
 
-  if (phase === "error" || !displaySettings) {
+  if (phase === "error") {
+    return (
+      <div
+        className={`fixed z-[9999] max-w-[min(100vw-2rem,18rem)] ${loadingPositionClass}`}
+        role="alert"
+      >
+        <div className="rounded-xl border border-gray-600/80 bg-gray-900 px-3 py-2.5 text-sm text-gray-100 shadow-lg dark:bg-gray-900">
+          <p className="font-medium leading-snug">{shellStrings.initErrorTitle}</p>
+          {initErrorMessage.trim() ? (
+            <p className="mt-1.5 text-xs leading-relaxed text-gray-400 break-words">{initErrorMessage}</p>
+          ) : null}
+          <button
+            type="button"
+            className="mt-2.5 w-full rounded-lg bg-gray-100 px-3 py-2 text-sm font-semibold text-gray-900 transition-colors hover:bg-white"
+            onClick={() => setRetryNonce((n) => n + 1)}
+          >
+            {shellStrings.initErrorRetry}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!displaySettings) {
     return null;
   }
-  if (!chatVisitorId) {
+  if (chatVisitorId === null) {
     return null;
   }
 
@@ -162,6 +203,9 @@ export function EmbedWidgetRoot({ rawConfig }: EmbedWidgetRootProps) {
       debug={false}
       footerPrivacyText={displaySettings.privacyText}
       useFloatingLauncher
+      visitorMultiChatEnabled={displaySettings.visitorMultiChatEnabled}
+      visitorMultiChatMax={displaySettings.visitorMultiChatMax}
+      widgetStrings={shellStrings}
     />
   );
 }

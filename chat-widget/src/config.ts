@@ -1,4 +1,4 @@
-import type { EmbedChatConfig, EmbedPosition, WidgetMode } from "./types";
+import type { EmbedChatConfig, EmbedPosition, WidgetMode, WidgetStrings } from "./types";
 
 
 function toNonEmptyString(value: unknown): string | undefined {
@@ -44,8 +44,16 @@ function parseObjectConfig(input: unknown): Partial<EmbedChatConfig> {
       typeof cfg.disableRemoteConfig === "boolean" ? cfg.disableRemoteConfig : undefined,
     ...(typeof cfg.sessionPreview === "boolean" ? { sessionPreview: cfg.sessionPreview } : {}),
     ...(typeof cfg.persistChatSession === "boolean" ? { persistChatSession: cfg.persistChatSession } : {}),
+    ...((): { embedOrigin?: string } => {
+      const embedOrigin = toNonEmptyString(cfg.embedOrigin);
+      return embedOrigin ? { embedOrigin } : {};
+    })(),
     ...(widgetInitPath ? { widgetInitPath } : {}),
     ...(chatPostPath ? { chatPostPath } : {}),
+    ...(toNonEmptyString(cfg.locale) ? { locale: toNonEmptyString(cfg.locale) } : {}),
+    ...(cfg.widgetStrings && typeof cfg.widgetStrings === "object"
+      ? { widgetStrings: cfg.widgetStrings as Partial<WidgetStrings> }
+      : {}),
   };
 }
 
@@ -87,6 +95,9 @@ export function normalizeEmbedConfig(input: Partial<EmbedChatConfig>): EmbedChat
     previewOverrides: input.previewOverrides,
     disableRemoteConfig:
       typeof input.disableRemoteConfig === "boolean" ? input.disableRemoteConfig : undefined,
+    embedOrigin: toNonEmptyString(input.embedOrigin),
+    locale: toNonEmptyString(input.locale),
+    widgetStrings: input.widgetStrings,
   };
 }
 

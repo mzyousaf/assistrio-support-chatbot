@@ -39,6 +39,10 @@ export interface BotLike {
     responseLength?: 'short' | 'medium' | 'long';
   };
   faqs?: Array<{ question: string; answer: string }>;
+  /** Embed: allow multiple saved threads per chatVisitorId. */
+  visitorMultiChatEnabled?: boolean;
+  /** Max saved threads per visitor when visitorMultiChatEnabled; null = unlimited. */
+  visitorMultiChatMax?: number | null;
 }
 
 export interface RunChatInput {
@@ -61,6 +65,18 @@ export interface RunChatInput {
   requestId?: string;
   /** When true (e.g. admin), result may include debug info. */
   debug?: boolean;
+  /**
+   * Continue this Mongo conversation (embed). Ignored when visitorMultiChatEnabled is false (legacy single thread).
+   */
+  conversationId?: string;
+  /**
+   * When visitorMultiChatEnabled, create a new thread on this turn (first message of the new thread).
+   */
+  startNewConversation?: boolean;
+  /**
+   * Preview/widget-testing: run the full model path without persisting Conversation/Message to Mongo.
+   */
+  ephemeral?: boolean;
 }
 
 /** Single source item (chunk-level, deduped by chunkId; order by retrieval score). */
@@ -273,5 +289,8 @@ export type RunChatResult =
   }
   | {
     ok: false;
-    error: 'missing_openai_key';
+    error:
+    | 'missing_openai_key'
+    | 'conversation_not_found'
+    | 'visitor_multi_chat_limit_reached';
   };

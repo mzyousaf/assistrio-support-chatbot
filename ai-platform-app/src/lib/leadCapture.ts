@@ -1,4 +1,25 @@
-import type { BotLeadCaptureLegacy, BotLeadCaptureV2, BotLeadField, LeadFieldType } from "@/models/Bot";
+import type {
+  BotLeadCaptureLegacy,
+  BotLeadCaptureV2,
+  BotLeadField,
+  LeadAskStrategy,
+  LeadFieldType,
+} from "@/models/Bot";
+
+const DEFAULT_ASK_STRATEGY: LeadAskStrategy = "balanced";
+/** UI no longer exposes capture mode; API always persists chat scheduling. */
+const SAVED_CAPTURE_MODE = "chat" as const;
+
+function parseAskStrategy(raw: unknown): LeadAskStrategy | undefined {
+  return raw === "soft" || raw === "balanced" || raw === "direct" ? raw : undefined;
+}
+
+export function defaultLeadCaptureBehavior(): Pick<BotLeadCaptureV2, "askStrategy" | "captureMode"> {
+  return {
+    askStrategy: DEFAULT_ASK_STRATEGY,
+    captureMode: SAVED_CAPTURE_MODE,
+  };
+}
 
 const ALLOWED_TYPES: LeadFieldType[] = ["text", "email", "phone", "number", "url"];
 
@@ -6,27 +27,48 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-function slugifyKey(input: string): string {
+/** Lowercase kebab-case key from arbitrary input (letters/digits; runs of other chars become hyphens). */
+export function slugifyLeadFieldKey(input: string): string {
   return input
     .trim()
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "");
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .replace(/-+/g, "-");
 }
 
 function ensureUniqueKey(base: string, usedKeys: Set<string>): string {
-  const normalizedBase = slugifyKey(base) || "field";
+  const normalizedBase = slugifyLeadFieldKey(base) || "field";
   if (!usedKeys.has(normalizedBase)) {
     usedKeys.add(normalizedBase);
     return normalizedBase;
   }
   let index = 2;
-  while (usedKeys.has(`${normalizedBase}_${index}`)) {
+  while (usedKeys.has(`${normalizedBase}-${index}`)) {
     index += 1;
   }
-  const next = `${normalizedBase}_${index}`;
+  const next = `${normalizedBase}-${index}`;
   usedKeys.add(next);
   return next;
+}
+
+/** Unique key among existing fields (optional row skipped when editing). */
+export function uniqueLeadFieldKeyFromLabel(
+  label: string,
+  fields: BotLeadField[],
+  skipIndex?: number,
+): string {
+  const base = slugifyLeadFieldKey(label) || "field";
+  const used = new Set(
+    fields
+      .filter((_, index) => index !== skipIndex)
+      .map((field) => field.key.trim().toLowerCase())
+      .filter(Boolean),
+  );
+  if (!used.has(base)) return base;
+  let suffix = 2;
+  while (used.has(`${base}-${suffix}`)) suffix += 1;
+  return `${base}-${suffix}`;
 }
 
 function normalizeFields(input: unknown): BotLeadField[] {
@@ -49,9 +91,10 @@ function normalizeFields(input: unknown): BotLeadField[] {
     const key = ensureUniqueKey(keyRaw || labelRaw, usedKeys);
     output.push({
       key,
-      label: labelRaw || key.replace(/_/g, " "),
+      label: labelRaw || key.replace(/-/g, " "),
       type,
       required: field.required !== false,
+      ...(field.disabled === true ? { disabled: true } : {}),
     });
   }
   return output;
@@ -66,10 +109,14 @@ export function normalizeLeadCapture(input: unknown): BotLeadCaptureV2 {
     return { enabled: false, fields: [] };
   }
 
-  const fields = normalizeFields(input.fields);
-  const enabled = typeof input.enabled === "boolean" ? input.enabled : fields.length > 0;
+  const raw = input as Record<string, unknown>;
+  const fields = normalizeFields(raw.fields);
+  const enabled = typeof raw.enabled === "boolean" ? raw.enabled : fields.length > 0;
+  const askStrategy = parseAskStrategy(raw.askStrategy) ?? DEFAULT_ASK_STRATEGY;
+  const behavior = { askStrategy, captureMode: SAVED_CAPTURE_MODE };
+
   if (fields.length > 0) {
-    return { enabled, fields };
+    return { enabled, fields, ...behavior };
   }
 
   if (hasLegacyBooleans(input)) {
@@ -77,7 +124,7 @@ export function normalizeLeadCapture(input: unknown): BotLeadCaptureV2 {
     const legacyEnabled = typeof legacy.enabled === "boolean" ? legacy.enabled : false;
     const legacyFields: BotLeadField[] = [];
     if (legacy.collectName !== false) {
-      legacyFields.push({ key: "name", label: "Full name", type: "text", required: true });
+      legacyFields.push({ key: "name", label: "Name", type: "text", required: true });
     }
     if (legacy.collectEmail !== false) {
       legacyFields.push({ key: "email", label: "Email", type: "email", required: true });
@@ -85,7 +132,7 @@ export function normalizeLeadCapture(input: unknown): BotLeadCaptureV2 {
     if (legacy.collectPhone) {
       legacyFields.push({ key: "phone", label: "Phone", type: "phone", required: true });
     }
-    return { enabled: legacyEnabled, fields: legacyFields };
+    return { enabled: legacyEnabled, fields: legacyFields, ...behavior };
   }
 
   return { enabled: false, fields: [] };

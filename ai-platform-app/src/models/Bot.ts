@@ -31,11 +31,23 @@ export interface BotLeadField {
   label: string;
   type: LeadFieldType;
   required?: boolean;
+  /** When true, field is kept in the list but not used for capture or asking. */
+  disabled?: boolean;
 }
+
+export type LeadAskStrategy = "soft" | "balanced" | "direct";
+/** @deprecated Legacy API values; admin UI always saves `chat`. */
+export type LeadCaptureMode = "chat" | "form" | "hybrid";
 
 export interface BotLeadCaptureV2 {
   enabled?: boolean;
   fields?: BotLeadField[];
+  /** How often the assistant is nudged to ask for missing fields (backend). Default balanced. */
+  askStrategy?: LeadAskStrategy;
+  /** @deprecated Use personality tone in Behavior instead; not set from admin. */
+  politeMode?: boolean;
+  /** @deprecated Ignored by admin UI; persisted as `chat`. */
+  captureMode?: LeadCaptureMode;
 }
 
 export interface BotLeadCaptureLegacy {
@@ -56,14 +68,17 @@ export type ChatStatusIndicator = "live" | "active" | "none";
 /** Where to show message time: "top" (above message) or "bottom" (assistant=right, user=left) */
 export type ChatTimePosition = "top" | "bottom";
 
-/** Quick link in chat header menu (max 3): display text + route/URL */
+/** Quick link in chat header menu (max 10): display text + route/URL + optional icon id (curated list). */
 export interface ChatMenuQuickLink {
   text: string;
   route: string;
+  icon?: string;
 }
 
 /** Launcher icon source: default chat icon, bot avatar (with background), or custom upload */
 export type ChatLauncherIcon = "default" | "bot-avatar" | "custom";
+/** Launcher button while chat panel is open */
+export type ChatLauncherWhenOpen = "close" | "chevron-down" | "same";
 /** Shadow intensity for chat and launcher */
 export type ChatShadowIntensity = "none" | "low" | "medium" | "high";
 /** Chat open/close animation style: slide-up-fade, fade, or expand (grows from launcher) */
@@ -79,6 +94,8 @@ export interface BotChatUI {
   shadowIntensity?: ChatShadowIntensity;
   /** When true, show a border around the chat panel using primary color (default true). */
   showChatBorder?: boolean;
+  /** Chat panel border width in px (0–5). 0 = no visible border. Default 1. */
+  chatPanelBorderWidth?: number;
   /** Launcher icon: default, bot avatar with background, or custom upload (default "default") */
   launcherIcon?: ChatLauncherIcon;
   /** When launcherIcon is "custom", image URL or data URL from upload */
@@ -87,6 +104,8 @@ export interface BotChatUI {
   launcherAvatarRingWidth?: number;
   /** Launcher button size in pixels (default 48) */
   launcherSize?: number;
+  /** Icon while chat is open: X, down arrow (default), or same as closed */
+  launcherWhenOpen?: ChatLauncherWhenOpen;
   /** How the chat panel opens/closes: slide-up-fade, fade, or expand (default "slide-up-fade") */
   chatOpenAnimation?: ChatOpenAnimation;
   /** When true, chat opens automatically on page load (default true). Only applies where the widget is used (e.g. bot edit page). */
@@ -94,6 +113,10 @@ export interface BotChatUI {
   showBranding?: boolean;
   /** Editable text in footer when showBranding is true (e.g. "Powered by ...") */
   brandingMessage?: string;
+  /** When false, hide the privacy/footer line even if privacyText is set (default true). */
+  showPrivacyText?: boolean;
+  /** Optional second footer line (e.g. privacy notice). Shown when showPrivacyText is true. */
+  privacyText?: string;
   liveIndicatorStyle?: LiveIndicatorStyle;
   /** Header status: "live" | "active" | "none" (default "none") */
   statusIndicator?: ChatStatusIndicator;
@@ -101,6 +124,10 @@ export interface BotChatUI {
   statusDotStyle?: "blinking" | "static";
   /** Show scroll-to-bottom button when user scrolls up (default true) */
   showScrollToBottom?: boolean;
+  /** Show label text beside the scroll-to-bottom arrow (default true) */
+  showScrollToBottomLabel?: boolean;
+  /** Custom scroll-to-bottom label; empty uses widget default (“Scroll to latest”) */
+  scrollToBottomLabel?: string;
   /** Show scrollbar in message area (default true). When false, scrollbar is hidden but content still scrolls. */
   showScrollbar?: boolean;
   /** When true, message input is a separate box (border-top + bg). When false, no border and no bg (default true). */
@@ -111,8 +138,12 @@ export interface BotChatUI {
   composerBorderColor?: "default" | "primary";
   /** Show "Expand chat" option in header menu (default true) */
   showMenuExpand?: boolean;
-  /** Quick links in header menu (max 3) */
+  /** When false, hide the quick links menu in the chat header (default true). */
+  showMenuQuickLinks?: boolean;
+  /** Quick links in header menu (max 10) */
   menuQuickLinks?: ChatMenuQuickLink[];
+  /** Icon id for the header button that opens quick links (default link-2). */
+  menuQuickLinksMenuIcon?: string;
   /** When true, show chat input with suggested questions on first message. When false, only quick-question chips until user picks one (default false). */
   showComposerWithSuggestedQuestions?: boolean;
   /** Show bot avatar in chat header (default true) */
@@ -150,6 +181,10 @@ export interface BotDocument {
   messageLimitMode?: "none" | "fixed_total";
   messageLimitTotal?: number | null;
   messageLimitUpgradeMessage?: string | null;
+  /** When true, embed visitors can start multiple saved conversations (see visitorMultiChatMax). */
+  visitorMultiChatEnabled?: boolean;
+  /** Max saved threads per visitor when visitorMultiChatEnabled; omit/null = unlimited. Minimum 2 when set (current chat counts as one). */
+  visitorMultiChatMax?: number | null;
   isPublic: boolean;
   shortDescription?: string;
   category?: string;
@@ -172,5 +207,7 @@ export interface BotDocument {
   exampleQuestions?: string[];
   personality?: BotPersonality;
   config?: BotConfig;
+  /** Runtime allowlist: hostname entries (subdomains allowed) or `exact:<origin>` for one origin only. */
+  allowedDomains?: string[];
   createdAt: Date;
 }

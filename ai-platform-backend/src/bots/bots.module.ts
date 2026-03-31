@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
+import { AuthModule } from '../auth/auth.module';
 import { BotsController } from './bots.controller';
 import { PublicBotsController } from './public-bots.controller';
 import { LandingBotsController } from './landing-bots.controller';
@@ -9,6 +10,7 @@ import { LandingSiteApiKeyGuard } from './landing-site-api-key.guard';
 import { ChatWidgetApiKeyGuard } from './chat-widget-api-key.guard';
 import { WidgetTestingBotController } from './widget-testing-bot.controller';
 import { BotsService } from './bots.service';
+import { EmbedSessionService } from './embed-session.service';
 import {
   Bot,
   BotSchema,
@@ -27,9 +29,12 @@ import {
 } from '../models';
 import { KnowledgeModule } from '../knowledge/knowledge.module';
 import { VisitorsModule } from '../visitors/visitors.module';
+import { WorkspacesModule } from '../workspaces/workspaces.module';
 
 @Module({
   imports: [
+    AuthModule,
+    WorkspacesModule,
     MongooseModule.forFeature([
       { name: User.name, schema: UserSchema },
       { name: Bot.name, schema: BotSchema },
@@ -44,7 +49,7 @@ import { VisitorsModule } from '../visitors/visitors.module';
     VisitorsModule,
   ],
   controllers: [BotsController, PublicBotsController, LandingBotsController, WidgetInitController, WidgetTestingBotController, TrialBotsController],
-  providers: [BotsService, LandingSiteApiKeyGuard, ChatWidgetApiKeyGuard],
-  exports: [BotsService],
+  providers: [BotsService, LandingSiteApiKeyGuard, ChatWidgetApiKeyGuard, EmbedSessionService],
+  exports: [BotsService, EmbedSessionService],
 })
 export class BotsModule { }

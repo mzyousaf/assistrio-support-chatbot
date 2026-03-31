@@ -7,21 +7,6 @@ import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
 import { AppModule } from './app.module';
 
-function isAllowedCorsOrigin(origin: string | undefined): boolean {
-  if (!origin) return false;
-  // localhost with any port (e.g. 3000, 3001)
-  if (/^https?:\/\/localhost(:\d+)?$/.test(origin)) return true;
-  try {
-    const url = new URL(origin);
-    const hostname = url.hostname;
-    const isAssistrio =
-      hostname === 'assistrio.com' || hostname.endsWith('.assistrio.com');
-    return (url.protocol === 'http:' || url.protocol === 'https:') && isAssistrio;
-  } catch {
-    return false;
-  }
-}
-
 async function bootstrap() {
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
@@ -29,11 +14,9 @@ async function bootstrap() {
   );
   await app.getHttpAdapter().getInstance().register(cors as never, {
     origin: (origin: string | undefined, cb: (err: Error | null, allow: boolean | string) => void) => {
-      if (!origin) {
-        cb(null, true);
-        return;
-      }
-      cb(null, isAllowedCorsOrigin(origin) ? origin : false);
+      // Reflect the browser origin so embedded widgets on customer sites can send credentialed requests
+      // (HttpOnly embed session cookie). Authorization is enforced server-side, not by CORS.
+      cb(null, origin || true);
     },
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     // Needed because widget testing uses header `X-API-Key` and browsers require it in preflight.

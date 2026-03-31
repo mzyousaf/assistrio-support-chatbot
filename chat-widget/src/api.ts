@@ -27,6 +27,13 @@ function minimalPreviewInit(config: EmbedChatConfig): WidgetInitRequest {
   };
 }
 
+function resolveRuntimeEmbedOrigin(config: EmbedChatConfig): string | undefined {
+  const fromConfig = typeof config.embedOrigin === "string" ? config.embedOrigin.trim() : "";
+  if (fromConfig) return fromConfig;
+  if (typeof window === "undefined") return undefined;
+  return window.location.origin;
+}
+
 function toInitRequest(config: EmbedChatConfig): WidgetInitRequest {
   if ((config.mode ?? "runtime") === "preview") {
     const authToken = previewAuthToken(config);
@@ -49,9 +56,11 @@ function toInitRequest(config: EmbedChatConfig): WidgetInitRequest {
       ...(config.secretKey ? { secretKey: config.secretKey } : {}),
     };
   }
+  const embedOrigin = resolveRuntimeEmbedOrigin(config);
   return {
     botId: config.botId,
     mode: "runtime",
+    ...(embedOrigin ? { embedOrigin } : {}),
     ...(config.accessKey ? { accessKey: config.accessKey } : {}),
     ...(config.secretKey ? { secretKey: config.secretKey } : {}),
     ...(config.chatVisitorId ? { chatVisitorId: config.chatVisitorId } : {}),

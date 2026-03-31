@@ -1,5 +1,8 @@
 import type { BotChatUI, BotConfig, BotLeadCaptureV2, BotLeadField, BotPersonality } from '../models/bot.schema';
 import type { LeadFieldType } from '../models/bot.schema';
+import { isEmbedDomainInputDisallowedLocalhost, parseAllowedDomainStringForStorage } from '../bots/embed-domain.util';
+import { normalizeVisitorMultiChatMax } from '../bots/visitor-multi-chat.util';
+import { normalizeQuickLinkIcon } from './quick-link-icon-ids';
 
 const LEAD_TYPES: LeadFieldType[] = ['text', 'email', 'phone', 'number', 'url'];
 
@@ -7,8 +10,9 @@ function slugifyKey(input: string): string {
   return input
     .trim()
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '');
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .replace(/-+/g, '-');
 }
 
 function ensureUniqueKey(base: string, used: Set<string>): string {
@@ -18,8 +22,8 @@ function ensureUniqueKey(base: string, used: Set<string>): string {
     return n;
   }
   let i = 2;
-  while (used.has(`${n}_${i}`)) i++;
-  const k = `${n}_${i}`;
+  while (used.has(`${n}-${i}`)) i++;
+  const k = `${n}-${i}`;
   used.add(k);
   return k;
 }
@@ -42,9 +46,10 @@ function normalizeFields(input: unknown): BotLeadField[] {
       : undefined;
     out.push({
       key,
-      label: labelRaw || key.replace(/_/g, ' '),
+      label: labelRaw || key.replace(/-/g, ' '),
       type,
       required: o.required !== false,
+      ...(o.disabled === true ? { disabled: true } : {}),
       ...(aliases?.length ? { aliases } : {}),
     });
   }
@@ -64,7 +69,7 @@ function normalizeLeadCapture(input: unknown): BotLeadCaptureV2 {
   if ('collectName' in o || 'collectEmail' in o || 'collectPhone' in o) {
     const leg = o as { collectName?: boolean; collectEmail?: boolean; collectPhone?: boolean; enabled?: boolean };
     const legacyFields: BotLeadField[] = [];
-    if (leg.collectName !== false) legacyFields.push({ key: 'name', label: 'Full name', type: 'text', required: true });
+    if (leg.collectName !== false) legacyFields.push({ key: 'name', label: 'Name', type: 'text', required: true });
     if (leg.collectEmail !== false) legacyFields.push({ key: 'email', label: 'Email', type: 'email', required: true });
     if (leg.collectPhone) legacyFields.push({ key: 'phone', label: 'Phone', type: 'phone', required: true });
     return { enabled: leg.enabled === true, fields: legacyFields, ...extra };
@@ -94,9 +99,29 @@ function normalizeExampleQuestions(input: unknown): string[] {
     .filter(Boolean);
 }
 
-const MENU_QUICK_LINKS_MAX = 3;
+const MENU_QUICK_LINKS_MAX = 10;
 
-function normalizeMenuQuickLinks(input: unknown): Array<{ text: string; route: string }> {
+function normalizeAllowedDomainsFromPayload(input: Record<string, unknown>): string[] | undefined {
+  if (!('allowedDomains' in input)) return undefined;
+  const raw = input.allowedDomains;
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const item of raw) {
+    if (typeof item !== 'string') continue;
+    const trimmed = item.trim();
+    const n = parseAllowedDomainStringForStorage(item);
+    if (n && !seen.has(n)) {
+      seen.add(n);
+      out.push(n);
+    } else if (trimmed && !n && isEmbedDomainInputDisallowedLocalhost(item)) {
+      throw new Error('Localhost and loopback addresses cannot be used as allowed embed domains.');
+    }
+  }
+  return out;
+}
+
+function normalizeMenuQuickLinks(input: unknown): Array<{ text: string; route: string; icon?: string }> {
   if (!Array.isArray(input)) return [];
   return input
     .slice(0, MENU_QUICK_LINKS_MAX)
@@ -105,9 +130,11 @@ function normalizeMenuQuickLinks(input: unknown): Array<{ text: string; route: s
       if (!o) return null;
       const text = typeof o.text === 'string' ? o.text.trim() : '';
       const route = typeof o.route === 'string' ? o.route.trim() : '';
-      return text && route ? { text, route } : null;
+      if (!text || !route) return null;
+      const icon = normalizeQuickLinkIcon(o.icon);
+      return icon ? { text, route, icon } : { text, route };
     })
-    .filter((x): x is { text: string; route: string } => x != null);
+    .filter((x): x is { text: string; route: string; icon?: string } => x != null);
 }
 
 export interface NormalizedBotPayload {
@@ -116,6 +143,7 @@ export interface NormalizedBotPayload {
   description?: string;
   categories: string[];
   imageUrl?: string;
+  avatarEmoji?: string;
   knowledgeDescription?: string;
   faqs: Array<{ question: string; answer: string; active?: boolean }>;
   exampleQuestions?: string[];
@@ -136,9 +164,15 @@ export interface NormalizedBotPayload {
   includeNameInKnowledge?: boolean;
   includeTaglineInKnowledge?: boolean;
   includeNotesInKnowledge: boolean;
+  /** Omitted from PATCH body = leave unchanged on server. */
+  allowedDomains?: string[];
+  /** Present only when `visitorMultiChatEnabled` is in the request body. */
+  visitorMultiChatEnabled?: boolean;
+  visitorMultiChatMax?: number | null;
 }
 
 export function normalizeBotPayload(input: Record<string, unknown>): NormalizedBotPayload {
+  const allowedDomains = normalizeAllowedDomainsFromPayload(input);
   const name = String(input.name ?? '').trim();
   const shortDescription = String(input.shortDescription ?? '').trim();
   const description = String(input.description ?? '').trim();
@@ -146,6 +180,7 @@ export function normalizeBotPayload(input: Record<string, unknown>): NormalizedB
     ? (input.categories as unknown[]).map((e) => String(e).trim()).filter(Boolean) as string[]
     : [];
   const imageUrl = String(input.imageUrl ?? '').trim();
+  const avatarEmoji = String(input.avatarEmoji ?? '').trim();
   const knowledgeDescription = String(input.knowledgeDescription ?? '').trim();
   const welcomeMessage = String(input.welcomeMessage ?? '').trim();
   const openaiApiKeyOverride = String(input.openaiApiKeyOverride ?? '').trim();
@@ -192,20 +227,81 @@ export function normalizeBotPayload(input: Record<string, unknown>): NormalizedB
         : 20;
   const timePos =
     chatUIInput.timePosition === 'bottom' || chatUIInput.timePosition === 'bottom-right' ? 'bottom' : 'top';
+  const chatPanelBorderWidth =
+    typeof chatUIInput.chatPanelBorderWidth === 'number' &&
+      chatUIInput.chatPanelBorderWidth >= 0 &&
+      chatUIInput.chatPanelBorderWidth <= 5
+      ? Math.round(chatUIInput.chatPanelBorderWidth)
+      : 1;
+  const menuQuickLinksMenuIcon = normalizeQuickLinkIcon(chatUIInput.menuQuickLinksMenuIcon);
   const chatUI: BotChatUI = {
     primaryColor: typeof chatUIInput.primaryColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(chatUIInput.primaryColor.trim()) ? chatUIInput.primaryColor.trim() : '#14B8A6',
     backgroundStyle: chatUIInput.backgroundStyle === 'auto' || chatUIInput.backgroundStyle === 'light' || chatUIInput.backgroundStyle === 'dark' ? chatUIInput.backgroundStyle as BotChatUI['backgroundStyle'] : 'light',
     bubbleBorderRadius: bubbleRadius,
+    chatPanelBorderWidth,
     launcherPosition: chatUIInput.launcherPosition === 'bottom-left' || chatUIInput.launcherPosition === 'bottom-right' ? chatUIInput.launcherPosition as BotChatUI['launcherPosition'] : 'bottom-right',
+    shadowIntensity:
+      chatUIInput.shadowIntensity === 'none' ||
+        chatUIInput.shadowIntensity === 'low' ||
+        chatUIInput.shadowIntensity === 'medium' ||
+        chatUIInput.shadowIntensity === 'high'
+        ? (chatUIInput.shadowIntensity as BotChatUI['shadowIntensity'])
+        : 'medium',
+    showChatBorder: chatUIInput.showChatBorder !== false,
+    launcherIcon:
+      chatUIInput.launcherIcon === 'bot-avatar' || chatUIInput.launcherIcon === 'custom' ? chatUIInput.launcherIcon : 'default',
+    launcherAvatarUrl:
+      typeof chatUIInput.launcherAvatarUrl === 'string' ? chatUIInput.launcherAvatarUrl.trim() || undefined : undefined,
+    launcherAvatarRingWidth:
+      typeof chatUIInput.launcherAvatarRingWidth === 'number' &&
+        chatUIInput.launcherAvatarRingWidth >= 0 &&
+        chatUIInput.launcherAvatarRingWidth <= 30
+        ? Math.round(chatUIInput.launcherAvatarRingWidth)
+        : 18,
+    launcherSize:
+      typeof chatUIInput.launcherSize === 'number' && chatUIInput.launcherSize >= 32 && chatUIInput.launcherSize <= 96
+        ? Math.round(chatUIInput.launcherSize)
+        : 48,
+    launcherWhenOpen:
+      chatUIInput.launcherWhenOpen === 'close' || chatUIInput.launcherWhenOpen === 'same'
+        ? chatUIInput.launcherWhenOpen
+        : 'chevron-down',
+    chatOpenAnimation:
+      chatUIInput.chatOpenAnimation === 'fade'
+        ? 'fade'
+        : chatUIInput.chatOpenAnimation === 'expand' || chatUIInput.chatOpenAnimation === 'scale'
+          ? 'expand'
+          : 'slide-up-fade',
+    openChatOnLoad: chatUIInput.openChatOnLoad !== false,
     showBranding: chatUIInput.showBranding !== false,
     brandingMessage: typeof chatUIInput.brandingMessage === 'string' ? chatUIInput.brandingMessage.trim() : '',
+    showPrivacyText: chatUIInput.showPrivacyText !== false,
+    privacyText: typeof chatUIInput.privacyText === 'string' ? chatUIInput.privacyText.trim() : '',
     liveIndicatorStyle: chatUIInput.liveIndicatorStyle === 'dot-only' ? 'dot-only' : 'label',
     statusIndicator: chatUIInput.statusIndicator === 'live' || chatUIInput.statusIndicator === 'active' ? chatUIInput.statusIndicator as BotChatUI['statusIndicator'] : 'none',
     statusDotStyle: chatUIInput.statusDotStyle === 'static' ? 'static' : 'blinking',
     showScrollToBottom: chatUIInput.showScrollToBottom !== false,
+    showScrollToBottomLabel: chatUIInput.showScrollToBottomLabel !== false,
+    scrollToBottomLabel:
+      typeof chatUIInput.scrollToBottomLabel === 'string' ? chatUIInput.scrollToBottomLabel.trim() : '',
+    showScrollbar: chatUIInput.showScrollbar !== false,
     composerAsSeparateBox: chatUIInput.composerAsSeparateBox !== false,
+    composerBorderWidth:
+      typeof chatUIInput.composerBorderWidth === 'number' &&
+        chatUIInput.composerBorderWidth >= 0 &&
+        chatUIInput.composerBorderWidth <= 6
+        ? (() => {
+          const w = Number(chatUIInput.composerBorderWidth);
+          return w > 0 && w < 0.5 ? 0.5 : Math.max(0, Math.min(6, w));
+        })()
+        : (chatUIInput as { showComposerBorder?: boolean }).showComposerBorder === false
+          ? 0
+          : 1,
+    composerBorderColor: chatUIInput.composerBorderColor === 'default' ? 'default' : 'primary',
     showMenuExpand: chatUIInput.showMenuExpand !== false,
+    showMenuQuickLinks: chatUIInput.showMenuQuickLinks !== false,
     menuQuickLinks: normalizeMenuQuickLinks(chatUIInput.menuQuickLinks),
+    ...(menuQuickLinksMenuIcon ? { menuQuickLinksMenuIcon } : {}),
     showComposerWithSuggestedQuestions: chatUIInput.showComposerWithSuggestedQuestions === true,
     showAvatarInHeader: chatUIInput.showAvatarInHeader !== false,
     senderName: typeof chatUIInput.senderName === 'string' ? chatUIInput.senderName.trim() : '',
@@ -242,12 +338,23 @@ export function normalizeBotPayload(input: Record<string, unknown>): NormalizedB
   if (['short', 'medium', 'long'].includes(String(configInput.responseLength))) configCandidate.responseLength = configInput.responseLength as BotConfig['responseLength'];
   const config = Object.keys(configCandidate).length ? configCandidate : undefined;
 
+  const visitorMultiPatch =
+    'visitorMultiChatEnabled' in input
+      ? (() => {
+        const en = input.visitorMultiChatEnabled === true;
+        const rawVisitorMax = input.visitorMultiChatMax;
+        const max = !en ? null : normalizeVisitorMultiChatMax(rawVisitorMax);
+        return { visitorMultiChatEnabled: en, visitorMultiChatMax: max } as const;
+      })()
+      : null;
+
   return {
     name,
     shortDescription: shortDescription || undefined,
     description: description || undefined,
     categories,
     imageUrl: imageUrl || undefined,
+    avatarEmoji: avatarEmoji || undefined,
     knowledgeDescription: knowledgeDescription || undefined,
     faqs,
     exampleQuestions: exampleQuestions.length > 0 ? exampleQuestions : undefined,
@@ -268,5 +375,7 @@ export function normalizeBotPayload(input: Record<string, unknown>): NormalizedB
     includeNameInKnowledge,
     includeTaglineInKnowledge,
     includeNotesInKnowledge,
+    ...(allowedDomains !== undefined ? { allowedDomains } : {}),
+    ...(visitorMultiPatch ?? {}),
   };
 }

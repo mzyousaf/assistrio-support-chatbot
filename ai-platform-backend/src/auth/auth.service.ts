@@ -3,11 +3,20 @@ import { Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import { Types } from 'mongoose';
 import { User, USER_ROLES, type UserRole } from '../models';
+import { WorkspacesService } from '../workspaces/workspaces.service';
 
 export interface AuthTokenPayload {
   sub: string;
   role: UserRole;
+}
+
+/** Map legacy platform roles so existing JWTs keep working after enum change. */
+function normalizeTokenRole(role: string): UserRole {
+  if (role === 'admin' || role === 'viewer') return 'customer';
+  if ((USER_ROLES as readonly string[]).includes(role)) return role as UserRole;
+  throw new Error('Invalid role in token');
 }
 
 @Injectable()
@@ -15,6 +24,7 @@ export class AuthService {
   constructor(
     private readonly jwtService: JwtService,
     @InjectModel(User.name) private readonly userModel: Model<User>,
+    private readonly workspacesService: WorkspacesService,
   ) {}
 
   async findUserByEmail(email: string) {
@@ -45,6 +55,8 @@ export class AuthService {
       passwordHash,
       role,
     });
+    const uid = (doc as unknown as { _id: Types.ObjectId })._id;
+    await this.workspacesService.createWorkspaceWithAdminMember(uid);
     return doc;
   }
 
@@ -60,10 +72,8 @@ export class AuthService {
     if (typeof decoded?.sub !== 'string' || !decoded.role) {
       throw new Error('Invalid token claims');
     }
-    if (!(USER_ROLES as readonly string[]).includes(decoded.role)) {
-      throw new Error('Invalid role in token');
-    }
-    return decoded;
+    const role = normalizeTokenRole(decoded.role);
+    return { sub: decoded.sub, role };
   }
 
   async validateCredentials(email: string, password: string): Promise<User | null> {

@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@assistrio/chat-widget": "^0.1.0",
     "next": "^15.5.12",
     "react": "19.2.3",
     "react-dom": "19.2.3",

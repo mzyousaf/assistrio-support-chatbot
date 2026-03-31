@@ -44,8 +44,6 @@ export interface ChatContextLeadCapture {
   shouldAskNow: boolean;
   /** Human-readable field labels for prompting (key -> label) */
   fieldLabels: Record<string, string>;
-  /** When true, prompt asks for polite wording when requesting lead info. */
-  politeMode?: boolean;
   askStrategy?: 'soft' | 'balanced' | 'direct';
 }
 

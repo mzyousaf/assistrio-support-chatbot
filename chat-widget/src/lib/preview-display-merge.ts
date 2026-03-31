@@ -1,3 +1,4 @@
+import { normalizeLauncherIcon } from "./launcherIconNormalize";
 import type { WidgetInitResponse, WidgetPreviewOverrides } from "../types";
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
@@ -54,6 +55,10 @@ export function mergePreviewInitResponse(
   if (overrides.launcherPosition) {
     mergedChatUI.launcherPosition = overrides.launcherPosition;
   }
+  mergedChatUI.launcherIcon = normalizeLauncherIcon(mergedChatUI.launcherIcon);
+  if (mergedChatUI.launcherIcon === "bot-avatar") {
+    delete mergedChatUI.launcherAvatarUrl;
+  }
 
   const savedSuggestedQuestions = suggestedQuestionsFromResponse(base);
   const suggestedQuestions = Array.isArray(overrides.suggestedQuestions)
@@ -63,9 +68,34 @@ export function mergePreviewInitResponse(
   const brandingMessage =
     toNonEmptyString(overrides.brandingMessage) ??
     toNonEmptyString(mergedChatUI.brandingMessage);
-  const privacyText = toNonEmptyString(overrides.privacyText);
+  const privacyText =
+    toNonEmptyString(overrides.privacyText) ??
+    toNonEmptyString(
+      isPlainRecord(overrides.chatUI)
+        ? (overrides.chatUI as { privacyText?: unknown }).privacyText
+        : undefined,
+    );
 
   const bot = base.bot ?? {};
+  const visitorMultiFromOverrides =
+    overrides.visitorMultiChatEnabled !== undefined
+      ? {
+          visitorMultiChatEnabled: overrides.visitorMultiChatEnabled === true,
+          visitorMultiChatMax:
+            overrides.visitorMultiChatEnabled === true
+              ? overrides.visitorMultiChatMax === null || overrides.visitorMultiChatMax === undefined
+                ? null
+                : typeof overrides.visitorMultiChatMax === "number" && Number.isFinite(overrides.visitorMultiChatMax)
+                  ? (() => {
+                      const n = Math.floor(overrides.visitorMultiChatMax as number);
+                      if (n <= 0) return null;
+                      return Math.max(2, n);
+                    })()
+                  : null
+              : null,
+        }
+      : null;
+
   return {
     ...base,
     bot: {
@@ -84,6 +114,7 @@ export function mergePreviewInitResponse(
       chatUI: mergedChatUI,
       ...(brandingMessage ? { brandingMessage } : {}),
       ...(privacyText ? { privacyText } : {}),
+      ...(visitorMultiFromOverrides ?? {}),
     },
   };
 }

@@ -16,6 +16,17 @@ export type {
   WidgetInitStatus,
   WidgetMode,
   WidgetPreviewOverrides,
+  WidgetStrings,
 } from "./types";
 
+export { mergeWidgetStrings, DEFAULT_WIDGET_STRINGS_EN } from "./lib/widgetStrings";
+export type { WidgetLocale } from "./lib/widgetStrings";
+
 export type { EmbedWidgetRootProps } from "./widget-root";
+
+export {
+  QUICK_LINK_ICON_IDS,
+  getQuickLinkIcon,
+  isQuickLinkIconId,
+} from "./lib/quickLinkIcons";
+export type { QuickLinkIconId } from "./lib/quickLinkIcons";

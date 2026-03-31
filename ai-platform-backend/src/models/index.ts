@@ -33,6 +33,13 @@ export { RateLimit, RateLimitSchema } from './rate-limit.schema';
 export { Config, ConfigSchema } from './config.schema';
 export { User, UserSchema, USER_ROLES } from './user.schema';
 export type { UserRole } from './user.schema';
+export { Workspace, WorkspaceSchema } from './workspace.schema';
+export {
+  WorkspaceMembership,
+  WorkspaceMembershipSchema,
+  WORKSPACE_MEMBER_ROLES,
+} from './workspace-membership.schema';
+export type { WorkspaceMemberRole } from './workspace-membership.schema';
 export { IngestJob, IngestJobSchema } from './ingest-job.schema';
 export type { IngestJobStatus } from './ingest-job.schema';
 export { SummaryJob, SummaryJobSchema } from './summary-job.schema';

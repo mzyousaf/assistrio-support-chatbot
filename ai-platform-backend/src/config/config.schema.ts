@@ -1,4 +1,5 @@
 import * as Joi from 'joi';
+import { ENV_CHAT_WIDGET_API_KEY, ENV_WIDGET_EMBED_RATE_LIMIT_PER_MINUTE } from '../lib/env-var-names';
 
 export const configValidationSchema = Joi.object({
   NODE_ENV: Joi.string().valid('development', 'production', 'test').default('development'),
@@ -12,5 +13,6 @@ export const configValidationSchema = Joi.object({
   CLOUDFRONT_BASE_URL: Joi.string().uri().optional().allow(''),
   LANDING_SITE_BOTS_API_KEY: Joi.string().optional().allow(''),
   /** Auth for widget-only testing endpoints (returns an embeddable botId). */
-  CHAT_WIDGET_API_KEY: Joi.string().min(16).optional().allow(''),
+  [ENV_CHAT_WIDGET_API_KEY]: Joi.string().min(16).optional().allow(''),
+  [ENV_WIDGET_EMBED_RATE_LIMIT_PER_MINUTE]: Joi.number().integer().min(0).optional(),
 });

@@ -37,6 +37,7 @@ import { SUMMARY_MIN_MESSAGES, SUMMARY_UPDATE_INTERVAL } from './conversation-su
 import { chatLog } from './chat-logger';
 import { SummaryJobService } from './summary-job.service';
 import { withRetry, withTimeout, AI_CALL_TIMEOUTS } from '../lib/ai-call.helper';
+import { normalizeVisitorMultiChatMax } from '../bots/visitor-multi-chat.util';
 
 function rankedItemToEvidenceItem(item: RankedKnowledgeItem): ChatContextEvidenceItem {
   const url =
@@ -223,6 +224,28 @@ export class ChatEngineService {
     private readonly summaryJobService: SummaryJobService,
   ) { }
 
+  private readonly ephemeralPreviewThreads = new Map<
+    string,
+    {
+      messages: Array<{ role: string; content: string; createdAt: Date; sources?: unknown }>;
+      conv: {
+        _id: Types.ObjectId;
+        capturedLeadData?: CapturedLeadData;
+        leadCaptureMeta?: LeadCaptureMeta;
+        summary?: string;
+      };
+    }
+  >();
+
+  private parseOptionalObjectId(s?: string): Types.ObjectId | null {
+    if (!s || !String(s).trim()) return null;
+    try {
+      return new Types.ObjectId(String(s).trim());
+    } catch {
+      return null;
+    }
+  }
+
   resolveOpenAIKey(params: { userApiKey?: string; bot: BotLike }): string {
     const requestKey = String(params.userApiKey || '').trim();
     if (requestKey) return requestKey;
@@ -231,16 +254,176 @@ export class ChatEngineService {
     return String(this.config.get<string>('openaiApiKey') || '').trim();
   }
 
-  async runChat({
-    bot,
-    chatVisitorId,
-    platformVisitorId,
-    message,
-    mode,
-    userApiKey,
-    requestId: inputRequestId,
-    debug: requestDebug = false,
-  }: RunChatInput): Promise<RunChatResult> {
+  private resolveEphemeralThread(
+    bot: BotLike,
+    chatVisitorId: string,
+    inputConversationId: string | undefined,
+    now: Date,
+  ): {
+    conversation: Conversation & { _id: Types.ObjectId };
+    isNewConversation: boolean;
+    thread: {
+      messages: Array<{ role: string; content: string; createdAt: Date; sources?: unknown }>;
+      conv: {
+        _id: Types.ObjectId;
+        capturedLeadData?: CapturedLeadData;
+        leadCaptureMeta?: LeadCaptureMeta;
+        summary?: string;
+      };
+    };
+  } {
+    const botOid =
+      typeof bot._id === 'object' && 'toHexString' in bot._id
+        ? (bot._id as Types.ObjectId)
+        : new Types.ObjectId(bot._id.toString());
+    const convId = this.parseOptionalObjectId(inputConversationId) ?? new Types.ObjectId();
+    const key = `${botOid.toHexString()}\0${chatVisitorId}\0${convId.toHexString()}`;
+    let thread = this.ephemeralPreviewThreads.get(key);
+    let isNewConversation = false;
+    if (!thread) {
+      thread = { messages: [], conv: { _id: convId } };
+      this.ephemeralPreviewThreads.set(key, thread);
+      isNewConversation = true;
+      const rawWelcome = typeof bot.welcomeMessage === 'string' ? bot.welcomeMessage.trim() : '';
+      if (rawWelcome) {
+        const welcomeText = resolveWelcomeMessage(rawWelcome, {
+          name: bot.name,
+          shortDescription: bot.shortDescription,
+          description: bot.description,
+        });
+        thread.messages.push({
+          role: 'assistant',
+          content: welcomeText,
+          createdAt: now,
+        });
+      }
+    }
+    return {
+      conversation: thread.conv as unknown as Conversation & { _id: Types.ObjectId },
+      isNewConversation,
+      thread,
+    };
+  }
+
+  private async resolveMongoConversation(
+    bot: BotLike,
+    chatVisitorId: string,
+    platformVisitorId: string | undefined,
+    now: Date,
+    inputConversationId: string | undefined,
+    inputStartNew: boolean | undefined,
+    multiEnabled: boolean,
+    multiMax: number | null,
+  ): Promise<
+    | { ok: true; conversation: Conversation; isNewConversation: boolean }
+    | { ok: false; error: 'conversation_not_found' | 'visitor_multi_chat_limit_reached' }
+  > {
+    const botOid =
+      typeof bot._id === 'object' && 'toHexString' in bot._id
+        ? (bot._id as Types.ObjectId)
+        : new Types.ObjectId(bot._id.toString());
+
+    const createWithWelcome = async (): Promise<Conversation> => {
+      const conv = await this.conversationModel.create({
+        botId: botOid,
+        chatVisitorId,
+        visitorId: platformVisitorId,
+        createdAt: now,
+        lastActivityAt: now,
+      });
+      const rawWelcome = typeof bot.welcomeMessage === 'string' ? bot.welcomeMessage.trim() : '';
+      if (rawWelcome) {
+        const welcomeText = resolveWelcomeMessage(rawWelcome, {
+          name: bot.name,
+          shortDescription: bot.shortDescription,
+          description: bot.description,
+        });
+        await this.messageModel.create({
+          conversationId: conv._id,
+          botId: botOid,
+          chatVisitorId,
+          visitorId: platformVisitorId,
+          role: 'assistant',
+          content: welcomeText,
+          createdAt: now,
+        });
+      }
+      return conv;
+    };
+
+    if (!multiEnabled) {
+      let conversation = await this.conversationModel.findOne({
+        botId: botOid,
+        chatVisitorId,
+      });
+      if (!conversation) {
+        conversation = await this.conversationModel.findOne({
+          botId: botOid,
+          visitorId: chatVisitorId,
+        });
+      }
+      if (!conversation) {
+        const conv = await createWithWelcome();
+        return { ok: true, conversation: conv, isNewConversation: true };
+      }
+      return { ok: true, conversation, isNewConversation: false };
+    }
+
+    if (inputStartNew) {
+      if (multiMax != null) {
+        const count = await this.conversationModel.countDocuments({ botId: botOid, chatVisitorId });
+        if (count >= multiMax) {
+          return { ok: false, error: 'visitor_multi_chat_limit_reached' };
+        }
+      }
+      const conv = await createWithWelcome();
+      return { ok: true, conversation: conv, isNewConversation: true };
+    }
+
+    const parsedOid = inputConversationId?.trim() ? this.parseOptionalObjectId(inputConversationId) : null;
+    if (parsedOid) {
+      const conversation = await this.conversationModel.findOne({
+        _id: parsedOid,
+        botId: botOid,
+        chatVisitorId,
+      });
+      if (!conversation) {
+        return { ok: false, error: 'conversation_not_found' };
+      }
+      return { ok: true, conversation, isNewConversation: false };
+    }
+
+    let conversation = await this.conversationModel
+      .findOne({ botId: botOid, chatVisitorId })
+      .sort({ lastActivityAt: -1, createdAt: -1 })
+      .exec();
+    if (!conversation) {
+      conversation = await this.conversationModel
+        .findOne({ botId: botOid, visitorId: chatVisitorId })
+        .sort({ lastActivityAt: -1, createdAt: -1 })
+        .exec();
+    }
+    if (!conversation) {
+      const conv = await createWithWelcome();
+      return { ok: true, conversation: conv, isNewConversation: true };
+    }
+    return { ok: true, conversation, isNewConversation: false };
+  }
+
+  async runChat(input: RunChatInput): Promise<RunChatResult> {
+    const {
+      bot,
+      chatVisitorId,
+      platformVisitorId,
+      message,
+      mode,
+      userApiKey,
+      requestId: inputRequestId,
+      debug: requestDebug = false,
+      conversationId: inputConversationId,
+      startNewConversation: inputStartNew,
+      ephemeral: inputEphemeral,
+    } = input;
     const requestId = inputRequestId ?? `chat-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
     const startTime = Date.now();
     const endpoint = mode === 'user' ? 'user' : mode;
@@ -272,48 +455,45 @@ export class ChatEngineService {
     const maxTokens = typeof cfg.maxTokens === 'number' ? cfg.maxTokens : 512;
 
     const now = new Date();
-    // chatVisitorId is the identity for Conversation/Message records.
-    // Backward compat: older docs stored chat identity in `visitorId`.
-    let conversation = await this.conversationModel.findOne({
-      botId: bot._id,
-      chatVisitorId,
-    });
-    if (!conversation) {
-      conversation = await this.conversationModel.findOne({
-        botId: bot._id,
-        visitorId: chatVisitorId,
-      });
+    const multiEnabled = bot.visitorMultiChatEnabled === true;
+    const multiMax = normalizeVisitorMultiChatMax(bot.visitorMultiChatMax);
+
+    let conversation: Conversation & { _id: Types.ObjectId };
+    let isNewConversation = false;
+    let ephemeralThread:
+      | {
+          messages: Array<{ role: string; content: string; createdAt: Date; sources?: unknown }>;
+          conv: {
+            _id: Types.ObjectId;
+            capturedLeadData?: CapturedLeadData;
+            leadCaptureMeta?: LeadCaptureMeta;
+            summary?: string;
+          };
+        }
+      | undefined;
+
+    if (inputEphemeral) {
+      const ep = this.resolveEphemeralThread(bot, chatVisitorId, inputConversationId, now);
+      conversation = ep.conversation;
+      isNewConversation = ep.isNewConversation;
+      ephemeralThread = ep.thread;
+    } else {
+      const resolved = await this.resolveMongoConversation(
+        bot,
+        chatVisitorId,
+        platformVisitorId,
+        now,
+        inputConversationId,
+        inputStartNew,
+        multiEnabled,
+        multiMax,
+      );
+      if (resolved.ok === false) return resolved;
+      conversation = resolved.conversation as Conversation & { _id: Types.ObjectId };
+      isNewConversation = resolved.isNewConversation;
     }
 
-    let isNewConversation = false;
-    if (!conversation) {
-      conversation = await this.conversationModel.create({
-        botId: bot._id,
-        chatVisitorId,
-        // Deprecated platform visitor id for legacy visitor/quota logic.
-        visitorId: platformVisitorId,
-        createdAt: now,
-      });
-      isNewConversation = true;
-      const rawWelcome =
-        typeof bot.welcomeMessage === 'string' ? bot.welcomeMessage.trim() : '';
-      if (rawWelcome) {
-        const welcomeText = resolveWelcomeMessage(rawWelcome, {
-          name: bot.name,
-          shortDescription: bot.shortDescription,
-          description: bot.description,
-        });
-        await this.messageModel.create({
-          conversationId: conversation._id,
-          botId: bot._id,
-          chatVisitorId,
-          visitorId: platformVisitorId,
-          role: 'assistant',
-          content: welcomeText,
-          createdAt: now,
-        });
-      }
-    } else {
+    if (!inputEphemeral) {
       const lastTwo = await this.messageModel
         .find({ conversationId: conversation._id })
         .sort({ createdAt: -1 })
@@ -327,7 +507,36 @@ export class ChatEngineService {
           newest.role === 'assistant' &&
           second.role === 'user' &&
           normalizeMessageForDedupe(String(second.content || '')) === norm &&
-          (now.getTime() - new Date(second.createdAt).getTime() < DEDUPE_WINDOW_MS)
+          now.getTime() - new Date(second.createdAt).getTime() < DEDUPE_WINDOW_MS
+        ) {
+          chatLog({
+            event: 'chat.duplicate_request_detected',
+            level: 'info',
+            botId: bot._id.toString(),
+            conversationId: conversation._id.toString(),
+            chatVisitorId,
+            requestId,
+            endpoint,
+          });
+          return {
+            ok: true,
+            conversationId: conversation._id.toString(),
+            assistantMessage: String(newest.content || '').trim() || "I'm here. How can I help?",
+            isNewConversation: false,
+          };
+        }
+      }
+    } else if (ephemeralThread) {
+      const arr = ephemeralThread.messages;
+      if (arr.length >= 2) {
+        const newest = arr[arr.length - 1];
+        const second = arr[arr.length - 2];
+        const norm = normalizeMessageForDedupe(message);
+        if (
+          newest.role === 'assistant' &&
+          second.role === 'user' &&
+          normalizeMessageForDedupe(String(second.content || '')) === norm &&
+          now.getTime() - new Date(second.createdAt).getTime() < DEDUPE_WINDOW_MS
         ) {
           chatLog({
             event: 'chat.duplicate_request_detected',
@@ -348,23 +557,39 @@ export class ChatEngineService {
       }
     }
 
-    // Persist user message first so it is part of conversation history when we load messages.
-    await this.messageModel.create({
-      conversationId: conversation._id,
-      botId: bot._id,
-      chatVisitorId,
-      visitorId: platformVisitorId,
-      role: 'user',
-      content: message,
-      createdAt: now,
-    });
+    if (!inputEphemeral) {
+      await this.messageModel.create({
+        conversationId: conversation._id,
+        botId: bot._id,
+        chatVisitorId,
+        visitorId: platformVisitorId,
+        role: 'user',
+        content: message,
+        createdAt: now,
+      });
+      await this.conversationModel.updateOne(
+        { _id: conversation._id },
+        { $set: { lastActivityAt: now } },
+      );
+    } else {
+      ephemeralThread!.messages.push({
+        role: 'user',
+        content: message,
+        createdAt: now,
+      });
+    }
 
-    // Load conversation messages (chronological). Memory helper will exclude current message and apply window.
-    const allMessages = await this.messageModel
-      .find({ conversationId: conversation._id })
-      .sort({ createdAt: 1 })
-      .select({ role: 1, content: 1, createdAt: 1 })
-      .lean();
+    const allMessages = inputEphemeral
+      ? ephemeralThread!.messages.map((m) => ({
+          role: m.role,
+          content: m.content,
+          createdAt: m.createdAt,
+        }))
+      : await this.messageModel
+          .find({ conversationId: conversation._id })
+          .sort({ createdAt: 1 })
+          .select({ role: 1, content: 1, createdAt: 1 })
+          .lean();
     const allMessagesForContext = allMessages.map((m) => ({
       role: m.role as 'user' | 'assistant' | 'system',
       content: String(m.content || ''),
@@ -422,7 +647,9 @@ export class ChatEngineService {
       { lastAskedField: conv.leadCaptureMeta?.lastAskedField, fieldAliases },
     );
     const fieldTypes = Object.fromEntries(
-      (normalizeLeadCaptureConfig(leadConfig).fields ?? []).map((f) => [f.key, f.type ?? 'text']),
+      (normalizeLeadCaptureConfig(leadConfig).fields ?? [])
+        .filter((f) => !f.disabled)
+        .map((f) => [f.key, f.type ?? 'text']),
     );
     const { collected: mergedCollected, overwritten: leadOverwritten, skipped: leadSkipped } =
       mergeExtractedLeadDataWithDebug(
@@ -467,7 +694,6 @@ export class ChatEngineService {
         meta: conv.leadCaptureMeta,
         shouldAskThisTurn,
         askStrategy: normalizedLead.askStrategy,
-        politeMode: normalizedLead.politeMode,
       },
     );
 
@@ -493,7 +719,16 @@ export class ChatEngineService {
       };
     }
     if (Object.keys(updates).length > 0) {
-      await this.conversationModel.updateOne({ _id: conversation._id }, { $set: updates });
+      if (inputEphemeral && ephemeralThread) {
+        if (updates.capturedLeadData !== undefined) {
+          ephemeralThread.conv.capturedLeadData = updates.capturedLeadData;
+        }
+        if (updates.leadCaptureMeta !== undefined) {
+          ephemeralThread.conv.leadCaptureMeta = updates.leadCaptureMeta;
+        }
+      } else {
+        await this.conversationModel.updateOne({ _id: conversation._id }, { $set: updates });
+      }
     }
 
     const evidenceItems: ChatContextEvidenceItem[] = unifiedResult.items.map(rankedItemToEvidenceItem);
@@ -640,23 +875,32 @@ export class ChatEngineService {
         }))
         : undefined;
 
-    await this.messageModel.create({
-      conversationId: conversation._id,
-      botId: bot._id,
-      chatVisitorId,
-      visitorId: platformVisitorId,
-      role: 'assistant',
-      content: assistantMessage,
-      sources: messageSources,
-      createdAt: new Date(),
-    });
+    if (inputEphemeral && ephemeralThread) {
+      ephemeralThread.messages.push({
+        role: 'assistant',
+        content: assistantMessage,
+        createdAt: new Date(),
+        sources: messageSources,
+      });
+    } else {
+      await this.messageModel.create({
+        conversationId: conversation._id,
+        botId: bot._id,
+        chatVisitorId,
+        visitorId: platformVisitorId,
+        role: 'assistant',
+        content: assistantMessage,
+        sources: messageSources,
+        createdAt: new Date(),
+      });
+    }
 
     const totalMessagesNow = messageCount + 2;
     const summaryEligible =
       totalMessagesNow >= SUMMARY_MIN_MESSAGES && totalMessagesNow % SUMMARY_UPDATE_INTERVAL === 0;
     let summaryEnqueued = false;
     const enqueueStart = Date.now();
-    if (summaryEligible) {
+    if (!inputEphemeral && summaryEligible) {
       const botOid = typeof bot._id === 'object' && 'toHexString' in bot._id ? (bot._id as Types.ObjectId) : new Types.ObjectId(bot._id.toString());
       summaryEnqueued = await this.summaryJobService.enqueue(conversation._id, botOid);
     }
@@ -831,5 +1075,74 @@ export class ChatEngineService {
       result.debug = debugInfo;
     }
     return result;
+  }
+
+  /**
+   * Recent conversations for an embed visitor (runtime widget “recent chats”).
+   */
+  async listVisitorConversations(params: {
+    botOid: Types.ObjectId;
+    chatVisitorId: string;
+    limit?: number;
+  }): Promise<Array<{ id: string; lastActivityAt: string; preview: string }>> {
+    const limit = Math.min(50, Math.max(1, params.limit ?? 20));
+    const convs = await this.conversationModel
+      .find({ botId: params.botOid, chatVisitorId: params.chatVisitorId })
+      .sort({ lastActivityAt: -1, createdAt: -1 })
+      .limit(limit)
+      .lean();
+    const out: Array<{ id: string; lastActivityAt: string; preview: string }> = [];
+    for (const c of convs) {
+      const cid = (c as { _id: Types.ObjectId })._id;
+      const lastUser = await this.messageModel
+        .findOne({ conversationId: cid, role: 'user' })
+        .sort({ createdAt: -1 })
+        .select({ content: 1 })
+        .lean();
+      const preview = String((lastUser as { content?: string })?.content ?? '').trim().slice(0, 80);
+      const lastAt =
+        (c as { lastActivityAt?: Date; createdAt?: Date }).lastActivityAt ??
+        (c as { createdAt?: Date }).createdAt;
+      out.push({
+        id: cid.toString(),
+        lastActivityAt: lastAt ? new Date(lastAt).toISOString() : new Date().toISOString(),
+        preview: preview || 'Chat',
+      });
+    }
+    return out;
+  }
+
+  /**
+   * Load persisted messages for a conversation (embed “open recent chat”).
+   */
+  async getConversationMessagesForEmbed(params: {
+    botOid: Types.ObjectId;
+    chatVisitorId: string;
+    conversationId: string;
+  }): Promise<Array<{ role: 'user' | 'assistant' | 'system'; content: string; createdAt: string }> | null> {
+    let cid: Types.ObjectId;
+    try {
+      cid = new Types.ObjectId(String(params.conversationId).trim());
+    } catch {
+      return null;
+    }
+    const conv = await this.conversationModel.findOne({
+      _id: cid,
+      botId: params.botOid,
+      chatVisitorId: params.chatVisitorId,
+    });
+    if (!conv) {
+      return null;
+    }
+    const msgs = await this.messageModel
+      .find({ conversationId: cid })
+      .sort({ createdAt: 1 })
+      .select({ role: 1, content: 1, createdAt: 1 })
+      .lean();
+    return msgs.map((m) => ({
+      role: m.role as 'user' | 'assistant' | 'system',
+      content: String(m.content || ''),
+      createdAt: new Date((m as { createdAt?: Date }).createdAt ?? Date.now()).toISOString(),
+    }));
   }
 }

@@ -1,3 +1,6 @@
+import { normalizeChatOpenAnimation } from "./lib/chatOpenAnimationNormalize";
+import { normalizeLauncherIcon } from "./lib/launcherIconNormalize";
+import { normalizeLauncherWhenOpen } from "./lib/launcherWhenOpenNormalize";
 import type { BotChatUI } from "./models/botChatUI";
 import type {
   EmbedChatConfig,
@@ -8,6 +11,14 @@ import type {
 
 const DEFAULT_BOT_NAME = "Assistant";
 const DEFAULT_PRIMARY_COLOR = "#14B8A6";
+
+/** Minimum 2 saved threads when capped (current chat + at least one other). */
+function normalizeVisitorMultiChatMax(raw: unknown): number | null {
+  if (raw === null || raw === undefined) return null;
+  const n = Math.floor(Number(raw));
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.max(2, n);
+}
 
 function normalizeSuggestedQuestions(response: WidgetInitResponse): string[] {
   const source = response.bot?.suggestedQuestions ?? response.bot?.exampleQuestions ?? [];
@@ -28,6 +39,10 @@ function normalizeChatUI(response: WidgetInitResponse): BotChatUI {
   return {
     ...chatUI,
     primaryColor,
+    launcherIcon: normalizeLauncherIcon(chatUI.launcherIcon),
+    launcherWhenOpen: normalizeLauncherWhenOpen(chatUI.launcherWhenOpen),
+    chatOpenAnimation: normalizeChatOpenAnimation(chatUI.chatOpenAnimation),
+    showPrivacyText: chatUI.showPrivacyText !== false,
   };
 }
 
@@ -52,6 +67,14 @@ export function normalizeWidgetSettings(
   const launcherPosition = resolveLauncherPosition(chatUI, config);
   const botName = (response.bot?.name ?? "").trim() || DEFAULT_BOT_NAME;
 
+  const settings = response.settings as
+    | {
+        visitorMultiChatEnabled?: boolean;
+        visitorMultiChatMax?: number | null;
+      }
+    | undefined;
+  const visitorMultiChatMax = normalizeVisitorMultiChatMax(settings?.visitorMultiChatMax);
+
   return {
     botId: config.botId,
     botName,
@@ -67,6 +90,12 @@ export function normalizeWidgetSettings(
     },
     launcherPosition,
     brandingMessage: response.settings?.brandingMessage ?? chatUI.brandingMessage,
-    privacyText: response.settings?.privacyText,
+    privacyText:
+      response.settings?.privacyText ??
+      (typeof (chatUI as { privacyText?: string }).privacyText === "string"
+        ? (chatUI as { privacyText: string }).privacyText.trim() || undefined
+        : undefined),
+    visitorMultiChatEnabled: settings?.visitorMultiChatEnabled === true,
+    visitorMultiChatMax,
   };
 }

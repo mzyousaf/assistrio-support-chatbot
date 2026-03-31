@@ -1,14 +1,17 @@
 import { Body, Controller, HttpException, HttpStatus, Post, Req } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
 import { FastifyRequest } from 'fastify';
 import { getRequestId } from '../lib/request-id.helper';
 import { AuthService } from '../auth/auth.service';
 import { BotsService } from '../bots/bots.service';
 import { VisitorsService } from '../visitors/visitors.service';
-import { validateRuntimeBotAccess } from '../bots/runtime-bot-access.util';
-import { toRuntimeCredentialErrorCode } from '../bots/runtime-error-codes.util';
 import { ChatEngineService } from './chat-engine.service';
 import type { BotLike } from './chat-engine.types';
+import { WorkspacesService } from '../workspaces/workspaces.service';
+import { normalizeVisitorMultiChatMax } from '../bots/visitor-multi-chat.util';
+import { isPreviewRequestOriginAllowed } from '../bots/preview-origin.util';
+import { resolveAllowedPreviewHosts } from '../config/config.factory';
 
 type PreviewOverrides = {
   botName?: string;
@@ -110,11 +113,11 @@ function parsePreviewOverrides(input: unknown): PreviewOverrides | undefined {
       : {}),
     ...(Array.isArray(input.suggestedQuestions)
       ? {
-          suggestedQuestions: input.suggestedQuestions
-            .map((v) => toNonEmptyString(v))
-            .filter((v): v is string => typeof v === 'string')
-            .slice(0, 6),
-        }
+        suggestedQuestions: input.suggestedQuestions
+          .map((v) => toNonEmptyString(v))
+          .filter((v): v is string => typeof v === 'string')
+          .slice(0, 6),
+      }
       : {}),
     ...(toNonEmptyString(input.brandingMessage)
       ? { brandingMessage: toNonEmptyString(input.brandingMessage) }
@@ -181,31 +184,63 @@ function parseChatBody(
   visitorId?: string;
   authToken?: string;
   previewOverrides?: PreviewOverrides;
+  conversationId?: string;
+  startNewConversation?: boolean;
 } | null {
   if (!isPlainRecord(body)) return null;
   const parsed = parseInitBody(body);
   if (!parsed) return null;
   const message = toNonEmptyString((body as PreviewChatBody).message);
   if (!message) return null;
-  return { ...parsed, message };
+  const conversationId = toNonEmptyString((body as Record<string, unknown>).conversationId);
+  const startNewConversation = (body as Record<string, unknown>).startNewConversation === true;
+  return {
+    ...parsed,
+    message,
+    ...(conversationId ? { conversationId } : {}),
+    ...(startNewConversation ? { startNewConversation: true } : {}),
+  };
 }
 
 function normalizeObjectIdString(value: unknown): string {
   return String(value ?? '').trim();
 }
 
-function hasAdminBypassRole(role: string | undefined): boolean {
-  return role === 'admin' || role === 'superadmin';
+/** Authenticated dashboard preview: stable chat visitor id (never equal to platform visitor id). */
+function previewAuthenticatedChatVisitorId(userId: string): string {
+  const id = userId.trim() || 'owner';
+  return `pa_${id}`;
 }
+
+type PreviewAuthKind = 'platform' | 'user';
 
 @Controller('api/widget/preview')
 export class WidgetPreviewController {
   constructor(
+    private readonly configService: ConfigService,
     private readonly authService: AuthService,
     private readonly botsService: BotsService,
     private readonly visitorsService: VisitorsService,
     private readonly chatEngineService: ChatEngineService,
-  ) {}
+    private readonly workspacesService: WorkspacesService,
+  ) { }
+
+  private assertPreviewOriginAllowed(request: FastifyRequest): void {
+    const nodeEnv = this.configService.get<string>('nodeEnv') ?? 'development';
+    const allowed =
+      this.configService.get<string[]>('allowedPreviewHosts') ??
+      resolveAllowedPreviewHosts(nodeEnv);
+    if (!isPreviewRequestOriginAllowed(request.headers, allowed)) {
+      throw new HttpException(
+        {
+          error: 'Preview is only allowed from approved web origins.',
+          status: 'error' as const,
+          errorCode: 'PREVIEW_ORIGIN_NOT_ALLOWED',
+        },
+        HttpStatus.FORBIDDEN,
+      );
+    }
+  }
 
   private async resolveAuthenticatedUser(
     request: FastifyRequest,
@@ -224,10 +259,9 @@ export class WidgetPreviewController {
   private async verifyPreviewOwnershipOrThrow(
     request: FastifyRequest,
     bot: Record<string, unknown>,
-    platformVisitorId?: string,
+    platformVisitorId: string | undefined,
     authToken?: string,
-    runtimeCreds?: { accessKey?: string; secretKey?: string },
-  ): Promise<{ runtimeVisitorId: string }> {
+  ): Promise<{ runtimeVisitorId: string; previewAuthKind: PreviewAuthKind }> {
     const requestedPlatformVisitorId = String(platformVisitorId ?? '').trim();
 
     if (requestedPlatformVisitorId) {
@@ -238,43 +272,7 @@ export class WidgetPreviewController {
           HttpStatus.FORBIDDEN,
         );
       }
-      return { runtimeVisitorId: requestedPlatformVisitorId };
-    }
-
-    const accessKey = String(runtimeCreds?.accessKey ?? '').trim();
-    const secretKey = String(runtimeCreds?.secretKey ?? '').trim();
-    if (accessKey || secretKey) {
-      const access = validateRuntimeBotAccess(
-        {
-          status: (bot.status as string | undefined) ?? undefined,
-          visibility: (bot.visibility as 'public' | 'private' | undefined) ?? undefined,
-          accessKey: (bot.accessKey as string | undefined) ?? undefined,
-          secretKey: (bot.secretKey as string | undefined) ?? undefined,
-        },
-        { accessKey: accessKey || undefined, secretKey: secretKey || undefined },
-      );
-      if (!access.ok) {
-        if (access.reason === 'unpublished') {
-          throw new HttpException(
-            {
-              error: 'Bot not found or not available for embedding',
-              status: 'error',
-              errorCode: 'BOT_NOT_PUBLISHED',
-            },
-            HttpStatus.NOT_FOUND,
-          );
-        }
-        throw new HttpException(
-          {
-            error: 'Invalid bot access credentials',
-            status: 'error',
-            errorCode: toRuntimeCredentialErrorCode(access),
-          },
-          HttpStatus.FORBIDDEN,
-        );
-      }
-      const ownerVisitorId = String(bot.ownerVisitorId ?? '').trim();
-      return { runtimeVisitorId: ownerVisitorId || `embed_${String(bot._id)}` };
+      return { runtimeVisitorId: requestedPlatformVisitorId, previewAuthKind: 'platform' };
     }
 
     const user = await this.resolveAuthenticatedUser(request, authToken);
@@ -285,22 +283,16 @@ export class WidgetPreviewController {
       );
     }
 
-    if (hasAdminBypassRole(user.role)) {
-      return { runtimeVisitorId: normalizeObjectIdString(user._id) || 'admin' };
-    }
-
     const userId = normalizeObjectIdString(user._id);
-    const ownerUserId = normalizeObjectIdString(bot.ownerUserId);
-    const createdByUserId = normalizeObjectIdString(bot.createdByUserId);
-    const isOwner = Boolean(userId && (ownerUserId === userId || createdByUserId === userId));
-    if (!isOwner) {
+    const allowed = await this.workspacesService.canUserAccessShowcaseBot(userId, user.role, bot);
+    if (!allowed) {
       throw new HttpException(
-        { error: 'Preview allowed only for bot owner.', errorCode: 'PREVIEW_FORBIDDEN' },
+        { error: 'Preview not allowed for this account.', errorCode: 'PREVIEW_FORBIDDEN' },
         HttpStatus.FORBIDDEN,
       );
     }
 
-    return { runtimeVisitorId: userId || 'owner' };
+    return { runtimeVisitorId: userId || 'owner', previewAuthKind: 'user' };
   }
 
   private buildInitResponse(
@@ -323,6 +315,8 @@ export class WidgetPreviewController {
       chatUI: Record<string, unknown>;
       brandingMessage?: string;
       privacyText?: string;
+      visitorMultiChatEnabled?: boolean;
+      visitorMultiChatMax?: number | null;
     };
   } {
     const baseChatUI =
@@ -336,9 +330,9 @@ export class WidgetPreviewController {
 
     const savedSuggestedQuestions = Array.isArray(bot.exampleQuestions)
       ? (bot.exampleQuestions as unknown[])
-          .map((q) => toNonEmptyString(q))
-          .filter((q): q is string => typeof q === 'string')
-          .slice(0, 6)
+        .map((q) => toNonEmptyString(q))
+        .filter((q): q is string => typeof q === 'string')
+        .slice(0, 6)
       : [];
     const suggestedQuestions = Array.isArray(previewOverrides?.suggestedQuestions)
       ? previewOverrides.suggestedQuestions
@@ -347,7 +341,14 @@ export class WidgetPreviewController {
     const brandingMessage =
       toNonEmptyString(previewOverrides?.brandingMessage) ??
       toNonEmptyString(mergedChatUI.brandingMessage);
-    const privacyText = toNonEmptyString(previewOverrides?.privacyText);
+    const privacyText =
+      toNonEmptyString(previewOverrides?.privacyText) ??
+      toNonEmptyString(mergedChatUI.privacyText);
+
+    const visitorMultiChatEnabled = (bot as { visitorMultiChatEnabled?: unknown }).visitorMultiChatEnabled === true;
+    const visitorMultiChatMax = normalizeVisitorMultiChatMax(
+      (bot as { visitorMultiChatMax?: unknown }).visitorMultiChatMax,
+    );
 
     return {
       status: 'ok',
@@ -376,6 +377,8 @@ export class WidgetPreviewController {
         chatUI: mergedChatUI,
         ...(brandingMessage ? { brandingMessage } : {}),
         ...(privacyText ? { privacyText } : {}),
+        visitorMultiChatEnabled,
+        visitorMultiChatMax,
       },
     };
   }
@@ -384,23 +387,23 @@ export class WidgetPreviewController {
     const mergedLeadCapture =
       isPlainRecord(bot.leadCapture) && isPlainRecord(previewOverrides?.leadCapture)
         ? (mergePlainRecords(
-            bot.leadCapture as Record<string, unknown>,
-            previewOverrides?.leadCapture as Record<string, unknown>,
-          ) as BotLike['leadCapture'])
+          bot.leadCapture as Record<string, unknown>,
+          previewOverrides?.leadCapture as Record<string, unknown>,
+        ) as BotLike['leadCapture'])
         : (previewOverrides?.leadCapture ?? (bot.leadCapture as BotLike['leadCapture']));
     const mergedPersonality =
       isPlainRecord(bot.personality) && isPlainRecord(previewOverrides?.personality)
         ? (mergePlainRecords(
-            bot.personality as Record<string, unknown>,
-            previewOverrides?.personality as Record<string, unknown>,
-          ) as BotLike['personality'])
+          bot.personality as Record<string, unknown>,
+          previewOverrides?.personality as Record<string, unknown>,
+        ) as BotLike['personality'])
         : (previewOverrides?.personality ?? (bot.personality as BotLike['personality']));
     const mergedConfig =
       isPlainRecord(bot.config) && isPlainRecord(previewOverrides?.config)
         ? (mergePlainRecords(
-            bot.config as Record<string, unknown>,
-            previewOverrides?.config as Record<string, unknown>,
-          ) as BotLike['config'])
+          bot.config as Record<string, unknown>,
+          previewOverrides?.config as Record<string, unknown>,
+        ) as BotLike['config'])
         : (previewOverrides?.config ?? (bot.config as BotLike['config']));
 
     return {
@@ -422,11 +425,15 @@ export class WidgetPreviewController {
       personality: mergedPersonality,
       config: mergedConfig,
       faqs: (bot.faqs as BotLike['faqs']) ?? undefined,
+      visitorMultiChatEnabled:
+        (bot as { visitorMultiChatEnabled?: unknown }).visitorMultiChatEnabled === true ? true : undefined,
+      visitorMultiChatMax: normalizeVisitorMultiChatMax((bot as { visitorMultiChatMax?: unknown }).visitorMultiChatMax),
     };
   }
 
   @Post('init')
   async init(@Body() body: unknown, @Req() request: FastifyRequest) {
+    this.assertPreviewOriginAllowed(request);
     const parsed = parseInitBody(body);
     if (!parsed) {
       throw new HttpException(
@@ -447,13 +454,16 @@ export class WidgetPreviewController {
       );
     }
 
-    await this.verifyPreviewOwnershipOrThrow(
+    const { previewAuthKind } = await this.verifyPreviewOwnershipOrThrow(
       request,
       bot,
       parsed.platformVisitorId ?? parsed.visitorId,
       parsed.authToken,
-      { accessKey: parsed.accessKey, secretKey: parsed.secretKey },
     );
+
+    if (previewAuthKind === 'user') {
+      return { ...this.buildInitResponse(bot, parsed.previewOverrides) };
+    }
 
     const chatVisitorId =
       parsed.chatVisitorId && parsed.chatVisitorId.trim()
@@ -471,6 +481,7 @@ export class WidgetPreviewController {
 
   @Post('chat')
   async chat(@Body() body: unknown, @Req() request: FastifyRequest) {
+    this.assertPreviewOriginAllowed(request);
     const parsed = parseChatBody(body);
     if (!parsed) {
       throw new HttpException(
@@ -487,26 +498,33 @@ export class WidgetPreviewController {
       );
     }
 
-    const { runtimeVisitorId } = await this.verifyPreviewOwnershipOrThrow(
+    const { runtimeVisitorId, previewAuthKind } = await this.verifyPreviewOwnershipOrThrow(
       request,
       bot,
-      parsed.platformVisitorId ?? parsed.visitorId,
+      parsed.platformVisitorId,
       parsed.authToken,
-      { accessKey: parsed.accessKey, secretKey: parsed.secretKey },
     );
     if (runtimeVisitorId) {
       await this.visitorsService.getOrCreateVisitor(runtimeVisitorId);
     }
 
-    // Critical boundary: chatVisitorId must NEVER be derived from platformVisitorId.
-    // It must be supplied via preview init response (preferred) or via legacy `visitorId`.
-    const chatVisitorId = parsed.chatVisitorId ?? parsed.visitorId;
-
-    if (!chatVisitorId) {
-      throw new HttpException(
-        { error: 'chatVisitorId is required', errorCode: 'CHAT_VISITOR_ID_REQUIRED' },
-        HttpStatus.BAD_REQUEST,
-      );
+    let chatVisitorId: string;
+    if (previewAuthKind === 'platform') {
+      const fromBody = parsed.chatVisitorId ?? parsed.visitorId;
+      if (!fromBody || !String(fromBody).trim()) {
+        throw new HttpException(
+          { error: 'chatVisitorId is required', errorCode: 'CHAT_VISITOR_ID_REQUIRED' },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      chatVisitorId = String(fromBody).trim();
+    } else {
+      chatVisitorId = previewAuthenticatedChatVisitorId(runtimeVisitorId);
+      try {
+        await this.visitorsService.getOrCreateChatVisitor(chatVisitorId);
+      } catch (err) {
+        console.error('[widget/preview/chat] getOrCreateChatVisitor failed', err);
+      }
     }
 
     const botLike = this.buildPreviewBotLike(bot, parsed.previewOverrides);
@@ -518,6 +536,9 @@ export class WidgetPreviewController {
       mode: 'user',
       requestId: getRequestId(request),
       debug: false,
+      ephemeral: true,
+      ...(parsed.conversationId ? { conversationId: parsed.conversationId } : {}),
+      ...(parsed.startNewConversation ? { startNewConversation: true } : {}),
     });
     if (!result.ok) {
       throw new HttpException(result, HttpStatus.BAD_REQUEST);

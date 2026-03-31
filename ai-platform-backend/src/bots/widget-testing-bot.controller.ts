@@ -5,7 +5,7 @@ import { ChatWidgetApiKeyGuard } from './chat-widget-api-key.guard';
 @Controller('api/widget')
 @UseGuards(ChatWidgetApiKeyGuard)
 export class WidgetTestingBotController {
-  constructor(private readonly botsService: BotsService) {}
+  constructor(private readonly botsService: BotsService) { }
 
   /**
    * Widget testing helper (secured).
