@@ -1,6 +1,6 @@
 {
   "name": "@assistrio/chat-widget",
-  "version": "0.1.7",
+  "version": "0.1.5",
   "description": "Assistrio embeddable chat widget: CDN bundle (assistrio-chat.js) and npm ESM entry for React apps.",
   "publishConfig": {
     "access": "public"
