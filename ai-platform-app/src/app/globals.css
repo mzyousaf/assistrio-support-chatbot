@@ -92,6 +92,43 @@ body {
   font-family: var(--font-body);
 }
 
+/* Slim scrollbars app-wide (Firefox + WebKit). */
+html {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(148 163 184 / 0.42) transparent;
+}
+
+/* Theme wrapper (AdminShell) — dark scrollbars for nested scroll areas (Firefox). */
+.dark * {
+  scrollbar-color: rgb(100 116 139 / 0.48) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgb(148 163 184 / 0.4);
+  border-radius: 9999px;
+}
+
+.dark *::-webkit-scrollbar-thumb {
+  background: rgb(100 116 139 / 0.45);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: rgb(148 163 184 / 0.65);
+}
+
+.dark *::-webkit-scrollbar-thumb:hover {
+  background: rgb(100 116 139 / 0.65);
+}
+
 @keyframes fadeInUp {
   0% {
     opacity: 0;

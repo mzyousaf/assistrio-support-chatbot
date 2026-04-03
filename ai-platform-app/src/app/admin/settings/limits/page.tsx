@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import AdminShell from "@/components/admin/AdminShell";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { SkeletonFormFields } from "@/components/ui/Skeleton";
 import { Input } from "@/components/ui/Input";
 import { apiFetch } from "@/lib/api";
 import { useAdminUser } from "@/hooks/useAdminUser";
@@ -62,7 +63,7 @@ export default function AdminLimitsSettingsPage() {
   if (authLoading || !user) {
     return (
       <AdminShell title="Settings">
-        <p className="text-sm text-gray-500">Loading…</p>
+        <SkeletonFormFields fields={2} />
       </AdminShell>
     );
   }
@@ -78,7 +79,7 @@ export default function AdminLimitsSettingsPage() {
   if (loading || !limits) {
     return (
       <AdminShell title="Settings">
-        <p className="text-sm text-gray-500">Loading…</p>
+        <SkeletonFormFields fields={2} />
       </AdminShell>
     );
   }

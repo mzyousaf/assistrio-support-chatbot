@@ -1,5 +1,7 @@
 "use client";
 
+import { UserProvider } from "@/contexts/UserContext";
+
 import "./globals.css";
 
 export default function RootLayout({
@@ -10,7 +12,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="bg-background text-foreground font-sans">
-        {children}
+        <UserProvider>{children}</UserProvider>
       </body>
     </html>
   );

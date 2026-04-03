@@ -19,6 +19,11 @@ import {
 import { normalizeVisitorMultiChatMax } from './visitor-multi-chat.util';
 import { EmbedSessionService } from './embed-session.service';
 import { resolveWidgetEmbedRateLimitPerMinute } from '../models/bot.schema';
+import {
+  assertPlatformVisitorWebsiteMatchesBotAllowlist,
+  platformVisitorEmbedCanBypassAllowedDomainsGate,
+} from './platform-visitor-website-allowlist.util';
+import { trialRuntimePlatformVisitorMatchesOwner } from './trial-runtime-embed.util';
 
 type WidgetInitBody = {
   botId?: unknown;
@@ -33,11 +38,20 @@ type WidgetInitBody = {
    * When omitted, backend generates one so the widget can persist it locally.
    */
   chatVisitorId?: unknown;
+  /** When set, must match an entry on the bot `platformVisitorWebsiteAllowlist` (if configured). */
+  platformVisitorId?: unknown;
 };
 
 function parseInitBody(
   body: unknown,
-): { botId: string; accessKey?: string; secretKey?: string; chatVisitorId?: string; embedOrigin?: string } | null {
+): {
+  botId: string;
+  accessKey?: string;
+  secretKey?: string;
+  chatVisitorId?: string;
+  embedOrigin?: string;
+  platformVisitorId?: string;
+} | null {
   if (body == null || typeof body !== 'object') return null;
   const o = body as WidgetInitBody;
   const botId = typeof o.botId === 'string' ? o.botId.trim() : '';
@@ -46,12 +60,14 @@ function parseInitBody(
   const secretKey = typeof o.secretKey === 'string' ? o.secretKey.trim() : '';
   const chatVisitorId = typeof o.chatVisitorId === 'string' ? o.chatVisitorId.trim() : '';
   const embedOrigin = typeof o.embedOrigin === 'string' ? o.embedOrigin.trim() : '';
+  const platformVisitorId = typeof o.platformVisitorId === 'string' ? o.platformVisitorId.trim() : '';
   return {
     botId,
     ...(accessKey ? { accessKey } : {}),
     ...(secretKey ? { secretKey } : {}),
     ...(chatVisitorId ? { chatVisitorId } : {}),
     ...(embedOrigin ? { embedOrigin } : {}),
+    ...(platformVisitorId ? { platformVisitorId } : {}),
   };
 }
 
@@ -133,7 +149,6 @@ export class WidgetInitController {
       );
     }
 
-    const allowedRules = parseAllowedDomainRulesFromStoredArray((row as { allowedDomains?: unknown }).allowedDomains);
     const embedOriginResolved = resolveRuntimeEmbedOriginFromHeaders(req.headers);
     if (!embedOriginResolved) {
       throw new HttpException(
@@ -145,29 +160,113 @@ export class WidgetInitController {
         HttpStatus.FORBIDDEN,
       );
     }
-    const allowLoopback =
-      this.configService.get<boolean>('allowLoopbackEmbedOrigin') === true;
-    const domainGate = checkEmbedDomainGate(allowedRules, embedOriginResolved, {
-      allowLoopbackOriginWhenLocalDev: allowLoopback,
-    });
-    if (!domainGate.ok) {
-      const errorCode =
-        domainGate.reason === 'no_allowlist'
-          ? 'EMBED_NO_ALLOWLIST'
-          : domainGate.reason === 'missing_origin'
-            ? 'EMBED_ORIGIN_REQUIRED'
-            : domainGate.reason === 'bad_origin'
-              ? 'EMBED_ORIGIN_INVALID'
-              : 'EMBED_DOMAIN_NOT_ALLOWED';
-      const error =
-        domainGate.reason === 'no_allowlist'
-          ? 'This bot has no valid allowed embed rules configured'
-          : domainGate.reason === 'missing_origin'
-            ? 'Origin header is required for embed requests'
-            : domainGate.reason === 'bad_origin'
-              ? 'embedOrigin could not be parsed'
-              : 'This chat widget is not allowed on this site';
-      throw new HttpException({ error, status: 'error' as const, errorCode }, HttpStatus.FORBIDDEN);
+
+    const pv = parsed.platformVisitorId?.trim();
+    const isTrialBot = (row as { creatorType?: string }).creatorType === 'visitor';
+    if (isTrialBot) {
+      if (!pv) {
+        throw new HttpException(
+          {
+            error: 'platformVisitorId is required for trial bots',
+            status: 'error' as const,
+            errorCode: 'VISITOR_ID_REQUIRED',
+          },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      if (
+        !trialRuntimePlatformVisitorMatchesOwner({
+          ownerVisitorId: (row as { ownerVisitorId?: unknown }).ownerVisitorId,
+          resolvedPlatformVisitorId: pv,
+        })
+      ) {
+        throw new HttpException(
+          {
+            error: 'platformVisitorId does not match this trial bot owner.',
+            status: 'error' as const,
+            errorCode: 'TRIAL_PLATFORM_VISITOR_OWNER_MISMATCH',
+          },
+          HttpStatus.FORBIDDEN,
+        );
+      }
+    }
+    const bypassAllowedDomains =
+      !isTrialBot &&
+      platformVisitorEmbedCanBypassAllowedDomainsGate({
+        bot: row as { platformVisitorWebsiteAllowlist?: unknown },
+        platformVisitorId: pv,
+      });
+
+    if (!bypassAllowedDomains) {
+      const allowedRules = parseAllowedDomainRulesFromStoredArray((row as { allowedDomains?: unknown }).allowedDomains);
+      const allowLoopback =
+        this.configService.get<boolean>('allowLoopbackEmbedOrigin') === true;
+      const domainGate = checkEmbedDomainGate(allowedRules, embedOriginResolved, {
+        allowLoopbackOriginWhenLocalDev: allowLoopback,
+      });
+      if (!domainGate.ok) {
+        const errorCode =
+          domainGate.reason === 'no_allowlist'
+            ? 'EMBED_NO_ALLOWLIST'
+            : domainGate.reason === 'missing_origin'
+              ? 'EMBED_ORIGIN_REQUIRED'
+              : domainGate.reason === 'bad_origin'
+                ? 'EMBED_ORIGIN_INVALID'
+                : 'EMBED_DOMAIN_NOT_ALLOWED';
+        const error =
+          domainGate.reason === 'no_allowlist'
+            ? 'This bot has no valid allowed embed rules configured'
+            : domainGate.reason === 'missing_origin'
+              ? 'Origin header is required for embed requests'
+              : domainGate.reason === 'bad_origin'
+                ? 'embedOrigin could not be parsed'
+                : 'This chat widget is not allowed on this site';
+        throw new HttpException({ error, status: 'error' as const, errorCode }, HttpStatus.FORBIDDEN);
+      }
+    }
+    if (pv && !isTrialBot) {
+      try {
+        assertPlatformVisitorWebsiteMatchesBotAllowlist({
+          bot: row as { platformVisitorWebsiteAllowlist?: unknown },
+          platformVisitorId: pv,
+          requestOrigin: embedOriginResolved,
+        });
+      } catch (err) {
+        const code = err instanceof Error ? err.message : '';
+        if (code === 'PLATFORM_EMBED_ORIGIN_REQUIRED') {
+          throw new HttpException(
+            {
+              error: 'Origin header is required when using platformVisitorId',
+              status: 'error' as const,
+              errorCode: 'PLATFORM_EMBED_ORIGIN_REQUIRED',
+            },
+            HttpStatus.FORBIDDEN,
+          );
+        }
+        if (code === 'PLATFORM_VISITOR_NOT_IN_BOT_ALLOWLIST') {
+          throw new HttpException(
+            {
+              error:
+                'This platform visitor id is not listed for this bot. Add it (with its website URL) in the bot website allowlist.',
+              status: 'error' as const,
+              errorCode: 'PLATFORM_VISITOR_NOT_IN_BOT_ALLOWLIST',
+            },
+            HttpStatus.FORBIDDEN,
+          );
+        }
+        if (code === 'PLATFORM_VISITOR_WEBSITE_ORIGIN_MISMATCH') {
+          throw new HttpException(
+            {
+              error:
+                'This page origin does not match the website URL configured for this platform visitor on this bot.',
+              status: 'error' as const,
+              errorCode: 'PLATFORM_VISITOR_WEBSITE_ORIGIN_MISMATCH',
+            },
+            HttpStatus.FORBIDDEN,
+          );
+        }
+        throw err;
+      }
     }
 
     const chatUI = (row.chatUI ?? {}) as Record<string, unknown>;

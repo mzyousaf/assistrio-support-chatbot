@@ -4,6 +4,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import AdminShell from "@/components/admin/AdminShell";
 import { Card } from "@/components/ui/Card";
+import { VisitorDetailPageSkeleton } from "@/components/ui/Skeleton";
 import { apiFetch } from "@/lib/api";
 import { useAdminUser } from "@/hooks/useAdminUser";
 
@@ -63,7 +64,7 @@ export default function VisitorDetailPage() {
   if (authLoading || !user) {
     return (
       <AdminShell title="Visitor">
-        <p className="text-sm text-gray-500">Loading…</p>
+        <VisitorDetailPageSkeleton />
       </AdminShell>
     );
   }
@@ -79,7 +80,7 @@ export default function VisitorDetailPage() {
   if (loading || !data) {
     return (
       <AdminShell title={`Visitor ${platformVisitorId}`}>
-        <p className="text-sm text-gray-500">Loading…</p>
+        <VisitorDetailPageSkeleton />
       </AdminShell>
     );
   }

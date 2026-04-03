@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import AdminShell from "@/components/admin/AdminShell";
 import { Card } from "@/components/ui/Card";
+import { AnalyticsPageSkeleton } from "@/components/ui/Skeleton";
 import { apiFetch } from "@/lib/api";
 import { useUser } from "@/hooks/useUser";
 
@@ -68,30 +69,33 @@ export default function UserAnalyticsPage() {
 
   if (authLoading || !user) {
     return (
-      <AdminShell title="Analytics">
-        <p className="text-sm text-gray-500">Loading…</p>
+      <AdminShell title="Overview" subtitle="High-level traffic and engagement across your workspace.">
+        <AnalyticsPageSkeleton />
       </AdminShell>
     );
   }
 
   if (error) {
     return (
-      <AdminShell title="Analytics">
+      <AdminShell title="Overview" subtitle="High-level traffic and engagement across your workspace.">
         <p className="text-sm text-red-600">{error}</p>
       </AdminShell>
     );
   }
 
   return (
-    <AdminShell title="Analytics">
-      <section className="space-y-1">
-        <p className="text-sm text-gray-600 dark:text-gray-400">High-level overview of traffic and engagement.</p>
-        <p className="text-xs text-gray-500 dark:text-gray-500">
-          Showing latest <span className="font-medium text-gray-700 dark:text-gray-300">{recentEvents.length}</span> events.
+    <AdminShell
+      title="Overview"
+      subtitle="High-level traffic and engagement across your workspace."
+      toolbar={
+        <p className="text-xs text-slate-500 dark:text-slate-500">
+          Latest events tracked:{" "}
+          <span className="font-medium text-slate-700 dark:text-slate-300">{recentEvents.length}</span>
         </p>
-      </section>
+      }
+    >
       {loading ? (
-        <p className="text-sm text-gray-500">Loading…</p>
+        <AnalyticsPageSkeleton />
       ) : (
         <>
           <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">

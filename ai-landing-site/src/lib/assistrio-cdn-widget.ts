@@ -1,9 +1,20 @@
 /**
- * Hosted widget built from the `chat-widget` package (same URLs as production embed snippets).
+ * Widget script/CSS URLs for the landing site.
+ *
+ * Defaults load from this site’s `public/` (`/assistrio-chat.js`) so the UI matches the
+ * `chat-widget` package in the repo. Override with `NEXT_PUBLIC_ASSISTRIO_WIDGET_*` to use
+ * the hosted CDN (e.g. https://widget.assistrio.com/assistrio-chat.js) if you do not ship the bundle.
  */
 
-export const ASSISTRIO_WIDGET_CSS = "https://widget.assistrio.com/assistrio-chat.css";
-export const ASSISTRIO_WIDGET_JS = "https://widget.assistrio.com/assistrio-chat.js";
+export function getAssistrioWidgetJsUrl(): string {
+  const v = typeof process !== "undefined" ? process.env.NEXT_PUBLIC_ASSISTRIO_WIDGET_JS?.trim() : "";
+  return v || "/assistrio-chat.js";
+}
+
+export function getAssistrioWidgetCssUrl(): string {
+  const v = typeof process !== "undefined" ? process.env.NEXT_PUBLIC_ASSISTRIO_WIDGET_CSS?.trim() : "";
+  return v || "/assistrio-chat.css";
+}
 
 /** Subset of embed config passed to `AssistrioChat.mount` / `AssistrioChatConfig` (matches chat-widget types). */
 export interface AssistrioEmbedConfig {
@@ -50,16 +61,14 @@ const defaultIds: AssistrioCdnElementIds = {
 
 function findOrCreateStylesheet(ids: AssistrioCdnElementIds): void {
   if (typeof document === "undefined") return;
-  if (
-    document.querySelector(`link[href="${ASSISTRIO_WIDGET_CSS}"]`) ||
-    document.getElementById(ids.linkId)
-  ) {
+  const cssUrl = getAssistrioWidgetCssUrl();
+  if (document.querySelector(`link[href="${cssUrl}"]`) || document.getElementById(ids.linkId)) {
     return;
   }
   const link = document.createElement("link");
   link.id = ids.linkId;
   link.rel = "stylesheet";
-  link.href = ASSISTRIO_WIDGET_CSS;
+  link.href = cssUrl;
   document.head.appendChild(link);
 }
 
@@ -79,10 +88,10 @@ export function mountAssistrioWidgetFromCdn(
     window.AssistrioChat?.mount?.(window.AssistrioChatConfig);
   };
 
+  const jsUrl = getAssistrioWidgetJsUrl();
   const existingScript =
-    (document.querySelector(
-      `script[src="${ASSISTRIO_WIDGET_JS}"]`,
-    ) as HTMLScriptElement | null) ?? (document.getElementById(ids.scriptId) as HTMLScriptElement | null);
+    (document.querySelector(`script[src="${jsUrl}"]`) as HTMLScriptElement | null) ??
+    (document.getElementById(ids.scriptId) as HTMLScriptElement | null);
 
   if (existingScript) {
     if (window.AssistrioChat?.mount) {
@@ -95,7 +104,7 @@ export function mountAssistrioWidgetFromCdn(
 
   const script = document.createElement("script");
   script.id = ids.scriptId;
-  script.src = ASSISTRIO_WIDGET_JS;
+  script.src = jsUrl;
   script.async = true;
   script.addEventListener("load", mountWidget, { once: true });
   document.body.appendChild(script);

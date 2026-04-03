@@ -64,6 +64,7 @@ function toInitRequest(config: EmbedChatConfig): WidgetInitRequest {
     ...(config.accessKey ? { accessKey: config.accessKey } : {}),
     ...(config.secretKey ? { secretKey: config.secretKey } : {}),
     ...(config.chatVisitorId ? { chatVisitorId: config.chatVisitorId } : {}),
+    ...(config.platformVisitorId ? { platformVisitorId: config.platformVisitorId } : {}),
   };
 }
 

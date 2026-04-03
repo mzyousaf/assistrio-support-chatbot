@@ -171,6 +171,7 @@ export const homePageContent: HomePageContent = {
         description:
           "Plans, trials, and setup—trained on sample product docs and billing FAQs.",
         href: siteRoutes.bots,
+        avatarEmoji: "💼",
       },
       {
         id: "demo-agency",
@@ -178,6 +179,7 @@ export const homePageContent: HomePageContent = {
         description:
           "Services, timelines, and what to expect—grounded in a sample scope and deliverables.",
         href: siteRoutes.bots,
+        avatarEmoji: "🎯",
       },
       {
         id: "demo-service",
@@ -185,6 +187,7 @@ export const homePageContent: HomePageContent = {
         description:
           "Coverage areas, booking, and pricing qualifiers—without overpromising.",
         href: siteRoutes.bots,
+        avatarEmoji: "🏠",
       },
     ],
     viewAllCta: {

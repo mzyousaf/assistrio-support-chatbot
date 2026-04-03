@@ -77,13 +77,15 @@ export class UserBotsController {
     if (!clientDraftId) {
       throw new HttpException({ error: 'clientDraftId is required' }, HttpStatus.BAD_REQUEST);
     }
-    const normalized = normalizeBotPayload(body?.payload ?? {});
-    if (normalized.allowedDomains !== undefined) {
-      assertAllowedDomainsPolicy(normalized.allowedDomains, req.user?.role);
-    }
     const draftBot = await this.botsService.findShowcaseByClientDraftId(clientDraftId);
     if (draftBot?._id != null) {
       await this.assertCanAccessShowcaseBot(req, String(draftBot._id));
+    }
+    const creatorTypeForPayload =
+      draftBot && (draftBot as { creatorType?: string }).creatorType === 'visitor' ? 'visitor' : 'user';
+    const normalized = normalizeBotPayload(body?.payload ?? {}, { creatorType: creatorTypeForPayload });
+    if (normalized.allowedDomains !== undefined) {
+      assertAllowedDomainsPolicy(normalized.allowedDomains, req.user?.role);
     }
     const createdByUserId = req.user?._id != null ? String(req.user._id) : undefined;
     try {
@@ -91,7 +93,14 @@ export class UserBotsController {
     } catch (err) {
       console.error('Finalize draft bot failed', err);
       const msg = err instanceof Error ? err.message : '';
-      if (msg.includes('allowed domain') || msg.includes('allowed embed domain')) {
+      if (
+        msg.includes('allowed domain') ||
+        msg.includes('allowed embed domain') ||
+        msg.includes('platform visitor allowlist') ||
+        msg.includes('platform visitor website') ||
+        msg.includes('At most one platform visitor website') ||
+        msg.includes('Trial bots may have at most one allowed embed domain')
+      ) {
         throw new HttpException({ error: msg }, HttpStatus.BAD_REQUEST);
       }
       throw new HttpException({ error: 'Internal server error' }, HttpStatus.INTERNAL_SERVER_ERROR);
@@ -110,21 +119,89 @@ export class UserBotsController {
       platformRole: role,
       workspaceIds,
     });
-    return (bots as Record<string, unknown>[]).map((b) => ({
-      _id: String(b._id),
-      name: b.name ?? '',
-      type: b.type ?? 'showcase',
-      category: b.category ?? '',
-      status: b.status ?? 'draft',
-      isPublic: Boolean(b.isPublic),
-      visibility: b.visibility ?? 'public',
-      creatorType: b.creatorType ?? 'user',
-      messageLimitMode: b.messageLimitMode ?? 'none',
-      messageLimitTotal:
-        typeof b.messageLimitTotal === 'number' ? b.messageLimitTotal : null,
-      createdAt: (b.createdAt as Date)?.toISOString?.() ?? null,
-      slug: b.slug ?? '',
-    }));
+    return (bots as Record<string, unknown>[]).map((b) => {
+      const chatUI =
+        b.chatUI && typeof b.chatUI === 'object' ? (b.chatUI as Record<string, unknown>) : {};
+      const rawPrimary = typeof chatUI.primaryColor === 'string' ? chatUI.primaryColor.trim() : '';
+      const primaryColor = /^#[0-9a-fA-F]{6}$/.test(rawPrimary) ? rawPrimary : '#14B8A6';
+      const avatarEmoji =
+        typeof b.avatarEmoji === 'string' && b.avatarEmoji.trim() !== '' ? b.avatarEmoji.trim() : undefined;
+      const imageUrl =
+        typeof b.imageUrl === 'string' && b.imageUrl.trim() !== '' ? b.imageUrl.trim() : undefined;
+      return {
+        _id: String(b._id),
+        name: b.name ?? '',
+        type: b.type ?? 'showcase',
+        category: b.category ?? '',
+        status: b.status ?? 'draft',
+        isPublic: Boolean(b.isPublic),
+        visibility: b.visibility ?? 'public',
+        creatorType: b.creatorType ?? 'user',
+        messageLimitMode: b.messageLimitMode ?? 'none',
+        messageLimitTotal:
+          typeof b.messageLimitTotal === 'number' ? b.messageLimitTotal : null,
+        createdAt: (b.createdAt as Date)?.toISOString?.() ?? null,
+        slug: b.slug ?? '',
+        primaryColor,
+        avatarEmoji,
+        imageUrl,
+      };
+    });
+  }
+
+  /**
+   * Deletes multiple showcase bots in one request. Each id uses the same cascade as DELETE :id
+   * (conversations, messages, documents, knowledge, jobs, etc.). Partial success returns 200 with `failed` entries.
+   */
+  @Post('bulk-delete')
+  async bulkDeleteBots(@Body() body: { ids?: unknown }, @Req() req: RequestWithUser) {
+    const raw = body?.ids;
+    if (!Array.isArray(raw) || raw.length === 0) {
+      throw new HttpException({ error: 'ids must be a non-empty array' }, HttpStatus.BAD_REQUEST);
+    }
+    const MAX = 50;
+    if (raw.length > MAX) {
+      throw new HttpException({ error: `At most ${MAX} agents per request` }, HttpStatus.BAD_REQUEST);
+    }
+    const uniqueIds = [...new Set(raw.map((x) => String(x ?? '').trim()).filter((id) => Types.ObjectId.isValid(id)))];
+    if (uniqueIds.length === 0) {
+      throw new HttpException({ error: 'No valid bot ids' }, HttpStatus.BAD_REQUEST);
+    }
+
+    const deleted: string[] = [];
+    const failed: { id: string; error: string }[] = [];
+
+    for (const id of uniqueIds) {
+      try {
+        await this.assertCanAccessShowcaseBot(req, id);
+        const bot = await this.botsService.findOne(id);
+        if (!bot) {
+          failed.push({ id, error: 'not_found' });
+          continue;
+        }
+        if ((bot as { type?: string }).type !== 'showcase') {
+          failed.push({ id, error: 'not_showcase' });
+          continue;
+        }
+        await this.botsService.remove(id);
+        deleted.push(id);
+      } catch (e) {
+        if (e instanceof HttpException) {
+          const status = e.getStatus();
+          const err =
+            status === HttpStatus.FORBIDDEN
+              ? 'forbidden'
+              : status === HttpStatus.NOT_FOUND
+                ? 'not_found'
+                : `http_${status}`;
+          failed.push({ id, error: err });
+        } else {
+          failed.push({ id, error: 'error' });
+        }
+      }
+    }
+
+    return { ok: true, deleted, failed };
   }
 
   /**
@@ -246,6 +323,14 @@ export class UserBotsController {
         allowedDomains: Array.isArray(b.allowedDomains)
           ? (b.allowedDomains as unknown[]).map((d) => String(d ?? '').trim()).filter(Boolean)
           : [],
+        platformVisitorWebsiteAllowlist: Array.isArray(b.platformVisitorWebsiteAllowlist)
+          ? (b.platformVisitorWebsiteAllowlist as Array<{ platformVisitorId?: unknown; websiteUrl?: unknown }>).map(
+            (e) => ({
+              platformVisitorId: String(e?.platformVisitorId ?? '').trim(),
+              websiteUrl: String(e?.websiteUrl ?? '').trim(),
+            }),
+          ).filter((e) => e.platformVisitorId && e.websiteUrl)
+          : [],
         workspaceId: b.workspaceId != null ? String(b.workspaceId) : undefined,
       },
       health,
@@ -262,7 +347,13 @@ export class UserBotsController {
       throw new HttpException({ error: 'Invalid id' }, HttpStatus.BAD_REQUEST);
     }
     await this.assertCanAccessShowcaseBot(req, id);
-    const normalized = normalizeBotPayload(body);
+    const botForType = await this.botsService.findOneShowcaseForAdmin(id);
+    if (!botForType) {
+      throw new HttpException({ error: 'Bot not found' }, HttpStatus.NOT_FOUND);
+    }
+    const creatorTypeForPayload =
+      (botForType as { creatorType?: string }).creatorType === 'visitor' ? 'visitor' : 'user';
+    const normalized = normalizeBotPayload(body, { creatorType: creatorTypeForPayload });
     if (normalized.allowedDomains !== undefined) {
       assertAllowedDomainsPolicy(normalized.allowedDomains, req.user?.role);
     }
@@ -302,6 +393,9 @@ export class UserBotsController {
               normalized.visitorMultiChatEnabled === true ? normalized.visitorMultiChatMax ?? null : null,
           }
           : {}),
+        ...(normalized.platformVisitorWebsiteAllowlist !== undefined
+          ? { platformVisitorWebsiteAllowlist: normalized.platformVisitorWebsiteAllowlist }
+          : {}),
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Update failed';
@@ -312,7 +406,11 @@ export class UserBotsController {
         msg.includes('messageLimitTotal must be a positive integer') ||
         msg.includes('allowed domain') ||
         msg.includes('allowed embed domain') ||
-        msg.includes('Localhost and loopback')
+        msg.includes('Localhost and loopback') ||
+        msg.includes('platform visitor allowlist') ||
+        msg.includes('platform visitor website') ||
+        msg.includes('At most one platform visitor website') ||
+        msg.includes('Trial bots may have at most one allowed embed domain')
       ) {
         throw new HttpException({ error: msg }, HttpStatus.BAD_REQUEST);
       }

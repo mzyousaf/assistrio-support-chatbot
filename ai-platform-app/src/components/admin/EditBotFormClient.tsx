@@ -11,6 +11,8 @@ import { clearDraftId, rotateDraftId } from "@/lib/draftBot";
 import type { BotChatUI, BotConfig, BotLeadCaptureV2, BotPersonality } from "@/models/Bot";
 
 type EditBotFormClientProps = {
+  /** Path after `/bots/[id]/` (drives BotForm tab + URL sync). */
+  workspaceSectionSlug: string;
   formId?: string;
   onDirtyChange?: (dirty: boolean) => void;
   /** Called when save starts (true) or ends (false). */
@@ -69,6 +71,7 @@ type EditBotFormClientProps = {
 
 export default function EditBotFormClient({
   initialBot,
+  workspaceSectionSlug,
   formId,
   onDirtyChange,
   onSavingChange,
@@ -105,6 +108,7 @@ export default function EditBotFormClient({
   return (
     <BotForm
       mode="edit"
+      workspaceSectionSlug={workspaceSectionSlug}
       formId={formId}
       onDirtyChange={onDirtyChange}
       onSavingChange={onSavingChange}

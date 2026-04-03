@@ -1,7 +1,12 @@
 export interface ShowcaseBotSeed {
   slug: string;
   name: string;
+  /** One-line summary for cards, lists, and SEO snippets (plain text). */
   shortDescription: string;
+  /**
+   * Long-form **Markdown** for gallery/detail pages: headings, lists, and emphasis render well with a rich-text or MD renderer.
+   * Keep `shortDescription` short; put structure and depth here.
+   */
   description: string;
   welcomeMessage?: string;
   exampleQuestions: string[];
@@ -14,7 +19,17 @@ export const SHOWCASE_BOTS: ShowcaseBotSeed[] = [
     slug: 'saas-product-support',
     name: 'SaaS Product Support',
     shortDescription: 'Answer questions about your SaaS product, plans, and features.',
-    description: 'A support bot trained on your product docs. Handles billing, feature questions, and onboarding.',
+    description: `## SaaS product support
+
+A **first-line support** assistant trained on your product documentation, pricing, and workflows. It deflects repetitive tickets and routes complex issues with clear context.
+
+### Best for
+- **Plans & billing** — upgrades, invoices, seat limits, and renewal timing
+- **Product how-tos** — features, integrations, and where to click in the app
+- **Developer-facing questions** — API basics, auth, and rate limits (from your KB)
+
+### What visitors get
+Clear, consistent answers aligned with your docs—ideal for marketing sites, in-app help, and onboarding flows.`,
     welcomeMessage: "Hi! I'm here to help with product questions, billing, and features. What can I help with?",
     exampleQuestions: ['How do I upgrade my plan?', 'Where can I find the API documentation?', 'How do I reset my password?'],
     personality: { systemPrompt: 'You are a helpful SaaS product support assistant.', tone: 'friendly', language: 'en-US' },
@@ -45,7 +60,17 @@ Password reset
     slug: 'ecommerce-returns-shipping',
     name: 'E-commerce Returns & Shipping',
     shortDescription: 'Handle returns, refunds, and shipping questions for your store.',
-    description: 'Trained on your return policy and shipping info. Helps customers with orders, tracking, and refunds.',
+    description: `## E‑commerce returns & shipping
+
+Answers **order status**, **return windows**, **refund timing**, and **shipping options** using your store policies—so shoppers self-serve before opening a ticket.
+
+### Covers
+- **Returns & exchanges** — eligibility, packaging, and label steps
+- **Shipping** — carriers, timeframes, and international duties (as you document)
+- **Refunds** — processing time and payment method credits
+
+### Fit
+Shopify-style storefronts, D2C brands, and marketplaces that want fewer “where is my order?” emails.`,
     welcomeMessage: "Hi! I can help with returns, shipping, and order status. What do you need?",
     exampleQuestions: ['What is your return policy?', 'How do I track my order?', 'How long do refunds take?'],
     personality: { systemPrompt: 'You are a helpful e-commerce customer service assistant.', tone: 'friendly', language: 'en-US' },
@@ -76,7 +101,17 @@ Refunds
     slug: 'law-firm-intake',
     name: 'Law Firm Intake',
     shortDescription: 'Collect intake details and direct clients to the right practice area.',
-    description: 'Intake assistant for law firms. Asks qualifying questions and routes to the appropriate team.',
+    description: `## Law firm intake
+
+A **structured intake** experience: it gathers matter type, urgency, and contact preferences—then points visitors to the right practice group or scheduling path.
+
+### Designed for
+- **Practice-area routing** — litigation, employment, real estate, estates, family, etc.
+- **Professional tone** — confidential, no legal advice in chat (policy-driven)
+- **Consultation handoff** — clear next steps for humans to follow up
+
+### Note
+Copy is illustrative; your firm should align prompts and KB with jurisdictional rules and bar advertising requirements.`,
     welcomeMessage: 'Welcome. This intake assistant will ask a few questions to connect you with the right team.',
     exampleQuestions: ['I need help with a contract dispute.', 'How do I schedule a consultation?', 'What practice areas do you cover?'],
     personality: { systemPrompt: 'You are a professional law firm intake assistant. Be clear and confidential.', tone: 'formal', language: 'en-US' },
@@ -109,7 +144,17 @@ Confidentiality: Information you provide is treated as confidential and subject 
     slug: 'real-estate-listing-assistant',
     name: 'Real Estate Listing Assistant',
     shortDescription: 'Answer questions about listed properties and schedule viewings.',
-    description: 'Trained on your listings. Answers questions about features, pricing, and availability and helps schedule showings.',
+    description: `## Real estate listings
+
+Helps **buyers and renters** compare properties, understand key facts (beds/baths, parking, HOA), and **request tours**—grounded in your active listings and office process.
+
+### Highlights
+- **Search-style help** — e.g. price bands, neighborhoods, must-haves
+- **Showing requests** — how to book and what to bring
+- **Transparency** — points to MLS/website for photos and legal disclaimers
+
+### Ideal use
+Brokerages and teams that want 24/7 answers on listing pages without overloading agents.`,
     welcomeMessage: "Hi! I can tell you about our current listings and help you schedule a viewing. What are you looking for?",
     exampleQuestions: ['What 3-bedroom homes do you have under $400k?', 'How do I schedule a viewing?', 'Does the downtown condo have parking?'],
     personality: { systemPrompt: 'You are a helpful real estate listing assistant. Be clear about features and next steps.', tone: 'friendly', language: 'en-US' },
@@ -137,7 +182,17 @@ Common details
     slug: 'clinic-appointment-assistant',
     name: 'Clinic Appointment & Info Assistant',
     shortDescription: 'Answer questions about services, hours, and book appointments.',
-    description: 'Trained on clinic info and FAQs. Helps with services, locations, and appointment booking.',
+    description: `## Clinic information & scheduling
+
+A **front-desk style** assistant for **hours**, **services**, **insurance basics**, and **how to book**—without giving medical advice.
+
+### Suitable for
+- **Access & logistics** — locations, parking, portal links
+- **Administrative FAQs** — new patient paperwork, cancellations, records requests
+- **Triage language** — urgent symptoms → appropriate escalation (per your policy)
+
+### Compliance posture
+Uses general facility information only; clinical questions stay with licensed staff.`,
     welcomeMessage: "Hi! I can help with appointments, locations, and general questions. What do you need?",
     exampleQuestions: ['What are your opening hours?', 'How do I book an appointment?', 'Do you take my insurance?'],
     personality: { systemPrompt: 'You are a helpful clinic front-desk assistant. Be clear and respectful about health information.', tone: 'friendly', language: 'en-US' },

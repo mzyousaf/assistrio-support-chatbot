@@ -13,10 +13,17 @@ import { BotsService } from '../bots/bots.service';
 import { DocumentsService } from '../documents/documents.service';
 import { IngestionService } from '../ingestion/ingestion.service';
 import { USER_ROLES, type UserRole } from '../models';
+import { ASSISTRIO_EMBED_ALLOWED_DOMAINS } from './assistrio-embed-allowed-domains';
 import { SHOWCASE_BOTS } from './showcase-bots-seed.data';
 import { AuthService } from '../auth/auth.service';
 import { AuthGuard, type RequestUser } from '../auth/auth.guard';
+import { SuperAdminGuard } from '../auth/super-admin.guard';
 import { WorkspacesService } from '../workspaces/workspaces.service';
+import {
+  ShowcaseAgentsPackService,
+  SHOWCASE_AGENTS_PACK_MAX_PER_REQUEST,
+  SHOWCASE_AGENTS_PACK_MAX_PER_USER,
+} from './showcase-agents-pack.service';
 
 type RequestWithUser = FastifyRequest & { user?: RequestUser };
 
@@ -28,9 +35,12 @@ export class UserSeedController {
     private readonly ingestionService: IngestionService,
     private readonly authService: AuthService,
     private readonly workspacesService: WorkspacesService,
+    private readonly showcaseAgentsPackService: ShowcaseAgentsPackService,
   ) { }
 
+  /** Create a platform user (superadmin-only; intended for admin dashboard). */
   @Post()
+  @UseGuards(AuthGuard, SuperAdminGuard)
   async seedUser(@Body() body: { email?: string; password?: string; role?: string }) {
     const email = typeof body?.email === 'string' ? body.email : '';
     const password = typeof body?.password === 'string' ? body.password : '';
@@ -55,7 +65,7 @@ export class UserSeedController {
   }
 
   @Post('showcase-bots')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, SuperAdminGuard)
   async seedShowcaseBots(@Req() req: RequestWithUser) {
     try {
       const createdByUserId =
@@ -81,6 +91,7 @@ export class UserSeedController {
           type: 'showcase',
           status: 'published',
           isPublic: true,
+          allowedDomains: ASSISTRIO_EMBED_ALLOWED_DOMAINS,
           shortDescription: seed.shortDescription,
           description: seed.description,
           welcomeMessage: seed.welcomeMessage,
@@ -120,6 +131,54 @@ export class UserSeedController {
       return { ok: true, createdBots, skippedBots };
     } catch (err) {
       console.error('Seed showcase bots failed', err);
+      throw new HttpException({ error: 'Internal server error' }, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  /**
+   * Superadmin: generate AI-assisted showcase agents (unique slugs, Assistrio embed allowlist, multi-chat max 5, short replies + sources).
+   * Capped at {@link SHOWCASE_AGENTS_PACK_MAX_PER_USER} total showcase bots per creator.
+   */
+  @Post('showcase-agents-pack')
+  @UseGuards(AuthGuard, SuperAdminGuard)
+  async seedShowcaseAgentsPack(@Body() body: { count?: unknown }, @Req() req: RequestWithUser) {
+    const raw = body?.count;
+    const count = typeof raw === 'number' ? raw : Number(raw);
+    if (!Number.isFinite(count) || count < 1 || count > SHOWCASE_AGENTS_PACK_MAX_PER_REQUEST) {
+      throw new HttpException(
+        { error: `count must be 1–${SHOWCASE_AGENTS_PACK_MAX_PER_REQUEST}` },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const createdByUserId =
+      req.user?._id != null && Types.ObjectId.isValid(String(req.user._id))
+        ? new Types.ObjectId(String(req.user._id))
+        : undefined;
+    if (!createdByUserId) {
+      throw new HttpException({ error: 'User id required' }, HttpStatus.BAD_REQUEST);
+    }
+    const workspaceId = await this.workspacesService.ensurePersonalWorkspaceForUser(String(req.user?._id));
+    try {
+      const pack = await this.showcaseAgentsPackService.runPack({
+        count: Math.floor(count),
+        createdByUserId,
+        workspaceId,
+      });
+      return {
+        ok: true,
+        maxTotalShowcasePerSuperadmin: SHOWCASE_AGENTS_PACK_MAX_PER_USER,
+        ...pack,
+        note:
+          pack.skippedDueToCap > 0
+            ? `Only ${pack.created.length} created: you are at or near the ${SHOWCASE_AGENTS_PACK_MAX_PER_USER} showcase cap for your account.`
+            : undefined,
+      };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Pack failed';
+      if (msg.includes('count')) {
+        throw new HttpException({ error: msg }, HttpStatus.BAD_REQUEST);
+      }
+      console.error('Showcase agents pack failed', err);
       throw new HttpException({ error: 'Internal server error' }, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }

@@ -53,7 +53,7 @@ export default function NewBotDraftInitializer() {
           throw new Error("Draft bot id missing.");
         }
         if (mounted) {
-          router.replace(`/user/bots/${data.botId}`);
+          router.replace(`/user/bots/${data.botId}/playground/profile`);
         }
       } catch {
         draftInitInFlight = null;

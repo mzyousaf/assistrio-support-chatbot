@@ -3,6 +3,17 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Bot, Conversation, Message, Visitor, VisitorEvent } from '../models';
 import type { VisitorEventType, VisitorKind } from '../models';
+/** Platform visitor: live chat on showcase (authenticated) bots — runtime embed. */
+export const PLATFORM_VISITOR_SHOWCASE_RUNTIME_USER_MESSAGE_CAP = 30;
+
+/** Platform visitor: live chat on trial (visitor) bots — runtime embed. */
+export const PLATFORM_VISITOR_TRIAL_RUNTIME_USER_MESSAGE_CAP = 30;
+
+/** Platform visitor: all preview chat (`/api/widget/preview/chat`). */
+export const PLATFORM_VISITOR_PREVIEW_USER_MESSAGE_CAP = 50;
+
+/** @deprecated Use {@link PLATFORM_VISITOR_TRIAL_RUNTIME_USER_MESSAGE_CAP}. */
+export const PLATFORM_VISITOR_GLOBAL_USER_MESSAGE_CAP = PLATFORM_VISITOR_TRIAL_RUNTIME_USER_MESSAGE_CAP;
 
 /** Matches platform visitors, including legacy docs without `visitorType`. */
 function platformVisitorFilter(visitorId: string): Record<string, unknown> {
@@ -86,6 +97,8 @@ export class VisitorsService {
       visitorType: 'platform',
       showcaseMessageCount: 0,
       ownBotMessageCount: 0,
+      trialPreviewUserMessageCount: 0,
+      previewUserMessageCount: 0,
       createdAt: now,
       lastSeenAt: now,
     });
@@ -205,6 +218,66 @@ export class VisitorsService {
     const current = await this.getAcceptedUserMessageCountForBotVisitor(params.botId, params.platformVisitorId);
     if (current >= safeLimit) return { allowed: false, current, limit: safeLimit };
     return { allowed: true, current, limit: safeLimit };
+  }
+
+  /**
+   * Trial bots only: counts persisted user messages with {@link Message.trialRuntimeUserMessage}
+   * (runtime embed), capped at {@link PLATFORM_VISITOR_TRIAL_RUNTIME_USER_MESSAGE_CAP}.
+   */
+  async checkTrialVisitorRuntimeMessageQuota(platformVisitorId: string): Promise<{
+    allowed: boolean;
+    current: number;
+    limit: number;
+  }> {
+    const limit = PLATFORM_VISITOR_TRIAL_RUNTIME_USER_MESSAGE_CAP;
+    const current = await this.messageModel.countDocuments({
+      visitorId: platformVisitorId,
+      role: 'user',
+      trialRuntimeUserMessage: true,
+    });
+    return { allowed: current < limit, current, limit };
+  }
+
+  /**
+   * Showcase (authenticated) bots only: runtime embed user messages tagged
+   * {@link Message.showcaseRuntimeUserMessage}, capped at {@link PLATFORM_VISITOR_SHOWCASE_RUNTIME_USER_MESSAGE_CAP}.
+   */
+  async checkShowcaseRuntimeMessageQuota(platformVisitorId: string): Promise<{
+    allowed: boolean;
+    current: number;
+    limit: number;
+  }> {
+    const limit = PLATFORM_VISITOR_SHOWCASE_RUNTIME_USER_MESSAGE_CAP;
+    const current = await this.messageModel.countDocuments({
+      visitorId: platformVisitorId,
+      role: 'user',
+      showcaseRuntimeUserMessage: true,
+    });
+    return { allowed: current < limit, current, limit };
+  }
+
+  private resolvePreviewMessageCount(v: Record<string, unknown> | null | undefined): number {
+    if (!v) return 0;
+    const a = Math.floor(Number(v.previewUserMessageCount ?? 0));
+    const b = Math.floor(Number(v.trialPreviewUserMessageCount ?? 0));
+    return Math.max(0, a + b);
+  }
+
+  async checkPlatformVisitorPreviewMessageQuota(platformVisitorId: string): Promise<{
+    allowed: boolean;
+    current: number;
+    limit: number;
+  }> {
+    const limit = PLATFORM_VISITOR_PREVIEW_USER_MESSAGE_CAP;
+    const v = await this.visitorModel.findOne(platformVisitorFilter(platformVisitorId)).lean();
+    const current = this.resolvePreviewMessageCount(v as Record<string, unknown> | undefined);
+    return { allowed: current < limit, current, limit };
+  }
+
+  async incrementPlatformVisitorPreviewMessageCount(platformVisitorId: string): Promise<void> {
+    await this.visitorModel.updateOne(platformVisitorFilter(platformVisitorId), {
+      $inc: { previewUserMessageCount: 1 },
+    });
   }
 
   async checkAndIncrementUsage(

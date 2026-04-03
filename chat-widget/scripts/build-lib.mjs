@@ -31,3 +31,21 @@ await esbuild.build({
 });
 
 console.log(`Built ${outfile}`);
+
+const quickIconsOut = join(outDir, "quick-link-icons.mjs");
+await esbuild.build({
+  entryPoints: [join(root, "src", "quick-link-icons.ts")],
+  bundle: true,
+  outfile: quickIconsOut,
+  format: "esm",
+  platform: "neutral",
+  target: ["es2020"],
+  minify: true,
+  sourcemap: true,
+  jsx: "automatic",
+  logLevel: "info",
+  legalComments: "none",
+  external: ["react", "react-dom", "react/jsx-runtime", "lucide-react"],
+});
+
+console.log(`Built ${quickIconsOut}`);

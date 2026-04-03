@@ -2,13 +2,19 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { Pencil, Trash2, X } from "lucide-react";
 import AdminShell from "@/components/admin/AdminShell";
+import {
+  ADMIN_PAGE_META_TEXT_CLASS,
+  ADMIN_PAGE_SEARCH_INPUT_CLASS,
+  adminFilterChipClass,
+} from "@/components/admin/admin-page-classes";
 import CreateNewBotButton from "@/components/admin/CreateNewBotButton";
 import { SettingsModal } from "@/components/admin/settings/SettingsModal";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { SkeletonDataTable, SkeletonTableRows } from "@/components/ui/Skeleton";
 import { apiFetch } from "@/lib/api";
 import { useAdminUser } from "@/hooks/useAdminUser";
 
@@ -40,6 +46,18 @@ function AdminBotsContent() {
   const [apiError, setApiError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [botToDelete, setBotToDelete] = useState<{ id: string; name: string } | null>(null);
+  const [search, setSearch] = useState("");
+
+  const filteredBots = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return bots;
+    return bots.filter(
+      (b) =>
+        b.name.toLowerCase().includes(q) ||
+        (b.category ?? "").toLowerCase().includes(q) ||
+        (b.type ?? "").toLowerCase().includes(q),
+    );
+  }, [bots, search]);
 
   async function fetchBots() {
     const url = `/api/user/bots${statusFilter !== "all" ? `?status=${statusFilter}` : ""}`;
@@ -99,14 +117,64 @@ function AdminBotsContent() {
 
   if (authLoading || !user) {
     return (
-      <AdminShell title="Bots">
-        <p className="text-sm text-gray-500">Loading…</p>
+      <AdminShell
+        title="Agents"
+        subtitle="Review and manage agents across the workspace."
+      >
+        <SkeletonDataTable rows={8} cols={7} />
       </AdminShell>
     );
   }
 
   return (
-    <AdminShell title="Bots">
+    <AdminShell
+      title="Agents"
+      subtitle="Review and manage agents across the workspace."
+      actions={
+        <CreateNewBotButton
+          label="Create new agent"
+          className="shrink-0 rounded-md bg-brand-500 px-3 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-brand-600"
+        />
+      }
+      toolbar={
+        <>
+          <div className="flex min-w-0 flex-1 flex-col gap-1.5 sm:max-w-md">
+            <label htmlFor="admin-agent-search" className="sr-only">
+              Search agents
+            </label>
+            <input
+              id="admin-agent-search"
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by name, category, or type…"
+              className={ADMIN_PAGE_SEARCH_INPUT_CLASS}
+            />
+          </div>
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:items-end">
+            <p className={ADMIN_PAGE_META_TEXT_CLASS}>
+              Showing{" "}
+              <span className="font-medium text-slate-700 dark:text-slate-300">{filteredBots.length}</span> of{" "}
+              <span className="font-medium text-slate-700 dark:text-slate-300">{bots.length}</span> agents
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <Link href="/admin/bots" className={adminFilterChipClass(statusFilter === "all")}>
+                All
+              </Link>
+              <Link href="/admin/bots?status=draft" className={adminFilterChipClass(statusFilter === "draft")}>
+                Draft
+              </Link>
+              <Link
+                href="/admin/bots?status=published"
+                className={adminFilterChipClass(statusFilter === "published")}
+              >
+                Published
+              </Link>
+            </div>
+          </div>
+        </>
+      }
+    >
       {apiError ? (
         <div
           className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-800 dark:bg-red-900/20 dark:text-red-200"
@@ -156,49 +224,6 @@ function AdminBotsContent() {
           Are you sure you want to delete this bot? All associated documents and data will be removed.
         </p>
       </SettingsModal>
-      <section className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="text-sm text-gray-600 dark:text-gray-400">Manage and review all configured bots.</p>
-          <p className="mt-1 text-xs text-gray-500 dark:text-gray-500">
-            Total bots:{" "}
-            <span className="font-medium text-gray-700 dark:text-gray-300">{bots.length}</span>
-          </p>
-          <div className="mt-2 flex items-center gap-2">
-            <Link
-              href="/user/bots"
-              className={`rounded-full border px-3 py-1 text-xs ${statusFilter === "all"
-                ? "border-brand-300 bg-brand-50 text-brand-700"
-                : "border-gray-200 bg-white text-gray-600"
-                }`}
-            >
-              All
-            </Link>
-            <Link
-              href="/user/bots?status=draft"
-              className={`rounded-full border px-3 py-1 text-xs ${statusFilter === "draft"
-                ? "border-brand-300 bg-brand-50 text-brand-700"
-                : "border-gray-200 bg-white text-gray-600"
-                }`}
-            >
-              Draft
-            </Link>
-            <Link
-              href="/user/bots?status=published"
-              className={`rounded-full border px-3 py-1 text-xs ${statusFilter === "published"
-                ? "border-brand-300 bg-brand-50 text-brand-700"
-                : "border-gray-200 bg-white text-gray-600"
-                }`}
-            >
-              Published
-            </Link>
-          </div>
-        </div>
-        <CreateNewBotButton
-          label="Create new"
-          className="shrink-0 rounded-lg bg-brand-500 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-brand-400"
-        />
-      </section>
-
       <Card className="overflow-hidden p-0">
         <div className="overflow-x-auto">
           <table className="min-w-full text-left text-sm">
@@ -215,12 +240,10 @@ function AdminBotsContent() {
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-800 text-gray-800 dark:text-gray-200">
               {loading ? (
-                <tr>
-                  <td className="px-4 py-6 text-gray-500" colSpan={7}>Loading…</td>
-                </tr>
+                <SkeletonTableRows rows={6} cols={7} />
               ) : (
                 <>
-                  {bots.map((bot) => (
+                  {filteredBots.map((bot) => (
                     <tr key={String(bot._id)} className="hover:bg-gray-50/80 dark:hover:bg-gray-800/40 transition-colors">
                       <td className="px-4 py-3 font-medium text-gray-900 dark:text-gray-100">{bot.name}</td>
                       <td className="px-4 py-3">
@@ -256,7 +279,7 @@ function AdminBotsContent() {
                         {bot.type === "showcase" ? (
                           <div className="flex items-center gap-1">
                             <Link
-                              href={`/user/bots/${String(bot._id)}`}
+                              href={`/admin/bots/${String(bot._id)}/playground/profile`}
                               className="inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
                               title="Edit bot"
                               aria-label="Edit bot"
@@ -284,10 +307,10 @@ function AdminBotsContent() {
                       </td>
                     </tr>
                   ))}
-                  {bots.length === 0 && (
+                  {filteredBots.length === 0 && (
                     <tr>
                       <td className="px-4 py-6 text-gray-500 dark:text-gray-400" colSpan={7}>
-                        No bots found yet.
+                        {bots.length === 0 ? "No agents yet." : "No agents match your search or filters."}
                       </td>
                     </tr>
                   )}
@@ -303,11 +326,13 @@ function AdminBotsContent() {
 
 export default function AdminBotsPage() {
   return (
-    <Suspense fallback={
-      <AdminShell title="Bots">
-        <p className="text-sm text-gray-500">Loading…</p>
-      </AdminShell>
-    }>
+    <Suspense
+      fallback={
+        <AdminShell title="Agents" subtitle="Review and manage agents across the workspace.">
+          <SkeletonDataTable rows={8} cols={7} />
+        </AdminShell>
+      }
+    >
       <AdminBotsContent />
     </Suspense>
   );

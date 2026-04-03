@@ -2,7 +2,11 @@
 
 import React, { useState } from "react";
 
-import { getQuickLinkIcon, QUICK_LINK_ICON_IDS, type QuickLinkIconId } from "@assistrio/chat-widget";
+import {
+  getQuickLinkIcon,
+  QUICK_LINK_ICON_IDS,
+  type QuickLinkIconId,
+} from "@assistrio/chat-widget/quick-link-icons";
 
 import {
   SettingsActionMenu,

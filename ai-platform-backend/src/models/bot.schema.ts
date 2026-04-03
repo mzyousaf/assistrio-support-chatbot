@@ -334,6 +334,20 @@ export class Bot {
   @Prop({ type: [String], default: [] })
   allowedDomains?: string[];
   /**
+   * Optional per-bot mapping: platform visitor id → one allowed website URL (stored as canonical origin).
+   * When non-empty, widget/chat with that `platformVisitorId` must use the same browser `Origin`.
+   */
+  @Prop({
+    type: [
+      {
+        platformVisitorId: { type: String, required: true },
+        websiteUrl: { type: String, required: true },
+      },
+    ],
+    default: [],
+  })
+  platformVisitorWebsiteAllowlist?: Array<{ platformVisitorId: string; websiteUrl: string }>;
+  /**
    * Max combined embed requests per minute per IP for this bot (widget init + gated chat).
    * `0` = disabled. Not exposed in the admin UI yet; set on the document (e.g. DB) when needed.
    */

@@ -4,6 +4,7 @@ import "./globals.css";
 import { AssistrioGlobalEmbed } from "@/components/AssistrioGlobalEmbed";
 import { SiteChrome } from "@/components/SiteChrome";
 import { siteMeta } from "@/content/site";
+import { getAssistrioWidgetCssUrl } from "@/lib/assistrio-cdn-widget";
 
 const plusJakarta = Plus_Jakarta_Sans({
   subsets: ["latin"],
@@ -28,10 +29,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={plusJakarta.variable}>
       <head>
-        <link
-          rel="stylesheet"
-          href="https://widget.assistrio.com/assistrio-chat.css"
-        />
+        <link rel="stylesheet" href={getAssistrioWidgetCssUrl()} />
       </head>
       <body className="min-h-screen bg-white font-sans text-neutral-900 antialiased">
         <AssistrioGlobalEmbed />

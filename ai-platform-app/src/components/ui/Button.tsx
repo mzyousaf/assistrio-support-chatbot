@@ -15,7 +15,7 @@ const baseClasses =
   "inline-flex items-center justify-center rounded-lg font-medium transition focus:outline-none focus:ring-2 focus:ring-brand-400/70 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-gray-900 disabled:opacity-60 disabled:cursor-not-allowed";
 
 const variantClasses: Record<NonNullable<ButtonProps["variant"]>, string> = {
-  primary: "bg-brand-500 hover:bg-brand-400 text-white shadow-card",
+  primary: "bg-brand-500 hover:bg-brand-600 text-white shadow-card",
   secondary: "bg-gray-900 hover:bg-gray-800 text-white dark:bg-gray-100 dark:hover:bg-white dark:text-gray-900",
   ghost: "bg-transparent hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-200",
   destructive: "bg-red-500 hover:bg-red-600 text-white",

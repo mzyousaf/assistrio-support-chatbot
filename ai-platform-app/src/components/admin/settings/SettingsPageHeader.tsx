@@ -9,6 +9,7 @@ export interface SettingsPageHeaderProps {
   className?: string;
 }
 
+/** Section intro under the editor pane title (one h1 per page lives in `BotEditorPane`). */
 export function SettingsPageHeader({
   title,
   description,
@@ -18,7 +19,7 @@ export function SettingsPageHeader({
   return (
     <div className={`flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-6 ${className}`.trim()}>
       <div className="min-w-0 flex-1">
-        <h1 className="text-2xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">{title}</h1>
+        <h2 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">{title}</h2>
         {description ? (
           <p className="mt-1.5 text-sm leading-relaxed text-gray-500 dark:text-gray-400">{description}</p>
         ) : null}

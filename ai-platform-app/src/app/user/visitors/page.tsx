@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import AdminShell from "@/components/admin/AdminShell";
+import { ADMIN_PAGE_META_TEXT_CLASS } from "@/components/admin/admin-page-classes";
 import { Card } from "@/components/ui/Card";
+import { SkeletonDataTable, SkeletonTableRows } from "@/components/ui/Skeleton";
 import { apiFetch } from "@/lib/api";
 import { useUser } from "@/hooks/useUser";
 
@@ -69,28 +71,38 @@ export default function UserVisitorsPage() {
 
   if (authLoading || !user) {
     return (
-      <AdminShell title="Visitors">
-        <p className="text-sm text-gray-500">Loading…</p>
+      <AdminShell
+        title="Visitors"
+        subtitle="People who have interacted with your agents, sorted by most recent activity."
+      >
+        <SkeletonDataTable rows={8} cols={8} />
       </AdminShell>
     );
   }
 
   if (error) {
     return (
-      <AdminShell title="Visitors">
+      <AdminShell
+        title="Visitors"
+        subtitle="People who have interacted with your agents, sorted by most recent activity."
+      >
         <p className="text-sm text-red-600">{error}</p>
       </AdminShell>
     );
   }
 
   return (
-    <AdminShell title="Visitors">
-      <section className="space-y-1">
-        <p className="text-sm text-gray-600 dark:text-gray-400">Showing most recent 100 visitors (by last seen).</p>
-        <p className="text-xs text-gray-500 dark:text-gray-500">
-          Total shown: <span className="font-medium text-gray-700 dark:text-gray-300">{visitors.length}</span>
+    <AdminShell
+      title="Visitors"
+      subtitle="People who have interacted with your agents, sorted by most recent activity."
+      toolbar={
+        <p className={ADMIN_PAGE_META_TEXT_CLASS}>
+          Showing up to <span className="font-medium text-slate-700 dark:text-slate-300">100</span> most recent
+          visitors · In list:{" "}
+          <span className="font-medium text-slate-700 dark:text-slate-300">{visitors.length}</span>
         </p>
-      </section>
+      }
+    >
       <Card className="overflow-hidden p-0">
         <div className="overflow-x-auto">
           <table className="min-w-full text-left text-sm">
@@ -108,9 +120,7 @@ export default function UserVisitorsPage() {
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-800 text-gray-800 dark:text-gray-200">
               {loading ? (
-                <tr>
-                  <td className="px-4 py-6 text-gray-500" colSpan={8}>Loading…</td>
-                </tr>
+                <SkeletonTableRows rows={6} cols={8} />
               ) : (
                 <>
                   {visitors.map((visitor) => (

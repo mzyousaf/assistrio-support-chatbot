@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import AdminShell from "@/components/admin/AdminShell";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { SkeletonFormFields } from "@/components/ui/Skeleton";
 import { Input } from "@/components/ui/Input";
 import { apiFetch } from "@/lib/api";
 import { useUser } from "@/hooks/useUser";
@@ -61,15 +62,15 @@ export default function UserLimitsSettingsPage() {
 
   if (authLoading || !user) {
     return (
-      <AdminShell title="Settings">
-        <p className="text-sm text-gray-500">Loading…</p>
+      <AdminShell title="Usage limits">
+        <SkeletonFormFields fields={2} />
       </AdminShell>
     );
   }
 
   if (error || (!loading && !limits)) {
     return (
-      <AdminShell title="Settings">
+      <AdminShell title="Usage limits">
         <p className="text-sm text-red-600">{error ?? "Failed to load limits."}</p>
       </AdminShell>
     );
@@ -77,14 +78,14 @@ export default function UserLimitsSettingsPage() {
 
   if (loading || !limits) {
     return (
-      <AdminShell title="Settings">
-        <p className="text-sm text-gray-500">Loading…</p>
+      <AdminShell title="Usage limits">
+        <SkeletonFormFields fields={2} />
       </AdminShell>
     );
   }
 
   return (
-    <AdminShell title="Settings">
+    <AdminShell title="Usage limits">
       <section className="space-y-1">
         <p className="text-sm text-gray-600 dark:text-gray-400">Control how many free messages a visitor can send.</p>
         <p className="text-xs text-gray-500 dark:text-gray-500">

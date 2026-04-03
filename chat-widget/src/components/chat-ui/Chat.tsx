@@ -97,8 +97,6 @@ export interface ChatProps {
   onSessionEndChat?: () => void;
   sessionRecentChats?: Array<{ id: string; preview: string; lastActivityAt: string }>;
   onSessionSelectRecentChat?: (conversationId: string) => void;
-  /** e.g. "3 / 5 saved conversations" when a cap is set; omitted when unlimited */
-  sessionUsageLabel?: string;
   /** Disable Start new chat when at cap */
   sessionStartNewDisabled?: boolean;
   /** When true, user can open the recent-chats panel (may differ from showSessionMenu when only history is available). */
@@ -249,7 +247,6 @@ export function Chat({
   onSessionEndChat,
   sessionRecentChats,
   onSessionSelectRecentChat,
-  sessionUsageLabel,
   sessionStartNewDisabled = false,
   sessionHistoryEnabled,
   composerReadOnly = false,
@@ -422,7 +419,6 @@ export function Chat({
           onSessionEndChat={onSessionEndChat}
           sessionEndChatDisabled={!hasUserMessage}
           sessionStartNewDisabled={sessionStartNewDisabled}
-          sessionUsageLabel={sessionUsageLabel}
           onSessionOpenHistory={() => setHistoryViewOpen(true)}
           onClose={onClose}
           backLabel={s.back}
@@ -474,13 +470,6 @@ export function Chat({
                 {s.chatHistory}
               </h2>
             </div>
-            {sessionUsageLabel ? (
-              <p
-                className={cx("max-w-full text-[10px] leading-snug", dark ? "text-gray-500" : "text-gray-500")}
-              >
-                {sessionUsageLabel}
-              </p>
-            ) : null}
           </div>
           {onClose ? (
             <button

@@ -30,6 +30,16 @@ export class Message {
   visitorId?: string;
   @Prop({ required: true, enum: ['user', 'assistant'] })
   role: string;
+  /**
+   * When true, this user message counts toward the trial runtime cap (30) for the platform visitor.
+   */
+  @Prop()
+  trialRuntimeUserMessage?: boolean;
+  /**
+   * When true, this user message counts toward the showcase bot runtime cap (30) for the platform visitor.
+   */
+  @Prop()
+  showcaseRuntimeUserMessage?: boolean;
   @Prop({ required: true })
   content: string;
   /** RAG sources for assistant messages (chunk/doc references and previews). */

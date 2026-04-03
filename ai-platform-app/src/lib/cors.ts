@@ -2,8 +2,8 @@ export const allowedCorsOrigins = [
   "http://localhost:3001"
 ].filter((value): value is string => typeof value === "string" && value.length > 0);
 
-function isAsstrioDomain(hostname: string): boolean {
-  return hostname === "asstrio.com" || hostname.endsWith(".asstrio.com");
+function isAssistrioDomain(hostname: string): boolean {
+  return hostname === "assistrio.com" || hostname.endsWith(".assistrio.com");
 }
 
 export function isAllowedCorsOrigin(origin: string | null): origin is string {
@@ -22,7 +22,7 @@ export function isAllowedCorsOrigin(origin: string | null): origin is string {
   try {
     const url = new URL(origin);
     const isHttp = url.protocol === "http:" || url.protocol === "https:";
-    return isHttp && isAsstrioDomain(url.hostname);
+    return isHttp && isAssistrioDomain(url.hostname);
   } catch {
     return false;
   }

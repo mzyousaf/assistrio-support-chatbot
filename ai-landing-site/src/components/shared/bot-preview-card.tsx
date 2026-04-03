@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { LandingBotAvatar } from "@/components/bots/landing-bot-avatar";
 import type { PublicBotPreview } from "@/types/home";
 import { cn } from "@/lib/cn";
 
@@ -15,8 +16,16 @@ export function BotPreviewCard({ bot, className }: BotPreviewCardProps) {
         className,
       )}
     >
-      <h3 className="text-lg font-semibold text-neutral-900">{bot.name}</h3>
-      <p className="mt-2 flex-1 text-sm leading-relaxed text-neutral-600">
+      <div className="flex items-start gap-3">
+        <LandingBotAvatar
+          name={bot.name}
+          imageUrl={bot.imageUrl}
+          avatarEmoji={bot.avatarEmoji}
+          size="preview"
+        />
+        <h3 className="min-w-0 flex-1 text-lg font-semibold leading-snug text-neutral-900">{bot.name}</h3>
+      </div>
+      <p className="mt-3 flex-1 text-sm leading-relaxed text-neutral-600">
         {bot.description}
       </p>
       <Link

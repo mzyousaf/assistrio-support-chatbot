@@ -1,8 +1,14 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import React, { useEffect, useState } from "react";
-import { EmbedWidgetRoot } from "@assistrio/chat-widget";
 import type { EmbedChatConfig } from "@assistrio/chat-widget";
+
+/** Main `index.mjs` touches `document` at load — only load on the client. */
+const EmbedWidgetRoot = dynamic(
+  () => import("@assistrio/chat-widget").then((m) => m.EmbedWidgetRoot),
+  { ssr: false, loading: () => null },
+);
 
 type BotEditEmbedPreviewProps = {
   botId: string;
@@ -24,8 +30,8 @@ export function BotEditEmbedPreview({ botId, previewOverrides }: BotEditEmbedPre
   useEffect(() => {
     setApiBaseUrl(
       (typeof process !== "undefined" && process.env.NEXT_PUBLIC_API_BASE_URL?.trim()) ||
-        (typeof window !== "undefined" ? window.location.origin : "") ||
-        "",
+      (typeof window !== "undefined" ? window.location.origin : "") ||
+      "",
     );
   }, []);
 

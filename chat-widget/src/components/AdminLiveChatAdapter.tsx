@@ -635,14 +635,6 @@ export function AdminLiveChatAdapter({
   const embedSessionMenuVisible =
     mode === "preview" ? visitorMultiChatEnabled : runtimeSessionMenuVisible;
 
-  const sessionUsageLabel = useMemo(() => {
-    if (!visitorMultiChatEnabled) return undefined;
-    if (visitorMultiChatMax === null || visitorMultiChatMax === undefined) {
-      return undefined;
-    }
-    return `${recentChats.length} / ${visitorMultiChatMax} saved conversations`;
-  }, [visitorMultiChatEnabled, visitorMultiChatMax, recentChats.length]);
-
   const sessionStartNewDisabled = useMemo(() => {
     if (!visitorMultiChatEnabled) return false;
     if (visitorMultiChatMax === null || visitorMultiChatMax === undefined) return false;
@@ -918,7 +910,6 @@ export function AdminLiveChatAdapter({
     sessionHistoryEnabled: embedSessionMenuVisible,
     onSessionStartNewChat: handleSessionStartNew,
     onSessionEndChat: handleSessionEnd,
-    sessionUsageLabel,
     sessionStartNewDisabled,
     sessionRecentChats: embedSessionMenuVisible ? recentChats : undefined,
     onSessionSelectRecentChat: handleSelectRecent,

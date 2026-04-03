@@ -423,6 +423,8 @@ export class ChatEngineService {
       conversationId: inputConversationId,
       startNewConversation: inputStartNew,
       ephemeral: inputEphemeral,
+      countTowardTrialRuntimeQuota: inputCountTowardTrialRuntimeQuota,
+      countTowardShowcaseRuntimeQuota: inputCountTowardShowcaseRuntimeQuota,
     } = input;
     const requestId = inputRequestId ?? `chat-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
     const startTime = Date.now();
@@ -564,6 +566,8 @@ export class ChatEngineService {
         chatVisitorId,
         visitorId: platformVisitorId,
         role: 'user',
+        ...(inputCountTowardTrialRuntimeQuota === true ? { trialRuntimeUserMessage: true } : {}),
+        ...(inputCountTowardShowcaseRuntimeQuota === true ? { showcaseRuntimeUserMessage: true } : {}),
         content: message,
         createdAt: now,
       });

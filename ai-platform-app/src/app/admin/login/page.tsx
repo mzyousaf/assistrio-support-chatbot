@@ -3,9 +3,11 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
+import { useUser } from "@/hooks/useUser";
 
 export default function AdminLoginPage() {
   const router = useRouter();
+  const { refetch } = useUser();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -32,6 +34,7 @@ export default function AdminLoginPage() {
         return;
       }
 
+      await refetch();
       router.push("/user/dashboard");
       router.refresh();
     } catch {

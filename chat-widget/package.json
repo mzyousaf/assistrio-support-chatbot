@@ -15,6 +15,11 @@
       "import": "./dist/index.mjs",
       "default": "./dist/index.mjs"
     },
+    "./quick-link-icons": {
+      "types": "./dist/quick-link-icons.d.ts",
+      "import": "./dist/quick-link-icons.mjs",
+      "default": "./dist/quick-link-icons.mjs"
+    },
     "./assistrio-chat.js": "./dist/assistrio-chat.js",
     "./assistrio-chat.css": "./dist/assistrio-chat.css"
   },

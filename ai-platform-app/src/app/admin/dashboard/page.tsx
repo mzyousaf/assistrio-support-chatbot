@@ -3,6 +3,7 @@
 import Link from "next/link";
 import AdminShell from "@/components/admin/AdminShell";
 import { Card } from "@/components/ui/Card";
+import { DashboardPageSkeleton } from "@/components/ui/Skeleton";
 import { useAdminUser } from "@/hooks/useAdminUser";
 
 export default function AdminDashboardPage() {
@@ -10,18 +11,18 @@ export default function AdminDashboardPage() {
 
   if (loading || !user) {
     return (
-      <AdminShell title="Dashboard">
-        <p className="text-sm text-gray-500">Loading…</p>
+      <AdminShell title="Dashboard" subtitle="Overview of your workspace and shortcuts to common tasks.">
+        <DashboardPageSkeleton />
       </AdminShell>
     );
   }
 
   return (
-    <AdminShell title="Dashboard">
+    <AdminShell title="Dashboard" subtitle="Overview of your workspace and shortcuts to common tasks.">
       <Card>
         <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Welcome, {user.email}</h2>
         <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-          Choose a section to manage the platform. Use the sidebar, breadcrumbs, or back button to move faster.
+          Use the sidebar to jump to agents, analytics, or settings.
         </p>
       </Card>
 

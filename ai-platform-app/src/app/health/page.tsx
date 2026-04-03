@@ -2,6 +2,8 @@
 
 import { apiFetch } from "@/lib/api";
 import { useEffect, useState } from "react";
+import { Skeleton } from "@/components/ui/Skeleton";
+
 import { HealthClient } from "./HealthClient";
 
 type HealthStatus = {
@@ -50,7 +52,10 @@ export default function HealthPage() {
 
         <div className="space-y-2 text-sm">
           {status === null ? (
-            <p className="text-slate-400">Loading…</p>
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-48" />
+              <Skeleton className="h-4 w-36" />
+            </div>
           ) : (
             <>
               <p>

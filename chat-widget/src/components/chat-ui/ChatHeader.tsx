@@ -68,8 +68,6 @@ export interface ChatHeaderProps {
   sessionEndChatDisabled?: boolean;
   /** When true, Start new chat is disabled (e.g. at saved-conversation cap). */
   sessionStartNewDisabled?: boolean;
-  /** Shown under the subtitle when multi-chat is on (e.g. "3 / 5" or "Unlimited"). */
-  sessionUsageLabel?: string;
   /** Opens full-screen chat history list (parent renders the list view). */
   onSessionOpenHistory?: () => void;
   /** Close button click; omit to hide */
@@ -154,7 +152,6 @@ export function ChatHeader({
   onSessionEndChat,
   sessionEndChatDisabled = false,
   sessionStartNewDisabled = false,
-  sessionUsageLabel,
   onSessionOpenHistory,
   onClose,
   backLabel = "Back",
@@ -300,16 +297,6 @@ export function ChatHeader({
         </div>
         {subtitle ? (
           <p className={cx("text-xs truncate mt-0.5", dark ? "text-gray-400" : "text-gray-500")}>{subtitle}</p>
-        ) : null}
-        {sessionUsageLabel && sessionMenuHasAnyItem ? (
-          <p
-            className={cx(
-              "mt-0.5 text-[10px] leading-snug",
-              dark ? "text-gray-500" : "text-gray-500",
-            )}
-          >
-            {sessionUsageLabel}
-          </p>
         ) : null}
       </div>
 

@@ -27,6 +27,9 @@ export interface PublicBotDetailResponse {
   visibility: 'public';
   accessKey: string;
   shortDescription: string;
+  /** Long-form Markdown for gallery / detail pages. */
+  description?: string;
+  category?: string;
   avatarEmoji: string;
   imageUrl: string;
   welcomeMessage?: string;
@@ -108,6 +111,8 @@ export function shapePublicBotDetail(raw: unknown): PublicBotDetailResponse | nu
     visibility: 'public',
     accessKey,
     shortDescription: nonEmpty(row.shortDescription),
+    description: optionalNonEmpty(row.description),
+    category: optionalNonEmpty(row.category),
     avatarEmoji: nonEmpty(row.avatarEmoji) || '💬',
     imageUrl: nonEmpty(row.imageUrl),
     welcomeMessage: optionalNonEmpty(row.welcomeMessage),

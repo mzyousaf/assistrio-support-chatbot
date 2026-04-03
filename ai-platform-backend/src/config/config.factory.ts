@@ -1,15 +1,15 @@
 import { ENV_CHAT_WIDGET_API_KEY } from '../lib/env-var-names';
 
 /**
- * Base hostnames allowed to call `/api/widget/preview/*` (browser Origin / Referer).
+ * Base hostnames allowed to call `/api/widget/preview/*` (browser `Origin`).
  * Subdomains of each entry are allowed (e.g. `assistrio.com` allows `app.assistrio.com`).
+ * Production: assistrio.com only. Development: same plus loopback hosts for local UI preview.
  */
 const PREVIEW_ALLOWED_BASE_HOSTS = ['assistrio.com'] as const;
 
-/** Merged in when NODE_ENV is development (subdomains of `localhost` match too). */
 const PREVIEW_DEV_EXTRA_HOSTS = ['localhost', '127.0.0.1', '::1'] as const;
 
-/** Server-side list: assistrio.com (+ localhost-style hosts in development only). */
+/** Server-side list for `/api/widget/preview/*`. */
 export function resolveAllowedPreviewHosts(nodeEnv: string): string[] {
   const base: string[] = [...PREVIEW_ALLOWED_BASE_HOSTS];
   if (nodeEnv !== 'development') return base;
@@ -40,7 +40,7 @@ export function configFactory() {
     landingSiteBotsApiKey: process.env.LANDING_SITE_BOTS_API_KEY?.trim() ?? '',
     /** Shared secret for widget testing endpoints (header: X-API-Key). */
     chatWidgetApiKey: process.env[ENV_CHAT_WIDGET_API_KEY]?.trim() ?? '',
-    /** See {@link resolveAllowedPreviewHosts} — not configurable via env. */
+    /** See {@link resolveAllowedPreviewHosts} — assistrio.com; localhost only when `nodeEnv === 'development'`. */
     allowedPreviewHosts: resolveAllowedPreviewHosts(nodeEnv),
     /**
      * When true, loopback browser origins (localhost, 127.0.0.1, ::1, *.localhost) pass the runtime embed domain gate

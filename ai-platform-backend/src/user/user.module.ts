@@ -14,6 +14,7 @@ import { UserDocumentsController } from './user-documents.controller';
 import { UserJobsController } from './user-jobs.controller';
 import { UserLimitsController } from './user-limits.controller';
 import { BotOnboardingService } from './bot-onboarding.service';
+import { ShowcaseAgentsPackService } from './showcase-agents-pack.service';
 
 @Module({
   imports: [
@@ -34,7 +35,7 @@ import { BotOnboardingService } from './bot-onboarding.service';
     UserJobsController,
     UserLimitsController,
   ],
-  providers: [BotOnboardingService],
+  providers: [BotOnboardingService, ShowcaseAgentsPackService],
   exports: [],
 })
 export class UserModule { }

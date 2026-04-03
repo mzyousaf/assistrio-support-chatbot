@@ -26,6 +26,18 @@ export class Visitor {
   showcaseMessageCount: number;
   @Prop({ default: 0 })
   ownBotMessageCount: number;
+  /** @deprecated Prefer {@link previewUserMessageCount}. */
+  @Prop({ default: 0 })
+  trialPreviewUserMessageCount: number;
+  /** Platform visitor preview quota (`/api/widget/preview/chat`), cap 50. */
+  @Prop({ default: 0 })
+  previewUserMessageCount: number;
+  /**
+   * Single allowed embed **origin** for this platform visitor (set on first `POST /api/widget/init` with `platformVisitorId`).
+   * Full URL origin (e.g. `https://assistrio.com`), not a bare hostname. Widget + chat must use this exact origin thereafter.
+   */
+  @Prop()
+  platformEmbedAllowedUrl?: string;
   @Prop({ default: Date.now })
   createdAt: Date;
   @Prop({ default: Date.now })

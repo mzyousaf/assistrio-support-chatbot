@@ -2,6 +2,7 @@
 
 import AdminShell from "@/components/admin/AdminShell";
 import NewBotDraftInitializer from "@/components/admin/NewBotDraftInitializer";
+import { SkeletonFormFields } from "@/components/ui/Skeleton";
 import { useAdminUser } from "@/hooks/useAdminUser";
 
 export default function AdminNewBotPage() {
@@ -10,7 +11,7 @@ export default function AdminNewBotPage() {
   if (loading || !user) {
     return (
       <AdminShell title="Create Bot">
-        <p className="text-sm text-gray-500">Loading…</p>
+        <SkeletonFormFields fields={3} />
       </AdminShell>
     );
   }

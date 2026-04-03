@@ -2,7 +2,11 @@
 
 import React from "react";
 
-import { getQuickLinkIcon, QUICK_LINK_ICON_IDS, type QuickLinkIconId } from "@assistrio/chat-widget";
+import {
+  getQuickLinkIcon,
+  QUICK_LINK_ICON_IDS,
+  type QuickLinkIconId,
+} from "@assistrio/chat-widget/quick-link-icons";
 
 import { normalizeQuickLinkIcon } from "@/lib/quickLinkIconNormalize";
 
@@ -30,11 +34,10 @@ export function QuickLinksMenuIconPicker({ value, onChange }: QuickLinksMenuIcon
         <button
           type="button"
           onClick={() => onChange(undefined)}
-          className={`rounded-md border px-2 py-1 text-xs font-medium transition-colors ${
-            defaultBtnActive
+          className={`rounded-md border px-2 py-1 text-xs font-medium transition-colors ${defaultBtnActive
               ? "border-brand-500 bg-brand-50 text-brand-800 dark:bg-brand-950/40 dark:text-brand-200"
               : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
-          }`}
+            }`}
         >
           Default (link)
         </button>
@@ -48,11 +51,10 @@ export function QuickLinksMenuIconPicker({ value, onChange }: QuickLinksMenuIcon
               type="button"
               title={id}
               onClick={() => onChange(id === DEFAULT_MENU_ICON_ID ? undefined : id)}
-              className={`flex h-8 w-8 items-center justify-center rounded-md border transition-colors ${
-                cellActive(id)
+              className={`flex h-8 w-8 items-center justify-center rounded-md border transition-colors ${cellActive(id)
                   ? "border-brand-500 bg-brand-50 text-brand-800 dark:bg-brand-950/40 dark:text-brand-200"
                   : "border-transparent bg-gray-50 text-gray-700 hover:border-gray-200 dark:bg-gray-800 dark:text-gray-200 dark:hover:border-gray-600"
-              }`}
+                }`}
             >
               <Icon className="h-4 w-4" strokeWidth={2} aria-hidden />
             </button>

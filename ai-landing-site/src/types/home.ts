@@ -60,6 +60,9 @@ export type PublicBotPreview = {
   name: string;
   description: string;
   href: string;
+  /** Optional — home marketing cards; when absent, initials are shown */
+  avatarEmoji?: string;
+  imageUrl?: string;
 };
 
 export type HomePublicBotsPreviewContent = {

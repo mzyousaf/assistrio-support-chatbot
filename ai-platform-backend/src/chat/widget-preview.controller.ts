@@ -228,12 +228,15 @@ export class WidgetPreviewController {
   private assertPreviewOriginAllowed(request: FastifyRequest): void {
     const nodeEnv = this.configService.get<string>('nodeEnv') ?? 'development';
     const allowed =
-      this.configService.get<string[]>('allowedPreviewHosts') ??
-      resolveAllowedPreviewHosts(nodeEnv);
+      this.configService.get<string[]>('allowedPreviewHosts') ?? resolveAllowedPreviewHosts(nodeEnv);
     if (!isPreviewRequestOriginAllowed(request.headers, allowed)) {
+      const devHint =
+        nodeEnv === 'development'
+          ? ' In development, localhost is also allowed.'
+          : '';
       throw new HttpException(
         {
-          error: 'Preview is only allowed from approved web origins.',
+          error: `Preview is only allowed from assistrio.com (or its subdomains).${devHint}`,
           status: 'error' as const,
           errorCode: 'PREVIEW_ORIGIN_NOT_ALLOWED',
         },
@@ -272,6 +275,17 @@ export class WidgetPreviewController {
           HttpStatus.FORBIDDEN,
         );
       }
+      /** Showcase bots: preview only via signed-in workspace user — not platformVisitorId-only auth. */
+      if (String((bot as { type?: string }).type ?? '') === 'showcase') {
+        throw new HttpException(
+          {
+            error:
+              'Preview with platform visitor identity is not allowed for showcase bots. Sign in to preview.',
+            errorCode: 'PREVIEW_PLATFORM_VISITOR_NOT_ALLOWED_FOR_SHOWCASE',
+          },
+          HttpStatus.FORBIDDEN,
+        );
+      }
       return { runtimeVisitorId: requestedPlatformVisitorId, previewAuthKind: 'platform' };
     }
 
@@ -284,10 +298,13 @@ export class WidgetPreviewController {
     }
 
     const userId = normalizeObjectIdString(user._id);
-    const allowed = await this.workspacesService.canUserAccessShowcaseBot(userId, user.role, bot);
+    const allowed = this.workspacesService.canUserPreviewShowcaseBotAsOwner(userId, user.role, bot);
     if (!allowed) {
       throw new HttpException(
-        { error: 'Preview not allowed for this account.', errorCode: 'PREVIEW_FORBIDDEN' },
+        {
+          error: 'Preview is only available to the bot owner. Sign in as the account that created this agent.',
+          errorCode: 'PREVIEW_FORBIDDEN',
+        },
         HttpStatus.FORBIDDEN,
       );
     }
@@ -527,11 +544,40 @@ export class WidgetPreviewController {
       }
     }
 
+    const trialOwnerId =
+      (bot as { creatorType?: string }).creatorType === 'visitor'
+        ? String((bot as { ownerVisitorId?: unknown }).ownerVisitorId ?? '').trim()
+        : '';
+    /** Single preview quota (50) per platform visitor: trial bot owner or platform-auth preview. */
+    let previewQuotaVisitorId = '';
+    if (trialOwnerId) {
+      previewQuotaVisitorId = trialOwnerId;
+    } else if (previewAuthKind === 'platform' && runtimeVisitorId) {
+      previewQuotaVisitorId = String(runtimeVisitorId).trim();
+    }
+    if (previewQuotaVisitorId) {
+      await this.visitorsService.getOrCreateVisitor(previewQuotaVisitorId);
+      const previewQuota = await this.visitorsService.checkPlatformVisitorPreviewMessageQuota(previewQuotaVisitorId);
+      if (!previewQuota.allowed) {
+        throw new HttpException(
+          {
+            error: 'Preview message limit reached for this platform visitor.',
+            errorCode: 'PREVIEW_MESSAGE_QUOTA_EXCEEDED',
+            current: previewQuota.current,
+            limit: previewQuota.limit,
+          },
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
+      }
+    }
+
     const botLike = this.buildPreviewBotLike(bot, parsed.previewOverrides);
+    const platformVisitorIdForChat =
+      trialOwnerId || (runtimeVisitorId && String(runtimeVisitorId).trim()) || undefined;
     const result = await this.chatEngineService.runChat({
       bot: botLike,
       chatVisitorId,
-      platformVisitorId: runtimeVisitorId || undefined,
+      platformVisitorId: platformVisitorIdForChat,
       message: parsed.message,
       mode: 'user',
       requestId: getRequestId(request),
@@ -542,6 +588,10 @@ export class WidgetPreviewController {
     });
     if (!result.ok) {
       throw new HttpException(result, HttpStatus.BAD_REQUEST);
+    }
+
+    if (previewQuotaVisitorId) {
+      await this.visitorsService.incrementPlatformVisitorPreviewMessageCount(previewQuotaVisitorId);
     }
 
     return {

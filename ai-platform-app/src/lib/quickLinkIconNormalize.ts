@@ -1,4 +1,4 @@
-import { QUICK_LINK_ICON_IDS } from "@assistrio/chat-widget";
+import { QUICK_LINK_ICON_IDS } from "@assistrio/chat-widget/quick-link-icons";
 
 const ALLOWED = new Set<string>(QUICK_LINK_ICON_IDS as readonly string[]);
 

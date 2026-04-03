@@ -92,4 +92,19 @@ export class WorkspacesService {
     const createdBy = oidString(bot.createdByUserId);
     return owner === uid || createdBy === uid;
   }
+
+  /**
+   * `/api/widget/preview/*` (signed-in user): only the bot owner/creator may preview, not other workspace members.
+   * Superadmin may still preview any bot. Visitor preview uses {@link bot.ownerVisitorId} in the preview controller.
+   */
+  canUserPreviewShowcaseBotAsOwner(userId: string, platformRole: string, bot: Record<string, unknown>): boolean {
+    if (platformRole === 'superadmin') return true;
+    const uid = userId.trim();
+    if (!Types.ObjectId.isValid(uid)) return false;
+    const owner = oidString(bot.ownerUserId);
+    const createdBy = oidString(bot.createdByUserId);
+    if (owner && owner === uid) return true;
+    if (createdBy && createdBy === uid) return true;
+    return false;
+  }
 }
