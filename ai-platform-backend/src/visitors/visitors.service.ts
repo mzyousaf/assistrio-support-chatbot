@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { Bot, Conversation, Message, Visitor, VisitorEvent } from '../models';
 import type { VisitorEventType, VisitorKind } from '../models';
 /** Platform visitor: live chat on showcase (authenticated) bots — runtime embed. */
@@ -239,8 +239,8 @@ export class VisitorsService {
   }
 
   /**
-   * Showcase (authenticated) bots only: runtime embed user messages tagged
-   * {@link Message.showcaseRuntimeUserMessage}, capped at {@link PLATFORM_VISITOR_SHOWCASE_RUNTIME_USER_MESSAGE_CAP}.
+   * Showcase bots only: runtime embed user messages tagged {@link Message.showcaseRuntimeUserMessage}.
+   * **Global bucket** — no `botId` in the query; same platform visitor shares one cap across showcase bots.
    */
   async checkShowcaseRuntimeMessageQuota(platformVisitorId: string): Promise<{
     allowed: boolean;
@@ -254,6 +254,39 @@ export class VisitorsService {
       showcaseRuntimeUserMessage: true,
     });
     return { allowed: current < limit, current, limit };
+  }
+
+  /**
+   * Public-safe remaining usage for anonymous landing: preview vs runtime buckets are **separate**
+   * (preview = visitor doc counters; trial/showcase runtime = message flags). No secrets.
+   */
+  async getPublicVisitorQuotaSummary(platformVisitorId: string): Promise<{
+    preview: { limit: number; used: number; remaining: number };
+    trialRuntime: { limit: number; used: number; remaining: number };
+    showcaseRuntime: { limit: number; used: number; remaining: number };
+  }> {
+    const pv = String(platformVisitorId ?? '').trim();
+    const preview = await this.checkPlatformVisitorPreviewMessageQuota(pv);
+    const trialRuntime = await this.checkTrialVisitorRuntimeMessageQuota(pv);
+    const showcaseRuntime = await this.checkShowcaseRuntimeMessageQuota(pv);
+    const toRemaining = (limit: number, used: number) => Math.max(0, limit - used);
+    return {
+      preview: {
+        limit: preview.limit,
+        used: preview.current,
+        remaining: toRemaining(preview.limit, preview.current),
+      },
+      trialRuntime: {
+        limit: trialRuntime.limit,
+        used: trialRuntime.current,
+        remaining: toRemaining(trialRuntime.limit, trialRuntime.current),
+      },
+      showcaseRuntime: {
+        limit: showcaseRuntime.limit,
+        used: showcaseRuntime.current,
+        remaining: toRemaining(showcaseRuntime.limit, showcaseRuntime.current),
+      },
+    };
   }
 
   private resolvePreviewMessageCount(v: Record<string, unknown> | null | undefined): number {
@@ -364,6 +397,146 @@ export class VisitorsService {
         createdAt: (b.createdAt as Date)?.toISOString?.() ?? null,
       })),
       conversationsCount,
+    };
+  }
+
+  /**
+   * PV-safe: find a **visitor-own** bot owned by this `platformVisitorId`, or `null`.
+   * Does not expose secrets; selection is minimal for summary APIs.
+   */
+  async findPvOwnedVisitorOwnBot(
+    platformVisitorId: string,
+    botId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const pv = String(platformVisitorId ?? '').trim();
+    if (!botId || !Types.ObjectId.isValid(botId)) return null;
+    const bot = await this.botModel
+      .findOne({
+        _id: new Types.ObjectId(botId),
+        type: 'visitor-own',
+        ownerVisitorId: pv,
+      })
+      .select(
+        '_id name slug status type createdAt allowedDomains leadCapture messageLimitMode messageLimitTotal',
+      )
+      .lean();
+    return bot ?? null;
+  }
+
+  /**
+   * PV-safe product summary for an owned trial bot — not raw analytics events.
+   * **Do not** reuse internal `AnalyticsService` dashboard shapes for these responses.
+   *
+   * @see docs/ANALYTICS_BOUNDARIES.md
+   * @see docs/PV_SAFE_PUBLIC_APIS.md
+   */
+  async getPvSafeVisitorBotSummary(platformVisitorId: string, botId: string) {
+    const bot = await this.findPvOwnedVisitorOwnBot(platformVisitorId, botId);
+    if (!bot) return null;
+    const quotas = await this.getPublicVisitorQuotaSummary(platformVisitorId);
+    const oid = new Types.ObjectId(String(bot._id));
+    const trialUsedOnBot = await this.messageModel.countDocuments({
+      botId: oid,
+      visitorId: platformVisitorId,
+      role: 'user',
+      trialRuntimeUserMessage: true,
+    });
+    const globalTrial = await this.checkTrialVisitorRuntimeMessageQuota(platformVisitorId);
+    const messageLimitTotal =
+      bot.messageLimitMode === 'fixed_total' && bot.messageLimitTotal != null
+        ? Math.max(0, Math.floor(Number(bot.messageLimitTotal)))
+        : null;
+    const effectiveLimit =
+      messageLimitTotal != null
+        ? Math.min(globalTrial.limit, messageLimitTotal)
+        : globalTrial.limit;
+    const globalRemaining = Math.max(0, globalTrial.limit - globalTrial.current);
+    const remainingForBot = Math.min(
+      globalRemaining,
+      Math.max(0, effectiveLimit - trialUsedOnBot),
+    );
+    const allowedDomains = (bot.allowedDomains as string[] | undefined) ?? [];
+    const leadCapture = bot.leadCapture as { enabled?: boolean } | undefined;
+    return {
+      platformVisitorId,
+      bot: {
+        id: String(bot._id),
+        name: String(bot.name ?? ''),
+        slug: String(bot.slug ?? ''),
+        status: String(bot.status ?? ''),
+        type: 'visitor-own' as const,
+        allowedDomains,
+        allowedDomain: allowedDomains[0] ?? '',
+        createdAt: (bot.createdAt as Date)?.toISOString?.() ?? null,
+        leadCaptureEnabled: !!leadCapture?.enabled,
+      },
+      usage: {
+        preview: quotas.preview,
+        trialRuntime: {
+          used: trialUsedOnBot,
+          limit: effectiveLimit,
+          remaining: remainingForBot,
+        },
+        showcaseRuntime: quotas.showcaseRuntime,
+      },
+    };
+  }
+
+  /**
+   * PV-safe basic activity summary for an owned bot (counts + last activity).
+   */
+  async getPvSafeVisitorBotBasicInsights(platformVisitorId: string, botId: string) {
+    const bot = await this.findPvOwnedVisitorOwnBot(platformVisitorId, botId);
+    if (!bot) return null;
+    const oid = new Types.ObjectId(String(bot._id));
+    const leadCapture = bot.leadCapture as { enabled?: boolean } | undefined;
+    const [conversationCount, messageCount, lastMsg] = await Promise.all([
+      this.conversationModel.countDocuments({ botId: oid, visitorId: platformVisitorId }),
+      this.messageModel.countDocuments({ botId: oid, visitorId: platformVisitorId }),
+      this.messageModel
+        .findOne({ botId: oid, visitorId: platformVisitorId })
+        .sort({ createdAt: -1 })
+        .select('createdAt')
+        .lean(),
+    ]);
+    return {
+      platformVisitorId,
+      botId: String(bot._id),
+      conversationCount,
+      messageCount,
+      leadCaptureEnabled: !!leadCapture?.enabled,
+      lastActivityAt: lastMsg?.createdAt ? (lastMsg.createdAt as Date).toISOString() : null,
+    };
+  }
+
+  /**
+   * PV-safe lead capture **aggregates** only — no field values (PII).
+   */
+  async getPvSafeVisitorBotLeadsSummary(platformVisitorId: string, botId: string) {
+    const bot = await this.findPvOwnedVisitorOwnBot(platformVisitorId, botId);
+    if (!bot) return null;
+    const oid = new Types.ObjectId(String(bot._id));
+    const convs = await this.conversationModel
+      .find({ botId: oid, visitorId: platformVisitorId })
+      .select('capturedLeadData')
+      .lean();
+    let conversationsWithCapturedLeads = 0;
+    let totalLeadFieldsCaptured = 0;
+    for (const c of convs) {
+      const data = (c as { capturedLeadData?: Record<string, string> }).capturedLeadData;
+      if (data && typeof data === 'object' && !Array.isArray(data)) {
+        const keys = Object.keys(data).filter((k) => String(data[k] ?? '').trim().length > 0);
+        if (keys.length > 0) {
+          conversationsWithCapturedLeads += 1;
+          totalLeadFieldsCaptured += keys.length;
+        }
+      }
+    }
+    return {
+      platformVisitorId,
+      botId: String(bot._id),
+      conversationsWithCapturedLeads,
+      totalLeadFieldsCaptured,
     };
   }
 }

@@ -17,11 +17,13 @@ import { getDefaultBotCreatePayload } from '../user/default-new-bot.payload';
 import { KnowledgeBaseItemService } from '../knowledge/knowledge-base-item.service';
 import { KnowledgeBaseChunkService } from '../knowledge/knowledge-base-chunk.service';
 import { generateBotAccessKey, generateBotSecretKey } from './bot-keys.util';
-import { parseAllowedDomainRulesFromStoredArray, validateAllowedDomainEntry } from './embed-domain.util';
+import { normalizeUserWebsiteInputToHostname, parseAllowedDomainRulesFromStoredArray } from './embed-domain.util';
 import {
   assertPlatformVisitorWebsiteAllowlistWritePolicy,
   assertTrialBotAllowedDomainsPolicy,
+  normalizePlatformVisitorWebsiteAllowlistRowPublic,
 } from './platform-visitor-website-allowlist.util';
+import { validateRuntimeBotAccess } from './runtime-bot-access.util';
 import { normalizeVisitorMultiChatMax } from './visitor-multi-chat.util';
 import { WorkspacesService } from '../workspaces/workspaces.service';
 
@@ -214,12 +216,13 @@ export class BotsService {
   }
 
   /**
-   * Public gallery: all published bots marked public (showcase and visitor-owned).
-   * Safe fields only — same shape as the legacy showcase list.
+   * Anonymous public gallery: **showcase** bots only.
+   * Visitor-owned trial bots (`type: 'visitor-own'`) are not listed here — they are not anonymous marketing demos.
    */
   async findPublicShowcase(): Promise<PublicBotDto[]> {
     const docs = await this.botModel
       .find({
+        type: 'showcase',
         isPublic: true,
         status: 'published',
         visibility: 'public',
@@ -541,10 +544,10 @@ export class BotsService {
     const safeImageUrl = String(input.imageUrl ?? '').trim();
     const safeAvatarEmoji = String(input.avatarEmoji ?? '').trim();
 
-    const allowedDomainNorm = validateAllowedDomainEntry(String(input.allowedDomain ?? ''));
+    const allowedDomainNorm = normalizeUserWebsiteInputToHostname(String(input.allowedDomain ?? ''));
     if (!allowedDomainNorm) {
       throw new Error(
-        'allowedDomain is required and must be a valid hostname (e.g. www.example.com or localhost).',
+        'allowedDomain is required and must be a valid public hostname (paste a URL or hostname; we store only the hostname).',
       );
     }
 
@@ -604,6 +607,67 @@ export class BotsService {
       }
     }
     throw new Error('Failed to allocate unique trial bot credentials.');
+  }
+
+  /**
+   * Showcase runtime: pair a **saved** `platformVisitorId` with a **hostname** (from user URL or hostname) for this bot.
+   * Proves control via embed `accessKey`/`secretKey` (not domain alone). Trial bots use `allowedDomains` only.
+   */
+  async registerShowcaseEmbedWebsiteAllowlistForRuntime(input: {
+    botId: string;
+    accessKey: string;
+    secretKey?: string;
+    platformVisitorId: string;
+    websiteUrl: string;
+  }): Promise<{
+    ok: true;
+    botId: string;
+    platformVisitorWebsiteAllowlist: Array<{ platformVisitorId: string; websiteUrl: string }>;
+  }> {
+    const id = input.botId?.trim();
+    if (!id || !Types.ObjectId.isValid(id)) {
+      throw new Error('E_INVALID_BOT_ID');
+    }
+    const bot = await this.botModel
+      .findById(new Types.ObjectId(id))
+      .select('_id type status creatorType visibility accessKey secretKey')
+      .lean();
+    if (!bot) {
+      throw new Error('E_BOT_NOT_FOUND');
+    }
+    const botType = String((bot as { type?: string }).type ?? '');
+    const creatorType = (bot as { creatorType?: string }).creatorType === 'visitor' ? 'visitor' : 'user';
+    if (botType !== 'showcase') {
+      throw new Error('E_SHOWCASE_ONLY');
+    }
+    if (creatorType === 'visitor') {
+      throw new Error('E_TRIAL_BOT_NOT_SUPPORTED');
+    }
+    const access = validateRuntimeBotAccess(
+      {
+        status: (bot.status as string | undefined) ?? undefined,
+        visibility: (bot.visibility as 'public' | 'private' | undefined) ?? undefined,
+        accessKey: (bot.accessKey as string | undefined) ?? undefined,
+        secretKey: (bot.secretKey as string | undefined) ?? undefined,
+      },
+      { accessKey: input.accessKey, secretKey: input.secretKey },
+    );
+    if (!access.ok) {
+      throw new Error(`E_ACCESS_${access.reason}`);
+    }
+    let row: { platformVisitorId: string; websiteUrl: string };
+    try {
+      row = normalizePlatformVisitorWebsiteAllowlistRowPublic({
+        platformVisitorId: input.platformVisitorId,
+        websiteUrl: input.websiteUrl,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '';
+      throw new Error(msg || 'E_ALLOWLIST_NORMALIZE');
+    }
+    assertPlatformVisitorWebsiteAllowlistWritePolicy('user', [row]);
+    await this.botModel.updateOne({ _id: new Types.ObjectId(id) }, { $set: { platformVisitorWebsiteAllowlist: [row] } });
+    return { ok: true, botId: id, platformVisitorWebsiteAllowlist: [row] };
   }
 
   async updateShowcaseAccessSettings(

@@ -10,6 +10,10 @@ import { ChatEngineService } from './chat-engine.service';
 import type { BotLike } from './chat-engine.types';
 import { WorkspacesService } from '../workspaces/workspaces.service';
 import { normalizeVisitorMultiChatMax } from '../bots/visitor-multi-chat.util';
+import {
+  resolveEmbedChatVisitorIdFromBody,
+  resolvePreviewInitPlatformVisitorIdForAuth,
+} from '../bots/widget-embed-identity.util';
 import { isPreviewRequestOriginAllowed } from '../bots/preview-origin.util';
 import { resolveAllowedPreviewHosts } from '../config/config.factory';
 
@@ -37,10 +41,10 @@ type PreviewInitBody = {
   platformVisitorId?: unknown;
   chatVisitorId?: unknown;
   /**
-   * @deprecated Legacy payload field (ambiguous).
+   * @deprecated Legacy field.
    *
-   * - On preview `init`: treated as `platformVisitorId` (ownership / preview authorization).
-   * - On preview `chat`: treated as `chatVisitorId` (chat identity) for backward compatibility.
+   * - **init**: aliases `platformVisitorId` for ownership (prefer sending `platformVisitorId` for parity with chat).
+   * - **chat**: **chat/session identity only** — not used for ownership; send `platformVisitorId` to prove owner for platform-auth preview.
    */
   visitorId?: unknown;
   authToken?: unknown;
@@ -144,8 +148,7 @@ function parseInitBody(
   authToken?: string;
   previewOverrides?: PreviewOverrides;
   /**
-   * @deprecated Legacy field. Treated as `platformVisitorId` for preview `init`.
-   * (For preview `chat`, the controller will treat it as `chatVisitorId`.)
+   * @deprecated See `PreviewInitBody.visitorId`. For consistent owner checks, send `platformVisitorId` on **chat** too.
    */
   visitorId?: string;
 } | null {
@@ -474,7 +477,7 @@ export class WidgetPreviewController {
     const { previewAuthKind } = await this.verifyPreviewOwnershipOrThrow(
       request,
       bot,
-      parsed.platformVisitorId ?? parsed.visitorId,
+      resolvePreviewInitPlatformVisitorIdForAuth(parsed.platformVisitorId, parsed.visitorId),
       parsed.authToken,
     );
 
@@ -515,6 +518,10 @@ export class WidgetPreviewController {
       );
     }
 
+    /**
+     * Preview chat: platform auth uses **only** `platformVisitorId` (or cookie/session via `verifyPreviewOwnershipOrThrow`).
+     * Legacy `visitorId` on this route is chat/session only — never mixed into ownership auth.
+     */
     const { runtimeVisitorId, previewAuthKind } = await this.verifyPreviewOwnershipOrThrow(
       request,
       bot,
@@ -527,7 +534,7 @@ export class WidgetPreviewController {
 
     let chatVisitorId: string;
     if (previewAuthKind === 'platform') {
-      const fromBody = parsed.chatVisitorId ?? parsed.visitorId;
+      const fromBody = resolveEmbedChatVisitorIdFromBody(parsed.chatVisitorId, parsed.visitorId);
       if (!fromBody || !String(fromBody).trim()) {
         throw new HttpException(
           { error: 'chatVisitorId is required', errorCode: 'CHAT_VISITOR_ID_REQUIRED' },
@@ -548,13 +555,13 @@ export class WidgetPreviewController {
       (bot as { creatorType?: string }).creatorType === 'visitor'
         ? String((bot as { ownerVisitorId?: unknown }).ownerVisitorId ?? '').trim()
         : '';
-    /** Single preview quota (50) per platform visitor: trial bot owner or platform-auth preview. */
-    let previewQuotaVisitorId = '';
-    if (trialOwnerId) {
-      previewQuotaVisitorId = trialOwnerId;
-    } else if (previewAuthKind === 'platform' && runtimeVisitorId) {
-      previewQuotaVisitorId = String(runtimeVisitorId).trim();
-    }
+    /**
+     * Preview quota (separate from runtime embed quotas): one bucket per authenticated identity.
+     * - Trial bot: owner’s platform visitor id.
+     * - Platform-auth preview: that platform visitor id.
+     * - Signed-in dashboard preview: same `runtimeVisitorId` (user id) so preview cannot bypass the cap.
+     */
+    const previewQuotaVisitorId = trialOwnerId || String(runtimeVisitorId ?? '').trim();
     if (previewQuotaVisitorId) {
       await this.visitorsService.getOrCreateVisitor(previewQuotaVisitorId);
       const previewQuota = await this.visitorsService.checkPlatformVisitorPreviewMessageQuota(previewQuotaVisitorId);

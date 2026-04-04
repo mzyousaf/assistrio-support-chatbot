@@ -1,9 +1,10 @@
 import type { BotChatUI, BotConfig, BotLeadCaptureV2, BotLeadField, BotPersonality } from '../models/bot.schema';
 import type { LeadFieldType } from '../models/bot.schema';
 import {
-  canonicalOriginFromString,
+  extractHostnameFromUserWebsiteInputLoose,
   isDisallowedUserEmbedHost,
   isEmbedDomainInputDisallowedLocalhost,
+  normalizeUserWebsiteInputToHostname,
   parseAllowedDomainStringForStorage,
 } from '../bots/embed-domain.util';
 import { normalizeVisitorMultiChatMax } from '../bots/visitor-multi-chat.util';
@@ -120,20 +121,15 @@ function normalizePlatformVisitorWebsiteAllowlistFromPayload(
     const pv = String(o.platformVisitorId ?? '').trim();
     const wuRaw = String(o.websiteUrl ?? '').trim();
     if (!pv || !wuRaw) continue;
-    const canon = canonicalOriginFromString(wuRaw) ?? canonicalOriginFromString(`https://${wuRaw}`);
-    if (!canon) {
-      throw new Error('Invalid website URL in platform visitor allowlist.');
-    }
-    let host: string;
-    try {
-      host = new URL(canon).hostname;
-    } catch {
-      throw new Error('Invalid website URL in platform visitor allowlist.');
-    }
-    if (isDisallowedUserEmbedHost(host)) {
+    const loose = extractHostnameFromUserWebsiteInputLoose(wuRaw);
+    if (loose && isDisallowedUserEmbedHost(loose)) {
       throw new Error('Localhost and loopback addresses cannot be used as platform visitor website URLs.');
     }
-    map.set(pv, { platformVisitorId: pv, websiteUrl: canon });
+    const host = normalizeUserWebsiteInputToHostname(wuRaw);
+    if (!host) {
+      throw new Error('Invalid website URL in platform visitor allowlist.');
+    }
+    map.set(pv, { platformVisitorId: pv, websiteUrl: host });
   }
   const arr = [...map.values()];
   if (creatorType === 'visitor') {
@@ -219,7 +215,7 @@ export interface NormalizedBotPayload {
   includeNotesInKnowledge: boolean;
   /** Omitted from PATCH body = leave unchanged on server. */
   allowedDomains?: string[];
-  /** Per platform visitor: allowed website origin for this bot (canonical). Omitted = unchanged. */
+  /** Per platform visitor: allowed hostname for this bot (stored in `websiteUrl` field). Omitted = unchanged. */
   platformVisitorWebsiteAllowlist?: Array<{ platformVisitorId: string; websiteUrl: string }>;
   /** Present only when `visitorMultiChatEnabled` is in the request body. */
   visitorMultiChatEnabled?: boolean;

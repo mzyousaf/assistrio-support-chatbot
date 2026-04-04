@@ -1,10 +1,18 @@
 /**
  * Allowed embed origins for runtime (and serialization for the admin UI).
  *
+ * **Vs CORS:** These rules authorize **which site may embed** after the browser is allowed to call the API. For
+ * **public runtime** routes (`/api/widget/init`, `/api/chat/*`, …), CORS reflects valid HTTPS origins without
+ * per-customer env entries; see `public-embed-cors-paths.util.ts`. Failure modes: CORS block (no response body) vs 403
+ * `EMBED_*` / `deploymentHint` from `/api/widget/init`.
+ *
  * Storage (`allowedDomains: string[]`):
  * - **Single hostname** (exact match only, no wildcard subdomains): `www.example.com` or `example.com`
  * - **Multiple hostnames** (comma list): `hosts:example.com,www.example.com,app.example.com`
  * - **Exact origin**: `exact:https://example.com:3000` (canonical origin after `exact:`)
+ *
+ * User-facing website fields (trial `allowedDomain`, showcase `websiteUrl`) are normalized to **hostname only** via
+ * {@link normalizeUserWebsiteInputToHostname} before storage.
  */
 
 const LABEL = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
@@ -39,6 +47,53 @@ export function hostnameFromEmbedOrigin(embedOrigin: string): string | null {
     /* ignore */
   }
   return null;
+}
+
+/**
+ * Extract hostname from user-entered website / URL / hostname-with-path (lowercase). No validation.
+ * Returns null when the string cannot be parsed as a URL with a host.
+ */
+export function extractHostnameFromUserWebsiteInputLoose(raw: string): string | null {
+  const t = raw.trim();
+  if (!t) return null;
+  try {
+    const withScheme = /:\/\//.test(t) ? t : `https://${t}`;
+    const u = new URL(withScheme);
+    if (!u.hostname) return null;
+    return u.hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Normalize user-entered website / base URL (or bare hostname) to a single hostname for storage and allowlists.
+ * Strips scheme, path, query, hash, and port. Preserves subdomains. Rejects invalid or disallowed hosts.
+ */
+export function normalizeUserWebsiteInputToHostname(raw: string): string | null {
+  const t = raw.trim();
+  if (!t || t.length > 2048) return null;
+  const loose = extractHostnameFromUserWebsiteInputLoose(t);
+  if (!loose) return null;
+  return validateAllowedDomainHostStrict(loose);
+}
+
+/**
+ * Read hostname from a showcase allowlist `websiteUrl` value: either hostname-only (new) or legacy canonical origin
+ * string (`https://host:port`). Used for runtime matching against the browser Origin hostname.
+ */
+export function hostnameFromShowcaseWebsiteAllowlistStoredValue(stored: string): string | null {
+  const t = stored.trim();
+  if (!t) return null;
+  const co = canonicalOriginFromString(t) ?? canonicalOriginFromString(`https://${t}`);
+  if (co) {
+    try {
+      return new URL(co).hostname.toLowerCase();
+    } catch {
+      return null;
+    }
+  }
+  return validateAllowedDomainHostStrict(t);
 }
 
 /** Full request hostname from an origin string (lowercase, no www stripping). Used for runtime embed gate. */
@@ -281,6 +336,9 @@ export type EmbedDomainGateOptions = {
  * Runtime embed gate: **no** legacy “empty list = allow all”.
  * Every published bot must have at least one valid rule; otherwise `no_allowlist`.
  * Domain rules match **only** the exact hostname (no automatic subdomains).
+ *
+ * **Not identity:** passing this gate means the **origin** is allowed for the bot — it does **not** assign
+ * or prove `platformVisitorId` / quota ownership (those come from request identity fields).
  */
 export function checkEmbedDomainGate(
   rules: AllowedDomainRule[],

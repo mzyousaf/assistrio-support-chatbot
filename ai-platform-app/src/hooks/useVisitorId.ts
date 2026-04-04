@@ -5,6 +5,11 @@ import { v4 as uuidv4 } from "uuid";
 
 const PLATFORM_VISITOR_ID_STORAGE_KEY = "platform_visitor_id";
 
+/**
+ * Stable **platform visitor id** for anonymous flows: persisted in `localStorage`, seedable via
+ * `?platformVisitorId=` for cross-device reconnect. Copy into embed snippets (same id = same quota bucket);
+ * hostname alone does not identify the user.
+ */
 export function useVisitorId() {
   const [platformVisitorId, setPlatformVisitorId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);

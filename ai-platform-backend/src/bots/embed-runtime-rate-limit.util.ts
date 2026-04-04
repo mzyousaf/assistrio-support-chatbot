@@ -4,8 +4,24 @@ const buckets = new Map<string, { count: number; windowStart: number }>();
 const WINDOW_MS = 60_000;
 const MAX_BUCKETS = 50_000;
 
-/** Client IP for runtime embed rate limiting (trust proxy must be configured for req.ip / X-Forwarded-For). */
+/** Fixed window for {@link consumeEmbedRuntimeRateLimitToken} (in-process; per API instance). */
+export const EMBED_RUNTIME_RATE_LIMIT_WINDOW_MS = WINDOW_MS;
+
+/**
+ * Client IP for rate limiting.
+ *
+ * **Primary:** `req.ip` (Fastify). When `trustProxy` is enabled on the adapter (`main.ts` + `TRUST_PROXY=1`),
+ * this is derived from `X-Forwarded-For` / `X-Real-IP` per Fastify’s trusted proxy rules — **not** raw socket address.
+ *
+ * **When `trustProxy` is false:** `req.ip` is typically the **direct TCP peer** (often the load balancer). All
+ * customers behind that LB then **share one rate-limit bucket** unless you enable `TRUST_PROXY` and your proxy
+ * sends `X-Forwarded-For`.
+ *
+ * **Fallback:** If `req.ip` is empty, first hop of `x-forwarded-for` (useful in some tests; production should rely on `req.ip`).
+ */
 export function getClientIpForRateLimit(req: FastifyRequest): string {
+  const direct = req.ip;
+  if (typeof direct === 'string' && direct.trim()) return direct.trim();
   const xf = req.headers['x-forwarded-for'];
   if (typeof xf === 'string') {
     const first = xf.split(',')[0]?.trim();
@@ -14,8 +30,6 @@ export function getClientIpForRateLimit(req: FastifyRequest): string {
     const first = String(xf[0]).split(',')[0]?.trim();
     if (first) return first;
   }
-  const ip = req.ip;
-  if (typeof ip === 'string' && ip.trim()) return ip.trim();
   return 'unknown';
 }
 

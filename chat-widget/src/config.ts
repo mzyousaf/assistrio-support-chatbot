@@ -32,7 +32,9 @@ function parseObjectConfig(input: unknown): Partial<EmbedChatConfig> {
     mode: normalizeMode(cfg.mode),
     accessKey: toNonEmptyString(cfg.accessKey),
     secretKey: toNonEmptyString(cfg.secretKey),
+    /** Platform identity (quota/ownership); separate from `chatVisitorId`. */
     platformVisitorId: toNonEmptyString(cfg.platformVisitorId),
+    /** Chat thread identity; stored locally when `persistChatSession` allows. */
     chatVisitorId: toNonEmptyString(cfg.chatVisitorId),
     authToken: toNonEmptyString(cfg.authToken),
     position: normalizePosition(cfg.position),

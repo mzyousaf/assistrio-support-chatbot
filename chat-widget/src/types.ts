@@ -25,14 +25,17 @@ export type EmbedChatConfig = {
    */
   chatPostPath?: string;
   /**
-   * Platform visitor identity (platformVisitorId).
-   * Used for trial quota enforcement + preview authorization.
+   * **Stable saved identity** for the anonymous product (`platformVisitorId`): same string = same quota/ownership bucket.
+   * Put this in the snippet/config on every page and device you want to “reconnect”; `localStorage` alone is not cross-device.
+   * Treat as private — anyone with this id can consume quotas tied to it. Domain/origin gates are separate (where the embed may run).
+   *
+   * **Required** for runtime embed of **showcase** bots (shared showcase quota across agents for this id).
    */
   platformVisitorId?: string;
 
   /**
-   * Optional chat visitor identity (chatVisitorId).
-   * Usually omitted by callers; the widget will load/create it from localStorage.
+   * Chat/session identity only. Persisted under `assistrio_chat_visitor_*` localStorage keys.
+   * Never used as the platform id for trial ownership.
    */
   chatVisitorId?: string;
   /**
@@ -72,6 +75,7 @@ export interface WidgetInitRequest {
   /** Page origin (e.g. https://www.example.com). Sent on runtime init when the embedding site is known. */
   embedOrigin?: string;
   chatVisitorId?: string;
+  /** Same stable id as `EmbedChatConfig.platformVisitorId` — must be repeated on init/chat for quota continuity. */
   platformVisitorId?: string;
   authToken?: string;
   previewOverrides?: WidgetPreviewOverrides;
@@ -94,6 +98,10 @@ export interface WidgetInitResponse {
   status?: WidgetInitStatus;
   error?: string;
   errorCode?: string;
+  /** Non-secret operator hint from API when init fails (e.g. CORS vs allowlist). */
+  deploymentHint?: string;
+  /** Suggested backoff for 429 RATE_LIMITED. */
+  retryAfterSeconds?: number;
   chatVisitorId?: string;
   bot?: {
     id?: string;
@@ -162,4 +170,13 @@ export type AssistrioChatGlobal = {
   mount: (config?: Partial<EmbedChatConfig>) => void;
   unmount: () => void;
   isMounted: () => boolean;
+};
+
+/**
+ * Backend (anonymous, rate-limited): `POST /api/public/visitor-quota/summary` with `{ platformVisitorId }` returns
+ * remaining preview / trial-runtime / showcase-runtime quota buckets — for future landing UI only.
+ * Do not send `visitorId`; the API rejects it on this route to avoid mixing chat vs platform identity.
+ */
+export type PublicVisitorQuotaSummaryRequest = {
+  platformVisitorId: string;
 };

@@ -5,7 +5,39 @@ export type VisitorEventType =
   | 'page_view'
   | 'demo_chat_started'
   | 'trial_bot_created'
-  | 'trial_chat_started';
+  | 'trial_chat_started'
+  /** Landing / marketing (assistrio-landing-site) — details in `metadata` */
+  | 'cta_clicked'
+  | 'demo_opened'
+  | 'trial_create_started'
+  | 'trial_create_succeeded'
+  | 'snippet_copied'
+  | 'stable_id_copied'
+  | 'reconnect_submitted'
+  | 'reconnect_succeeded'
+  | 'website_register_started'
+  | 'website_register_succeeded'
+  | 'widget_runtime_opened'
+  | 'quota_viewed';
+
+const VISITOR_EVENT_ENUM: VisitorEventType[] = [
+  'page_view',
+  'demo_chat_started',
+  'trial_bot_created',
+  'trial_chat_started',
+  'cta_clicked',
+  'demo_opened',
+  'trial_create_started',
+  'trial_create_succeeded',
+  'snippet_copied',
+  'stable_id_copied',
+  'reconnect_submitted',
+  'reconnect_succeeded',
+  'website_register_started',
+  'website_register_succeeded',
+  'widget_runtime_opened',
+  'quota_viewed',
+];
 
 @Schema({ timestamps: false })
 export class VisitorEvent {
@@ -13,7 +45,7 @@ export class VisitorEvent {
   visitorId: string;
   @Prop({
     required: true,
-    enum: ['page_view', 'demo_chat_started', 'trial_bot_created', 'trial_chat_started'],
+    enum: VISITOR_EVENT_ENUM,
   })
   type: VisitorEventType;
   @Prop()

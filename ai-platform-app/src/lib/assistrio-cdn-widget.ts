@@ -18,7 +18,12 @@ export type EmbedChatConfig = {
   secretKey?: string;
   widgetInitPath?: string;
   chatPostPath?: string;
+  /**
+   * Stable **platform visitor id** — same string in snippet = same quota bucket; not the chat session id.
+   * Required for showcase runtime embed (enforced by API). Persist/copy for cross-device reconnect.
+   */
   platformVisitorId?: string;
+  /** Chat/session id — distinct from `platformVisitorId`. */
   chatVisitorId?: string;
   authToken?: string;
   /** Same cookie session as private APIs; no JWT in request body. */

@@ -9,6 +9,12 @@ import { AnalyticsService } from './analytics.service';
 import { VisitorsService } from '../visitors/visitors.service';
 import { parseTrackPayload } from './track-payload.dto';
 
+/**
+ * **Internal analytics ingestion** — append-only events for operators (funnels, debugging).
+ * **Read path:** none — this is write-only for clients; never document as a PV “analytics API”.
+ * Authenticated reporting: `/api/user/analytics` — see `docs/ANALYTICS_BOUNDARIES.md`.
+ * PV-facing summaries: `/api/public/visitor-*` — see `docs/PV_SAFE_PUBLIC_APIS.md`.
+ */
 @Controller('api/analytics')
 export class AnalyticsTrackController {
   constructor(

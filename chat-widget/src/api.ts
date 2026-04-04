@@ -115,7 +115,18 @@ export async function validateAndInitWidget(
     const message =
       data?.error ||
       `Widget init failed with status ${response.status}`;
-    throw new Error(code ? `${message} (${code})` : message);
+    const hint =
+      typeof data?.deploymentHint === "string" ? data.deploymentHint.trim() : "";
+    const retry =
+      typeof data?.retryAfterSeconds === "number" && Number.isFinite(data.retryAfterSeconds)
+        ? data.retryAfterSeconds
+        : null;
+    const retryPart =
+      response.status === 429 && retry != null ? ` Retry after ~${retry}s.` : "";
+    const suffix = hint ? ` — ${hint}` : "";
+    throw new Error(
+      code ? `${message} (${code})${retryPart}${suffix}` : `${message}${retryPart}${suffix}`,
+    );
   }
 
   if (!data) {
@@ -125,7 +136,10 @@ export async function validateAndInitWidget(
   if (data.status === "error") {
     const code = typeof data.errorCode === "string" ? data.errorCode : "";
     const message = data.error ?? "Widget init failed.";
-    throw new Error(code ? `${message} (${code})` : message);
+    const hint =
+      typeof data.deploymentHint === "string" ? data.deploymentHint.trim() : "";
+    const suffix = hint ? ` — ${hint}` : "";
+    throw new Error(code ? `${message} (${code})${suffix}` : `${message}${suffix}`);
   }
 
   return data;

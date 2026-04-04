@@ -219,7 +219,9 @@ export interface AdminLiveChatAdapterProps {
   chatPostPath?: string;
   accessKey?: string;
   secretKey?: string;
+  /** Chat/session identity only — threads, history, embed cookie binding. Not for quota ownership. */
   chatVisitorId: string;
+  /** Platform identity — trial quota, allowlist, preview auth; never substitute `chatVisitorId`. */
   platformVisitorId?: string;
   authToken?: string;
   previewOverrides?: WidgetPreviewOverrides;

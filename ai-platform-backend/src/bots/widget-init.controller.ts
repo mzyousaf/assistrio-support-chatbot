@@ -14,8 +14,10 @@ import {
 import {
   consumeEmbedRuntimeRateLimitToken,
   EMBED_RUNTIME_RATE_LIMIT_KEY_PREFIX,
+  EMBED_RUNTIME_RATE_LIMIT_WINDOW_MS,
   getClientIpForRateLimit,
 } from './embed-runtime-rate-limit.util';
+import { throwEmbedRuntimeIpRateLimited } from '../rate-limit/rate-limit-http-exception.util';
 import { normalizeVisitorMultiChatMax } from './visitor-multi-chat.util';
 import { EmbedSessionService } from './embed-session.service';
 import { resolveWidgetEmbedRateLimitPerMinute } from '../models/bot.schema';
@@ -24,6 +26,11 @@ import {
   platformVisitorEmbedCanBypassAllowedDomainsGate,
 } from './platform-visitor-website-allowlist.util';
 import { trialRuntimePlatformVisitorMatchesOwner } from './trial-runtime-embed.util';
+import {
+  getEmbedRuntimePlatformIdentityViolation,
+  PLATFORM_VISITOR_EMBED_ANONYMOUS_SENTINEL,
+} from './widget-embed-identity.util';
+import { RUNTIME_INIT_DEPLOYMENT_HINTS } from './runtime-deployment-hints';
 
 type WidgetInitBody = {
   botId?: unknown;
@@ -34,11 +41,14 @@ type WidgetInitBody = {
    */
   embedOrigin?: unknown;
   /**
-   * Optional chat identity (chatVisitorId).
-   * When omitted, backend generates one so the widget can persist it locally.
+   * Chat/session identity only (`chatVisitorId`).
+   * When omitted, the backend mints a **chat** id (not a platform ownership id).
    */
   chatVisitorId?: unknown;
-  /** When set, must match an entry on the bot `platformVisitorWebsiteAllowlist` (if configured). */
+  /**
+   * Stable saved identity (`platformVisitorId`) — must match snippet/config for reconnect and quota continuity.
+   * Domain/origin checks are separate. Required for trial bots (`creatorType === 'visitor'`).
+   */
   platformVisitorId?: unknown;
 };
 
@@ -143,10 +153,7 @@ export class WidgetInitController {
     if (
       !consumeEmbedRuntimeRateLimitToken(`${EMBED_RUNTIME_RATE_LIMIT_KEY_PREFIX}:${ip}`, limit)
     ) {
-      throw new HttpException(
-        { error: 'Too many requests', status: 'error', errorCode: 'RATE_LIMITED' },
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
+      throwEmbedRuntimeIpRateLimited(EMBED_RUNTIME_RATE_LIMIT_WINDOW_MS);
     }
 
     const embedOriginResolved = resolveRuntimeEmbedOriginFromHeaders(req.headers);
@@ -156,6 +163,7 @@ export class WidgetInitController {
           error: 'Origin header is required for embed requests',
           status: 'error' as const,
           errorCode: 'EMBED_ORIGIN_HEADER_REQUIRED',
+          deploymentHint: RUNTIME_INIT_DEPLOYMENT_HINTS.originHeader,
         },
         HttpStatus.FORBIDDEN,
       );
@@ -185,11 +193,33 @@ export class WidgetInitController {
             error: 'platformVisitorId does not match this trial bot owner.',
             status: 'error' as const,
             errorCode: 'TRIAL_PLATFORM_VISITOR_OWNER_MISMATCH',
+            deploymentHint: RUNTIME_INIT_DEPLOYMENT_HINTS.trialOwner,
           },
           HttpStatus.FORBIDDEN,
         );
       }
     }
+
+    const creatorType = (row as { creatorType?: string }).creatorType === 'visitor' ? 'visitor' : 'user';
+    const botType = String((row as { type?: string }).type ?? '');
+    const resolvedPvForIdentity = (pv ?? '').trim() || PLATFORM_VISITOR_EMBED_ANONYMOUS_SENTINEL;
+    const embedIdentityErr = getEmbedRuntimePlatformIdentityViolation({
+      botType,
+      creatorType,
+      resolvedPlatformVisitorId: resolvedPvForIdentity,
+    });
+    if (!embedIdentityErr.ok) {
+      throw new HttpException(
+        {
+          error: embedIdentityErr.message,
+          status: 'error' as const,
+          errorCode: embedIdentityErr.errorCode,
+        },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    /** Domain / origin: where the widget may run (separate from platform identity above). */
     const bypassAllowedDomains =
       !isTrialBot &&
       platformVisitorEmbedCanBypassAllowedDomainsGate({
@@ -221,7 +251,16 @@ export class WidgetInitController {
               : domainGate.reason === 'bad_origin'
                 ? 'embedOrigin could not be parsed'
                 : 'This chat widget is not allowed on this site';
-        throw new HttpException({ error, status: 'error' as const, errorCode }, HttpStatus.FORBIDDEN);
+        const deploymentHint =
+          domainGate.reason === 'no_allowlist'
+            ? RUNTIME_INIT_DEPLOYMENT_HINTS.noAllowlist
+            : domainGate.reason === 'missing_origin' || domainGate.reason === 'bad_origin'
+              ? RUNTIME_INIT_DEPLOYMENT_HINTS.originHeader
+              : `${RUNTIME_INIT_DEPLOYMENT_HINTS.embedDomain} ${RUNTIME_INIT_DEPLOYMENT_HINTS.corsPrerequisite}`;
+        throw new HttpException(
+          { error, status: 'error' as const, errorCode, deploymentHint },
+          HttpStatus.FORBIDDEN,
+        );
       }
     }
     if (pv && !isTrialBot) {
@@ -239,6 +278,7 @@ export class WidgetInitController {
               error: 'Origin header is required when using platformVisitorId',
               status: 'error' as const,
               errorCode: 'PLATFORM_EMBED_ORIGIN_REQUIRED',
+              deploymentHint: RUNTIME_INIT_DEPLOYMENT_HINTS.originHeader,
             },
             HttpStatus.FORBIDDEN,
           );
@@ -250,6 +290,7 @@ export class WidgetInitController {
                 'This platform visitor id is not listed for this bot. Add it (with its website URL) in the bot website allowlist.',
               status: 'error' as const,
               errorCode: 'PLATFORM_VISITOR_NOT_IN_BOT_ALLOWLIST',
+              deploymentHint: RUNTIME_INIT_DEPLOYMENT_HINTS.platformVisitorAllowlist,
             },
             HttpStatus.FORBIDDEN,
           );
@@ -261,6 +302,7 @@ export class WidgetInitController {
                 'This page origin does not match the website URL configured for this platform visitor on this bot.',
               status: 'error' as const,
               errorCode: 'PLATFORM_VISITOR_WEBSITE_ORIGIN_MISMATCH',
+              deploymentHint: RUNTIME_INIT_DEPLOYMENT_HINTS.platformVisitorAllowlist,
             },
             HttpStatus.FORBIDDEN,
           );

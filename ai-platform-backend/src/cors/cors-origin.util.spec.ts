@@ -1,4 +1,8 @@
-import { isBrowserOriginAllowedForCors, parseCorsExtraOriginsEnv } from './cors-origin.util';
+import {
+  isBrowserOriginAllowedForCors,
+  isReflectablePublicEmbedOrigin,
+  parseCorsExtraOriginsEnv,
+} from './cors-origin.util';
 
 describe('parseCorsExtraOriginsEnv', () => {
   it('parses comma-separated origins', () => {
@@ -39,5 +43,19 @@ describe('isBrowserOriginAllowedForCors', () => {
     const extra = new Set(['https://partner.example']);
     expect(isBrowserOriginAllowedForCors('https://partner.example', 'production', extra)).toBe(true);
     expect(isBrowserOriginAllowedForCors('https://partner.example', 'development', extra)).toBe(true);
+  });
+});
+
+describe('isReflectablePublicEmbedOrigin', () => {
+  it('allows https in production', () => {
+    expect(isReflectablePublicEmbedOrigin('https://customer.example.com', 'production')).toBe(true);
+  });
+
+  it('denies http in production', () => {
+    expect(isReflectablePublicEmbedOrigin('http://customer.example.com', 'production')).toBe(false);
+  });
+
+  it('allows loopback http in development', () => {
+    expect(isReflectablePublicEmbedOrigin('http://localhost:3000', 'development')).toBe(true);
   });
 });

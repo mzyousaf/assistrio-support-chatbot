@@ -14,14 +14,22 @@ import {
 import {
   consumeEmbedRuntimeRateLimitToken,
   EMBED_RUNTIME_RATE_LIMIT_KEY_PREFIX,
+  EMBED_RUNTIME_RATE_LIMIT_WINDOW_MS,
   getClientIpForRateLimit,
 } from '../bots/embed-runtime-rate-limit.util';
+import { throwEmbedRuntimeIpRateLimited } from '../rate-limit/rate-limit-http-exception.util';
 import { normalizeVisitorMultiChatMax } from '../bots/visitor-multi-chat.util';
 import {
   assertPlatformVisitorWebsiteMatchesBotAllowlist,
   platformVisitorEmbedCanBypassAllowedDomainsGate,
 } from '../bots/platform-visitor-website-allowlist.util';
 import { trialRuntimePlatformVisitorMatchesOwner } from '../bots/trial-runtime-embed.util';
+import {
+  getEmbedRuntimePlatformIdentityViolation,
+  PLATFORM_VISITOR_EMBED_ANONYMOUS_SENTINEL,
+  resolveEmbedChatVisitorIdFromBody,
+  resolveRuntimeEmbedPlatformVisitorIdForChat,
+} from '../bots/widget-embed-identity.util';
 import { resolveWidgetEmbedRateLimitPerMinute } from '../models/bot.schema';
 import { getRequestId } from '../lib/request-id.helper';
 import { VisitorsService } from '../visitors/visitors.service';
@@ -83,6 +91,11 @@ export class ChatController {
     }
   }
 
+  /**
+   * **Domain / origin authorization** — whether this embed origin may load the widget (allowedDomains,
+   * optional per-visitor website allowlist bypass). Independent of quota identity; see
+   * {@link getEmbedRuntimePlatformIdentityViolation} for platformVisitorId rules.
+   */
   private assertEmbedDomainGateForBot(
     bot: {
       allowedDomains?: unknown;
@@ -97,10 +110,7 @@ export class ChatController {
     if (
       !consumeEmbedRuntimeRateLimitToken(`${EMBED_RUNTIME_RATE_LIMIT_KEY_PREFIX}:${ip}`, limit)
     ) {
-      throw new HttpException(
-        { error: 'Too many requests', errorCode: 'RATE_LIMITED' },
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
+      throwEmbedRuntimeIpRateLimited(EMBED_RUNTIME_RATE_LIMIT_WINDOW_MS);
     }
 
     const embedOriginResolved = resolveRuntimeEmbedOriginFromHeaders(req.headers);
@@ -161,11 +171,8 @@ export class ChatController {
     conversationId?: string;
     startNewConversation?: boolean;
     /**
-     * @deprecated Legacy payload field (ambiguous).
-     *
-     * For this chat endpoint:
-     * - legacy `visitorId` is treated as `chatVisitorId` only (chat identity).
-     * - platform visitor identity is derived separately (only when bot.creatorType === 'visitor').
+     * @deprecated Legacy payload field — **chat/session identity only** on this route.
+     * Never mixed into `platformVisitorId` resolution here (see {@link resolveRuntimeEmbedPlatformVisitorIdForChat}).
      */
     visitorId?: string;
   } | null {
@@ -203,26 +210,27 @@ export class ChatController {
     embedOrigin?: string;
     chatVisitorId?: string;
     platformVisitorId?: string;
+    /** @deprecated Chat identity alias only — see {@link resolveEmbedChatVisitorIdFromBody}. */
     visitorId?: string;
   } | null {
     if (body == null || typeof body !== 'object') return null;
     const o = body as Record<string, unknown>;
     const botId = typeof o.botId === 'string' ? o.botId.trim() : '';
     const chatVisitorId = typeof o.chatVisitorId === 'string' ? o.chatVisitorId.trim() : '';
-    if (!botId || !chatVisitorId) return null;
+    const visitorId = typeof o.visitorId === 'string' ? o.visitorId.trim() : '';
+    if (!botId || (!chatVisitorId && !visitorId)) return null;
     const accessKey = typeof o.accessKey === 'string' ? o.accessKey.trim() : '';
     const secretKey = typeof o.secretKey === 'string' ? o.secretKey.trim() : '';
     const embedOrigin = typeof o.embedOrigin === 'string' ? o.embedOrigin.trim() : '';
     const platformVisitorId = typeof o.platformVisitorId === 'string' ? o.platformVisitorId.trim() : '';
-    const visitorId = typeof o.visitorId === 'string' ? o.visitorId.trim() : '';
     return {
       botId,
-      chatVisitorId,
+      ...(chatVisitorId ? { chatVisitorId } : {}),
+      ...(visitorId ? { visitorId } : {}),
       ...(accessKey ? { accessKey } : {}),
       ...(secretKey ? { secretKey } : {}),
       ...(embedOrigin ? { embedOrigin } : {}),
       ...(platformVisitorId ? { platformVisitorId } : {}),
-      ...(visitorId ? { visitorId } : {}),
     };
   }
 
@@ -248,7 +256,7 @@ export class ChatController {
       );
     }
 
-    const resolvedChatVisitorId = parsed.chatVisitorId ?? parsed.visitorId;
+    const resolvedChatVisitorId = resolveEmbedChatVisitorIdFromBody(parsed.chatVisitorId, parsed.visitorId);
     if (!resolvedChatVisitorId) {
       throw new HttpException(
         { error: 'chatVisitorId is required', errorCode: 'CHAT_VISITOR_ID_REQUIRED' },
@@ -262,14 +270,27 @@ export class ChatController {
     }, resolvedChatVisitorId);
 
     const creatorType = bot.creatorType === 'visitor' ? 'visitor' : 'user';
-    const resolvedPlatformVisitorId =
-      creatorType === 'visitor'
-        ? (parsed.platformVisitorId ?? parsed.visitorId ?? '')
-        : (parsed.platformVisitorId ?? parsed.visitorId ?? 'anonymous');
+    const botType = String((bot as { type?: string }).type ?? '');
+    const resolvedPlatformVisitorId = resolveRuntimeEmbedPlatformVisitorIdForChat({
+      creatorType,
+      platformVisitorId: parsed.platformVisitorId,
+    });
 
     if (creatorType === 'visitor' && !resolvedPlatformVisitorId) {
       throw new HttpException(
         { error: 'platformVisitorId is required for trial bots', errorCode: 'VISITOR_ID_REQUIRED' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const embedIdentityErr = getEmbedRuntimePlatformIdentityViolation({
+      botType,
+      creatorType,
+      resolvedPlatformVisitorId,
+    });
+    if (!embedIdentityErr.ok) {
+      throw new HttpException(
+        { error: embedIdentityErr.message, errorCode: embedIdentityErr.errorCode },
         HttpStatus.BAD_REQUEST,
       );
     }
@@ -327,6 +348,7 @@ export class ChatController {
     embedOrigin?: string;
     chatVisitorId?: string;
     platformVisitorId?: string;
+    /** @deprecated Chat identity alias only — see {@link resolveEmbedChatVisitorIdFromBody}. */
     visitorId?: string;
   } | null {
     if (body == null || typeof body !== 'object') return null;
@@ -334,16 +356,16 @@ export class ChatController {
     const botId = typeof o.botId === 'string' ? o.botId.trim() : '';
     const conversationId = typeof o.conversationId === 'string' ? o.conversationId.trim() : '';
     const chatVisitorId = typeof o.chatVisitorId === 'string' ? o.chatVisitorId.trim() : '';
-    if (!botId || !conversationId || !chatVisitorId) return null;
+    const visitorId = typeof o.visitorId === 'string' ? o.visitorId.trim() : '';
+    if (!botId || !conversationId || (!chatVisitorId && !visitorId)) return null;
     const accessKey = typeof o.accessKey === 'string' ? o.accessKey.trim() : '';
     const secretKey = typeof o.secretKey === 'string' ? o.secretKey.trim() : '';
     const embedOrigin = typeof o.embedOrigin === 'string' ? o.embedOrigin.trim() : '';
     const platformVisitorId = typeof o.platformVisitorId === 'string' ? o.platformVisitorId.trim() : '';
-    const visitorId = typeof o.visitorId === 'string' ? o.visitorId.trim() : '';
     return {
       botId,
       conversationId,
-      chatVisitorId,
+      ...(chatVisitorId ? { chatVisitorId } : {}),
       ...(accessKey ? { accessKey } : {}),
       ...(secretKey ? { secretKey } : {}),
       ...(embedOrigin ? { embedOrigin } : {}),
@@ -374,7 +396,7 @@ export class ChatController {
       );
     }
 
-    const resolvedChatVisitorId = parsed.chatVisitorId ?? parsed.visitorId;
+    const resolvedChatVisitorId = resolveEmbedChatVisitorIdFromBody(parsed.chatVisitorId, parsed.visitorId);
     if (!resolvedChatVisitorId) {
       throw new HttpException(
         { error: 'chatVisitorId is required', errorCode: 'CHAT_VISITOR_ID_REQUIRED' },
@@ -388,14 +410,27 @@ export class ChatController {
     }, resolvedChatVisitorId);
 
     const creatorType = bot.creatorType === 'visitor' ? 'visitor' : 'user';
-    const resolvedPlatformVisitorId =
-      creatorType === 'visitor'
-        ? (parsed.platformVisitorId ?? parsed.visitorId ?? '')
-        : (parsed.platformVisitorId ?? parsed.visitorId ?? 'anonymous');
+    const botType = String((bot as { type?: string }).type ?? '');
+    const resolvedPlatformVisitorId = resolveRuntimeEmbedPlatformVisitorIdForChat({
+      creatorType,
+      platformVisitorId: parsed.platformVisitorId,
+    });
 
     if (creatorType === 'visitor' && !resolvedPlatformVisitorId) {
       throw new HttpException(
         { error: 'platformVisitorId is required for trial bots', errorCode: 'VISITOR_ID_REQUIRED' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const embedIdentityErr = getEmbedRuntimePlatformIdentityViolation({
+      botType,
+      creatorType,
+      resolvedPlatformVisitorId,
+    });
+    if (!embedIdentityErr.ok) {
+      throw new HttpException(
+        { error: embedIdentityErr.message, errorCode: embedIdentityErr.errorCode },
         HttpStatus.BAD_REQUEST,
       );
     }
@@ -475,7 +510,7 @@ export class ChatController {
 
     // Resolve chat visitor id (chat history + conversation/message association).
     // Critical boundary: chatVisitorId must NEVER be derived from platformVisitorId.
-    const resolvedChatVisitorId = parsed.chatVisitorId ?? parsed.visitorId;
+    const resolvedChatVisitorId = resolveEmbedChatVisitorIdFromBody(parsed.chatVisitorId, parsed.visitorId);
     if (!resolvedChatVisitorId) {
       throw new HttpException(
         { error: 'chatVisitorId is required', errorCode: 'CHAT_VISITOR_ID_REQUIRED' },
@@ -491,15 +526,27 @@ export class ChatController {
     const creatorType = bot.creatorType === 'visitor' ? 'visitor' : 'user';
     const botType = String((bot as { type?: string }).type ?? '');
 
-    // Resolve platform visitor id (trial owner + platform quota/analytics).
-    const resolvedPlatformVisitorId =
-      creatorType === 'visitor'
-        ? (parsed.platformVisitorId ?? parsed.visitorId ?? '')
-        : (parsed.platformVisitorId ?? parsed.visitorId ?? 'anonymous');
+    /** Platform identity: explicit `platformVisitorId` only (legacy `visitorId` is chat-only on this route). */
+    const resolvedPlatformVisitorId = resolveRuntimeEmbedPlatformVisitorIdForChat({
+      creatorType,
+      platformVisitorId: parsed.platformVisitorId,
+    });
 
     if (creatorType === 'visitor' && !resolvedPlatformVisitorId) {
       throw new HttpException(
         { error: 'platformVisitorId is required for trial bots', errorCode: 'VISITOR_ID_REQUIRED' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const embedIdentityErr = getEmbedRuntimePlatformIdentityViolation({
+      botType,
+      creatorType,
+      resolvedPlatformVisitorId,
+    });
+    if (!embedIdentityErr.ok) {
+      throw new HttpException(
+        { error: embedIdentityErr.message, errorCode: embedIdentityErr.errorCode },
         HttpStatus.BAD_REQUEST,
       );
     }
@@ -535,7 +582,7 @@ export class ChatController {
     }
 
     const pvPolicy = String(resolvedPlatformVisitorId ?? '').trim();
-    if (pvPolicy && pvPolicy !== 'anonymous') {
+    if (pvPolicy && pvPolicy !== PLATFORM_VISITOR_EMBED_ANONYMOUS_SENTINEL) {
       await this.visitorsService.getOrCreateVisitor(pvPolicy);
       const originHeader = resolveRuntimeEmbedOriginFromHeaders(req.headers);
       /** Per-visitor website URL allowlist applies to authenticated users' bots only, not trial bots. */
@@ -627,7 +674,8 @@ export class ChatController {
     };
 
     const pvForEmbed =
-      String(resolvedPlatformVisitorId ?? '').trim() && String(resolvedPlatformVisitorId ?? '').trim() !== 'anonymous'
+      String(resolvedPlatformVisitorId ?? '').trim() &&
+      String(resolvedPlatformVisitorId ?? '').trim() !== PLATFORM_VISITOR_EMBED_ANONYMOUS_SENTINEL
         ? String(resolvedPlatformVisitorId ?? '').trim()
         : undefined;
 

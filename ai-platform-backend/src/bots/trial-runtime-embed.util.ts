@@ -1,5 +1,6 @@
 /**
- * Runtime embed: trial bots must send {@link resolvedPlatformVisitorId} equal to {@link Bot.ownerVisitorId}.
+ * Trial runtime embed: **identity / ownership** — `resolvedPlatformVisitorId` must match the bot’s
+ * `ownerVisitorId`. Origin/domain allowlists are enforced separately; a matching domain never replaces id proof.
  */
 export function trialRuntimePlatformVisitorMatchesOwner(params: {
   ownerVisitorId: unknown;
