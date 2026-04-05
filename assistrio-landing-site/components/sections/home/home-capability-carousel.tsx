@@ -247,13 +247,8 @@ export function HomeCapabilityCarousel() {
       id="capabilities"
       fillViewport
       spacing="loose"
-      className="relative border-b border-[var(--border-default)] bg-[var(--background)]"
+      className="border-b border-[var(--border-default)] bg-[var(--background)]"
     >
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-52 bg-[radial-gradient(ellipse_88%_100%_at_50%_0%,rgba(13,148,136,0.065),transparent_74%)]" aria-hidden />
-      <div
-        className="pointer-events-none absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-[var(--background)] via-transparent to-transparent"
-        aria-hidden
-      />
       <Container className="relative">
         <HomeSectionHeader
           id="capabilities-heading"

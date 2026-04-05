@@ -778,11 +778,7 @@ function AgentsHero({
       className="relative mb-4 shrink-0 rounded-lg border border-teal-200/50 bg-gradient-to-br from-white via-teal-50/40 to-slate-50/80 p-3 shadow-sm ring-1 ring-teal-100/30 dark:border-slate-800 dark:from-slate-950 dark:via-slate-900/80 dark:to-slate-950 dark:ring-slate-800/60 sm:p-3.5"
       aria-labelledby="agents-hero-heading"
     >
-      {/* Blur lives in its own overflow clip so the section is not `overflow:hidden` (that + flex parent would shrink this block to ~one row). */}
-      <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-[inherit]" aria-hidden>
-        <div className="absolute -right-8 -top-8 h-28 w-28 rounded-full bg-brand-400/10 blur-2xl dark:bg-brand-500/10" />
-      </div>
-      <div className="relative flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+      <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
         <div className="min-w-0 flex flex-col gap-1.5">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className="inline-flex items-center gap-1 rounded-full border border-teal-300/90 bg-white/90 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-teal-900 ring-1 ring-teal-700/10 dark:border-teal-500/35 dark:bg-slate-900/90 dark:text-teal-100 dark:ring-teal-400/15">

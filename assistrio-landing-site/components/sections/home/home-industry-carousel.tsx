@@ -155,13 +155,8 @@ export function HomeIndustryCarousel() {
       id="industries"
       fillViewport
       spacing="loose"
-      className="relative border-b border-[var(--border-default)] bg-[var(--background)]"
+      className="border-b border-[var(--border-default)] bg-[var(--background)]"
     >
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-36 bg-[radial-gradient(ellipse_72%_100%_at_50%_0%,rgba(13,148,136,0.065),transparent_74%)]" aria-hidden />
-      <div
-        className="pointer-events-none absolute inset-x-0 -top-14 h-32 bg-[radial-gradient(ellipse_85%_100%_at_50%_100%,rgba(148,163,184,0.12),transparent_68%)] blur-2xl"
-        aria-hidden
-      />
       <Container className="relative">
         <HomeSectionHeader
           id="industries-heading"

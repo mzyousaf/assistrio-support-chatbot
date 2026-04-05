@@ -3,6 +3,7 @@
 import { Children, type ReactNode, useCallback, useId, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { Section } from "@/components/layout/section";
+import { HomeSectionGlowBackdrop } from "@/components/sections/home/home-section-glow-backdrop";
 import { useCarouselAutoplay } from "@/hooks/useCarouselAutoplay";
 import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
 
@@ -64,13 +65,16 @@ export function HomePrimarySectionsTabs({ children, tabLabels }: Props) {
     <Section
       id="home-primary-sections"
       spacing="loose"
-      className="border-b border-[var(--border-default)] bg-[var(--background)]"
+      className="relative overflow-hidden border-b border-[var(--border-default)]"
     >
-      <p className="sr-only" aria-live="polite">
-        {tabLabels[safeIndex]}
-      </p>
+      <HomeSectionGlowBackdrop />
 
-      <div
+      <div className="relative z-10">
+        <p className="sr-only" aria-live="polite">
+          {tabLabels[safeIndex]}
+        </p>
+
+        <div
           id={panelId}
           role="tabpanel"
           aria-labelledby={`primary-tab-${baseId}-${safeIndex}`}
@@ -158,6 +162,7 @@ export function HomePrimarySectionsTabs({ children, tabLabels }: Props) {
             );
           })}
         </div>
+      </div>
     </Section>
   );
 }

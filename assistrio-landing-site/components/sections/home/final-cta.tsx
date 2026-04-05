@@ -1,5 +1,6 @@
 import { Container } from "@/components/layout/container";
 import { Section } from "@/components/layout/section";
+import { HomeSectionGlowBackdrop } from "@/components/sections/home/home-section-glow-backdrop";
 import { FinalCtaRow } from "@/components/sections/home/final-cta-ctas";
 import { ScrollReveal } from "@/components/motion/scroll-reveal";
 
@@ -9,18 +10,11 @@ export function FinalCta() {
       id="cta"
       fillViewport
       spacing="loose"
-      className="relative overflow-hidden border-t border-[var(--border-default)] bg-gradient-to-b from-[var(--brand-teal-subtle)]/25 via-white to-[var(--background)]"
+      className="relative overflow-hidden border-t border-[var(--border-default)]"
     >
-      <div
-        className="pointer-events-none absolute inset-x-0 -top-32 h-64 bg-[radial-gradient(ellipse_72%_88%_at_50%_0%,rgba(13,148,136,0.11),transparent_70%)]"
-        aria-hidden
-      />
-      <div
-        className="pointer-events-none absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-[var(--background)]/80 to-transparent"
-        aria-hidden
-      />
+      <HomeSectionGlowBackdrop />
 
-      <Container className="relative">
+      <Container className="relative z-10">
         <ScrollReveal y={18}>
           <div className="mx-auto max-w-5xl">
             <div className="relative overflow-hidden rounded-[1.85rem] border border-[var(--border-teal-soft)]/90 bg-white/90 px-5 py-12 shadow-[0_40px_100px_-36px_rgba(13,148,136,0.22),var(--shadow-premium)] ring-1 ring-[color-mix(in_srgb,var(--brand-teal)_12%,transparent)] backdrop-blur-md sm:px-10 sm:py-14 lg:px-12 lg:py-16">

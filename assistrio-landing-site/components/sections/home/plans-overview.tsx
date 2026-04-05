@@ -1,5 +1,6 @@
 import { Container } from "@/components/layout/container";
 import { Section } from "@/components/layout/section";
+import { HomeSectionGlowBackdrop } from "@/components/sections/home/home-section-glow-backdrop";
 import { HomeSectionHeader } from "@/components/sections/home/home-section-header";
 import { PlansPricingGrid } from "@/components/sections/home/plans-pricing-grid";
 import { ScrollReveal } from "@/components/motion/scroll-reveal";
@@ -10,13 +11,10 @@ export function PlansOverview() {
     <Section
       id="pricing"
       spacing="snug"
-      className="relative border-b border-[var(--border-default)] bg-[var(--background)]"
+      className="relative overflow-hidden border-b border-[var(--border-default)]"
     >
-      <div
-        className="pointer-events-none absolute inset-x-0 top-0 h-36 bg-[radial-gradient(ellipse_72%_100%_at_50%_0%,rgba(13,148,136,0.055),transparent_72%)]"
-        aria-hidden
-      />
-      <Container className="relative">
+      <HomeSectionGlowBackdrop />
+      <Container className="relative z-10">
         <ScrollReveal y={18}>
           <HomeSectionHeader
             id="pricing-heading"
