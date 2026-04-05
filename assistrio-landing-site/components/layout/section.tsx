@@ -1,9 +1,14 @@
 import type { ReactNode } from "react";
 
 const spacingClass = {
-  default: "py-16 sm:py-24",
+  /** Default homepage rhythm — slightly roomier than compact marketing pages */
+  default: "py-20 sm:py-28",
   compact: "py-12 sm:py-16",
-  loose: "py-20 sm:py-28",
+  loose: "py-24 sm:py-36",
+  /** Tighter band for dense editorial blocks (e.g. pricing prelude) */
+  snug: "py-14 sm:py-20",
+  /** Vertical padding supplied entirely via `className` (e.g. hero) */
+  none: "",
 } as const;
 
 const toneClass = {
@@ -22,6 +27,8 @@ type Props = {
   spacing?: SectionSpacing;
   /** Subtle background treatments — compose with `className` for one-off hero gradients */
   tone?: SectionTone;
+  /** Section is at least one viewport tall (content can grow beyond). */
+  fillViewport?: boolean;
 };
 
 export function Section({
@@ -30,11 +37,17 @@ export function Section({
   className = "",
   spacing = "default",
   tone = "default",
+  fillViewport = false,
 }: Props) {
-  /** Clears sticky site header + homepage subnav when present */
-  const anchorOffset = id ? "scroll-mt-32" : "";
+  /** Clears sticky site header when jumping to in-page anchors */
+  const anchorOffset = id ? "scroll-mt-24 sm:scroll-mt-28" : "";
+  /** Full viewport bands with content vertically centered when shorter than the viewport */
+  const fillClass = fillViewport ? "min-h-[100svh] flex flex-col justify-center" : "";
   return (
-    <section id={id} className={`${anchorOffset} ${spacingClass[spacing]} ${toneClass[tone]} ${className}`}>
+    <section
+      id={id}
+      className={`${anchorOffset} ${spacingClass[spacing]} ${toneClass[tone]} ${fillClass} ${className}`.trim()}
+    >
       {children}
     </section>
   );

@@ -10,11 +10,11 @@ const pillars = [
   },
   {
     title: "Try before you commit",
-    body: "Showcase demos use real runtime flows. Your trial bot runs on domains you allowlist — not a generic mock.",
+    body: "Gallery live examples use real runtime flows. Your Explore bot runs only on your allowed websites — not a generic mock.",
   },
   {
     title: "Clear separation of concerns",
-    body: "Preview inside Assistrio is for owners testing changes. Customer-facing runtime is always on your allowed domain with its own rules.",
+    body: "Preview inside Assistrio is for owners testing changes. Customer-facing runtime is always on your allowed website with its own rules.",
   },
 ];
 

@@ -102,7 +102,7 @@ export function ShowcaseWebsiteRegistration({ botId, accessKey }: Props) {
         <p className="mt-2 text-sm leading-relaxed text-emerald-950/90">
           The backend stored this <strong className="font-medium text-emerald-950">hostname + your stable id</strong> so
           embed init can match your page&apos;s hostname to the allowlist. This does{" "}
-          <strong className="font-medium">not</strong> verify DNS or prove you own the domain — it only records intent
+          <strong className="font-medium">not</strong> verify DNS or prove you own the website — it only records intent
           for authorization.
         </p>
         {registeredHostname ? (

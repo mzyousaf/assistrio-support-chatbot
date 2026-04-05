@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useReducedMotion } from "framer-motion";
 import {
   fetchPvVisitorBotBasicInsights,
   fetchPvVisitorBotLeadsSummary,
@@ -120,7 +121,34 @@ function RefreshIcon({ className }: { className?: string }) {
  * Limited, PV-safe snapshot for an owned trial bot — only
  * `POST /api/public/visitor-bot/summary`, `basic-insights`, `leads-summary`.
  */
+function PvTrialBotSummarySkeleton() {
+  return (
+    <Card className="border-[var(--border-default)] bg-white p-5 sm:p-6">
+      <div className="flex items-center justify-between gap-3">
+        <div className="h-5 w-40 rounded assistrio-skeleton" />
+        <div className="h-9 w-28 rounded-[var(--radius-md)] assistrio-skeleton" />
+      </div>
+      <div className="mt-6 space-y-4">
+        <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] p-4">
+          <div className="h-4 w-32 rounded assistrio-skeleton" />
+          <div className="mt-3 h-3 w-full max-w-md rounded assistrio-skeleton opacity-90" />
+          <div className="mt-2 h-3 w-[80%] rounded assistrio-skeleton opacity-80" />
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            <div className="h-14 rounded-[var(--radius-md)] assistrio-skeleton" />
+            <div className="h-14 rounded-[var(--radius-md)] assistrio-skeleton opacity-95" />
+          </div>
+        </div>
+        <div className="h-36 rounded-[var(--radius-lg)] assistrio-skeleton opacity-90" />
+      </div>
+      <p className="sr-only" role="status">
+        Loading bot summary and usage numbers.
+      </p>
+    </Card>
+  );
+}
+
 export function PvTrialBotSummary({ platformVisitorId, botId, showRefresh = true, showHeaderHint = true }: Props) {
+  const reduceMotion = useReducedMotion();
   const [state, setState] = useState<LoadState>({ kind: "loading" });
   const [refreshing, setRefreshing] = useState(false);
   const lastOkRef = useRef<OkState | null>(null);
@@ -206,18 +234,7 @@ export function PvTrialBotSummary({ platformVisitorId, botId, showRefresh = true
   }, [runFetch]);
 
   if (state.kind === "loading") {
-    return (
-      <Card className="border-[var(--border-default)] bg-white p-5 sm:p-6">
-        <div className="flex items-center justify-between gap-3">
-          <div className="h-5 w-40 animate-pulse rounded bg-slate-200" />
-          <div className="h-9 w-28 animate-pulse rounded-[var(--radius-md)] bg-slate-100" />
-        </div>
-        <div className="mt-6 space-y-4">
-          <div className="h-28 animate-pulse rounded-[var(--radius-lg)] bg-slate-100" />
-          <div className="h-36 animate-pulse rounded-[var(--radius-lg)] bg-slate-100" />
-        </div>
-      </Card>
-    );
+    return <PvTrialBotSummarySkeleton />;
   }
 
   if (state.kind === "no_api") {
@@ -269,17 +286,26 @@ export function PvTrialBotSummary({ platformVisitorId, botId, showRefresh = true
             disabled={refreshing}
             onClick={() => void runFetch("refresh")}
             aria-busy={refreshing}
+            aria-label={refreshing ? "Refreshing bot numbers from the server" : "Update bot numbers from the server"}
           >
             <span className="inline-flex items-center gap-2">
-              <RefreshIcon className={refreshing ? "animate-spin text-[var(--brand-teal-dark)]" : "text-slate-600"} />
-              {refreshing ? "Updating…" : "Update numbers"}
+              <RefreshIcon
+                className={
+                  refreshing && !reduceMotion ? "animate-spin text-[var(--brand-teal-dark)]" : "text-slate-600"
+                }
+              />
+              {refreshing ? "Updating numbers…" : "Update numbers"}
             </span>
           </Button>
         </div>
       ) : null}
 
       {refreshError ? (
-        <div className="rounded-[var(--radius-lg)] border border-amber-200/90 bg-amber-50/80 px-4 py-3 text-sm text-amber-950">
+        <div
+          className="rounded-[var(--radius-lg)] border border-amber-200/90 bg-amber-50/80 px-4 py-3 text-sm text-amber-950"
+          role="status"
+          aria-live="polite"
+        >
           <p className="font-medium">Update didn&apos;t finish</p>
           <p className="mt-1 text-xs text-amber-900/90">{refreshError}</p>
           <p className="mt-2 text-xs text-amber-900/85">Showing the last numbers we loaded.</p>
@@ -304,7 +330,7 @@ export function PvTrialBotSummary({ platformVisitorId, botId, showRefresh = true
             <span className="inline-flex rounded-full border border-slate-200 bg-white px-2.5 py-0.5 text-xs font-medium text-slate-700">
               {b.status}
             </span>
-            <span className="text-xs text-[var(--foreground-muted)]">Visitor trial bot</span>
+            <span className="text-xs text-[var(--foreground-muted)]">Explore evaluation bot</span>
           </div>
           <dl className="mt-5 grid gap-4 text-sm sm:grid-cols-2">
             <div className="min-w-0">
@@ -331,8 +357,8 @@ export function PvTrialBotSummary({ platformVisitorId, botId, showRefresh = true
         <Card className="border-[var(--border-default)] bg-white p-5 sm:p-6">
           <SectionTitle kicker="Usage" title="Quotas for this saved id" />
           <p className="mb-5 text-xs leading-relaxed text-[var(--foreground-muted)]">
-            Preview = tests in Assistrio; trial runtime = this bot on your allowlisted site; showcase = shared pool for
-            gallery demos.
+            Preview = tests in Assistrio; Explore runtime = this bot on your allowed website; gallery = shared pool for live
+            examples.
           </p>
           <div className="space-y-5">
             <UsageRow
@@ -341,12 +367,12 @@ export function PvTrialBotSummary({ platformVisitorId, botId, showRefresh = true
               bucket={u.preview}
             />
             <UsageRow
-              title="Trial runtime"
+              title="Explore runtime"
               subtitle="Messages on this bot, tied to your id."
               bucket={u.trialRuntime}
             />
             <UsageRow
-              title="Showcase demos"
+              title="Live examples"
               subtitle="When you try gallery bots as runtime demos."
               bucket={u.showcaseRuntime}
             />

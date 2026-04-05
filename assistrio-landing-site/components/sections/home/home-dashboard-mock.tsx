@@ -39,7 +39,7 @@ export function HomeDashboardMock() {
           ].map((m) => (
             <div
               key={m.label}
-              className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-white p-4 shadow-[var(--shadow-xs)]"
+              className="rounded-[var(--radius-lg)] border border-white/80 bg-white/95 p-4 shadow-[0_8px_24px_-6px_rgba(15,23,42,0.08),0_2px_6px_-2px_rgba(13,148,136,0.06)] ring-1 ring-slate-900/[0.04]"
             >
               <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{m.label}</p>
               <p className="mt-2 font-[family-name:var(--font-display)] text-2xl font-semibold text-slate-900">{m.value}</p>

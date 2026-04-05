@@ -1,5 +1,6 @@
 import { Container } from "@/components/layout/container";
 import { Section } from "@/components/layout/section";
+import { ScrollReveal } from "@/components/motion/scroll-reveal";
 import { Card } from "@/components/ui/card";
 import { HomeSectionHeader } from "@/components/sections/home/home-section-header";
 
@@ -10,7 +11,7 @@ const readiness = [
   },
   {
     title: "Authorization in the API",
-    body: "Allowlists, keys, and visitor identity are enforced server-side. CORS lets browsers read responses; it is not the ownership gate.",
+    body: "Allowed websites, keys, and visitor identity are enforced server-side. CORS lets browsers read responses; it is not the ownership gate.",
   },
   {
     title: "Operable in production",
@@ -25,12 +26,14 @@ export function HomeTrust() {
   return (
     <Section id="trust" tone="muted" className="relative border-b border-[var(--border-default)]">
       <Container>
-        <HomeSectionHeader id="trust-heading" eyebrow="Trust" title="Ready for serious rollouts">
-          <p className="max-w-2xl text-base leading-relaxed">
-            We prioritize clarity: you should understand how preview, runtime, and identity interact before customers hit your widget.
-          </p>
-        </HomeSectionHeader>
-        <div className="mt-12 rounded-[1.35rem] border border-[var(--border-default)] bg-gradient-to-b from-white to-slate-50/80 p-6 shadow-[var(--shadow-sm)] sm:p-8">
+        <ScrollReveal y={20}>
+          <HomeSectionHeader id="trust-heading" eyebrow="Trust" title="Ready for serious rollouts">
+            <p className="max-w-2xl text-base leading-relaxed">
+              We prioritize clarity: you should understand how preview, runtime, and authorization interact before customers hit your widget.
+            </p>
+          </HomeSectionHeader>
+        </ScrollReveal>
+        <div className="mt-12 rounded-[1.35rem] border border-[var(--border-default)] bg-gradient-to-b from-white to-slate-50/80 p-6 shadow-[var(--shadow-md)] ring-1 ring-[var(--brand-teal)]/6 sm:p-8">
           <div className="grid gap-6 md:grid-cols-3 md:gap-8">
             {readiness.map((p, i) => (
               <Card key={p.title} className="relative border-[var(--border-default)] bg-white/90 p-5 pt-8 shadow-none sm:p-6 sm:pt-9">

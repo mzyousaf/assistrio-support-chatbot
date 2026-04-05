@@ -1,20 +1,55 @@
 import { Container } from "@/components/layout/container";
 import { Section } from "@/components/layout/section";
 import { FinalCtaRow } from "@/components/sections/home/final-cta-ctas";
+import { ScrollReveal } from "@/components/motion/scroll-reveal";
 
 export function FinalCta() {
   return (
-    <Section id="cta" className="border-t border-[var(--border-default)] bg-gradient-to-br from-[var(--brand-teal-subtle)]/40 via-white to-[var(--background)] pb-20 pt-16 sm:pb-24 sm:pt-20">
-      <Container size="narrow" className="text-center">
-        <div className="mx-auto max-w-xl rounded-[1.35rem] border border-[var(--border-teal-soft)] bg-white/90 px-6 py-10 shadow-[var(--shadow-md)] ring-1 ring-[var(--brand-teal)]/10 backdrop-blur-sm sm:px-10 sm:py-12">
-          <h2 className="font-[family-name:var(--font-display)] text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
-            Ready to try Assistrio?
-          </h2>
-          <p className="mx-auto mt-3 max-w-md text-base leading-relaxed text-[var(--foreground-muted)]">
-            Start a free trial with your stable id, or open the gallery to see runtime behavior on this site first.
-          </p>
-          <FinalCtaRow />
-        </div>
+    <Section
+      id="cta"
+      fillViewport
+      spacing="loose"
+      className="relative overflow-hidden border-t border-[var(--border-default)] bg-gradient-to-b from-[var(--brand-teal-subtle)]/25 via-white to-[var(--background)]"
+    >
+      <div
+        className="pointer-events-none absolute inset-x-0 -top-32 h-64 bg-[radial-gradient(ellipse_72%_88%_at_50%_0%,rgba(13,148,136,0.11),transparent_70%)]"
+        aria-hidden
+      />
+      <div
+        className="pointer-events-none absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-[var(--background)]/80 to-transparent"
+        aria-hidden
+      />
+
+      <Container className="relative">
+        <ScrollReveal y={18}>
+          <div className="mx-auto max-w-5xl">
+            <div className="relative overflow-hidden rounded-[1.85rem] border border-[var(--border-teal-soft)]/90 bg-white/90 px-5 py-12 shadow-[0_40px_100px_-36px_rgba(13,148,136,0.22),var(--shadow-premium)] ring-1 ring-[color-mix(in_srgb,var(--brand-teal)_12%,transparent)] backdrop-blur-md sm:px-10 sm:py-14 lg:px-12 lg:py-16">
+              <div
+                className="pointer-events-none absolute -right-24 -top-24 h-64 w-64 rounded-full bg-[radial-gradient(circle_at_center,rgba(13,148,136,0.1),transparent_70%)]"
+                aria-hidden
+              />
+              <div
+                className="pointer-events-none absolute -bottom-16 left-1/2 h-48 w-[min(90%,28rem)] -translate-x-1/2 rounded-full bg-[radial-gradient(ellipse_at_center,rgba(13,148,136,0.06),transparent_72%)] blur-2xl"
+                aria-hidden
+              />
+
+              <div className="relative text-center">
+                <p className="text-eyebrow">Your next step</p>
+                <h2
+                  id="final-cta-heading"
+                  className="text-home-h2 text-home-h2-premium mx-auto mt-5 max-w-[min(100%,22rem)] text-balance sm:mt-6 sm:max-w-3xl"
+                >
+                  Put always-on support in front of every customer
+                </h2>
+                <p className="mx-auto mt-5 max-w-2xl text-pretty text-base leading-relaxed text-[var(--foreground-muted)] sm:mt-6 sm:text-[1.0625rem] sm:leading-[1.72]">
+                  Same product — three ways to move forward. Pick the pace that fits how your team evaluates and buys.
+                </p>
+
+                <FinalCtaRow />
+              </div>
+            </div>
+          </div>
+        </ScrollReveal>
       </Container>
     </Section>
   );

@@ -10,9 +10,9 @@ import { tryGetPublicApiBaseUrl } from "@/lib/utils/env";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Showcase demos",
+  title: "Live examples",
   description:
-    "Runtime demos of published showcase bots. Showcase quota is separate from trial runtime; owner preview stays in Assistrio.",
+    "Browse gallery runtime demos of published showcase bots. Showcase quota is separate from Explore runtime on your own bot; owner preview stays in Assistrio.",
 };
 
 export default async function GalleryPage() {
@@ -21,7 +21,7 @@ export default async function GalleryPage() {
     return (
       <Section spacing="compact" className="pb-20 pt-10">
         <Container>
-          <PageIntro eyebrow="Gallery" title="Showcase demos" />
+          <PageIntro eyebrow="Gallery" title="Live examples" />
           <p className="mt-6 rounded-[var(--radius-xl)] border border-amber-200/90 bg-amber-50/90 px-4 py-3 text-sm text-amber-950 shadow-[var(--shadow-xs)]">
             Set <code className="rounded bg-white px-1">NEXT_PUBLIC_ASSISTRIO_API_BASE_URL</code> in{" "}
             <code className="rounded bg-white px-1">.env.local</code> to load bots from the Assistrio API.
@@ -50,21 +50,22 @@ export default async function GalleryPage() {
           aria-hidden
         />
         <Container className="relative">
-          <PageIntro eyebrow="Curated demos" title="Showcase demos" largeTitle className="max-w-3xl">
+          <PageIntro eyebrow="Gallery" title="See live examples" largeTitle className="max-w-3xl">
             <p className="text-page-lead">
-              A browsable library of <strong className="font-medium text-slate-800">published showcase</strong> bots
-              from <code className="rounded bg-slate-100 px-1 text-xs">GET /api/public/bots</code>. Each card opens a
-              detail page with a real <strong className="font-medium text-slate-800">runtime</strong> embed — not owner
-              preview, and not a substitute for your own trial bot.
+              A browsable library of <strong className="font-medium text-slate-800">published showcase</strong> bots from{" "}
+              <code className="rounded bg-slate-100 px-1 text-xs">GET /api/public/bots</code>. Each card opens a detail page
+              with a real <strong className="font-medium text-slate-800">runtime</strong> embed — not owner preview, and not
+              a substitute for <strong className="font-medium text-slate-800">Try it free</strong> with your own
+              evaluation bot.
             </p>
             <p className="text-page-meta">
-              Demo traffic draws from the <strong className="font-medium text-slate-700">showcase runtime</strong> slice
+              Gallery traffic draws from the <strong className="font-medium text-slate-700">showcase runtime</strong> slice
               of your saved <code className="rounded bg-slate-100 px-1 text-xs">platformVisitorId</code> quota (see
               Identity &amp; usage on the homepage). Owner preview stays in Assistrio app UIs.{" "}
               <Link href="/trial" className="link-inline">
-                Start a free trial
+                Try it free
               </Link>{" "}
-              for a separate visitor-owned bot and hostname allowlist.
+              when you want your own bot and your own allowed websites — separate from browsing examples here.
             </p>
           </PageIntro>
         </Container>

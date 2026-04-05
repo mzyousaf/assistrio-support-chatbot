@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 /** Shared outer shell: border, teal ring, shadow, radius — matches marketing homepage system */
 export const productFrameShellClassName =
-  "overflow-hidden rounded-[1.35rem] border border-[var(--border-default)] bg-slate-100/80 shadow-[var(--shadow-sm)] ring-1 ring-[var(--brand-teal)]/10";
+  "overflow-hidden rounded-[1.35rem] border border-[var(--border-default)] bg-slate-100/80 shadow-[0_20px_50px_-18px_rgba(15,23,42,0.1)] ring-1 ring-[var(--brand-teal)]/12";
 
 export type ProductFrameChrome = "app" | "page" | "none";
 
@@ -11,7 +11,7 @@ type ChromeAppProps = { addressBarLabel: string };
 /** Traffic lights + centered address bar (Assistrio app / dashboard) */
 export function ProductChromeApp({ addressBarLabel }: ChromeAppProps) {
   return (
-    <div className="flex items-center gap-2 border-b border-[var(--border-default)] bg-white/95 px-4 py-3">
+    <div className="flex items-center gap-2 border-b border-[var(--border-default)] bg-white/90 px-4 py-3 backdrop-blur-md supports-[backdrop-filter]:bg-white/80">
       <div className="flex gap-1.5" aria-hidden>
         <span className="h-3 w-3 rounded-full bg-red-300/90" />
         <span className="h-3 w-3 rounded-full bg-amber-300/90" />

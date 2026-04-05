@@ -14,7 +14,7 @@ type Props = {
 
 /**
  * Copyable **runtime** embed only — loads CDN CSS/JS and sets `AssistrioChatConfig` with `mode: "runtime"`.
- * Host page must be served on the **allowed domain** you configured; the widget sends `embedOrigin` automatically.
+ * Host page must be served on the **allowed website** you configured; the widget sends `embedOrigin` automatically.
  */
 export function TrialRuntimeSnippet({ trial }: Props) {
   const snippet = useMemo(() => {
@@ -47,12 +47,12 @@ export function TrialRuntimeSnippet({ trial }: Props) {
         <code className="rounded bg-white px-1">platformVisitorId</code> inside{" "}
         <code className="rounded bg-white px-1">AssistrioChatConfig</code>. Your <strong className="font-medium text-slate-800">live site</strong>{" "}
         will use that value for init — it does not read this landing page&apos;s saved id. If you reconnect on the
-        marketing site with a <em>different</em> id, quota/trial UI here may not match the id embedded on your site until
+        marketing site with a <em>different</em> id, quota/Explore UI here may not match the id embedded on your site until
         you align them or update the snippet.
       </div>
       <p className="text-sm leading-relaxed text-[var(--foreground-muted)]">
         Place near the end of <code className="rounded bg-slate-100 px-1 text-xs">&lt;body&gt;</code> on pages served at a
-        URL whose <strong className="font-medium text-slate-800">hostname</strong> matches your trial allowlist (saved as{" "}
+        URL whose <strong className="font-medium text-slate-800">hostname</strong> matches your Explore allowed website (saved hostname:{" "}
         <strong className="font-medium text-slate-800">{trial.allowedDomain}</strong>). The browser sends{" "}
         <code className="rounded bg-slate-100 px-1 text-xs">Origin: &lt;full origin&gt;</code> on init —{" "}
         <strong className="font-medium text-slate-800">scheme, host, and port</strong> must match how users reach the
@@ -65,7 +65,7 @@ export function TrialRuntimeSnippet({ trial }: Props) {
         <ol className="mt-2 list-inside list-decimal space-y-1.5">
           <li>
             Reuse the <strong className="font-medium text-slate-700">same</strong>{" "}
-            <code className="rounded bg-slate-100 px-1">platformVisitorId</code> everywhere you want the same trial
+            <code className="rounded bg-slate-100 px-1">platformVisitorId</code> everywhere you want the same Explore
             ownership and quota (copy from this page or reconnect on another device).
           </li>
           <li>

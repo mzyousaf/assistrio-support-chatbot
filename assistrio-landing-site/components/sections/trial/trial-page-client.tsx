@@ -43,20 +43,23 @@ export function TrialPageClient() {
         className="border-b border-[var(--border-default)] bg-gradient-to-b from-[var(--brand-teal-subtle)]/30 to-transparent pb-10 pt-10 sm:pb-12 sm:pt-12"
       >
         <Container size="narrow">
-          <PageIntro eyebrow="Trial" title="Start your free trial" className="max-w-2xl">
+          <PageIntro eyebrow="Explore" title="Explore Assistrio on your allowed website" className="max-w-2xl">
             <p className="text-page-lead">
-              Create a <strong className="font-medium text-slate-800">visitor-owned trial bot</strong> using your
-              current <strong className="font-medium text-slate-800">stable id</strong> and the hostname where runtime
-              will run. The server checks both. Owner preview lives in Assistrio product UIs; customer-facing chat is{" "}
-              <strong className="font-medium text-slate-800">runtime</strong> on your allowlisted domain only — not
-              preview on this site.
+              <strong className="font-medium text-slate-800">Try it free</strong> creates your evaluation bot using
+              your <strong className="font-medium text-slate-800">workspace key</strong> and the allowed website where runtime
+              may run. The server checks both. Owner preview lives in Assistrio product UIs; visitors only see{" "}
+              <strong className="font-medium text-slate-800">runtime</strong> on that allowed website — not preview on this
+              marketing site. No card required.
             </p>
           </PageIntro>
         </Container>
       </Section>
 
       <Section spacing="compact" className="pb-20 pt-12 sm:pt-14">
-        <Container size="narrow" className={trialCreated ? "" : "space-y-12 sm:space-y-14"}>
+        <Container size="narrow">
+          <div
+            className={`rounded-[1.75rem] border border-[var(--border-default)] bg-white/95 p-5 shadow-[var(--shadow-sm)] ring-1 ring-slate-900/[0.03] sm:p-8 ${trialCreated ? "" : "space-y-12 sm:space-y-14"}`}
+          >
           {!trialCreated ? (
             <>
               {resumeRef ? (
@@ -65,7 +68,7 @@ export function TrialPageClient() {
                   <div className="flex items-center gap-3 py-2">
                     <div className="h-px flex-1 bg-[var(--border-default)]" />
                     <span className="shrink-0 text-center text-[0.7rem] font-medium uppercase tracking-wide text-slate-400">
-                      New trial or different id
+                      New bot or different id
                     </span>
                     <div className="h-px flex-1 bg-[var(--border-default)]" />
                   </div>
@@ -87,15 +90,15 @@ export function TrialPageClient() {
               <TrialFlowStep
                 step="2"
                 title="Usage for this id"
-                description="Preview, trial runtime, and showcase demos use separate quota buckets; all keyed to the id above."
+                description="Preview, Explore runtime on your bot, and gallery live examples use separate quota buckets — all keyed to the id above."
               >
                 <QuotaSummaryCard />
               </TrialFlowStep>
 
               <TrialFlowStep
                 step="3"
-                title="Create your trial bot"
-                description="Declare where runtime may run. After creation you’ll get credentials and an embed snippet — treat them as private access material."
+                title="Create your bot"
+                description="Choose the allowed website where runtime may run. After creation you get credentials and an embed snippet — treat them as private access material."
                 id="create"
               >
                 <TrialForm
@@ -116,6 +119,7 @@ export function TrialPageClient() {
               onTrialHandoffLost={() => setTrialCreated(false)}
             />
           )}
+          </div>
         </Container>
       </Section>
     </>

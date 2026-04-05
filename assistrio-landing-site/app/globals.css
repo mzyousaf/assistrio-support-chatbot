@@ -5,7 +5,7 @@
   --background: #f6f8fb;
   --background-subtle: #eef2f7;
   --foreground: #0f172a;
-  --foreground-muted: #5b6b7f;
+  --foreground-muted: #52606f;
   --foreground-subtle: #8b9aad;
 
   --brand-teal: #0d9488;
@@ -26,6 +26,8 @@
   --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.05), 0 1px 2px rgba(15, 23, 42, 0.03);
   --shadow-md: 0 4px 14px rgba(15, 23, 42, 0.06), 0 2px 4px rgba(15, 23, 42, 0.03);
   --shadow-teal-glow: 0 8px 30px rgba(13, 148, 136, 0.07);
+  --shadow-premium: 0 22px 60px -18px rgba(15, 23, 42, 0.14), 0 8px 20px -10px rgba(13, 148, 136, 0.1);
+  --shadow-card-hover: 0 28px 70px -22px rgba(15, 23, 42, 0.16), 0 12px 28px -14px rgba(13, 148, 136, 0.12);
 
   --radius-sm: 0.5rem;
   --radius-md: 0.75rem;
@@ -51,13 +53,15 @@
 
   body {
     background-color: var(--background);
-    background-image: radial-gradient(
-      ellipse 120% 70% at 50% -15%,
-      rgba(204, 251, 241, 0.55) 0%,
-      transparent 52%
-    );
+    background-image:
+      radial-gradient(ellipse 120% 70% at 50% -18%, rgba(204, 251, 241, 0.5) 0%, transparent 55%),
+      radial-gradient(ellipse 80% 50% at 100% 0%, rgba(13, 148, 136, 0.06) 0%, transparent 45%);
     color: var(--foreground);
     font-family: var(--font-sans), system-ui, sans-serif;
+    font-feature-settings: "kern" 1, "liga" 1;
+    font-size: 1rem;
+    line-height: 1.6;
+    text-rendering: optimizeLegibility;
   }
 
   /* Calm focus for inline links (buttons keep component-level rings) */
@@ -74,38 +78,492 @@
 }
 
 @layer components {
-  /* Page titles — Instrument Serif */
+  /* Page titles — Fraunces display (weights 400–700; semibold is real, not synthetic) */
   .text-page-title {
     font-family: var(--font-display), ui-serif, Georgia, serif;
-    font-weight: 600;
-    letter-spacing: -0.03em;
+    font-weight: 400;
+    letter-spacing: -0.02em;
     color: var(--foreground);
-    font-size: clamp(1.875rem, 4vw, 2.25rem);
-    line-height: 1.15;
+    font-size: clamp(1.875rem, 3.8vw, 2.35rem);
+    line-height: 1.22;
+    font-feature-settings: "kern" 1, "liga" 1;
   }
 
   .text-page-title-lg {
-    font-size: clamp(2.25rem, 4.5vw, 2.75rem);
+    font-size: clamp(2.125rem, 4.2vw, 2.875rem);
+    line-height: 1.18;
+    letter-spacing: -0.022em;
   }
 
   .text-page-lead {
     font-size: 1.125rem;
-    line-height: 1.7;
+    line-height: 1.68;
+    letter-spacing: -0.011em;
     color: var(--foreground-muted);
   }
 
   .text-page-meta {
     font-size: 0.875rem;
-    line-height: 1.65;
+    line-height: 1.68;
+    letter-spacing: -0.008em;
     color: var(--foreground-muted);
   }
 
+  /* Eyebrows — sans for contrast against Fraunces display headings */
   .text-eyebrow {
-    font-size: 0.6875rem;
+    font-family: var(--font-sans), system-ui, sans-serif;
+    font-size: 0.625rem;
     font-weight: 600;
-    letter-spacing: 0.18em;
+    letter-spacing: 0.22em;
     text-transform: uppercase;
     color: var(--brand-teal-dark);
+  }
+
+  /* Section titles — shared marketing (non-home); homepage majors use .text-home-h2 */
+  .text-section-title {
+    font-family: var(--font-display), ui-serif, Georgia, serif;
+    font-weight: 400;
+    letter-spacing: -0.02em;
+    color: var(--foreground);
+    font-size: clamp(1.75rem, 3.1vw, 2.5rem);
+    line-height: 1.18;
+    font-feature-settings: "kern" 1, "liga" 1;
+  }
+
+  /** Larger interior sections / closing CTAs — still below .text-home-h2 */
+  .text-section-title-lg {
+    font-size: clamp(1.9rem, 3.5vw, 2.75rem);
+    line-height: 1.14;
+    letter-spacing: -0.021em;
+  }
+
+  /**
+   * Homepage type system — four levels only (semantic: hero H1, section H2, feature H3, step/label H4).
+   * H1 — hero headline only
+   */
+  .text-hero-display {
+    font-family: var(--font-display), ui-serif, Georgia, serif;
+    font-weight: 400;
+    letter-spacing: -0.028em;
+    color: var(--foreground);
+    font-size: clamp(2.25rem, 4.25vw + 0.5rem, 3.65rem);
+    line-height: 1.08;
+    font-feature-settings: "kern" 1, "liga" 1;
+    text-shadow: 0 2px 48px rgba(15, 23, 42, 0.04);
+  }
+
+  /** Hero subhead — premium body under H1 */
+  .text-hero-subhead {
+    font-size: clamp(1.0625rem, 1.35vw + 0.65rem, 1.1875rem);
+    line-height: 1.62;
+    letter-spacing: -0.012em;
+    color: var(--foreground-muted);
+    font-weight: 500;
+  }
+
+  /** H2 — major homepage sections (below hero, editorial serif) */
+  .text-home-h2 {
+    font-family: var(--font-display), ui-serif, Georgia, serif;
+    font-weight: 400;
+    letter-spacing: -0.024em;
+    color: var(--foreground);
+    font-size: clamp(2rem, 4vw, 3rem);
+    line-height: 1.16;
+    font-feature-settings: "kern" 1, "liga" 1;
+  }
+
+  /** Stronger H2 — carousels, flagship bands (still below hero H1) */
+  .text-home-h2-premium {
+    font-size: clamp(2.35rem, 4.6vw, 3.45rem);
+    line-height: 1.08;
+    letter-spacing: -0.028em;
+  }
+
+  /** Carousel slide titles — sans, premium weight */
+  .text-carousel-slide-title {
+    font-family: var(--font-sans), system-ui, sans-serif;
+    font-weight: 600;
+    font-size: clamp(1.3125rem, 2.35vw, 1.625rem);
+    letter-spacing: -0.028em;
+    line-height: 1.28;
+    color: var(--foreground);
+  }
+
+  /** Carousel slide subtitle */
+  .text-carousel-slide-sub {
+    font-size: 1.0625rem;
+    line-height: 1.68;
+    color: color-mix(in srgb, var(--foreground-muted) 92%, var(--foreground) 8%);
+  }
+
+  /** H3 — pillar titles, card titles, industry names */
+  .text-home-h3 {
+    font-family: var(--font-sans), system-ui, sans-serif;
+    font-weight: 600;
+    font-size: 1.125rem;
+    letter-spacing: -0.022em;
+    line-height: 1.35;
+    color: var(--foreground);
+  }
+
+  /** H4 — step titles, pricing group labels, dense subsection labels */
+  .text-home-h4 {
+    font-family: var(--font-sans), system-ui, sans-serif;
+    font-weight: 600;
+    font-size: 1rem;
+    letter-spacing: -0.02em;
+    line-height: 1.4;
+    color: var(--foreground);
+  }
+
+  /** Step / pillar / category titles — sans, authoritative (alias of H3 scale) */
+  .text-block-title {
+    font-family: var(--font-sans), system-ui, sans-serif;
+    font-weight: 600;
+    font-size: 1.0625rem;
+    letter-spacing: -0.02em;
+    line-height: 1.3;
+    color: var(--foreground);
+  }
+
+  /** Pricing tier names */
+  .text-plan-name {
+    font-family: var(--font-display), ui-serif, Georgia, serif;
+    font-weight: 400;
+    font-size: clamp(1.3125rem, 2vw, 1.5625rem);
+    letter-spacing: -0.018em;
+    line-height: 1.2;
+    color: var(--foreground);
+  }
+
+  /** Card price emphasis */
+  .text-plan-price {
+    font-family: var(--font-display), ui-serif, Georgia, serif;
+    font-weight: 400;
+    font-size: clamp(1.15rem, 2.1vw, 1.45rem);
+    letter-spacing: -0.02em;
+    line-height: 1.25;
+    color: var(--foreground);
+  }
+
+  /** Launch (featured) tier — stronger commercial hierarchy on homepage / pricing */
+  .text-plan-price-featured {
+    font-family: var(--font-display), ui-serif, Georgia, serif;
+    font-weight: 400;
+    font-size: clamp(1.35rem, 2.4vw, 1.85rem);
+    letter-spacing: -0.024em;
+    line-height: 1.2;
+    color: var(--foreground);
+  }
+
+  .text-plan-price-note {
+    font-family: var(--font-sans), system-ui, sans-serif;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    line-height: 1.45;
+    color: var(--foreground-muted);
+  }
+
+  .text-card-label {
+    font-family: var(--font-sans), system-ui, sans-serif;
+    font-size: 0.625rem;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--foreground-subtle);
+  }
+
+  .text-card-label-accent {
+    font-family: var(--font-sans), system-ui, sans-serif;
+    font-size: 0.625rem;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--brand-teal-dark);
+  }
+
+  .text-body-relaxed {
+    font-size: 1.0625rem;
+    line-height: 1.75;
+    color: var(--foreground-muted);
+  }
+
+  /** Fine print under heroes / cards */
+  .text-meta {
+    font-size: 0.8125rem;
+    line-height: 1.7;
+    letter-spacing: -0.006em;
+    color: var(--foreground-subtle);
+  }
+
+  /** Editorial pull stat — honest labels only (no fake metrics) */
+  .text-pull-label {
+    font-family: var(--font-sans), system-ui, sans-serif;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--foreground-subtle);
+  }
+
+  .text-pull-value {
+    font-family: var(--font-display), ui-serif, Georgia, serif;
+    font-weight: 400;
+    font-size: clamp(1.75rem, 3vw, 2.25rem);
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+    color: var(--foreground);
+  }
+
+  /* Primary CTA — subtle shimmer (decorative; motion-reduced users see static gradient) */
+  .btn-primary-shimmer {
+    position: relative;
+    overflow: hidden;
+    box-shadow: var(--shadow-sm), 0 0 0 1px color-mix(in srgb, var(--brand-teal) 18%, transparent);
+    transition:
+      box-shadow 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+      transform 0.2s cubic-bezier(0.22, 1, 0.36, 1),
+      filter 0.2s ease,
+      background-color 0.2s ease;
+  }
+
+  .btn-primary-shimmer:hover:not(:disabled) {
+    box-shadow:
+      0 14px 44px -12px rgba(13, 148, 136, 0.4),
+      0 0 0 1px color-mix(in srgb, var(--brand-teal) 26%, transparent);
+    filter: brightness(1.03);
+  }
+
+  .btn-primary-shimmer:active:not(:disabled) {
+    box-shadow: var(--shadow-xs), 0 0 0 1px color-mix(in srgb, var(--brand-teal) 20%, transparent);
+    filter: brightness(0.98);
+  }
+
+  .btn-primary-shimmer::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      105deg,
+      transparent 38%,
+      rgba(255, 255, 255, 0.22) 48%,
+      transparent 58%
+    );
+    transform: translateX(-120%);
+    animation: assistrio-shimmer 2.8s ease-in-out infinite;
+    pointer-events: none;
+  }
+
+  .hero-gradient-blob {
+    background: radial-gradient(closest-side, rgba(204, 251, 241, 0.75) 0%, rgba(13, 148, 136, 0.12) 52%, transparent 72%);
+    animation: assistrio-blob-a 18s ease-in-out infinite alternate;
+  }
+
+  .hero-gradient-blob-alt {
+    background: radial-gradient(closest-side, rgba(125, 211, 252, 0.2) 0%, rgba(13, 148, 136, 0.08) 48%, transparent 70%);
+    animation: assistrio-blob-b 22s ease-in-out infinite alternate;
+  }
+
+  @keyframes assistrio-shimmer {
+    0% {
+      transform: translateX(-120%);
+    }
+    60%,
+    100% {
+      transform: translateX(120%);
+    }
+  }
+
+  @keyframes assistrio-blob-a {
+    0% {
+      transform: translate(0, 0) scale(1);
+    }
+    100% {
+      transform: translate(4%, 6%) scale(1.05);
+    }
+  }
+
+  @keyframes assistrio-blob-b {
+    0% {
+      transform: translate(0, 0) scale(1);
+    }
+    100% {
+      transform: translate(-5%, -4%) scale(1.06);
+    }
+  }
+
+  @keyframes assistrio-typing-pulse {
+    0%,
+    100% {
+      opacity: 0.35;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+
+  .typing-dots span {
+    animation: assistrio-typing-pulse 1.1s ease-in-out infinite;
+  }
+
+  .typing-dots span:nth-child(2) {
+    animation-delay: 0.15s;
+  }
+
+  .typing-dots span:nth-child(3) {
+    animation-delay: 0.3s;
+  }
+
+  @keyframes assistrio-launcher-pulse {
+    0%,
+    100% {
+      box-shadow: 0 12px 32px rgba(13, 148, 136, 0.45);
+    }
+    50% {
+      box-shadow: 0 14px 40px rgba(13, 148, 136, 0.6);
+    }
+  }
+
+  .launcher-pulse {
+    animation: assistrio-launcher-pulse 2.6s ease-in-out infinite;
+  }
+
+  /* Indeterminate / skeleton shimmer — loading surfaces */
+  @keyframes assistrio-shimmer-sweep {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(100%);
+    }
+  }
+
+  .assistrio-skeleton {
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--surface-muted) 92%, var(--foreground) 8%) 0%,
+      color-mix(in srgb, var(--surface-muted) 78%, white 22%) 50%,
+      color-mix(in srgb, var(--surface-muted) 92%, var(--foreground) 8%) 100%
+    );
+    background-size: 200% 100%;
+    animation: assistrio-skeleton-bg 1.4s ease-in-out infinite;
+  }
+
+  @keyframes assistrio-skeleton-bg {
+    0% {
+      background-position: 100% 0;
+    }
+    100% {
+      background-position: -100% 0;
+    }
+  }
+
+  .assistrio-shimmer-line {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .assistrio-shimmer-line::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      color-mix(in srgb, white 55%, transparent),
+      transparent
+    );
+    animation: assistrio-shimmer-sweep 1.35s ease-in-out infinite;
+  }
+
+  /* Flow modal primary CTA — subtle idle pulse (use only on primary flow actions) */
+  @keyframes assistrio-flow-cta-pulse {
+    0%,
+    100% {
+      box-shadow: var(--shadow-sm), 0 0 0 0 color-mix(in srgb, var(--brand-teal) 28%, transparent);
+    }
+    50% {
+      box-shadow: var(--shadow-md), 0 0 0 6px color-mix(in srgb, var(--brand-teal) 0%, transparent);
+    }
+  }
+
+  .flow-primary-cta {
+    transition:
+      box-shadow 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+      transform 0.2s cubic-bezier(0.22, 1, 0.36, 1),
+      background-color 0.2s ease;
+    box-shadow: var(--shadow-sm), 0 0 0 1px color-mix(in srgb, var(--brand-teal) 14%, transparent);
+  }
+
+  .flow-primary-cta:hover:not(:disabled) {
+    box-shadow: var(--shadow-teal-glow), 0 0 0 1px color-mix(in srgb, var(--brand-teal) 22%, transparent);
+  }
+
+  .flow-primary-cta-pulse:not(:disabled) {
+    animation: assistrio-flow-cta-pulse 2.8s ease-in-out infinite;
+  }
+
+  /* Success hero — soft radial glow */
+  @keyframes assistrio-success-glow {
+    0%,
+    100% {
+      opacity: 0.55;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.85;
+      transform: scale(1.03);
+    }
+  }
+
+  .success-hero-glow {
+    pointer-events: none;
+    position: absolute;
+    inset: -40% -20% auto;
+    height: 120%;
+    background: radial-gradient(
+      ellipse 70% 55% at 50% 0%,
+      color-mix(in srgb, var(--brand-teal) 22%, transparent) 0%,
+      transparent 68%
+    );
+    animation: assistrio-success-glow 3.2s ease-in-out infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .btn-primary-shimmer:hover:not(:disabled),
+    .btn-primary-shimmer:active:not(:disabled) {
+      filter: none;
+    }
+
+    .btn-primary-shimmer::after {
+      animation: none;
+      opacity: 0;
+    }
+    .typing-dots span,
+    .launcher-pulse {
+      animation: none;
+    }
+    .hero-gradient-blob,
+    .hero-gradient-blob-alt {
+      animation: none;
+    }
+    .assistrio-skeleton {
+      animation: none;
+      background: var(--surface-muted);
+    }
+    .assistrio-shimmer-line::after {
+      animation: none;
+      opacity: 0;
+    }
+    .flow-primary-cta-pulse:not(:disabled) {
+      animation: none;
+    }
+    .success-hero-glow {
+      animation: none;
+      opacity: 0.5;
+    }
   }
 
   /* Primary inline link — use for marketing body links */

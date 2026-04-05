@@ -4,14 +4,16 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
-    "build": "next build --turbopack",
+    "build": "next build",
     "start": "next start",
     "lint": "eslint"
   },
   "dependencies": {
+    "framer-motion": "^11.18.2",
     "next": "15.5.12",
     "react": "19.1.0",
     "react-dom": "19.1.0",
+    "resend": "^6.10.0",
     "server-only": "^0.0.1"
   },
   "devDependencies": {

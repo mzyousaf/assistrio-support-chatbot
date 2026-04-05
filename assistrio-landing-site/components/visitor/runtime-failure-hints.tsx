@@ -21,8 +21,8 @@ export function RuntimeFailureHints({ variant = "compact" }: Props) {
             the API → add this page&apos;s origin to <code className="rounded bg-white px-1">CORS_EXTRA_ORIGINS</code>.
           </li>
           <li>
-            <strong className="text-slate-700">Domain / allowlist:</strong> Init returns <strong>403</strong> with{" "}
-            <code className="rounded bg-white px-1">errorCode</code> → fix allowedDomains / registered URL / trial hostname
+            <strong className="text-slate-700">Allowed websites:</strong> Init returns <strong>403</strong> with{" "}
+            <code className="rounded bg-white px-1">errorCode</code> → fix allowedDomains / registered URL / trial allowed website
             (see widget error text and <code className="rounded bg-white px-1">deploymentHint</code>).
           </li>
           <li>

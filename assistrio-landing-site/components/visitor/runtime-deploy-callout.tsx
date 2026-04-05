@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Launch aid: CORS vs embed-domain distinction for customer-site runtime (no redesign — informational only).
+ * Launch aid: CORS vs embed allowed-website rules for customer-site runtime (informational).
  * @see docs/RUNTIME_DEPLOYMENT.md
  */
 export function RuntimeDeployCallout({ context }: { context: "trial-snippet" | "showcase" }) {
@@ -16,10 +16,10 @@ export function RuntimeDeployCallout({ context }: { context: "trial-snippet" | "
           <strong className="text-slate-700">exact page origin</strong> (scheme + host + port) in{" "}
           <code className="rounded bg-white px-1 text-[11px]">CORS_EXTRA_ORIGINS</code>. Marketing on{" "}
           <code className="rounded bg-white px-1 text-[11px]">*.assistrio.com</code> is covered by default; arbitrary
-          customer domains are not.
+          customer websites are not covered automatically.
         </li>
         <li>
-          <strong className="text-slate-700">Embed rules:</strong> The bot must allow this hostname (trial{" "}
+          <strong className="text-slate-700">Embed rules:</strong> This page must be an allowed website for the bot (Explore{" "}
           <code className="rounded bg-white px-1 text-[11px]">allowedDomain</code>
           {context === "showcase"
             ? ", showcase allowedDomains, or register-website for your stable id"

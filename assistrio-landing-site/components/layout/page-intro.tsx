@@ -18,7 +18,9 @@ export function PageIntro({ title, eyebrow, children, className = "max-w-3xl", l
   return (
     <header className={className}>
       {eyebrow ? <p className="text-eyebrow">{eyebrow}</p> : null}
-      <h1 className={`text-page-title ${largeTitle ? "text-page-title-lg" : ""} ${eyebrow ? "mt-3" : ""}`}>
+      <h1
+        className={`text-page-title text-balance ${largeTitle ? "text-page-title-lg" : ""} ${eyebrow ? "mt-3" : ""}`}
+      >
         {title}
       </h1>
       {children ? <div className="mt-4 space-y-4">{children}</div> : null}

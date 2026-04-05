@@ -25,7 +25,7 @@ export function PvTrialResumeSection({ refData, onForget }: Props) {
       <div className="p-6 sm:p-7">
         <p className="text-eyebrow text-[var(--brand-teal-dark)]">Saved on this device</p>
         <h2 className="mt-2 font-[family-name:var(--font-display)] text-xl font-semibold tracking-tight text-slate-900 sm:text-2xl">
-          Your last trial bot
+          Your last Explore bot
         </h2>
         <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--foreground-muted)]">
           We keep a <strong className="font-medium text-slate-800">browser-only</strong> pointer to the bot you created

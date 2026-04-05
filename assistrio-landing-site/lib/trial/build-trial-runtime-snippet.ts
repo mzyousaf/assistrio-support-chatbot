@@ -4,7 +4,7 @@
  *
  * Product context: `docs/PRODUCT_MODEL.md`.
  *
- * - `embedOrigin` is omitted — the widget defaults to `window.location.origin` on the host page (must match allowed domain).
+ * - `embedOrigin` is omitted — the widget defaults to `window.location.origin` on the host page (must match allowed website).
  * - `chatVisitorId` is omitted — created by the widget.
  */
 export function buildTrialRuntimeEmbedSnippet(params: {
