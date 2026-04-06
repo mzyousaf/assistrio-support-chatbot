@@ -4,6 +4,7 @@ import { Model, Types } from 'mongoose';
 import { DocumentModel } from '../models';
 import { KnowledgeBaseItemService } from '../knowledge/knowledge-base-item.service';
 import { KnowledgeBaseChunkService } from '../knowledge/knowledge-base-chunk.service';
+import { getSignedGetUrl } from '../lib/s3';
 
 export interface CreateDocumentDto {
   botId: string;
@@ -99,6 +100,39 @@ export class DocumentsService {
     return this.documentModel
       .findOne({ _id: new Types.ObjectId(docId), botId: new Types.ObjectId(botId) })
       .lean();
+  }
+
+  /**
+   * Public gallery: signed S3 URL or original HTTP URL for a ready, active document owned by the bot.
+   * Returns null when the file is not available (manual text-only, missing keys, etc.).
+   */
+  async resolveFileDownloadUrlForBot(botId: string, documentId: string): Promise<string | null> {
+    if (!Types.ObjectId.isValid(botId) || !Types.ObjectId.isValid(documentId)) return null;
+    const doc = await this.documentModel
+      .findOne({
+        _id: new Types.ObjectId(documentId),
+        botId: new Types.ObjectId(botId),
+        status: 'ready',
+        active: { $ne: false },
+      })
+      .select({ s3Bucket: 1, s3Key: 1, url: 1 })
+      .lean();
+    if (!doc) return null;
+    const row = doc as { s3Bucket?: string; s3Key?: string; url?: string };
+    const bucket = typeof row.s3Bucket === 'string' ? row.s3Bucket.trim() : '';
+    const key = typeof row.s3Key === 'string' ? row.s3Key.trim() : '';
+    if (bucket && key) {
+      try {
+        return await getSignedGetUrl(bucket, key, 900);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error('[documents] signed download URL failed', { botId, documentId, msg });
+        return null;
+      }
+    }
+    const u = typeof row.url === 'string' ? row.url.trim() : '';
+    if (u && /^https?:\/\//i.test(u)) return u;
+    return null;
   }
 
   async getHealthSummary(botId: string) {

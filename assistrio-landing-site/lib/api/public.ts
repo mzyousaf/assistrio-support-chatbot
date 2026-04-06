@@ -4,7 +4,7 @@ import { getPublicApiBaseUrl } from "@/lib/utils/env";
 import type { PublicBotDetail, PublicBotListItem } from "@/types/bot";
 
 /**
- * Server-only: `GET /api/public/bots` — showcase bots for marketing gallery (no API key).
+ * Server-only: `GET /api/public/bots` — public showcase AI Agents for marketing gallery (no API key).
  */
 export async function fetchPublicShowcaseBots(): Promise<PublicBotListItem[]> {
   const base = getPublicApiBaseUrl();
@@ -13,7 +13,7 @@ export async function fetchPublicShowcaseBots(): Promise<PublicBotListItem[]> {
     headers: { Accept: "application/json" },
   });
   if (!res.ok) {
-    throw new Error(`Public bot list failed: ${res.status}`);
+    throw new Error(`Public showcase AI Agent list failed: ${res.status}`);
   }
   return res.json() as Promise<PublicBotListItem[]>;
 }
@@ -30,7 +30,7 @@ export async function fetchPublicBotBySlug(slug: string): Promise<PublicBotDetai
   });
   if (res.status === 404) return null;
   if (!res.ok) {
-    throw new Error(`Public bot detail failed: ${res.status}`);
+    throw new Error(`Public AI Agent detail failed: ${res.status}`);
   }
   return res.json() as Promise<PublicBotDetail>;
 }

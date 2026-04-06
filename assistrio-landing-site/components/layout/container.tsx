@@ -21,7 +21,7 @@ type Props = {
 export function Container({ children, className = "", size = "default" }: Props) {
   return (
     <div
-      className={`mx-auto w-full px-4 sm:px-6 lg:px-8 ${maxWidthClass[size]} ${className}`}
+      className={`mx-auto w-full min-w-0 px-4 sm:px-6 lg:px-8 ${maxWidthClass[size]} ${className}`}
     >
       {children}
     </div>

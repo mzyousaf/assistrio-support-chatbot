@@ -37,7 +37,7 @@ export function HomeTeammates() {
         <ScrollReveal y={20}>
           <HomeSectionHeader id="teammates-heading" eyebrow="Collaboration" title="Bring your teammates in" layout="editorial">
             <p>
-              Collaboration is about <strong className="font-semibold text-slate-800">who touches the system</strong> — not another recap of analytics, hosting, or lead fields.
+              Collaboration is about <strong className="text-emphasis-primary">who touches the system</strong> — not another recap of analytics, hosting, or lead fields.
               Those topics already have owners elsewhere on the page.
             </p>
           </HomeSectionHeader>

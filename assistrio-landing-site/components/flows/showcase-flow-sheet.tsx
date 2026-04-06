@@ -21,7 +21,7 @@ const springSheet = { type: "spring", stiffness: 340, damping: 36, mass: 0.9 } a
 const springContent = { type: "spring", stiffness: 440, damping: 34, mass: 0.72 } as const;
 const springProgress = { type: "spring", stiffness: 260, damping: 28 } as const;
 
-const SHOWCASE_STEP_LABELS = ["Choose a demo bot", "Runtime preview", "Snippets and next steps"] as const;
+const SHOWCASE_STEP_LABELS = ["Choose a demo AI Agent", "Runtime preview", "Snippets and next steps"] as const;
 const SHOWCASE_STEP_SHORT = ["Pick", "Preview", "Next"] as const;
 
 type Props = {
@@ -189,7 +189,7 @@ export function ShowcaseFlowSheet({ open, onClose, initialSlug }: Props) {
             className="relative z-10 flex h-full w-full max-w-md flex-col border-l border-[var(--border-default)] bg-white shadow-[0_24px_70px_-20px_rgba(15,23,42,0.2),0_10px_32px_-14px_rgba(13,148,136,0.12)] sm:max-h-[100dvh]"
           >
             <p id="showcase-flow-description" className="sr-only">
-              Browse curated demo bots, try runtime chat on this site, then open the full bot page for snippets and setup.
+              Browse curated demo AI Agents, try runtime chat on this site, then open the full demo page for snippets and setup.
             </p>
             <div id="showcase-flow-step-live" className="sr-only" aria-live="polite" aria-atomic="true">
               Step {step} of 3: {SHOWCASE_STEP_LABELS[step - 1]}
@@ -289,7 +289,7 @@ export function ShowcaseFlowSheet({ open, onClose, initialSlug }: Props) {
                       tabIndex={-1}
                       className={`text-sm leading-relaxed text-[var(--foreground-muted)] ${focusRing}`}
                     >
-                      Pick a curated bot — you&apos;ll chat with real runtime on this site (showcase quota). Owner preview
+                      Pick a curated AI Agent — you&apos;ll chat with real runtime on this site (showcase quota). Owner preview
                       stays in the Assistrio app.
                     </p>
                     {loading ? (
@@ -313,9 +313,9 @@ export function ShowcaseFlowSheet({ open, onClose, initialSlug }: Props) {
                         {loadError}
                       </p>
                     ) : bots.length === 0 ? (
-                      <p className="mt-4 text-sm text-[var(--foreground-muted)]">No showcase bots available.</p>
+                      <p className="mt-4 text-sm text-[var(--foreground-muted)]">No showcase AI Agents available.</p>
                     ) : (
-                      <ul className="mt-5 space-y-3" aria-label="Showcase demo bots">
+                      <ul className="mt-5 space-y-3" aria-label="Showcase demo AI Agents">
                         {bots.map((b) => (
                           <li key={b.id}>
                             <motion.button
@@ -393,7 +393,7 @@ export function ShowcaseFlowSheet({ open, onClose, initialSlug }: Props) {
                         identityReady={identityReady}
                       />
                     ) : (
-                      <p className="text-sm text-amber-900">This bot is missing runtime credentials in the public list.</p>
+                      <p className="text-sm text-amber-900">This AI Agent is missing runtime credentials in the public list.</p>
                     )}
                   </motion.div>
                 ) : null}
@@ -416,7 +416,7 @@ export function ShowcaseFlowSheet({ open, onClose, initialSlug }: Props) {
                       Snippets & your allowed website
                     </p>
                     <p className="text-sm leading-relaxed text-[var(--foreground-muted)]">
-                      Copy access keys, register your site, and get the full embed story on the bot page — no need to hunt
+                      Copy access keys, register your site, and get the full embed story on the demo page — no need to hunt
                       through the marketing site.
                     </p>
                     <motion.div {...(reduceMotion ? {} : { whileHover: { scale: 1.01 }, whileTap: { scale: 0.99 } })}>

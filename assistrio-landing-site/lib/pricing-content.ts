@@ -1,4 +1,5 @@
 import type { PlanItem } from "@/components/sections/home/plans-pricing-grid";
+import { TRIAL_NO_CREDIT_CARD_NOTE, TRIAL_PRIMARY_CTA_LABEL } from "@/lib/trial-primary-cta-label";
 
 /** Source-of-truth copy for homepage + /pricing — keep tiers aligned. */
 export const HOMEPAGE_PRICING_PLANS: PlanItem[] = [
@@ -10,9 +11,9 @@ export const HOMEPAGE_PRICING_PLANS: PlanItem[] = [
       {
         title: "Try instantly",
         items: [
-          "Instant evaluation — no card required.",
+          `Instant evaluation — ${TRIAL_NO_CREDIT_CARD_NOTE.toLowerCase()}.`,
           "Browse live examples in the gallery (shared demo quota)",
-          "Create 1 evaluation bot for your allowed website",
+          "Create 1 evaluation AI Support Agent for your allowed website",
           "1 allowed website (sub-sites on that website included)",
           "Website chat widget — same runtime model as Launch",
         ],
@@ -30,11 +31,11 @@ export const HOMEPAGE_PRICING_PLANS: PlanItem[] = [
         items: ["Evaluation access on Assistrio infrastructure", "Support included"],
       },
     ],
-    cta: "Try it free",
+    cta: TRIAL_PRIMARY_CTA_LABEL,
     href: "/trial",
     variant: "secondary",
     ctaPathLabel: "For evaluation",
-    ctaSupportingText: "Your bot on your allowed website · limited quota · no card",
+    ctaSupportingText: `Your AI Agent on your allowed website · limited quota · ${TRIAL_NO_CREDIT_CARD_NOTE.toLowerCase()}`,
   },
   {
     name: "Launch",
@@ -46,10 +47,10 @@ export const HOMEPAGE_PRICING_PLANS: PlanItem[] = [
       {
         title: "Capacity",
         items: [
-          "Up to 5 bots included",
+          "Up to 5 AI Agents included",
           "1,000 monthly AI credits — if you add your own OpenAI key, credits do not burn",
-          "Each bot: 1 allowed website, including sub-sites on that website",
-          "Additional bots: $25/month per bot",
+          "Each AI Agent: 1 allowed website, including sub-sites on that website",
+          "Additional AI Agents: $25/month per AI Agent",
         ],
       },
       {
@@ -58,9 +59,9 @@ export const HOMEPAGE_PRICING_PLANS: PlanItem[] = [
           "Website chat widget",
           "Document, FAQ, notes, and URL knowledge base",
           "Lead capture and lead tracking",
-          "Public and private bot controls",
+          "Public and private AI Agent controls",
           "Access key and secret key support",
-          "Insights dashboard, chats per bot, leads analytics, sentiment insights, and topic insights",
+          "Insights dashboard, chats per AI Agent, leads analytics, sentiment insights, and topic insights",
         ],
       },
       {
@@ -113,9 +114,9 @@ export const PRICING_PAGE_PLANS: PlanItem[] = [
       {
         title: "Evaluation",
         items: [
-          "Instant evaluation — no card required.",
+          `Instant evaluation — ${TRIAL_NO_CREDIT_CARD_NOTE.toLowerCase()}.`,
           "Browse live gallery examples (shared demo quota)",
-          "Create 1 evaluation bot for your allowed website",
+          "Create 1 evaluation AI Support Agent for your allowed website",
           "1 allowed website",
           "Sub-sites on that website included",
           "Website chat widget",
@@ -134,11 +135,11 @@ export const PRICING_PAGE_PLANS: PlanItem[] = [
         items: ["Evaluation access on Assistrio infrastructure", "Support included"],
       },
     ],
-    cta: "Try it free",
+    cta: TRIAL_PRIMARY_CTA_LABEL,
     href: "/trial",
     variant: "secondary",
     ctaPathLabel: "For evaluation",
-    ctaSupportingText: "Your bot on your allowed website · limited quota · no card",
+    ctaSupportingText: `Your AI Agent on your allowed website · limited quota · ${TRIAL_NO_CREDIT_CARD_NOTE.toLowerCase()}`,
   },
   {
     name: "Launch",
@@ -150,11 +151,11 @@ export const PRICING_PAGE_PLANS: PlanItem[] = [
       {
         title: "Capacity & allowed websites",
         items: [
-          "Up to 5 bots",
+          "Up to 5 AI Agents",
           "1,000 monthly AI credits",
           "If you add your own OpenAI key, credits do not burn",
-          "Each bot: 1 allowed website, including sub-sites on that website",
-          "Additional bots: $25/month per bot",
+          "Each AI Agent: 1 allowed website, including sub-sites on that website",
+          "Additional AI Agents: $25/month per AI Agent",
         ],
       },
       {
@@ -163,7 +164,7 @@ export const PRICING_PAGE_PLANS: PlanItem[] = [
           "Website chat widget",
           "Document, FAQ, notes, and URL knowledge base",
           "Lead capture and lead tracking",
-          "Public and private bot controls",
+          "Public and private AI Agent controls",
           "Access key and secret key support",
         ],
       },
@@ -171,7 +172,7 @@ export const PRICING_PAGE_PLANS: PlanItem[] = [
         title: "Insights",
         items: [
           "Insights dashboard",
-          "Chats per bot",
+          "Chats per AI Agent",
           "Leads analytics",
           "Sentiment insights",
           "Topic insights",
@@ -240,9 +241,9 @@ export const PRICING_COMPARISON_ROWS: PricingComparisonRow[] = [
     enterprise: "Private deployment and codebase ownership",
   },
   {
-    label: "Bots",
-    explore: "1 evaluation bot · gallery live examples",
-    launch: "Up to 5 included · $25/month per additional bot",
+    label: "AI Agents",
+    explore: "1 evaluation AI Support Agent · gallery live examples",
+    launch: "Up to 5 included · $25/month per additional AI Agent",
     enterprise: "Per your agreement",
   },
   {
@@ -254,7 +255,7 @@ export const PRICING_COMPARISON_ROWS: PricingComparisonRow[] = [
   {
     label: "Allowed websites",
     explore: "1 allowed website (sub-sites included)",
-    launch: "Per bot: 1 allowed website, sub-sites included",
+    launch: "Per AI Agent: 1 allowed website, sub-sites included",
     enterprise: "Per your deployment",
   },
   {

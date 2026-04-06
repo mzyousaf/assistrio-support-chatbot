@@ -93,8 +93,8 @@ export function ReconnectSavedId({ variant = "default", id, copyTone = "default"
       {!isWorkspace ? (
         <p className={`mt-2 text-[var(--foreground-muted)] ${isCompact ? "text-xs leading-relaxed" : "text-sm leading-relaxed"}`}>
           <strong className="font-medium text-slate-800">Intentional switch:</strong> Pasting a <em>different</em> id
-          replaces the active id here. A bot-creation success handoff below only stays visible while the active id matches the
-          one that created the bot — it will clear if you switch away.
+          replaces the active id here. An AI Support Agent creation success handoff below only stays visible while the active id matches the
+          one that created the AI Support Agent — it will clear if you switch away.
         </p>
       ) : (
         <p className={`mt-2 text-[var(--foreground-muted)] ${isCompact ? "text-xs leading-relaxed" : "text-sm leading-relaxed"}`}>

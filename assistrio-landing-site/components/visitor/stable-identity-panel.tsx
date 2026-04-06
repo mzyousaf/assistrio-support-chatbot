@@ -94,7 +94,7 @@ export function StableIdentityPanel({ variant = "default", copyTone = "default" 
             <p>
               This browser stores one <strong className="font-medium text-slate-800">platform visitor id</strong> (
               <code className="rounded bg-slate-100 px-1 text-xs">platformVisitorId</code>) — the same string the API uses
-              for evaluation bot ownership, quota, and gallery runtime demos. It is{" "}
+              for evaluation AI Support Agent ownership, quota, and gallery runtime demos. It is{" "}
               <strong className="font-medium text-slate-800">not</strong> your chat history; the widget creates chat
               sessions separately (<code className="rounded bg-slate-100 px-1 text-xs">chatVisitorId</code>).
             </p>
@@ -110,10 +110,10 @@ export function StableIdentityPanel({ variant = "default", copyTone = "default" 
             </p>
             <p>
               <strong className="font-medium text-slate-800">Reconnect</strong> replaces the stored id in this browser —
-              you are switching which anonymous bucket the marketing site uses (Explore bot create, quota, demos). Your
+              you are switching which anonymous bucket the marketing site uses (Explore AI Support Agent create, quota, demos). Your
               production embed snippet carries its own{" "}
               <code className="rounded bg-slate-100 px-1 text-xs">platformVisitorId</code>; update the snippet if you
-              intentionally change which id should own runtime for that bot.
+              intentionally change which id should own runtime for that AI Support Agent.
             </p>
           </>
         )}

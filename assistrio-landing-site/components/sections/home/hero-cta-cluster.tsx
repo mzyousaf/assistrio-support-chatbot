@@ -2,6 +2,7 @@
 
 import { TrackedCtaLink } from "@/components/analytics/tracked-cta-link";
 import { TrackedFlowCtaButton } from "@/components/flows/tracked-flow-cta";
+import { TRIAL_NO_CREDIT_CARD_NOTE, TRIAL_PRIMARY_CTA_LABEL } from "@/lib/trial-primary-cta-label";
 
 const LOCATION = "home_hero";
 
@@ -26,26 +27,26 @@ export function HeroCtaCluster() {
           flow="trial"
           href="/trial"
           location={`${LOCATION}_explore`}
-          label="Try it free"
+          label={TRIAL_PRIMARY_CTA_LABEL}
           variant="secondary"
-          className="w-full justify-center rounded-2xl border border-[var(--border-teal-soft)] bg-white/95 px-5 py-3.5 text-[0.9375rem] font-semibold shadow-[var(--shadow-xs)] backdrop-blur-sm transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-[var(--shadow-md)] active:translate-y-0"
+          className="w-full justify-center rounded-2xl border border-[var(--border-default)] bg-white/70 px-5 py-3.5 text-[0.9375rem] font-semibold text-slate-700 shadow-[var(--shadow-xs)] backdrop-blur-sm transition-[transform,box-shadow,background-color,border-color] duration-200 hover:border-[var(--border-teal-soft)] hover:bg-[color-mix(in_srgb,var(--brand-teal-subtle)_78%,white)] hover:shadow-[var(--shadow-md)] active:translate-y-0"
         >
-          Try it free
+          {TRIAL_PRIMARY_CTA_LABEL}
         </TrackedFlowCtaButton>
-        <TrackedFlowCtaButton
-          flow="showcase"
+        <TrackedCtaLink
           href="/gallery"
           location={`${LOCATION}_examples`}
-          label="See live examples"
+          label="Live AI Agents"
           variant="secondary"
-          className="w-full justify-center rounded-2xl border border-[var(--border-default)] bg-white/70 px-5 py-3.5 text-[0.9375rem] font-semibold text-slate-700 shadow-[var(--shadow-xs)] backdrop-blur-sm transition-[transform,box-shadow] duration-200 hover:border-slate-300 hover:bg-white hover:shadow-[var(--shadow-md)] active:translate-y-0"
+          className="w-full justify-center rounded-2xl border border-[var(--border-default)] bg-white/70 px-5 py-3.5 text-[0.9375rem] font-semibold text-slate-700 shadow-[var(--shadow-xs)] backdrop-blur-sm transition-[transform,box-shadow,background-color,border-color] duration-200 hover:border-[var(--border-teal-soft)] hover:bg-[color-mix(in_srgb,var(--brand-teal-subtle)_78%,white)] hover:shadow-[var(--shadow-md)] active:translate-y-0"
         >
-          See live examples
-        </TrackedFlowCtaButton>
+          Live AI Agents
+        </TrackedCtaLink>
       </div>
 
       <p className="mt-4 text-pretty text-[0.8125rem] leading-relaxed text-[var(--foreground-muted)]">
-        Try it free on your website — no card. Live examples are instant. Launch is fully hosted when you are ready.
+        Try it free on your website — <span className="text-emphasis-primary">{TRIAL_NO_CREDIT_CARD_NOTE}</span>. Live AI
+        Support Agents in the gallery are instant. Launch is fully hosted when you are ready.
       </p>
     </div>
   );

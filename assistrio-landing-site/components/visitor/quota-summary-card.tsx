@@ -143,7 +143,7 @@ export function QuotaSummaryCard() {
       <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Usage</p>
       <p className="mt-1 text-sm font-semibold text-slate-900">Anonymous quota buckets</p>
       <p className="mt-2 text-xs leading-relaxed text-[var(--foreground-muted)]">
-        Limits for this browser&apos;s saved id. Preview, Explore runtime on your bot, and gallery live examples use separate
+        Limits for this browser&apos;s saved id. Preview, Explore runtime on your AI Support Agent, and gallery live examples use separate
         buckets; the gallery draws from a shared showcase pool for all public demos combined.
       </p>
       <div className="mt-6 space-y-5">
@@ -154,12 +154,12 @@ export function QuotaSummaryCard() {
         />
         <Row
           title="Explore runtime"
-          subtitle="Messages on your evaluation bot on the allowed website you configured."
+          subtitle="Messages on your evaluation AI Support Agent on the allowed website you configured."
           bucket={q.trialRuntime}
         />
         <Row
           title="Live examples (gallery)"
-          subtitle="Shared pool when browsing public showcase bots as runtime demos."
+          subtitle="Shared pool when browsing public showcase AI Agents as runtime demos."
           bucket={q.showcaseRuntime}
         />
       </div>

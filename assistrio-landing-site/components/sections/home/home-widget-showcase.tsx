@@ -15,7 +15,7 @@ const benefits = [
   },
   {
     title: "Aligned with policy",
-    body: "Replies and quota follow the bot you published — escalation and tone stay under your rules.",
+    body: "Replies and quota follow the AI Agent you published — escalation and tone stay under your rules.",
   },
 ];
 
@@ -34,9 +34,9 @@ export function HomeWidgetShowcase() {
         <ScrollReveal y={20}>
           <HomeSectionHeader id="widget-heading" eyebrow="Runtime" title="The chat your customers see">
             <p className="max-w-2xl text-base leading-relaxed">
-              On your site, the widget runs in <strong className="font-medium text-slate-800">runtime</strong> mode — not
+              On your site, the widget runs in <strong className="text-emphasis-primary">runtime</strong> mode — not
               the Assistrio preview shell. The browser sends your page origin on init; the API enforces allowed websites and keys;
-              messages and quota follow your bot rules.
+              messages and quota follow your AI Agent rules.
             </p>
           </HomeSectionHeader>
         </ScrollReveal>
@@ -59,8 +59,8 @@ export function HomeWidgetShowcase() {
 
         <p className="mx-auto mt-8 max-w-2xl text-center text-xs leading-relaxed text-[var(--foreground-muted)] sm:mt-10">
           {widgetScreenshot
-            ? "Screenshot — your embed styling and copy follow your bot configuration."
-            : "Mock conversation — embed behavior depends on your bot config and allowed websites."}
+            ? "Screenshot — your embed styling and copy follow your AI Agent configuration."
+            : "Mock conversation — embed behavior depends on your AI Agent config and allowed websites."}
         </p>
       </Container>
     </Section>

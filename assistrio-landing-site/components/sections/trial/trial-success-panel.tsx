@@ -18,11 +18,11 @@ const saveTiers = [
   },
   {
     label: "Your website runtime",
-    body: "Use the full HTML snippet below — it already includes platformVisitorId, bot id, access key, and API base. Sharing it shares the same usage state as sharing the id + keys.",
+    body: "Use the full HTML snippet below — it already includes platformVisitorId, AI Agent id, access key, and API base. Sharing it shares the same usage state as sharing the id + keys.",
   },
   {
     label: "Integrations",
-    body: "Keep bot id + access key + platformVisitorId + allowed website (hostname) together. The access key alone is not enough without the matching bot and allowed website rules.",
+    body: "Keep AI Agent id + access key + platformVisitorId + allowed website (hostname) together. The access key alone is not enough without the matching AI Agent and allowed website rules.",
   },
 ];
 
@@ -74,7 +74,7 @@ export function TrialSuccessPanel({ trial }: Props) {
   return (
     <div className="space-y-10">
       <p className="sr-only" role="status">
-        Explore bot created successfully. Your evaluation bot is live. Save your workspace key and embed snippet below.
+        Explore AI Support Agent created successfully. Your evaluation AI Support Agent is live. Save your workspace key and embed snippet below.
       </p>
       <motion.div
         initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 16, scale: 0.985 }}
@@ -122,7 +122,7 @@ export function TrialSuccessPanel({ trial }: Props) {
               <div>
                 <p className="text-eyebrow text-emerald-900">Explore ready</p>
                 <h2 className="mt-2 font-[family-name:var(--font-display)] text-2xl font-semibold tracking-tight text-slate-900 sm:text-[1.75rem]">
-                  Your evaluation bot is live
+                  Your evaluation AI Support Agent is live
                 </h2>
               </div>
             </div>
@@ -137,7 +137,7 @@ export function TrialSuccessPanel({ trial }: Props) {
               ease: easeSoft,
             }}
           >
-            This bot is tied to your <strong className="font-medium text-slate-800">workspace key</strong> (shown below as{" "}
+            This AI Support Agent is tied to your <strong className="font-medium text-slate-800">workspace key</strong> (shown below as{" "}
             <code className="rounded bg-white px-1 text-xs shadow-sm">platformVisitorId</code> for integrations). Save it
             with your access key and allowed hostname — you need them to embed and to reconnect on another device. Treat
             them like private access material: anyone with them can use the same anonymous ownership and quota state.
@@ -154,7 +154,7 @@ export function TrialSuccessPanel({ trial }: Props) {
           >
             <strong className="font-medium">If you change the active id</strong> (Reconnect or{" "}
             <code className="rounded bg-white px-1 text-xs">?platformVisitorId=</code>) to something other than the id
-            above, this success view closes — it only applies while this browser&apos;s saved id matches the bot owner id.
+            above, this success view closes — it only applies while this browser&apos;s saved id matches the AI Agent owner id.
           </motion.div>
         </div>
       </motion.div>
@@ -175,9 +175,9 @@ export function TrialSuccessPanel({ trial }: Props) {
       >
         <motion.div variants={blockVariants}>
           <div>
-            <h3 className="font-[family-name:var(--font-display)] text-lg font-semibold text-slate-900">Your bot snapshot</h3>
+            <h3 className="font-[family-name:var(--font-display)] text-lg font-semibold text-slate-900">Your AI Agent snapshot</h3>
             <p className="mt-2 text-sm leading-relaxed text-[var(--foreground-muted)]">
-              Read-only numbers for this bot and your saved id — not a full dashboard. Use{" "}
+              Read-only numbers for this AI Agent and your saved id — not a full dashboard. Use{" "}
               <strong className="font-medium text-slate-700">Update numbers</strong> anytime to refresh without leaving the
               page.
             </p>
@@ -214,7 +214,7 @@ export function TrialSuccessPanel({ trial }: Props) {
             </p>
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
               <CopyField label="Workspace key (platformVisitorId)" value={trial.platformVisitorId} />
-              <CopyField label="Bot id" value={trial.bot.id} />
+              <CopyField label="AI Agent id" value={trial.bot.id} />
               <CopyField label="Access key" value={trial.bot.accessKey} />
               <CopyField label="Allowed website (hostname)" value={trial.allowedDomain} />
             </div>
@@ -278,8 +278,8 @@ export function TrialSuccessPanel({ trial }: Props) {
         animate={{ opacity: 1 }}
         transition={{ delay: reduceMotion ? 0.2 : 0.85, duration: reduceMotion ? 0.2 : 0.45 }}
       >
-        Bot slug: <code className="font-mono text-slate-700">{trial.bot.slug}</code> — use in integrations. Gallery URLs
-        on this site are for showcase bots, not visitor trials.
+        AI Agent slug: <code className="font-mono text-slate-700">{trial.bot.slug}</code> — use in integrations. Gallery URLs
+        on this site are for showcase AI Agents, not visitor trials.
       </motion.p>
     </div>
   );

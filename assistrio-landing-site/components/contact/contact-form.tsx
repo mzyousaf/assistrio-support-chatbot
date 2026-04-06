@@ -1,8 +1,10 @@
 "use client";
 
+import Image from "next/image";
 import { useId, useState } from "react";
 import { useTrackEvent } from "@/hooks/useTrackEvent";
 import { Button } from "@/components/ui/button";
+import { SITE_LOGO, SITE_LOGO_WORDMARK_PX } from "@/lib/site-branding";
 
 const MAX = { name: 120, email: 254, subject: 200, message: 12_000 } as const;
 
@@ -16,7 +18,17 @@ const fieldErrClass = "border-red-300 focus:border-red-400 focus:ring-red-200/40
 
 type FieldErrors = Partial<Record<"name" | "email" | "message", string>>;
 
-export function ContactForm() {
+type ContactFormProps = {
+  /**
+   * `split`: page supplies the main title and intro — omit centered wordmark and duplicate heading.
+   * `standalone` (default): full header inside the form card (narrow pages).
+   */
+  variant?: "standalone" | "split";
+  /** When `variant` is `split`, set to the page `<h1>` id for `aria-labelledby`. */
+  labelledBy?: string;
+};
+
+export function ContactForm({ variant = "standalone", labelledBy }: ContactFormProps) {
   const formId = useId();
   const errNameId = `${formId}-err-name`;
   const errEmailId = `${formId}-err-email`;
@@ -116,21 +128,38 @@ export function ContactForm() {
     );
   }
 
+  const isSplit = variant === "split";
+
   return (
     <form
       onSubmit={onSubmit}
-      className="rounded-2xl border border-[var(--border-default)] bg-white/95 p-6 shadow-[var(--shadow-premium)] ring-1 ring-slate-900/[0.04] sm:p-9"
+      className="min-w-0 rounded-2xl border border-[var(--border-default)] bg-white/95 p-6 shadow-[var(--shadow-premium)] ring-1 ring-slate-900/[0.04] sm:p-9"
       noValidate
       aria-busy={status === "sending"}
+      aria-labelledby={isSplit && labelledBy ? labelledBy : undefined}
     >
-      <p className="text-center text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-[var(--brand-teal-dark)]">Assistrio</p>
-      <h1 className="text-page-title mt-2 text-center">Contact us</h1>
-      <p className="mx-auto mt-3 max-w-md text-center text-page-meta leading-relaxed">
-        Questions about Launch, Enterprise, or your workspace? Send a note — we read everything at{" "}
-        <strong className="font-medium text-slate-800">support@assistrio.com</strong>.
-      </p>
+      {isSplit ? (
+        <h2 className="text-lg font-semibold tracking-tight text-slate-900">Send a message</h2>
+      ) : (
+        <>
+          <div className="flex justify-center">
+            <Image
+              src={SITE_LOGO.wordmark}
+              alt="Assistrio"
+              width={SITE_LOGO_WORDMARK_PX.width}
+              height={SITE_LOGO_WORDMARK_PX.height}
+              className="h-[22px] w-auto max-w-[min(85vw,14rem)] object-contain sm:h-6 sm:max-w-[16rem]"
+            />
+          </div>
+          <h1 className="text-page-title mt-2 text-center">Contact us</h1>
+          <p className="mx-auto mt-3 max-w-md text-center text-page-meta leading-relaxed">
+            Questions about Launch, Enterprise, or your workspace? Send a note — we read everything at{" "}
+            <strong className="font-medium text-slate-800">support@assistrio.com</strong>.
+          </p>
+        </>
+      )}
 
-      <div className="mt-10 space-y-8">
+      <div className={`space-y-8 ${isSplit ? "mt-8" : "mt-10"}`}>
         <fieldset className="space-y-5">
           <legend className="text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-[var(--foreground-subtle)]">Your details</legend>
           <div className="grid gap-5 sm:grid-cols-2">
@@ -262,7 +291,7 @@ export function ContactForm() {
         </p>
       ) : null}
 
-      <div className="mt-8 flex flex-col gap-5 border-t border-[var(--border-default)]/80 pt-8 sm:flex-row sm:items-center sm:justify-between">
+      <div className="mt-8 flex justify-end border-t border-[var(--border-default)]/80 pt-8">
         <Button
           type="submit"
           disabled={status === "sending"}
@@ -270,14 +299,8 @@ export function ContactForm() {
         >
           {status === "sending" ? "Sending…" : "Send message"}
         </Button>
-        <a
-          href="mailto:support@assistrio.com"
-          className="text-center text-sm font-medium text-[var(--brand-teal-dark)] underline decoration-[var(--border-teal-soft)] underline-offset-[0.2em] transition-colors hover:text-[var(--brand-teal)] hover:decoration-[var(--brand-teal)] sm:text-left"
-        >
-          Prefer email? Open your mail app
-        </a>
       </div>
-      <p className="mt-4 text-center text-[0.75rem] leading-snug text-[var(--foreground-muted)] sm:text-left">
+      <p className="mt-4 text-right text-[0.75rem] leading-snug text-[var(--foreground-muted)]">
         By sending, you agree we use your details only to respond to this inquiry.
       </p>
     </form>

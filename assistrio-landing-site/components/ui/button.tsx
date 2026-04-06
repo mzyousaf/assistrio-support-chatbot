@@ -6,7 +6,7 @@ export type ButtonVariant = "primary" | "secondary" | "ghost";
 type Variant = ButtonVariant;
 
 export const buttonBaseClass =
-  "inline-flex items-center justify-center rounded-[var(--radius-lg)] px-5 py-2.5 text-sm font-semibold transition-[color,background-color,box-shadow,transform,filter] duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50";
+  "inline-flex cursor-pointer items-center justify-center rounded-[var(--radius-lg)] px-5 py-2.5 text-sm font-semibold transition-[color,background-color,box-shadow,transform,filter] duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-[0.98] disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50";
 
 const base = buttonBaseClass;
 

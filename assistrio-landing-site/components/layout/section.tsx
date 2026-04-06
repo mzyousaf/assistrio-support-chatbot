@@ -46,7 +46,7 @@ export function Section({
   return (
     <section
       id={id}
-      className={`${anchorOffset} ${spacingClass[spacing]} ${toneClass[tone]} ${fillClass} ${className}`.trim()}
+      className={`min-w-0 ${anchorOffset} ${spacingClass[spacing]} ${toneClass[tone]} ${fillClass} ${className}`.trim()}
     >
       {children}
     </section>

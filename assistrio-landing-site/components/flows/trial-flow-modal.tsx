@@ -20,14 +20,15 @@ import {
   readPvLastTrialBotRefForActivePlatformVisitor,
   type PvLastTrialBotRef,
 } from "@/lib/identity/pv-last-trial-bot";
+import { TRIAL_NO_CREDIT_CARD_NOTE, TRIAL_PRIMARY_CTA_LABEL } from "@/lib/trial-primary-cta-label";
 
 const ease = [0.22, 1, 0.36, 1] as const;
 const springPanel = { type: "spring", stiffness: 380, damping: 32, mass: 0.85 } as const;
 const springContent = { type: "spring", stiffness: 440, damping: 34, mass: 0.72 } as const;
 const springProgress = { type: "spring", stiffness: 260, damping: 28 } as const;
 
-const TRIAL_STEP_LABELS = ["Introduction", "Website hostname", "Workspace key", "Create your bot"] as const;
-const TRIAL_STEP_SHORT = ["Intro", "Site", "Key", "Bot"] as const;
+const TRIAL_STEP_LABELS = ["Introduction", "Website hostname", "Workspace key", "Create your AI Support Agent"] as const;
+const TRIAL_STEP_SHORT = ["Intro", "Site", "Key", "Agent"] as const;
 
 type Props = {
   open: boolean;
@@ -157,7 +158,7 @@ export function TrialFlowModal({ open, onClose }: Props) {
             className="relative z-10 flex max-h-[min(92vh,880px)] w-full max-w-[min(100%,34rem)] flex-col overflow-hidden rounded-t-[1.35rem] border border-[var(--border-default)] bg-white shadow-[0_28px_80px_-24px_rgba(15,23,42,0.22),0_12px_36px_-16px_rgba(13,148,136,0.14)] sm:rounded-[1.5rem]"
           >
             <p id="trial-flow-description" className="sr-only">
-              Multi-step Explore flow: choose your allowed website, save a workspace key, then create your evaluation bot and copy
+              Multi-step Explore flow: choose your allowed website, save a workspace key, then create your evaluation AI Support Agent and copy
               your embed snippet.
             </p>
             <div
@@ -175,10 +176,11 @@ export function TrialFlowModal({ open, onClose }: Props) {
                   <p className="text-eyebrow">Explore Assistrio</p>
                   <h2
                     id="trial-flow-title"
-                    className="mt-1 font-[family-name:var(--font-display)] text-xl font-medium text-slate-900"
+                    className="mt-1 max-w-[20rem] text-balance font-[family-name:var(--font-display)] text-lg font-medium leading-snug text-slate-900 sm:max-w-none sm:text-xl sm:leading-normal"
                   >
-                    Try it free
+                    {TRIAL_PRIMARY_CTA_LABEL}
                   </h2>
+                  <p className="text-emphasis-primary mt-1.5 text-xs">{TRIAL_NO_CREDIT_CARD_NOTE}</p>
                 </div>
                 <motion.button
                   ref={initialCloseRef}
@@ -282,7 +284,7 @@ export function TrialFlowModal({ open, onClose }: Props) {
                     </p>
                     <p className="text-sm leading-relaxed text-[var(--foreground-muted)]">
                       You&apos;ll choose which allowed websites may run the widget, save a workspace key for reconnect, then get an embed
-                      snippet. No card required to start.
+                      snippet.
                     </p>
                     <ul className="space-y-2 text-sm text-[var(--foreground-muted)]">
                       <li className="flex gap-2">

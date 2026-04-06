@@ -2,6 +2,7 @@
 
 import { TrackedCtaLink } from "@/components/analytics/tracked-cta-link";
 import { TrackedFlowCtaButton } from "@/components/flows/tracked-flow-cta";
+import { TRIAL_NO_CREDIT_CARD_NOTE, TRIAL_PRIMARY_CTA_LABEL } from "@/lib/trial-primary-cta-label";
 
 const LOCATION = "home_final_cta";
 
@@ -54,14 +55,16 @@ export function FinalCtaRow() {
               flow="trial"
               href="/trial"
               location={`${LOCATION}_explore`}
-              label="Try it free"
+              label={TRIAL_PRIMARY_CTA_LABEL}
               variant="secondary"
-              className="mt-4 w-full justify-center rounded-xl border border-[var(--border-teal-soft)] bg-white px-5 py-3.5 text-[0.9375rem] font-semibold shadow-[var(--shadow-xs)] transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-[var(--shadow-md)] active:translate-y-0 sm:py-4"
+              className="mt-4 w-full justify-center rounded-xl border border-[var(--border-teal-soft)] bg-white px-5 py-3.5 text-center text-[0.9375rem] font-semibold leading-snug shadow-[var(--shadow-xs)] transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-[var(--shadow-md)] active:translate-y-0 sm:py-4"
             >
-              Try it free
+              {TRIAL_PRIMARY_CTA_LABEL}
             </TrackedFlowCtaButton>
             <p className={`${hintClass} mt-auto pt-4 text-pretty`}>
-              Free on your own allowed website — your workspace, no card, full feel for how Assistrio behaves for visitors.
+              Free on your own allowed website — your workspace,{" "}
+              <span className="text-emphasis-primary">{TRIAL_NO_CREDIT_CARD_NOTE.toLowerCase()}</span>, full feel for how
+              Assistrio behaves for visitors.
             </p>
           </div>
         </li>
@@ -69,18 +72,17 @@ export function FinalCtaRow() {
         <li className="min-w-0">
           <div className="flex h-full flex-col rounded-2xl border border-[var(--border-default)] bg-white/95 p-5 shadow-[var(--shadow-xs)] ring-1 ring-slate-900/[0.04] sm:p-6">
             <p className={microClass}>Quick preview</p>
-            <TrackedFlowCtaButton
-              flow="showcase"
+            <TrackedCtaLink
               href="/gallery"
               location={`${LOCATION}_examples`}
-              label="See live examples"
+              label="Live AI Agents"
               variant="secondary"
               className="mt-4 w-full justify-center rounded-xl border border-[var(--border-default)] bg-slate-50/80 px-5 py-3.5 text-[0.9375rem] font-semibold text-slate-800 shadow-[var(--shadow-xs)] transition-[transform,box-shadow] duration-200 hover:border-slate-300 hover:bg-white hover:shadow-[var(--shadow-md)] active:translate-y-0 sm:py-4"
             >
-              See live examples
-            </TrackedFlowCtaButton>
+              Live AI Agents
+            </TrackedCtaLink>
             <p className={`${hintClass} mt-auto pt-4 text-pretty`}>
-              Curated gallery demos — instant, no setup, great for sharing with stakeholders.
+              Live AI Support Agents in the gallery — instant, no setup, easy to share with stakeholders.
             </p>
           </div>
         </li>

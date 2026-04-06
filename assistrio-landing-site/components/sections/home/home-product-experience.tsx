@@ -34,39 +34,40 @@ export function HomeProductExperience({ embeddedInCarousel = false }: ProductExp
               Branding, knowledge, leads, and analytics — one place to shape how the world meets your AI support, before a single visitor sees the thread.
             </p>
             <p className="mt-5 max-w-xl text-pretty text-[1.0625rem] leading-[1.72] text-[var(--foreground-muted)] sm:max-w-[40rem] sm:text-[1.0625rem]">
-              This is the <strong className="font-semibold text-slate-800">control room</strong>: train and tune your agent, publish to the allowed websites you trust, and read the signals
-              that tell you what to fix next — without jumping across five disconnected tools.
+              This is the control room: train and tune your agent, publish to{" "}
+              <strong className="text-emphasis-primary">the allowed websites you trust</strong>, and read the signals that
+              tell you what to fix next — without jumping across five disconnected tools.
             </p>
             <ul className="mt-8 space-y-3.5 text-[0.9375rem] leading-relaxed text-[var(--foreground-muted)]">
               <li className="flex gap-3">
                 <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--brand-teal)] shadow-[0_0_8px_rgba(13,148,136,0.45)]" aria-hidden />
                 <span>
-                  <strong className="font-semibold text-slate-800">Dashboard</strong> — agents, knowledge, publish targets, and team workflows in one shell.
+                  <strong className="text-emphasis-primary">Dashboard</strong> — agents, knowledge, publish targets, and team workflows in one shell.
                 </span>
               </li>
               <li className="flex gap-3">
                 <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--brand-teal)] shadow-[0_0_8px_rgba(13,148,136,0.45)]" aria-hidden />
                 <span>
-                  <strong className="font-semibold text-slate-800">Visitor widget</strong> — the runtime your site embeds; same path from preview to production.
+                  <strong className="text-emphasis-primary">Visitor widget</strong> — the runtime your site embeds; same path from preview to production.
                 </span>
               </li>
               <li className="flex gap-3">
                 <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--brand-teal)] shadow-[0_0_8px_rgba(13,148,136,0.45)]" aria-hidden />
                 <span>
-                  <strong className="font-semibold text-slate-800">Insights</strong> — conversation patterns beside configuration, so improvements stay grounded in real chats.
+                  <strong className="text-emphasis-primary">Insights</strong> — conversation patterns beside configuration, so improvements stay grounded in real chats.
                 </span>
               </li>
               <li className="flex gap-3">
                 <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--brand-teal)] shadow-[0_0_8px_rgba(13,148,136,0.45)]" aria-hidden />
                 <span>
-                  <strong className="font-semibold text-slate-800">Brand controls</strong> — color, surfaces, launcher, and thread chrome aligned with your product.
+                  <strong className="text-emphasis-primary">Brand controls</strong> — color, surfaces, launcher, and thread chrome aligned with your product.
                 </span>
               </li>
             </ul>
             <p className="text-meta mt-8 max-w-md border-l-2 border-[var(--brand-teal)]/35 pl-4 leading-relaxed">
               Depth on branding, knowledge, leads, and analytics lives in Everything you control — without repeating specs here. Runtime stays on{" "}
-              <strong className="font-semibold text-slate-700">allowed websites</strong>; workspace access stays{" "}
-              <strong className="font-semibold text-slate-700">team-scoped</strong>.
+              <strong className="text-emphasis-primary">allowed websites</strong>; workspace access stays{" "}
+              <strong className="text-emphasis-primary">team-scoped</strong>.
             </p>
           </div>
 

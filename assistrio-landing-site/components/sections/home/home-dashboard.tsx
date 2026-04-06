@@ -32,7 +32,7 @@ export function HomeProductSurface() {
             align="split"
           >
             <p>
-              This is where teams configure production <strong className="font-semibold text-slate-800">AI Support Agents</strong> on the hosted platform — prompts, knowledge,
+              This is where teams configure production <strong className="text-emphasis-primary">AI Support Agents</strong> on the hosted platform — prompts, knowledge,
               branding, and publish targets — before visitors ever see the runtime widget on your allowed websites.
             </p>
           </HomeSectionHeader>

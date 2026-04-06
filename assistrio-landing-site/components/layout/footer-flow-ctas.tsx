@@ -1,8 +1,14 @@
 "use client";
 
+import { TrackedCtaLink } from "@/components/analytics/tracked-cta-link";
 import { TrackedFlowCtaButton } from "@/components/flows/tracked-flow-cta";
+import {
+  GALLERY_CTA_NAV_LABEL,
+  TRIAL_NAV_PRIMARY_LINE,
+  TRIAL_NAV_STACK_LABEL,
+} from "@/lib/trial-primary-cta-label";
 
-/** Try it free + See Live Examples — same actions as the site header, for footer (and optional reuse). */
+/** Trial (combined CTA) + gallery link — same actions as the site header, for footer (and optional reuse). */
 export function FooterFlowCtas() {
   return (
     <div className="flex flex-wrap gap-2 sm:gap-3">
@@ -10,22 +16,21 @@ export function FooterFlowCtas() {
         flow="trial"
         href="/trial"
         location="site_footer"
-        label="Try it free"
-        variant="secondary"
-        className="justify-center rounded-full border border-[var(--border-teal-soft)] px-4 py-2 text-sm font-semibold shadow-[var(--shadow-xs)]"
+        label={TRIAL_NAV_STACK_LABEL}
+        variant="primary"
+        className="btn-primary-shimmer max-w-full justify-center rounded-full px-3 py-2.5 text-center text-[0.8125rem] font-semibold leading-snug shadow-[var(--shadow-sm)] ring-1 ring-white/15 sm:px-4 sm:text-sm"
       >
-        Try it free
+        {TRIAL_NAV_PRIMARY_LINE}
       </TrackedFlowCtaButton>
-      <TrackedFlowCtaButton
-        flow="showcase"
+      <TrackedCtaLink
         href="/gallery"
         location="site_footer"
-        label="See Live Examples"
+        label={GALLERY_CTA_NAV_LABEL}
         variant="secondary"
-        className="justify-center rounded-full border border-[var(--border-default)] bg-slate-50/90 px-4 py-2 text-sm font-semibold text-slate-800"
+        className="justify-center rounded-full border border-[var(--border-teal-soft)] px-3 py-2.5 text-center text-[0.8125rem] font-semibold leading-snug shadow-[var(--shadow-xs)] sm:px-4 sm:text-sm sm:leading-normal"
       >
-        See Live Examples
-      </TrackedFlowCtaButton>
+        {GALLERY_CTA_NAV_LABEL}
+      </TrackedCtaLink>
     </div>
   );
 }

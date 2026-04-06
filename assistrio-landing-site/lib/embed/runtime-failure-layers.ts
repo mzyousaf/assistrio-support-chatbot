@@ -26,7 +26,7 @@ export const RUNTIME_FAILURE_LAYERS: RuntimeFailureLayer[] = [
   {
     id: "cors",
     symptom: "Network: preflight or request to the API fails with a CORS error; **no** JSON error body from init.",
-    fixHint: "Add the **exact** page origin (https://host:port) to API CORS_EXTRA_ORIGINS. This is not the same as bot allowedDomains.",
+    fixHint: "Add the **exact** page origin (https://host:port) to API CORS_EXTRA_ORIGINS. This is not the same as AI Agent allowedDomains.",
   },
   {
     id: "domain_allowlist",
@@ -40,8 +40,8 @@ export const RUNTIME_FAILURE_LAYERS: RuntimeFailureLayer[] = [
   },
   {
     id: "credentials",
-    symptom: "403 with INVALID_ACCESS_KEY or bot not found / unpublished.",
-    fixHint: "Verify bot id and access key match the bot; bot must be published for embed.",
+    symptom: "403 with INVALID_ACCESS_KEY or AI Agent not found / unpublished.",
+    fixHint: "Verify AI Agent id and access key match; the AI Agent must be published for embed.",
   },
   {
     id: "rate_limit",

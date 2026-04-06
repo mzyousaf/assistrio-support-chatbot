@@ -49,7 +49,7 @@ export function HomeCoreValue({ embeddedInCarousel = false }: CoreValueProps = {
             lead="Not a chat widget bolted onto your site — a full support experience your customers feel and your team can steer."
           >
             <p>
-              You get <strong className="font-semibold text-slate-800">always-on coverage</strong> for the questions that repeat, the moments that convert, and the handoffs that
+              You get <strong>always-on coverage</strong> for the questions that repeat, the moments that convert, and the handoffs that
               need context. Underneath is a serious product: branding, knowledge, leads, analytics, and a runtime built for real traffic — whether you start on Explore or go
               straight to production.
             </p>

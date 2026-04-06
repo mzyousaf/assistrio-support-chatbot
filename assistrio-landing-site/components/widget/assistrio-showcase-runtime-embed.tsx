@@ -108,7 +108,7 @@ export function AssistrioShowcaseRuntimeEmbed({ botId, accessKey, platformVisito
           {reason === "missing_api"
             ? "Set NEXT_PUBLIC_ASSISTRIO_API_BASE_URL at build time so the browser can call the API."
             : reason === "missing_embed_keys"
-              ? "Missing bot id or access key from the public API response — cannot mount the widget."
+              ? "Missing AI Agent id or access key from the public API response — cannot mount the widget."
               : "Stable identity not ready — wait for platformVisitorId, or use Reconnect on the homepage / trial page."}
         </p>
         <p className="mt-2 text-xs text-amber-900/85">
@@ -143,7 +143,7 @@ export function AssistrioShowcaseRuntimeEmbed({ botId, accessKey, platformVisito
       <p className="mt-2 text-sm leading-relaxed text-[var(--foreground-muted)]">
         The chat widget mounts as a <strong className="font-medium text-slate-800">floating launcher</strong> on this
         page. It uses your saved <code className="rounded bg-slate-100 px-1 text-xs">platformVisitorId</code> and this
-        bot&apos;s public access key — showcase demo messages share one quota pool per id.
+        AI Agent&apos;s public access key — showcase demo messages share one quota pool per id.
       </p>
       <AnimatePresence mode="wait">
         {phase === "loading" ? (

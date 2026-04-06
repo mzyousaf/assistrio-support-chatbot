@@ -1,13 +1,16 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { marketingPageMetadata } from "@/lib/site-metadata";
 import { Container } from "@/components/layout/container";
 import { PageIntro } from "@/components/layout/page-intro";
 import { Section } from "@/components/layout/section";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = marketingPageMetadata({
   title: "Privacy Policy",
-  description: "How Assistrio handles information on this marketing site.",
-};
+  description:
+    "How Assistrio handles identifiers, contact forms, and third parties on this marketing site for AI Support Agent evaluation and gallery demos.",
+  path: "/privacy",
+});
 
 export default function PrivacyPage() {
   return (
@@ -16,7 +19,7 @@ export default function PrivacyPage() {
         <PageIntro eyebrow="Legal" title="Privacy Policy">
           <p className="text-page-meta">Last updated: April 2026</p>
         </PageIntro>
-        <div className="mt-10 max-w-none space-y-6 text-sm leading-relaxed text-[var(--foreground-muted)]">
+        <div className="mt-10 max-w-none space-y-6 break-words text-sm leading-relaxed text-[var(--foreground-muted)]">
           <section>
             <h2 className="text-base font-semibold text-slate-900">What this site collects</h2>
             <p className="mt-2">

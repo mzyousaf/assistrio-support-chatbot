@@ -45,7 +45,7 @@ export function HomeWhoItsFor() {
         <ScrollReveal y={20}>
           <HomeSectionHeader id="who-its-for-heading" eyebrow="Audience" title="Built for every industry that talks to visitors" titleWide align="split">
             <p>
-              Verticals below are <strong className="font-semibold text-slate-800">examples of fit</strong>, not separate products — the same AI Support Agent stack applies; only
+              Verticals below are <strong className="text-emphasis-primary">examples of fit</strong>, not separate products — the same AI Support Agent stack applies; only
               the knowledge and tone change.
             </p>
           </HomeSectionHeader>

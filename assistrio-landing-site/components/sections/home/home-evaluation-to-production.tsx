@@ -10,7 +10,7 @@ const steps = [
     title: "Try it free",
     bullets: [
       "Experience Assistrio for free on your allowed website",
-      "No credit card — a real evaluation, not a toy",
+      "No credit card required — a real evaluation, not a toy",
       "Same runtime your visitors will see in production",
     ],
   },
@@ -26,7 +26,7 @@ const steps = [
     title: "Align on your launch",
     bullets: [
       "We learn your site, customers, and how support should sound",
-      "Tone, escalation, and what “done” looks like when the bot is live",
+      "Tone, escalation, and what “done” looks like when the AI Agent is live",
       "So Launch matches how your business actually operates",
     ],
   },

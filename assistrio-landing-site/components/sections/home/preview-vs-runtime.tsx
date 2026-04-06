@@ -10,7 +10,7 @@ export function PreviewVsRuntime() {
         <HomeSectionHeader eyebrow="Product model" title="Preview vs runtime">
           <p className="max-w-2xl text-base leading-relaxed">
             Preview and runtime are separate pipelines — both exist in the product; this site only embeds{" "}
-            <strong className="font-medium text-slate-800">runtime</strong> demos, not owner preview.
+            <strong className="text-emphasis-primary">runtime</strong> demos, not owner preview.
           </p>
         </HomeSectionHeader>
         <div className="mt-12 rounded-[1.35rem] border border-[var(--border-default)] bg-gradient-to-br from-white via-slate-50/40 to-[var(--brand-teal-subtle)]/20 p-6 shadow-[var(--shadow-sm)] sm:p-8">
@@ -31,7 +31,7 @@ export function PreviewVsRuntime() {
                 Runtime
               </h3>
               <p className="mt-3 text-sm leading-relaxed text-[var(--foreground-muted)]">
-                The widget on your site uses the allowed websites you declare. Explore evaluation bots and showcase embeds enforce
+                The widget on your site uses the allowed websites you declare. Explore evaluation AI Agents and showcase embeds enforce
                 origin rules on the server. Your stable{" "}
                 <code className="rounded bg-slate-100 px-1 text-xs">platformVisitorId</code> selects whose quota bucket
                 applies — not the hostname alone.

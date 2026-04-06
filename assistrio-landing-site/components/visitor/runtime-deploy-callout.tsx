@@ -19,7 +19,7 @@ export function RuntimeDeployCallout({ context }: { context: "trial-snippet" | "
           customer websites are not covered automatically.
         </li>
         <li>
-          <strong className="text-slate-700">Embed rules:</strong> This page must be an allowed website for the bot (Explore{" "}
+          <strong className="text-slate-700">Embed rules:</strong> This page must be an allowed website for the AI Agent (Explore{" "}
           <code className="rounded bg-white px-1 text-[11px]">allowedDomain</code>
           {context === "showcase"
             ? ", showcase allowedDomains, or register-website for your stable id"

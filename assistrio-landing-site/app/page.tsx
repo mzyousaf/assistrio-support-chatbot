@@ -1,3 +1,5 @@
+import type { Metadata } from "next";
+import { marketingPageMetadata } from "@/lib/site-metadata";
 import { FinalCta } from "@/components/sections/home/final-cta";
 import { Hero } from "@/components/sections/home/hero";
 import { HomeEvaluationToProduction } from "@/components/sections/home/home-evaluation-to-production";
@@ -9,6 +11,19 @@ import { HomeProductExperience } from "@/components/sections/home/home-product-e
 import { PlansOverview } from "@/components/sections/home/plans-overview";
 
 const PRIMARY_SECTION_LABELS = ["How teams go live", "Customize it", "The complete picture"] as const;
+
+const HOME_TITLE = "AI Support Agents for your website";
+
+export const metadata: Metadata = {
+  ...marketingPageMetadata({
+    title: HOME_TITLE,
+    description:
+      "Your AI Support Agent is always on — so customers get answers when you are away. Your brand, your control on the websites you allow. Fully customizable AI Support with knowledge base, lead capture, branding, and analytics in one product.",
+    path: "/",
+  }),
+  /** Root `page` title must be explicit — `title.template` from layout does not apply the ` · Assistrio` suffix here. */
+  title: { absolute: `${HOME_TITLE} · Assistrio` },
+};
 
 export default function HomePage() {
   return (

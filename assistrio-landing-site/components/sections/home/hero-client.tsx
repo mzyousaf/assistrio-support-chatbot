@@ -22,7 +22,7 @@ function HeroTrustChip({ icon, label }: { icon: ReactNode; label: string }) {
 export function HeroClient() {
   return (
     <Container className="relative">
-      <div className="grid items-center gap-14 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] lg:gap-16 xl:gap-24">
+      <div className="grid min-w-0 items-center gap-14 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] lg:gap-16 xl:gap-24">
         <div className="relative z-[1] min-w-0 max-w-2xl lg:max-w-none">
           <motion.div
             initial={{ opacity: 0, y: 16 }}
@@ -30,33 +30,46 @@ export function HeroClient() {
             transition={{ duration: 0.5, ease, delay: 0.02 }}
             className="flex flex-wrap items-center gap-2.5"
           >
-            <span className="inline-flex items-center gap-2 rounded-full border border-[var(--border-teal-soft)] bg-[var(--brand-teal-subtle)]/75 px-3.5 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--brand-teal-dark)] shadow-[var(--shadow-xs)]">
-              <svg className="h-3.5 w-3.5 opacity-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-                <circle cx="12" cy="12" r="9" />
-                <path d="M12 7v5l3 2" strokeLinecap="round" />
+            <span className="inline-flex max-w-full items-center gap-2 rounded-full border border-[var(--border-teal-soft)] bg-[var(--brand-teal-subtle)]/75 px-3 py-1.5 text-[0.7rem] font-semibold leading-snug tracking-wide text-[var(--brand-teal-dark)] shadow-[var(--shadow-xs)] sm:px-3.5 sm:py-1 sm:text-xs">
+              <svg
+                className="h-3.5 w-3.5 shrink-0 opacity-90"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden
+              >
+                <polygon points="12 2 2 7 12 12 22 7 12 2" />
+                <polyline points="2 17 12 22 22 17" />
+                <polyline points="2 12 12 17 22 12" />
               </svg>
-              Always on
+              Assistrio Provides
             </span>
-            <span className="text-[0.8125rem] font-medium text-slate-500">AI support for your customers, on your websites</span>
+            <span className="text-[0.8125rem] font-medium text-slate-500">Branded AI Support Agents on websites you allow</span>
           </motion.div>
 
           <motion.h1
-            className="text-hero-display mt-6 max-w-[min(100%,38rem)] text-pretty sm:mt-7"
+            className="mt-6 max-w-[min(100%,42rem)] text-pretty sm:mt-7"
             initial={{ opacity: 0, y: 22 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.65, ease, delay: 0.06 }}
           >
-            AI Support that never sleeps.
+            <span className="text-hero-display block">Your AI Support Agent</span>
+            <span className="hero-display-kicker mt-3 block max-w-[40rem] sm:mt-3.5">Always on · 24/7</span>
           </motion.h1>
 
           <motion.p
-            className="text-hero-subhead mt-5 max-w-xl text-pretty sm:mt-6"
+            className="text-hero-subhead mt-5 max-w-2xl text-pretty sm:mt-6"
             initial={{ opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.55, ease, delay: 0.1 }}
           >
-            Answers and guidance on <strong className="font-semibold text-slate-800">your websites</strong>, with your brand and knowledge — while we keep the channel running
-            around the clock.
+            Customers get answers around the clock — even when you step away.{" "}
+            <strong className="text-emphasis-primary">Your brand, your control on the websites you allow.</strong>{" "}
+            Launch <strong className="text-emphasis-primary">fully customizable</strong> AI Support grounded in your
+            knowledge base, with lead capture, branding, and analytics — in one product.
           </motion.p>
 
           <motion.div
@@ -105,7 +118,7 @@ export function HeroClient() {
         </div>
 
         <motion.aside
-          className="relative mx-auto w-full max-w-md lg:mx-0 lg:max-w-none"
+          className="relative mx-auto w-full min-w-0 max-w-md lg:mx-0 lg:max-w-none"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.65, ease, delay: 0.1 }}

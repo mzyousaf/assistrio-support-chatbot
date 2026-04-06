@@ -43,7 +43,7 @@ type ProductVisualFrameProps = {
   className?: string;
 };
 
-const defaultAppLabel = "app.assistrio.com · Acme · Support bot";
+const defaultAppLabel = "app.assistrio.com · Acme · AI Support Agent";
 const defaultPageLabel = "https://yoursite.com/docs";
 
 /**

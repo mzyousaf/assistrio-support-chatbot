@@ -25,10 +25,10 @@ export function PvTrialResumeSection({ refData, onForget }: Props) {
       <div className="p-6 sm:p-7">
         <p className="text-eyebrow text-[var(--brand-teal-dark)]">Saved on this device</p>
         <h2 className="mt-2 font-[family-name:var(--font-display)] text-xl font-semibold tracking-tight text-slate-900 sm:text-2xl">
-          Your last Explore bot
+          Your last Explore AI Support Agent
         </h2>
         <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--foreground-muted)]">
-          We keep a <strong className="font-medium text-slate-800">browser-only</strong> pointer to the bot you created
+          We keep a <strong className="font-medium text-slate-800">browser-only</strong> pointer to the AI Support Agent you created
           last while this <strong className="font-medium text-slate-800">saved id</strong> was active. It isn&apos;t an
           account and doesn&apos;t sync — reconnect with a different id and this clears.
         </p>
@@ -45,11 +45,11 @@ export function PvTrialResumeSection({ refData, onForget }: Props) {
 
       <div className="flex flex-col gap-4 border-t border-[var(--border-default)] bg-slate-50/50 px-6 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-7">
         <p className="max-w-md text-xs leading-relaxed text-[var(--foreground-muted)]">
-          Starting over or the wrong bot? Remove the remembered reference for this browser only. To create another bot,
+          Starting over or the wrong AI Support Agent? Remove the remembered reference for this browser only. To create another AI Support Agent,
           continue with the steps below.
         </p>
         <Button type="button" variant="ghost" className="shrink-0 self-start sm:self-center" onClick={onForget}>
-          Forget this bot
+          Forget this AI Support Agent
         </Button>
       </div>
     </Card>

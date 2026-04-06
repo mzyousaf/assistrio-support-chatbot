@@ -1,3 +1,20 @@
+export interface PublicKnowledgeBasePreviewItemResponse {
+  title: string;
+  sourceType: string;
+  fileName?: string;
+  fileType?: string;
+  documentId?: string;
+  fileDownloadable?: boolean;
+}
+
+export interface PublicKnowledgeBaseCountsResponse {
+  documents: number;
+  faqs: number;
+  notes: number;
+  urls: number;
+  html: number;
+}
+
 export interface PublicBotListItemResponse {
   id: string;
   name: string;
@@ -16,8 +33,18 @@ export interface PublicBotListItemResponse {
     launcherPosition?: string;
     showBranding?: boolean;
     timePosition?: 'top' | 'bottom';
+    showSources?: boolean;
+    showCopyButton?: boolean;
+    showEmoji?: boolean;
+    showMenuQuickLinks?: boolean;
+    launcherAvatarUrl?: string;
   };
   createdAt: string;
+  knowledgeBasePreview: PublicKnowledgeBasePreviewItemResponse[];
+  knowledgeBaseCounts: PublicKnowledgeBaseCountsResponse;
+  totalChats: number;
+  /** Capped excerpt of the bot's active KB note (when present). */
+  knowledgeNotePreview?: string;
 }
 
 export interface PublicBotDetailResponse {
@@ -53,6 +80,54 @@ function toStringArray(value: unknown): string[] {
     : [];
 }
 
+function toKnowledgeBasePreview(value: unknown): PublicKnowledgeBasePreviewItemResponse[] {
+  if (!Array.isArray(value)) return [];
+  const out: PublicKnowledgeBasePreviewItemResponse[] = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== 'object') continue;
+    const title = nonEmpty((entry as { title?: unknown }).title);
+    const sourceType = nonEmpty((entry as { sourceType?: unknown }).sourceType);
+    if (!title || !sourceType) continue;
+    const fileName = optionalNonEmpty((entry as { fileName?: unknown }).fileName);
+    const fileType = optionalNonEmpty((entry as { fileType?: unknown }).fileType);
+    const documentId = optionalNonEmpty((entry as { documentId?: unknown }).documentId);
+    const fileDownloadable = (entry as { fileDownloadable?: unknown }).fileDownloadable === true;
+    out.push({
+      title,
+      sourceType,
+      ...(fileName ? { fileName } : {}),
+      ...(fileType ? { fileType } : {}),
+      ...(documentId && fileDownloadable ? { documentId, fileDownloadable: true } : {}),
+    });
+    if (out.length >= 8) break;
+  }
+  return out;
+}
+
+function nonNegInt(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return 0;
+  return Math.floor(value);
+}
+
+function toKnowledgeBaseCounts(value: unknown): PublicKnowledgeBaseCountsResponse {
+  const empty: PublicKnowledgeBaseCountsResponse = {
+    documents: 0,
+    faqs: 0,
+    notes: 0,
+    urls: 0,
+    html: 0,
+  };
+  if (!value || typeof value !== 'object') return empty;
+  const o = value as Record<string, unknown>;
+  return {
+    documents: nonNegInt(o.documents),
+    faqs: nonNegInt(o.faqs),
+    notes: nonNegInt(o.notes),
+    urls: nonNegInt(o.urls),
+    html: nonNegInt(o.html),
+  };
+}
+
 function toFaqArray(value: unknown): Array<{ question: string; answer: string }> {
   if (!Array.isArray(value)) return [];
   return value
@@ -76,6 +151,12 @@ export function shapePublicBotListItem(raw: unknown): PublicBotListItemResponse 
   const accessKey = nonEmpty(row.accessKey);
   if (!id || !name || !slug || !createdAt || !accessKey) return null;
   if (row.visibility !== 'public') return null;
+  const totalChatsRaw = (row as { totalChats?: unknown }).totalChats;
+  const totalChats =
+    typeof totalChatsRaw === 'number' && Number.isFinite(totalChatsRaw) && totalChatsRaw >= 0
+      ? Math.floor(totalChatsRaw)
+      : 0;
+
   return {
     id,
     name,
@@ -92,6 +173,10 @@ export function shapePublicBotListItem(raw: unknown): PublicBotListItemResponse 
         ? (row.chatUI as PublicBotListItemResponse['chatUI'])
         : undefined,
     createdAt,
+    knowledgeBasePreview: toKnowledgeBasePreview(row.knowledgeBasePreview),
+    knowledgeBaseCounts: toKnowledgeBaseCounts(row.knowledgeBaseCounts),
+    totalChats,
+    knowledgeNotePreview: optionalNonEmpty((row as { knowledgeNotePreview?: unknown }).knowledgeNotePreview),
   };
 }
 

@@ -36,9 +36,8 @@ export function HomeBrandingExperience() {
           >
             <p>
               Branding is not decoration — it is how customers decide whether to trust the answers they see. Assistrio treats{" "}
-              <strong className="font-semibold text-slate-800">widget appearance</strong>, <strong className="font-semibold text-slate-800">launcher</strong>,{" "}
-              <strong className="font-semibold text-slate-800">welcome messaging</strong>, and <strong className="font-semibold text-slate-800">behavior</strong> as first-class
-              product controls for every AI Support Agent, alongside the knowledge and analytics layers.
+              <strong className="text-emphasis-primary">widget appearance, launcher, welcome messaging, and behavior</strong> as
+              first-class product controls for every AI Support Agent, alongside the knowledge and analytics layers.
             </p>
           </HomeSectionHeader>
         </ScrollReveal>

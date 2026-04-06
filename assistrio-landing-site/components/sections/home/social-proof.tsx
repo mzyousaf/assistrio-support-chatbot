@@ -6,11 +6,11 @@ import { HomeSectionHeader } from "@/components/sections/home/home-section-heade
 const pillars = [
   {
     title: "Grounded answers",
-    body: "Bots draw from your knowledge base so replies stay aligned with how your product actually works.",
+    body: "AI Agents draw from your knowledge base so replies stay aligned with how your product actually works.",
   },
   {
     title: "Try before you commit",
-    body: "Gallery live examples use real runtime flows. Your Explore bot runs only on your allowed websites — not a generic mock.",
+    body: "Gallery live examples use real runtime flows. Your Explore AI Support Agent runs only on your allowed websites — not a generic mock.",
   },
   {
     title: "Clear separation of concerns",

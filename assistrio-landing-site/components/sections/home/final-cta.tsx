@@ -16,7 +16,7 @@ export function FinalCta() {
 
       <Container className="relative z-10">
         <ScrollReveal y={18}>
-          <div className="mx-auto max-w-5xl">
+          <div className="mx-auto min-w-0 max-w-5xl">
             <div className="relative overflow-hidden rounded-[1.85rem] border border-[var(--border-teal-soft)]/90 bg-white/90 px-5 py-12 shadow-[0_40px_100px_-36px_rgba(13,148,136,0.22),var(--shadow-premium)] ring-1 ring-[color-mix(in_srgb,var(--brand-teal)_12%,transparent)] backdrop-blur-md sm:px-10 sm:py-14 lg:px-12 lg:py-16">
               <div
                 className="pointer-events-none absolute -right-24 -top-24 h-64 w-64 rounded-full bg-[radial-gradient(circle_at_center,rgba(13,148,136,0.1),transparent_70%)]"

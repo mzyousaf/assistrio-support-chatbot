@@ -15,7 +15,7 @@ export function HomeIdentityAndUsage() {
     <Section id="trial" tone="muted" className="border-t border-[var(--border-default)]">
       <Container>
         <ScrollReveal y={20}>
-          <HomeSectionHeader id="trial-heading" eyebrow="Trial" title="Put the bot on your allowed website">
+          <HomeSectionHeader id="trial-heading" eyebrow="Trial" title="Put the AI Support Agent on your allowed website">
             <p className="max-w-2xl text-base leading-relaxed">
               Configure your trial workspace, set the allowed websites you trust, and paste the runtime snippet where your
               customers already are. When you need to move devices or inspect quota, your session tools are here — without

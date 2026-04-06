@@ -260,14 +260,14 @@ export function HomeCapabilityCarousel() {
           lead="Appearance, memory, pipeline, and analytics — each slide is a control plane your team actually touches in production."
         >
           <p>
-            Customize every part of your <strong className="font-semibold text-slate-800">AI Support Agent</strong> experience — from branding and knowledge to lead capture and
+            Customize every part of your <strong className="text-emphasis-primary">AI Support Agent</strong> experience — from branding and knowledge to lead capture and
             advanced insights — without duct-taping four vendors together.
           </p>
         </HomeSectionHeader>
 
         <p className="text-meta mx-auto mt-6 max-w-2xl text-center text-[var(--foreground-muted)] sm:mt-7">
-          Governance stays practical: <strong className="font-semibold text-slate-700">Allowed websites</strong>,{" "}
-          <strong className="font-semibold text-slate-700">workspace roles</strong>, and production runtime maintenance — without inventing uptime percentages.
+          Governance stays practical: <strong className="text-emphasis-primary">Allowed websites</strong>,{" "}
+          <strong className="text-emphasis-primary">workspace roles</strong>, and production runtime maintenance — without inventing uptime percentages.
         </p>
 
         <div className="relative mt-12 lg:mt-14" {...pauseProps}>

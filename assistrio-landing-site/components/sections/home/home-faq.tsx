@@ -6,7 +6,7 @@ import { HomeSectionHeader } from "@/components/sections/home/home-section-heade
 const faqs: { q: string; a: string }[] = [
   {
     q: "What’s the difference between gallery live examples and Try it free?",
-    a: "Gallery examples run here with shared demo quota so you can browse quickly. Try it free creates your own evaluation bot: it’s tied to your workspace key and the allowed website you set for production-style runtime on your site.",
+    a: "Gallery examples run here with shared demo quota so you can browse quickly. Try it free creates your own evaluation AI Support Agent: it’s tied to your workspace key and the allowed website you set for production-style runtime on your site.",
   },
   {
     q: "Do I need an account to start?",
@@ -18,7 +18,7 @@ const faqs: { q: string; a: string }[] = [
   },
   {
     q: "How do I embed on my site?",
-    a: "After you create your evaluation bot, you get a runtime snippet with the credentials your embed needs. Your page must be served on the allowed website you configured; the API enforces origin and key rules.",
+    a: "After you create your evaluation AI Support Agent, you get a runtime snippet with the credentials your embed needs. Your page must be served on the allowed website you configured; the API enforces origin and key rules.",
   },
 ];
 

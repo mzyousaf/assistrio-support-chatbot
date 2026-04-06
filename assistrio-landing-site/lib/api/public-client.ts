@@ -13,7 +13,7 @@ export async function fetchPublicShowcaseBotsClient(): Promise<PublicBotListItem
     headers: { Accept: "application/json" },
   });
   if (!res.ok) {
-    throw new Error(`Public bot list failed: ${res.status}`);
+    throw new Error(`Public showcase AI Agent list failed: ${res.status}`);
   }
   return res.json() as Promise<PublicBotListItem[]>;
 }

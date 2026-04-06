@@ -159,7 +159,7 @@ export function PlansPricingGrid({ plans, density = "default", className = "", t
                         track("cta_clicked", { location: trackLocation, label: p.cta, href: p.href });
                         openTrial();
                       }}
-                      className={`${buttonBaseClass} ${buttonVariantClass[p.variant]} w-full justify-center rounded-xl px-5 py-3.5 text-[0.9375rem] font-semibold ${
+                      className={`${buttonBaseClass} ${buttonVariantClass[p.variant]} w-full justify-center rounded-xl px-5 py-3.5 text-center text-[0.9375rem] font-semibold leading-snug ${
                         p.featured
                           ? "btn-primary-shimmer py-3.5 text-base shadow-[var(--shadow-sm)] ring-2 ring-[color-mix(in_srgb,var(--brand-teal)_22%,transparent)]"
                           : ""

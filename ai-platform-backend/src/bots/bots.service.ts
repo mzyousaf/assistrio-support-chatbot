@@ -50,6 +50,26 @@ function getCreatorDefaultsForUserFlow(createdByUserId?: Types.ObjectId) {
   };
 }
 
+/** Safe KB metadata for marketing gallery (no signed URLs or storage keys; optional public download id). */
+export type PublicKnowledgeBasePreviewItem = {
+  title: string;
+  sourceType: string;
+  fileName?: string;
+  fileType?: string;
+  /** Mongo document id when `GET .../documents/:id/download` is supported for this row. */
+  documentId?: string;
+  fileDownloadable?: boolean;
+};
+
+/** Ready, active knowledge items only — counts for public gallery cards. */
+export type PublicKnowledgeBaseCounts = {
+  documents: number;
+  faqs: number;
+  notes: number;
+  urls: number;
+  html: number;
+};
+
 export interface PublicBotDto {
   id: string;
   name: string;
@@ -68,8 +88,21 @@ export interface PublicBotDto {
     launcherPosition?: string;
     showBranding?: boolean;
     timePosition?: 'top' | 'bottom';
+    showSources?: boolean;
+    showCopyButton?: boolean;
+    showEmoji?: boolean;
+    showMenuQuickLinks?: boolean;
+    launcherAvatarUrl?: string;
   };
   createdAt: string;
+  /** Ready knowledge items for gallery cards (capped per bot). */
+  knowledgeBasePreview: PublicKnowledgeBasePreviewItem[];
+  /** Counts of ready, active items by source type (gallery transparency). */
+  knowledgeBaseCounts: PublicKnowledgeBaseCounts;
+  /** Conversation count for gallery social proof (0 when none). */
+  totalChats?: number;
+  /** Active KB note body (trimmed, capped) for gallery — from `KnowledgeBaseItem` sourceType `note`. */
+  knowledgeNotePreview?: string;
 }
 
 export interface CreateVisitorTrialBotInput {
@@ -97,6 +130,12 @@ export interface ShowcaseAccessSettingsInput {
   visitorMultiChatEnabled?: boolean;
   visitorMultiChatMax?: number | null;
 }
+
+/** Mongo collection for {@link Bot}; used in KB aggregations to scope rows to public showcase bots only. */
+const BOTS_COLLECTION = 'bots';
+
+/** Max characters of note `content` exposed on public list (gallery cards). */
+const KNOWLEDGE_NOTE_PREVIEW_MAX = 800;
 
 @Injectable()
 export class BotsService {
@@ -233,11 +272,11 @@ export class BotsService {
       )
       .lean();
 
-    return docs.map((bot: Record<string, unknown>) => ({
+    const bots = docs.map((bot: Record<string, unknown>) => ({
       id: String(bot._id),
       name: String(bot.name ?? ''),
       slug: String(bot.slug ?? ''),
-      visibility: 'public',
+      visibility: 'public' as const,
       accessKey: String(bot.accessKey ?? ''),
       shortDescription: bot.shortDescription != null ? String(bot.shortDescription) : undefined,
       category: bot.category != null ? String(bot.category) : undefined,
@@ -251,7 +290,20 @@ export class BotsService {
         bot.createdAt instanceof Date
           ? bot.createdAt.toISOString()
           : String(bot.createdAt ?? ''),
+      knowledgeBasePreview: [] as PublicKnowledgeBasePreviewItem[],
+      knowledgeBaseCounts: {
+        documents: 0,
+        faqs: 0,
+        notes: 0,
+        urls: 0,
+        html: 0,
+      },
     }));
+    return this.attachTotalChats(
+      await this.attachKnowledgeBaseCounts(
+        await this.attachKnowledgeNotePreview(await this.attachKnowledgeBasePreview(bots)),
+      ),
+    );
   }
 
   /**
@@ -282,11 +334,11 @@ export class BotsService {
       )
       .lean();
 
-    return docs.map((bot: Record<string, unknown>) => ({
+    const bots = docs.map((bot: Record<string, unknown>) => ({
       id: String(bot._id),
       name: String(bot.name ?? ''),
       slug: String(bot.slug ?? ''),
-      visibility: 'public',
+      visibility: 'public' as const,
       accessKey: String(bot.accessKey ?? ''),
       shortDescription: bot.shortDescription != null ? String(bot.shortDescription) : undefined,
       category: bot.category != null ? String(bot.category) : undefined,
@@ -300,7 +352,278 @@ export class BotsService {
         bot.createdAt instanceof Date
           ? bot.createdAt.toISOString()
           : String(bot.createdAt ?? ''),
+      knowledgeBasePreview: [] as PublicKnowledgeBasePreviewItem[],
+      knowledgeBaseCounts: {
+        documents: 0,
+        faqs: 0,
+        notes: 0,
+        urls: 0,
+        html: 0,
+      },
     }));
+    return this.attachTotalChats(
+      await this.attachKnowledgeBaseCounts(
+        await this.attachKnowledgeNotePreview(await this.attachKnowledgeBasePreview(bots)),
+      ),
+    );
+  }
+
+  /** Minimal id lookup for public document download (showcase, published, public). */
+  async findPublicShowcaseBotIdBySlug(slug: string): Promise<string | null> {
+    const doc = await this.botModel
+      .findOne({
+        slug: slug.trim().toLowerCase(),
+        type: 'showcase',
+        isPublic: true,
+        status: 'published',
+        visibility: 'public',
+      })
+      .select('_id')
+      .lean();
+    return doc ? String((doc as { _id: unknown })._id) : null;
+  }
+
+  private async attachTotalChats(bots: PublicBotDto[]): Promise<PublicBotDto[]> {
+    if (bots.length === 0) return bots;
+    const botOids = bots.map((b) => new Types.ObjectId(b.id));
+    const agg = await this.conversationModel.aggregate<{ _id: Types.ObjectId; n: number }>([
+      { $match: { botId: { $in: botOids } } },
+      { $group: { _id: '$botId', n: { $sum: 1 } } },
+    ]);
+    const byId = new Map<string, number>();
+    for (const row of agg) {
+      byId.set(String(row._id), row.n);
+    }
+    return bots.map((b) => ({ ...b, totalChats: byId.get(b.id) ?? 0 }));
+  }
+
+  private emptyKnowledgeBaseCounts(): PublicKnowledgeBaseCounts {
+    return { documents: 0, faqs: 0, notes: 0, urls: 0, html: 0 };
+  }
+
+  /**
+   * Counts ready, active knowledge rows per bot and sourceType (full totals, not preview-capped).
+   * Only rows whose parent bot is **type `showcase`**, **published**, **public**, and **isPublic** are included
+   * (defense in depth for public gallery APIs).
+   */
+  private async attachKnowledgeBaseCounts(bots: PublicBotDto[]): Promise<PublicBotDto[]> {
+    if (bots.length === 0) return bots;
+    const botOids = bots.map((b) => new Types.ObjectId(b.id));
+    type AggRow = { _id: { b: Types.ObjectId; t: string }; n: number };
+    const agg = await this.knowledgeBaseItemModel.aggregate<AggRow>([
+      {
+        $match: {
+          botId: { $in: botOids },
+          active: true,
+          status: 'ready',
+          sourceType: { $in: ['document', 'faq', 'note', 'url', 'html'] },
+        },
+      },
+      {
+        $lookup: {
+          from: BOTS_COLLECTION,
+          let: { bid: '$botId' },
+          pipeline: [
+            { $match: { $expr: { $eq: ['$_id', '$$bid'] } } },
+            {
+              $match: {
+                type: 'showcase',
+                isPublic: true,
+                status: 'published',
+                visibility: 'public',
+              },
+            },
+            { $limit: 1 },
+            { $project: { _id: 1 } },
+          ],
+          as: '_showcaseBot',
+        },
+      },
+      { $match: { _showcaseBot: { $ne: [] } } },
+      { $group: { _id: { b: '$botId', t: '$sourceType' }, n: { $sum: 1 } } },
+    ]);
+    const byBot = new Map<string, PublicKnowledgeBaseCounts>();
+    for (const b of bots) {
+      byBot.set(b.id, this.emptyKnowledgeBaseCounts());
+    }
+    for (const row of agg) {
+      const bid = String(row._id.b);
+      const t = String(row._id.t ?? '');
+      const n = typeof row.n === 'number' && row.n >= 0 ? row.n : 0;
+      const cur = byBot.get(bid);
+      if (!cur) continue;
+      switch (t) {
+        case 'document':
+          cur.documents += n;
+          break;
+        case 'faq':
+          cur.faqs += n;
+          break;
+        case 'note':
+          cur.notes += n;
+          break;
+        case 'url':
+          cur.urls += n;
+          break;
+        case 'html':
+          cur.html += n;
+          break;
+        default:
+          break;
+      }
+    }
+    return bots.map((b) => ({ ...b, knowledgeBaseCounts: byBot.get(b.id) ?? this.emptyKnowledgeBaseCounts() }));
+  }
+
+  /**
+   * Loads a capped preview of ready, active knowledge items for gallery download hints.
+   * Same **showcase-only** bot gate as {@link attachKnowledgeBaseCounts}.
+   */
+  private async attachKnowledgeBasePreview(bots: PublicBotDto[]): Promise<PublicBotDto[]> {
+    if (bots.length === 0) return bots;
+    const botIds = bots.map((b) => new Types.ObjectId(b.id));
+    const KB_PREVIEW_PER_BOT = 6;
+    const KB_QUERY_CAP = 500;
+
+    type KbRow = {
+      botId: Types.ObjectId;
+      title?: string;
+      sourceType?: string;
+      sourceMeta?: unknown;
+      documentId?: Types.ObjectId;
+    };
+    const rows = await this.knowledgeBaseItemModel.aggregate<KbRow>([
+      {
+        $match: {
+          botId: { $in: botIds },
+          active: true,
+          status: 'ready',
+          sourceType: { $in: ['document', 'faq', 'note', 'url', 'html'] },
+        },
+      },
+      {
+        $lookup: {
+          from: BOTS_COLLECTION,
+          let: { bid: '$botId' },
+          pipeline: [
+            { $match: { $expr: { $eq: ['$_id', '$$bid'] } } },
+            {
+              $match: {
+                type: 'showcase',
+                isPublic: true,
+                status: 'published',
+                visibility: 'public',
+              },
+            },
+            { $limit: 1 },
+            { $project: { _id: 1 } },
+          ],
+          as: '_showcaseBot',
+        },
+      },
+      { $match: { _showcaseBot: { $ne: [] } } },
+      { $sort: { createdAt: -1 } },
+      { $limit: KB_QUERY_CAP },
+      { $project: { botId: 1, title: 1, sourceType: 1, sourceMeta: 1, documentId: 1 } },
+    ]);
+
+    const docOidList = [
+      ...new Set(
+        rows
+          .filter((r) => r.sourceType === 'document' && r.documentId)
+          .map((r) => String(r.documentId)),
+      ),
+    ].filter((id) => Types.ObjectId.isValid(id));
+    const docById = new Map<string, { botId: string; status?: string; active?: boolean; s3Bucket?: string; s3Key?: string; url?: string }>();
+    if (docOidList.length > 0) {
+      const docRows = await this.documentModel
+        .find({ _id: { $in: docOidList.map((id) => new Types.ObjectId(id)) } })
+        .select('botId status active s3Bucket s3Key url')
+        .lean();
+      for (const d of docRows) {
+        const id = String((d as { _id: unknown })._id);
+        const botId = String((d as { botId: Types.ObjectId }).botId);
+        const row = d as { status?: string; active?: boolean; s3Bucket?: string; s3Key?: string; url?: string };
+        docById.set(id, {
+          botId,
+          status: row.status,
+          active: row.active,
+          s3Bucket: typeof row.s3Bucket === 'string' ? row.s3Bucket : undefined,
+          s3Key: typeof row.s3Key === 'string' ? row.s3Key : undefined,
+          url: typeof row.url === 'string' ? row.url : undefined,
+        });
+      }
+    }
+
+    const isDocFileDownloadable = (d: { status?: string; active?: boolean; s3Bucket?: string; s3Key?: string; url?: string } | undefined): boolean => {
+      if (!d || d.status !== 'ready' || d.active === false) return false;
+      const b = (d.s3Bucket ?? '').trim();
+      const k = (d.s3Key ?? '').trim();
+      if (b && k) return true;
+      const u = (d.url ?? '').trim();
+      return /^https?:\/\//i.test(u);
+    };
+
+    const byBot = new Map<string, PublicKnowledgeBasePreviewItem[]>();
+    for (const b of bots) {
+      byBot.set(b.id, []);
+    }
+
+    for (const row of rows) {
+      const bid = String(row.botId);
+      const list = byBot.get(bid);
+      if (!list || list.length >= KB_PREVIEW_PER_BOT) continue;
+
+      const title = String(row.title ?? '').trim() || 'Untitled';
+      const sourceType = String(row.sourceType ?? 'note');
+      const meta = row.sourceMeta && typeof row.sourceMeta === 'object' ? row.sourceMeta : undefined;
+      let fileName: string | undefined;
+      let fileType: string | undefined;
+      if (meta) {
+        const fn = (meta as { fileName?: unknown }).fileName;
+        const ft = (meta as { fileType?: unknown }).fileType;
+        if (typeof fn === 'string' && fn.trim()) fileName = fn.trim();
+        if (typeof ft === 'string' && ft.trim()) fileType = ft.trim();
+      }
+
+      const docId =
+        sourceType === 'document' && row.documentId && Types.ObjectId.isValid(String(row.documentId))
+          ? String(row.documentId)
+          : undefined;
+      const docMeta = docId ? docById.get(docId) : undefined;
+      const downloadable =
+        Boolean(docId) && Boolean(docMeta) && docMeta!.botId === bid && isDocFileDownloadable(docMeta);
+
+      list.push({
+        title,
+        sourceType,
+        ...(fileName ? { fileName } : {}),
+        ...(fileType ? { fileType } : {}),
+        ...(downloadable && docId ? { documentId: docId, fileDownloadable: true } : {}),
+      });
+    }
+
+    return bots.map((b) => ({
+      ...b,
+      knowledgeBasePreview: byBot.get(b.id) ?? [],
+    }));
+  }
+
+  /** Public gallery: attach trimmed note `content` per bot (parallel reads). */
+  private async attachKnowledgeNotePreview(bots: PublicBotDto[]): Promise<PublicBotDto[]> {
+    if (bots.length === 0) return bots;
+    const contents = await Promise.all(
+      bots.map((b) => this.knowledgeBaseItemService.getNoteContentForBot(b.id)),
+    );
+    return bots.map((b, i) => {
+      const raw = (contents[i] ?? '').trim();
+      if (!raw) return b;
+      const knowledgeNotePreview =
+        raw.length > KNOWLEDGE_NOTE_PREVIEW_MAX
+          ? `${raw.slice(0, KNOWLEDGE_NOTE_PREVIEW_MAX).trimEnd()}…`
+          : raw;
+      return { ...b, knowledgeNotePreview };
+    });
   }
 
   async findOne(id: string) {

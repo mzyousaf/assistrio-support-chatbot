@@ -5,25 +5,78 @@ import { Container } from "@/components/layout/container";
 import { Section } from "@/components/layout/section";
 import { ShowcaseBotDetailClient } from "@/components/bots/showcase-bot-detail-client";
 import { fetchPublicBotBySlug } from "@/lib/api/public";
+import {
+  absoluteOgImageUrl,
+  DEFAULT_OG_IMAGE_PATH,
+  DEFAULT_OG_IMAGE_SIZE,
+} from "@/lib/site-metadata";
 import { tryGetPublicApiBaseUrl } from "@/lib/utils/env";
 
 export const dynamic = "force-dynamic";
 
 type Props = { params: Promise<{ slug: string }> };
 
+const FALLBACK_BOT_TITLE = "Showcase AI Support Agent";
+
+function buildBotDescription(bot: {
+  name: string;
+  shortDescription: string;
+  description?: string;
+  category?: string;
+}): string {
+  const base =
+    "Explore this live AI Support Agent example and see how Assistrio delivers knowledge-based answers, lead capture, and branded chat experiences.";
+  const fromApi = (bot.description ?? bot.shortDescription ?? "").trim();
+  const category = bot.category?.trim();
+  if (fromApi.length > 40) {
+    const extra = category ? ` ${category}.` : "";
+    const line = `${fromApi}${extra}`.replace(/\s+/g, " ").trim();
+    return line.length <= 165 ? line : `${line.slice(0, 162)}…`;
+  }
+  return base;
+}
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
   const base = tryGetPublicApiBaseUrl();
-  if (!base) return { title: "Showcase bot" };
+  if (!base) {
+    return { title: FALLBACK_BOT_TITLE };
+  }
   try {
     const bot = await fetchPublicBotBySlug(slug);
-    if (!bot) return { title: "Showcase bot" };
+    if (!bot) return { title: FALLBACK_BOT_TITLE };
+
+    const titleSegment = `${bot.name} — Live AI Support Agent Example`;
+    const description = buildBotDescription(bot);
+    const ogImageHref = absoluteOgImageUrl(bot.imageUrl);
+    const defaultImages: NonNullable<Metadata["openGraph"]>["images"] = [
+      { url: DEFAULT_OG_IMAGE_PATH, ...DEFAULT_OG_IMAGE_SIZE, alt: `${titleSegment} · Assistrio` },
+    ];
+    const ogImages = ogImageHref
+      ? [{ url: ogImageHref, alt: `${bot.name} — Assistrio` }]
+      : defaultImages;
+
     return {
-      title: bot.name,
-      description: bot.shortDescription,
+      title: titleSegment,
+      description,
+      alternates: { canonical: `/bots/${encodeURIComponent(bot.slug)}` },
+      openGraph: {
+        type: "website",
+        siteName: "Assistrio",
+        title: `${titleSegment} · Assistrio`,
+        description,
+        url: `/bots/${encodeURIComponent(bot.slug)}`,
+        images: ogImages,
+      },
+      twitter: {
+        card: "summary_large_image",
+        title: `${titleSegment} · Assistrio`,
+        description,
+        images: ogImageHref ? [ogImageHref] : [DEFAULT_OG_IMAGE_PATH],
+      },
     };
   } catch {
-    return { title: "Showcase bot" };
+    return { title: FALLBACK_BOT_TITLE };
   }
 }
 
@@ -36,7 +89,7 @@ export default async function BotDetailPage({ params }: Props) {
         <Container size="narrow">
           <p className="rounded-[var(--radius-xl)] border border-amber-200/90 bg-amber-50/90 px-4 py-3 text-sm text-amber-950 shadow-[var(--shadow-xs)]">
             Configure <code className="rounded bg-white px-1">NEXT_PUBLIC_ASSISTRIO_API_BASE_URL</code> to load showcase
-            bot details.
+            AI Agent details.
           </p>
         </Container>
       </Section>
@@ -48,7 +101,7 @@ export default async function BotDetailPage({ params }: Props) {
   try {
     bot = await fetchPublicBotBySlug(slug);
   } catch (e) {
-    loadError = e instanceof Error ? e.message : "Failed to load bot";
+    loadError = e instanceof Error ? e.message : "Failed to load AI Agent";
   }
 
   if (loadError) {

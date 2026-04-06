@@ -77,27 +77,42 @@ export function HomeIndustryCarousel() {
   const reduced = usePrefersReducedMotion();
   const scrollerRef = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState(0);
-  const activeRef = useRef(0);
-  activeRef.current = active;
+  /** Logical slide for prev/next/autoplay — synced from scroll (with edge rules), not only React state. */
+  const logicalIndexRef = useRef(0);
 
   const scrollToIndex = useCallback(
     (i: number) => {
       const root = scrollerRef.current;
       if (!root) return;
       const idx = Math.min(industries.length - 1, Math.max(0, i));
+      const prev = logicalIndexRef.current;
+      logicalIndexRef.current = idx;
       const card = root.querySelector<HTMLElement>(`[data-industry-card="${idx}"]`);
-      if (!card) return;
+      if (!card) {
+        logicalIndexRef.current = prev;
+        return;
+      }
       // scrollIntoView also scrolls the window; keep motion inside this scroller only (autoplay, dots, keys).
       const center = card.offsetLeft + card.offsetWidth / 2 - root.clientWidth / 2;
       const max = Math.max(0, root.scrollWidth - root.clientWidth);
-      root.scrollTo({ left: Math.max(0, Math.min(center, max)), behavior: reduced ? "auto" : "smooth" });
+      const left = Math.max(0, Math.min(center, max));
+      // Long smooth travel (e.g. last → first) can feel stuck in some engines; instant is reliable for wrap jumps.
+      const n = industries.length;
+      const wrapJump =
+        (prev === n - 1 && idx === 0) || (prev === 0 && idx === n - 1);
+      root.scrollTo({
+        left,
+        behavior: reduced || wrapJump ? "auto" : "smooth",
+      });
     },
     [reduced],
   );
 
   const scrollByDir = useCallback(
     (dir: -1 | 1) => {
-      const next = Math.min(industries.length - 1, Math.max(0, activeRef.current + dir));
+      const n = industries.length;
+      const cur = logicalIndexRef.current;
+      const next = (cur + dir + n) % n;
       scrollToIndex(next);
     },
     [scrollToIndex],
@@ -109,19 +124,35 @@ export function HomeIndustryCarousel() {
     const cards = () => Array.from(root.querySelectorAll<HTMLElement>("[data-industry-card]"));
 
     const onScroll = () => {
-      const r = root.getBoundingClientRect();
-      const mid = r.left + r.width / 2;
-      let best = 0;
-      let bestDist = Infinity;
-      cards().forEach((el, i) => {
-        const b = el.getBoundingClientRect();
-        const c = b.left + b.width / 2;
-        const d = Math.abs(c - mid);
-        if (d < bestDist) {
-          bestDist = d;
-          best = i;
-        }
-      });
+      const n = industries.length;
+      const maxScroll = Math.max(0, root.scrollWidth - root.clientWidth);
+      const x = root.scrollLeft;
+      let best: number;
+
+      // Variable card widths break “nearest center” at the strip ends — pin to first/last when scrolled flush.
+      if (maxScroll <= 0) {
+        best = 0;
+      } else if (x >= maxScroll - 4) {
+        best = n - 1;
+      } else if (x <= 4) {
+        best = 0;
+      } else {
+        const r = root.getBoundingClientRect();
+        const mid = r.left + r.width / 2;
+        best = 0;
+        let bestDist = Infinity;
+        cards().forEach((el, i) => {
+          const b = el.getBoundingClientRect();
+          const c = b.left + b.width / 2;
+          const d = Math.abs(c - mid);
+          if (d < bestDist) {
+            bestDist = d;
+            best = i;
+          }
+        });
+      }
+
+      logicalIndexRef.current = best;
       setActive(best);
     };
 
@@ -143,7 +174,8 @@ export function HomeIndustryCarousel() {
     disabled: reduced,
     intervalMs: 3200,
     onAdvance: () => {
-      const next = (activeRef.current + 1) % industries.length;
+      const n = industries.length;
+      const next = (logicalIndexRef.current + 1) % n;
       scrollToIndex(next);
     },
   });
@@ -168,8 +200,8 @@ export function HomeIndustryCarousel() {
           lead="Same runtime and controls — you tune knowledge, tone, and governance for how your market buys and gets help."
         >
           <p>
-            <strong className="font-semibold text-slate-800">AI Support Agents</strong> that adapt to workflows in SaaS, regulated services, commerce, and frontline support —
-            without a separate product SKU per vertical.
+            <strong className="text-emphasis-primary">AI Support Agents</strong> that work 24/7 and never sleep—always on when someone reaches out—grounded in your
+            knowledge and how you sound across SaaS, regulated services, commerce, and frontline support, without a separate product SKU per vertical.
           </p>
         </HomeSectionHeader>
 

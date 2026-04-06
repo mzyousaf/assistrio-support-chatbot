@@ -15,7 +15,7 @@ type Props = {
 
 /**
  * `POST /api/widget/register-website` — ties your **hostname** (from pasted URL or hostname) to your current
- * `platformVisitorId` for this showcase bot so the embed may run there. It does **not** verify DNS ownership; it
+ * `platformVisitorId` for this showcase AI Agent so the embed may run there. It does **not** verify DNS ownership; it
  * records intent for the backend allowlist. **Quota and ownership** still follow `platformVisitorId`, not the hostname
  * alone.
  */

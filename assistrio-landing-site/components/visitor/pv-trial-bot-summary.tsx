@@ -141,7 +141,7 @@ function PvTrialBotSummarySkeleton() {
         <div className="h-36 rounded-[var(--radius-lg)] assistrio-skeleton opacity-90" />
       </div>
       <p className="sr-only" role="status">
-        Loading bot summary and usage numbers.
+        Loading AI Agent summary and usage numbers.
       </p>
     </Card>
   );
@@ -271,7 +271,7 @@ export function PvTrialBotSummary({ platformVisitorId, botId, showRefresh = true
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           {showHeaderHint ? (
             <p className="text-xs text-[var(--foreground-muted)]">
-              Read-only numbers from your bot and saved id.{" "}
+              Read-only numbers from your AI Support Agent and saved id.{" "}
               <span className="text-slate-600">Update</span> pulls the latest without reloading the page.
             </p>
           ) : (
@@ -286,7 +286,11 @@ export function PvTrialBotSummary({ platformVisitorId, botId, showRefresh = true
             disabled={refreshing}
             onClick={() => void runFetch("refresh")}
             aria-busy={refreshing}
-            aria-label={refreshing ? "Refreshing bot numbers from the server" : "Update bot numbers from the server"}
+            aria-label={
+              refreshing
+                ? "Refreshing AI Agent numbers from the server"
+                : "Update AI Agent numbers from the server"
+            }
           >
             <span className="inline-flex items-center gap-2">
               <RefreshIcon
@@ -325,12 +329,12 @@ export function PvTrialBotSummary({ platformVisitorId, botId, showRefresh = true
         ) : null}
 
         <Card className="border-[var(--border-teal-soft)] bg-gradient-to-b from-white to-slate-50/60 p-5 ring-1 ring-[var(--brand-teal)]/10 sm:p-6">
-          <SectionTitle kicker="Bot" title={b.name} />
+          <SectionTitle kicker="AI Agent" title={b.name} />
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <span className="inline-flex rounded-full border border-slate-200 bg-white px-2.5 py-0.5 text-xs font-medium text-slate-700">
               {b.status}
             </span>
-            <span className="text-xs text-[var(--foreground-muted)]">Explore evaluation bot</span>
+            <span className="text-xs text-[var(--foreground-muted)]">Explore evaluation AI Support Agent</span>
           </div>
           <dl className="mt-5 grid gap-4 text-sm sm:grid-cols-2">
             <div className="min-w-0">
@@ -357,7 +361,7 @@ export function PvTrialBotSummary({ platformVisitorId, botId, showRefresh = true
         <Card className="border-[var(--border-default)] bg-white p-5 sm:p-6">
           <SectionTitle kicker="Usage" title="Quotas for this saved id" />
           <p className="mb-5 text-xs leading-relaxed text-[var(--foreground-muted)]">
-            Preview = tests in Assistrio; Explore runtime = this bot on your allowed website; gallery = shared pool for live
+            Preview = tests in Assistrio; Explore runtime = this AI Support Agent on your allowed website; gallery = shared pool for live
             examples.
           </p>
           <div className="space-y-5">
@@ -368,12 +372,12 @@ export function PvTrialBotSummary({ platformVisitorId, botId, showRefresh = true
             />
             <UsageRow
               title="Explore runtime"
-              subtitle="Messages on this bot, tied to your id."
+              subtitle="Messages on this AI Support Agent, tied to your id."
               bucket={u.trialRuntime}
             />
             <UsageRow
               title="Live examples"
-              subtitle="When you try gallery bots as runtime demos."
+              subtitle="When you try gallery AI Agents as runtime demos."
               bucket={u.showcaseRuntime}
             />
           </div>
@@ -383,7 +387,7 @@ export function PvTrialBotSummary({ platformVisitorId, botId, showRefresh = true
           <Card className="border-[var(--border-default)] bg-white p-5 sm:p-6">
             <SectionTitle kicker="Activity" title="Chats & messages" />
             <p className="mb-5 text-xs leading-relaxed text-[var(--foreground-muted)]">
-              Counts for your saved id on this bot — not a full export.
+              Counts for your saved id on this AI Support Agent — not a full export.
             </p>
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="rounded-[var(--radius-md)] border border-slate-100 bg-slate-50/90 px-4 py-3">

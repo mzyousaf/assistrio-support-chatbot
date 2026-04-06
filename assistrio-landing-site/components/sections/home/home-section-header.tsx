@@ -25,7 +25,7 @@ type Props = {
 };
 
 const bodyProseClass =
-  "max-w-2xl [&_p]:text-pretty [&_p]:text-[1.0625rem] [&_p]:leading-[1.72] [&_p]:text-[var(--foreground-muted)] [&_p+p]:mt-4 [&_strong]:font-semibold [&_strong]:text-slate-800";
+  "max-w-2xl [&_p]:text-pretty [&_p]:text-[1.0625rem] [&_p]:leading-[1.72] [&_p]:text-[var(--foreground-muted)] [&_p+p]:mt-4 [&_strong]:font-semibold [&_strong]:text-[var(--brand-teal-dark)]";
 
 /** Shared section title block — homepage H2 uses `.text-home-h2` (single scale below hero H1). */
 export function HomeSectionHeader({

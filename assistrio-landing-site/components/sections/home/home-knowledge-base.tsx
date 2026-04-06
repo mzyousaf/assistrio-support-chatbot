@@ -21,7 +21,7 @@ export function HomeKnowledgeBase() {
             <ScrollReveal y={20}>
               <HomeSectionHeader id="knowledge-base-heading" eyebrow="Knowledge" title="Ground every answer in what you already know">
                 <p>
-                  This is the only place we go deep on <strong className="font-semibold text-slate-800">sources</strong>: what you connect, how it stays accurate, and why visitors
+                  This is the only place we go deep on <strong className="text-emphasis-primary">sources</strong>: what you connect, how it stays accurate, and why visitors
                   stop getting contradictory answers from scattered docs.
                 </p>
               </HomeSectionHeader>

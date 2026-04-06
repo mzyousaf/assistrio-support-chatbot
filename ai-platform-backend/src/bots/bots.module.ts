@@ -33,6 +33,7 @@ import {
 import { KnowledgeModule } from '../knowledge/knowledge.module';
 import { VisitorsModule } from '../visitors/visitors.module';
 import { WorkspacesModule } from '../workspaces/workspaces.module';
+import { DocumentsModule } from '../documents/documents.module';
 /**
  * Bot-related HTTP surfaces include:
  * - **Anonymous public (rate-limited):** `TrialBotsController`, `PublicVisitorQuotaController`, `PublicVisitorBotController`,
@@ -56,6 +57,7 @@ import { WorkspacesModule } from '../workspaces/workspaces.module';
     ]),
     KnowledgeModule,
     VisitorsModule,
+    DocumentsModule,
   ],
   controllers: [
     BotsController,

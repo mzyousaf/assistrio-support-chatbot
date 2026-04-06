@@ -1,10 +1,12 @@
-import { Controller, Get, Header, HttpException, HttpStatus, Param, Req } from '@nestjs/common';
-import type { FastifyRequest } from 'fastify';
+import { Controller, Get, Header, HttpException, HttpStatus, Param, Req, Res } from '@nestjs/common';
+import type { FastifyReply, FastifyRequest } from 'fastify';
+import { Types } from 'mongoose';
 import { BotsService } from './bots.service';
 import { shapePublicBotDetail, shapePublicBotListItem } from './public-bot-response.util';
 import { PUBLIC_ANON_RATE_PREFIX, PUBLIC_ANONYMOUS_RATE_LIMITS } from '../rate-limit/public-anonymous-rate-limit.constants';
 import { enforcePublicAnonymousRateLimit } from '../rate-limit/public-anonymous-rate-limit.util';
 import { RateLimitService } from '../rate-limit/rate-limit.service';
+import { DocumentsService } from '../documents/documents.service';
 
 /** Slug path segment for public gallery detail — no slashes or unicode (matches slugify output). */
 const PUBLIC_BOT_SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -28,6 +30,7 @@ function assertPublicGallerySlug(slug: string): string {
 export class PublicBotsController {
   constructor(
     private readonly botsService: BotsService,
+    private readonly documentsService: DocumentsService,
     private readonly rateLimitService: RateLimitService,
   ) {}
 
@@ -52,6 +55,48 @@ export class PublicBotsController {
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
+  }
+
+  /**
+   * Redirect to a short-lived signed URL or the source HTTP URL for a showcase bot document.
+   * Declared before `@Get(':slug')` so paths with extra segments match.
+   */
+  @Get(':slug/documents/:documentId/download')
+  @Header('Cache-Control', 'no-store')
+  async downloadShowcaseDocument(
+    @Req() req: FastifyRequest,
+    @Param('slug') slug: string,
+    @Param('documentId') documentId: string,
+    @Res({ passthrough: false }) reply: FastifyReply,
+  ) {
+    await enforcePublicAnonymousRateLimit(
+      this.rateLimitService,
+      req,
+      PUBLIC_ANON_RATE_PREFIX.publicBotsSlug,
+      PUBLIC_ANONYMOUS_RATE_LIMITS.publicBotsDetailPerIpPerMinute,
+    );
+    const normalized = assertPublicGallerySlug(slug);
+    if (!Types.ObjectId.isValid(String(documentId ?? '').trim())) {
+      throw new HttpException(
+        { error: 'Invalid document id', status: 'error', errorCode: 'BAD_REQUEST' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const botId = await this.botsService.findPublicShowcaseBotIdBySlug(normalized);
+    if (!botId) {
+      throw new HttpException(
+        { error: 'Bot not found', status: 'error', errorCode: 'NOT_FOUND' },
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    const url = await this.documentsService.resolveFileDownloadUrlForBot(botId, documentId.trim());
+    if (!url) {
+      throw new HttpException(
+        { error: 'File not available', status: 'error', errorCode: 'NOT_FOUND' },
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    return reply.redirect(302, url);
   }
 
   @Get(':slug')

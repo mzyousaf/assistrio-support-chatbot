@@ -16,6 +16,10 @@ type Props = {
   children: ReactNode;
   /** When opening showcase, jump to this bot if present in the public list */
   showcaseSlug?: string | null;
+  /** Optional accessible name when children are multi-line or decorative. */
+  "aria-label"?: string;
+  /** Optional id of element describing the control (e.g. subline below the button). */
+  "aria-describedby"?: string;
 };
 
 export function TrackedFlowCtaButton({
@@ -27,6 +31,8 @@ export function TrackedFlowCtaButton({
   className = "",
   children,
   showcaseSlug,
+  "aria-label": ariaLabel,
+  "aria-describedby": ariaDescribedBy,
 }: Props) {
   const { openTrial, openShowcase } = useCtaFlow();
   const { track } = useTrackEvent();
@@ -34,6 +40,8 @@ export function TrackedFlowCtaButton({
     <button
       type="button"
       aria-haspopup="dialog"
+      aria-label={ariaLabel}
+      aria-describedby={ariaDescribedBy}
       onClick={() => {
         track("cta_clicked", { location, label, href });
         if (flow === "trial") openTrial();

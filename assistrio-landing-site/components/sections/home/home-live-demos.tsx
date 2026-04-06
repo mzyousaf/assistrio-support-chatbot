@@ -12,7 +12,7 @@ export function HomeLiveDemos() {
         <ScrollReveal y={20}>
           <HomeSectionHeader id="live-demos-heading" eyebrow="Showcase" title="Try runtime before you commit">
             <p className="max-w-2xl text-base leading-relaxed">
-              Open curated public bots and chat on this site with the same runtime API path as production — gallery quota is separate from your Explore runtime on your own bot.
+              Open curated public AI Agents and chat on this site with the same runtime API path as production — gallery quota is separate from your Explore runtime on your own AI Support Agent.
             </p>
           </HomeSectionHeader>
         </ScrollReveal>
@@ -20,7 +20,7 @@ export function HomeLiveDemos() {
           <div>
             <p className="font-[family-name:var(--font-display)] text-xl font-semibold text-slate-900">Gallery</p>
             <p className="mt-2 max-w-xl text-sm leading-relaxed text-[var(--foreground-muted)]">
-              Pick a bot, run the widget on this origin, and watch init, quota, and how allowed websites are enforced — then try it free to attach your own evaluation bot to your allowed website when you’re ready.
+              Pick an AI Agent, run the widget on this origin, and watch init, quota, and how allowed websites are enforced — then try it free to attach your own evaluation AI Support Agent to your allowed website when you’re ready.
             </p>
           </div>
           <HomeLiveDemosCta />

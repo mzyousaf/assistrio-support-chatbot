@@ -16,6 +16,7 @@ import {
   readPvLastTrialBotRefForActivePlatformVisitor,
   type PvLastTrialBotRef,
 } from "@/lib/identity/pv-last-trial-bot";
+import { TRIAL_NO_CREDIT_CARD_NOTE } from "@/lib/trial-primary-cta-label";
 
 export function TrialPageClient() {
   const [trialCreated, setTrialCreated] = useState(false);
@@ -45,11 +46,10 @@ export function TrialPageClient() {
         <Container size="narrow">
           <PageIntro eyebrow="Explore" title="Explore Assistrio on your allowed website" className="max-w-2xl">
             <p className="text-page-lead">
-              <strong className="font-medium text-slate-800">Try it free</strong> creates your evaluation bot using
-              your <strong className="font-medium text-slate-800">workspace key</strong> and the allowed website where runtime
-              may run. The server checks both. Owner preview lives in Assistrio product UIs; visitors only see{" "}
-              <strong className="font-medium text-slate-800">runtime</strong> on that allowed website — not preview on this
-              marketing site. No card required.
+              <strong>Try it free</strong> creates your evaluation AI Support Agent using your <strong>workspace key</strong>{" "}
+              and the allowed website where runtime may run. The server checks both. Owner preview lives in Assistrio
+              product UIs; visitors only see <strong>runtime</strong> on that allowed website — not preview on this
+              marketing site. <strong>{TRIAL_NO_CREDIT_CARD_NOTE}</strong>.
             </p>
           </PageIntro>
         </Container>
@@ -68,7 +68,7 @@ export function TrialPageClient() {
                   <div className="flex items-center gap-3 py-2">
                     <div className="h-px flex-1 bg-[var(--border-default)]" />
                     <span className="shrink-0 text-center text-[0.7rem] font-medium uppercase tracking-wide text-slate-400">
-                      New bot or different id
+                      New AI Agent or different id
                     </span>
                     <div className="h-px flex-1 bg-[var(--border-default)]" />
                   </div>
@@ -90,14 +90,14 @@ export function TrialPageClient() {
               <TrialFlowStep
                 step="2"
                 title="Usage for this id"
-                description="Preview, Explore runtime on your bot, and gallery live examples use separate quota buckets — all keyed to the id above."
+                description="Preview, Explore runtime on your AI Support Agent, and gallery live examples use separate quota buckets — all keyed to the id above."
               >
                 <QuotaSummaryCard />
               </TrialFlowStep>
 
               <TrialFlowStep
                 step="3"
-                title="Create your bot"
+                title="Create your AI Support Agent"
                 description="Choose the allowed website where runtime may run. After creation you get credentials and an embed snippet — treat them as private access material."
                 id="create"
               >

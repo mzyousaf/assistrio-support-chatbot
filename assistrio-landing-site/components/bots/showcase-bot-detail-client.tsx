@@ -27,16 +27,16 @@ export function ShowcaseBotDetailClient({ bot }: Props) {
       <div className="rounded-[1.35rem] border border-[var(--border-default)] bg-gradient-to-br from-white via-slate-50/30 to-[var(--brand-teal-subtle)]/20 p-6 shadow-[var(--shadow-sm)] sm:p-8">
         <p className="text-eyebrow">Showcase runtime</p>
         <h2 className="mt-2 font-[family-name:var(--font-display)] text-xl font-semibold text-slate-900 sm:text-2xl">
-          Try this bot on this page
+          Try this AI Agent on this page
         </h2>
         <p className="mt-3 max-w-3xl text-sm leading-relaxed text-[var(--foreground-muted)]">
           <strong className="font-medium text-slate-800">Runtime demo</strong> only — not owner preview. Messages count
           against the <strong className="font-medium text-slate-800">showcase runtime</strong> quota slice for your stable
-          id (shared across every gallery bot). Draft and preview workflows stay in the Assistrio app.
+          id (shared across every gallery AI Agent). Draft and preview workflows stay in the Assistrio app.
         </p>
         <p className="mt-3 max-w-3xl text-sm leading-relaxed text-[var(--foreground-muted)]">
           The embed may only load when your <strong className="font-medium text-slate-800">page origin</strong> is
-          allowed for this bot — either an Assistrio-configured demo host or a URL you register below for your current{" "}
+          allowed for this AI Agent — either an Assistrio-configured demo host or a URL you register below for your current{" "}
           <code className="rounded bg-slate-100 px-1 text-xs">platformVisitorId</code>.
         </p>
         <div className="mt-5">
@@ -44,8 +44,8 @@ export function ShowcaseBotDetailClient({ bot }: Props) {
         </div>
       </div>
 
-      <div className="grid gap-10 lg:grid-cols-12 lg:gap-10 lg:items-start">
-        <div className="space-y-6 lg:col-span-5">
+      <div className="grid min-w-0 gap-10 lg:grid-cols-12 lg:gap-10 lg:items-start">
+        <div className="min-w-0 space-y-6 lg:col-span-5">
           <StableIdentityPanel variant="compact" />
           <div>
             <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Quota</p>
@@ -53,7 +53,7 @@ export function ShowcaseBotDetailClient({ bot }: Props) {
           </div>
         </div>
 
-        <div className="space-y-8 lg:col-span-7">
+        <div className="min-w-0 space-y-8 lg:col-span-7">
           {canEmbed ? (
             <AssistrioShowcaseRuntimeEmbed
               botId={bot.id}

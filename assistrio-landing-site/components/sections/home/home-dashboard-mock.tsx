@@ -8,7 +8,7 @@ export function HomeDashboardMock() {
         <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-slate-400">Workspace</p>
         <ul className="mt-3 space-y-1 text-sm text-slate-600">
           <li className="rounded-md bg-[var(--brand-teal-subtle)]/60 px-2 py-1.5 font-medium text-[var(--brand-teal-dark)]">
-            Bots
+            AI Agents
           </li>
           <li className="rounded-md px-2 py-1.5">Knowledge</li>
           <li className="rounded-md px-2 py-1.5">Preview</li>
@@ -19,7 +19,7 @@ export function HomeDashboardMock() {
       <div className="bg-gradient-to-br from-white to-slate-50/90 p-5 sm:p-8">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <p className="text-sm font-semibold text-slate-900">Support bot · Production</p>
+            <p className="text-sm font-semibold text-slate-900">AI Support Agent · Production</p>
             <p className="mt-1 text-xs text-[var(--foreground-muted)]">Published · last edit 2h ago · preview draft saved</p>
           </div>
           <div className="flex flex-wrap gap-2">

@@ -140,7 +140,7 @@ export function TrialForm({
         tabIndex={stepHeadingId ? -1 : undefined}
         className="mt-2 font-[family-name:var(--font-display)] text-xl font-semibold text-slate-900 outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-teal)]/35 focus-visible:ring-offset-2"
       >
-        Evaluation bot & allowed website
+        Evaluation AI Support Agent & allowed website
       </h3>
       {!hideHostnameField ? (
         <p className="mt-2 text-sm leading-relaxed text-[var(--foreground-muted)]">
@@ -150,14 +150,14 @@ export function TrialForm({
         </p>
       ) : (
         <p className="mt-2 text-sm leading-relaxed text-[var(--foreground-muted)]">
-          You&apos;re creating an evaluation bot for{" "}
+          You&apos;re creating an evaluation AI Support Agent for{" "}
           <strong className="font-medium text-slate-900">{hostnameOverride?.trim() || "your site"}</strong>. Owner preview
           stays in Assistrio product surfaces.
         </p>
       )}
       <div className="mt-4 rounded-[var(--radius-lg)] border border-slate-200/90 bg-slate-50/80 px-3 py-2.5 text-xs leading-relaxed text-[var(--foreground-muted)]">
         <strong className="font-medium text-slate-700">Preview vs runtime:</strong> this step only sets which{" "}
-        <strong className="font-medium text-slate-800">allowed website</strong> may run your Explore bot at runtime.
+        <strong className="font-medium text-slate-800">allowed website</strong> may run your Explore AI Support Agent at runtime.
       </div>
       <form onSubmit={onSubmit} className="mt-6 space-y-4">
         {!hideHostnameField ? (
@@ -216,7 +216,7 @@ export function TrialForm({
                   />
                 </div>
                 <p className="px-3 py-2.5 text-xs font-medium text-[var(--brand-teal-dark)]">
-                  Creating your bot — saving your allowed website…
+                  Creating your AI Support Agent — saving your allowed website…
                 </p>
               </motion.div>
             ) : null}
@@ -231,7 +231,7 @@ export function TrialForm({
               className={submitting ? undefined : "flow-primary-cta flow-primary-cta-pulse w-full sm:w-auto"}
               aria-busy={submitting}
             >
-              {submitting ? "Creating your bot, please wait" : "Create bot"}
+              {submitting ? "Creating your AI Support Agent, please wait" : "Create AI Support Agent"}
             </Button>
           </motion.span>
         </div>

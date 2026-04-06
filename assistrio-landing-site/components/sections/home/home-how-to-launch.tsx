@@ -5,26 +5,40 @@ import { Container } from "@/components/layout/container";
 import { Section } from "@/components/layout/section";
 import { TrackedFlowCtaButton } from "@/components/flows/tracked-flow-cta";
 import { HomeSectionHeader } from "@/components/sections/home/home-section-header";
+import { TRIAL_PRIMARY_CTA_LABEL } from "@/lib/trial-primary-cta-label";
 
 const ease = [0.22, 1, 0.36, 1] as const;
 
 const linkClass =
   "inline-flex h-auto min-h-0 w-auto border-0 bg-transparent px-0 py-0 text-sm font-semibold text-[var(--brand-teal-dark)] shadow-none ring-0 hover:bg-transparent hover:text-[var(--brand-teal-hover)] hover:underline";
 
-const steps = [
+type HowToStepWithCta = {
+  title: string;
+  body: string;
+  flow: "trial" | "showcase";
+  href: string;
+  linkLabel: string;
+};
+
+type HowToStepPlain = {
+  title: string;
+  body: string;
+};
+
+const steps: (HowToStepWithCta | HowToStepPlain)[] = [
   {
-    title: "Browse live examples first",
-    body: "Open the gallery and chat with showcase bots on this site — same runtime stack visitors get — so you can judge answers, tone, and the widget before you configure anything of your own.",
+    title: "Browse live AI Support Agents first",
+    body: "Open the gallery and chat with live AI Support Agents on this site — same runtime stack visitors get — so you can judge answers, tone, and the widget before you configure anything of your own.",
     flow: "showcase" as const,
     href: "/gallery",
-    linkLabel: "See Live Examples",
+    linkLabel: "Live AI Agents",
   },
   {
-    title: "Create your own evaluation bot",
-    body: "Try it free to spin up a workspace and provision a bot with production-style embeds on the allowed websites you choose. No card — a real evaluation path, not a toy demo.",
+    title: "Create your own evaluation AI Support Agent",
+    body: "Try it free to spin up a workspace and provision an AI Agent with production-style embeds on the allowed websites you choose. No credit card required — a real evaluation path, not a toy demo.",
     flow: "trial" as const,
     href: "/trial",
-    linkLabel: "Try it free",
+    linkLabel: TRIAL_PRIMARY_CTA_LABEL,
   },
   {
     title: "Add your knowledge and branding",
@@ -38,7 +52,7 @@ const steps = [
     title: "Invite teammates and go live",
     body: "Add the people who own docs, sales, and support so configuration does not live in one inbox — when you are ready for Assistrio to run operations, the commercial path is under Launch on the homepage.",
   },
-] as const;
+];
 
 export function HomeHowToLaunch() {
   return (

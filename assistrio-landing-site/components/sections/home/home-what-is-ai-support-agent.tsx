@@ -24,7 +24,7 @@ export function HomeWhatIsAiSupportAgent() {
             <ScrollReveal y={20}>
               <HomeSectionHeader id="what-is-ai-support-agent-heading" eyebrow="Definition" title="What is an AI Support Agent?" titleWide>
                 <p>
-                  An <strong className="font-semibold text-slate-800">AI Support Agent</strong> is a chat assistant you embed on your website. It answers visitors in
+                  An <strong className="text-emphasis-primary">AI Support Agent</strong> is a chat assistant you embed on your website. It answers visitors in
                   natural language using the knowledge you connect — help articles, FAQs, policies, and docs — so people get accurate,
                   on-brand help without leaving the page.
                 </p>

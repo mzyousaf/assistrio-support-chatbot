@@ -3,10 +3,10 @@
 import { ScrollReveal } from "@/components/motion/scroll-reveal";
 
 const bullets = [
-  "Up to 5 bots included on Launch",
-  "$25/month per additional bot",
+  "Up to 5 AI Agents included on Launch",
+  "$25/month per additional AI Agent",
   "1,000 monthly AI credits — add your own OpenAI key and credits do not burn",
-  "Each bot: one allowed website, including sub-sites on that website",
+  "Each AI Agent: one allowed website, including sub-sites on that website",
   "Full knowledge base, leads, and insights included at published Launch scope",
 ];
 
@@ -19,9 +19,9 @@ export function PricingHostedCapacity() {
           aria-hidden
         />
         <p className="text-eyebrow">Launch capacity</p>
-        <h2 className="text-section-title mt-4 max-w-2xl text-balance">Bots, credits, and allowed websites on Launch</h2>
+        <h2 className="text-section-title mt-4 max-w-2xl text-balance">AI Agents, credits, and allowed websites on Launch</h2>
         <p className="mt-4 max-w-2xl text-body-relaxed">
-          Every Launch subscription follows the same transparent rules for bots, AI credits, and where the widget may run — so
+          Every Launch subscription follows the same transparent rules for AI Agents, AI credits, and where the widget may run — so
           you can plan brands, regions, or product lines without guessing what is included.
         </p>
         <ul className="mt-8 grid gap-3 sm:grid-cols-2 sm:gap-4 lg:gap-4">
