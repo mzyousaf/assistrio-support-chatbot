@@ -11,6 +11,12 @@ export type VisitorEventType =
   | 'demo_opened'
   | 'trial_create_started'
   | 'trial_create_succeeded'
+  | 'trial_lead_step1_submit_started'
+  | 'trial_lead_step1_submit_succeeded'
+  | 'trial_lead_step1_submit_failed'
+  | 'trial_lead_step1_resend_started'
+  | 'trial_lead_step1_resend_succeeded'
+  | 'trial_lead_step1_resend_failed'
   | 'snippet_copied'
   | 'stable_id_copied'
   | 'reconnect_submitted'
@@ -29,6 +35,12 @@ const VISITOR_EVENT_ENUM: VisitorEventType[] = [
   'demo_opened',
   'trial_create_started',
   'trial_create_succeeded',
+  'trial_lead_step1_submit_started',
+  'trial_lead_step1_submit_succeeded',
+  'trial_lead_step1_submit_failed',
+  'trial_lead_step1_resend_started',
+  'trial_lead_step1_resend_succeeded',
+  'trial_lead_step1_resend_failed',
   'snippet_copied',
   'stable_id_copied',
   'reconnect_submitted',

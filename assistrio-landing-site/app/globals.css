@@ -538,6 +538,46 @@
     animation: assistrio-flow-cta-pulse 2.8s ease-in-out infinite;
   }
 
+  /* Onboarding: first incomplete — same glow + ring pulse on stepper circle and sidebar bar */
+  @keyframes assistrio-onboarding-current-pulse {
+    0%,
+    100% {
+      box-shadow:
+        0 2px 8px -2px color-mix(in srgb, var(--brand-teal) 45%, transparent),
+        0 0 0 0 color-mix(in srgb, var(--brand-teal) 35%, transparent);
+    }
+    50% {
+      box-shadow:
+        0 3px 12px -2px color-mix(in srgb, var(--brand-teal) 55%, transparent),
+        0 0 0 5px color-mix(in srgb, var(--brand-teal) 14%, transparent);
+    }
+  }
+
+  .assistrio-onboarding-node-pulse,
+  .assistrio-onboarding-bar-pulse {
+    animation: assistrio-onboarding-current-pulse 2.4s ease-in-out infinite;
+  }
+
+  /* Regression / error step — red glow pulse (matches node + sidebar bar) */
+  @keyframes assistrio-onboarding-error-pulse {
+    0%,
+    100% {
+      box-shadow:
+        0 2px 8px -2px color-mix(in srgb, rgb(239 68 68) 48%, transparent),
+        0 0 0 0 color-mix(in srgb, rgb(239 68 68) 38%, transparent);
+    }
+    50% {
+      box-shadow:
+        0 3px 12px -2px color-mix(in srgb, rgb(239 68 68) 58%, transparent),
+        0 0 0 5px color-mix(in srgb, rgb(239 68 68) 16%, transparent);
+    }
+  }
+
+  .assistrio-onboarding-node-pulse-error,
+  .assistrio-onboarding-bar-pulse-error {
+    animation: assistrio-onboarding-error-pulse 2.4s ease-in-out infinite;
+  }
+
   /* Success hero — soft radial glow */
   @keyframes assistrio-success-glow {
     0%,
@@ -596,6 +636,13 @@
     .success-hero-glow {
       animation: none;
       opacity: 0.5;
+    }
+    .assistrio-onboarding-node-pulse,
+    .assistrio-onboarding-bar-pulse,
+    .assistrio-onboarding-node-pulse-error,
+    .assistrio-onboarding-bar-pulse-error {
+      animation: none;
+      box-shadow: none;
     }
   }
 

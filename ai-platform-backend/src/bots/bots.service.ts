@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import {
@@ -19,13 +19,41 @@ import { KnowledgeBaseChunkService } from '../knowledge/knowledge-base-chunk.ser
 import { generateBotAccessKey, generateBotSecretKey } from './bot-keys.util';
 import { normalizeUserWebsiteInputToHostname, parseAllowedDomainRulesFromStoredArray } from './embed-domain.util';
 import {
-  assertPlatformVisitorWebsiteAllowlistWritePolicy,
+  assertWebsiteURLAllowlistWritePolicy,
   assertTrialBotAllowedDomainsPolicy,
-  normalizePlatformVisitorWebsiteAllowlistRowPublic,
+  normalizeWebsiteURLAllowlistRowPublic,
 } from './platform-visitor-website-allowlist.util';
 import { validateRuntimeBotAccess } from './runtime-bot-access.util';
 import { normalizeVisitorMultiChatMax } from './visitor-multi-chat.util';
 import { WorkspacesService } from '../workspaces/workspaces.service';
+import { VisitorsService } from '../visitors/visitors.service';
+import type { TrialWorkspaceDraftV3Api } from '../visitors/trial-onboarding-draft-api.util';
+import { resolveFinalAvatarUrlFromDraftRow } from '../visitors/trial-avatar-resolve.util';
+import type { BotLeadCaptureV2 } from '../models/bot.schema';
+import {
+  buildCategoryBehaviorContext,
+  buildDefaultTrialLeadCapture,
+  buildTrialExampleQuestions,
+  buildTrialVisitorChatUIPreset,
+  buildTrialWelcomeMessage,
+  coerceBehaviorPreset,
+  isWeakAgentDescription,
+  mapCategoryToBehaviorPreset,
+  resolvePrimaryCategoryId,
+} from './trial-bot-from-draft-defaults.util';
+import {
+  getTrialOnboardingUploadSessionId,
+  listKnowledgeDocumentAssetsFromDraft,
+  parseTrialOnboardingFaqsForKnowledgeBase,
+} from './trial-onboarding-knowledge-bootstrap.util';
+import {
+  parseTrialWorkspaceBehaviorPatch,
+  parseTrialWorkspaceKnowledgePatch,
+  parseTrialWorkspaceProfilePatch,
+} from './trial-workspace-agent.util';
+import { DocumentsService } from '../documents/documents.service';
+import { IngestionService } from '../ingestion/ingestion.service';
+import { getS3PublicBucketOrThrow } from '../lib/s3';
 
 function slugify(input: string): string {
   const slug = input
@@ -114,12 +142,28 @@ export interface CreateVisitorTrialBotInput {
    * Example: window.location.hostname from the page that creates the trial.
    */
   allowedDomain: string;
+  /** Additional hostnames (normalized) merged into `allowedDomains` after the primary. */
+  extraAllowedDomains?: string[];
   name?: string;
   welcomeMessage?: string;
   shortDescription?: string;
   description?: string;
   imageUrl?: string;
   avatarEmoji?: string;
+  categories?: string[];
+  /** Primary chat accent (hex), e.g. onboarding brand color. */
+  brandColor?: string;
+  /** Menu quick links (header); max 10. */
+  menuQuickLinks?: Array<{ text: string; route: string; icon?: string }>;
+  /** Combined behavior / identity instructions for the model. */
+  personalitySystemPrompt?: string;
+  personalityTone?: string;
+  /** BotPersonality.behaviorPreset (schema enum). */
+  behaviorPreset?: string;
+  exampleQuestions?: string[];
+  leadCapture?: BotLeadCaptureV2;
+  /** Full chatUI document (trial onboarding); when set, replaces minimal primaryColor + links merge. */
+  chatUIPreset?: Record<string, unknown>;
 }
 
 export interface ShowcaseAccessSettingsInput {
@@ -153,6 +197,9 @@ export class BotsService {
     private readonly knowledgeBaseItemService: KnowledgeBaseItemService,
     private readonly knowledgeBaseChunkService: KnowledgeBaseChunkService,
     private readonly workspacesService: WorkspacesService,
+    private readonly visitorsService: VisitorsService,
+    private readonly documentsService: DocumentsService,
+    private readonly ingestionService: IngestionService,
   ) { }
 
   async findAll() {
@@ -720,7 +767,7 @@ export class BotsService {
     const bot = await this.botModel
       .findById(new Types.ObjectId(id))
       .select(
-        '_id slug name shortDescription description category avatarEmoji imageUrl openaiApiKeyOverride welcomeMessage leadCapture personality config chatUI type status isPublic visibility accessKey secretKey creatorType ownerUserId createdByUserId ownerVisitorId messageLimitMode messageLimitTotal messageLimitUpgradeMessage includeNameInKnowledge includeTaglineInKnowledge exampleQuestions allowedDomains platformVisitorWebsiteAllowlist visitorMultiChatEnabled visitorMultiChatMax',
+        '_id slug name shortDescription description category avatarEmoji imageUrl openaiApiKeyOverride welcomeMessage leadCapture personality config chatUI type status isPublic visibility accessKey secretKey creatorType ownerUserId createdByUserId ownerVisitorId messageLimitMode messageLimitTotal messageLimitUpgradeMessage includeNameInKnowledge includeTaglineInKnowledge exampleQuestions allowedDomains websiteURLAllowlist visitorMultiChatEnabled visitorMultiChatMax',
       )
       .lean();
     if (!bot) return null;
@@ -821,7 +868,7 @@ export class BotsService {
   async findOneShowcaseForAdmin(id: string) {
     const bot = await this.botModel
       .findById(id)
-      .select('slug name shortDescription description category categories imageUrl openaiApiKeyOverride whisperApiKeyOverride welcomeMessage status isPublic leadCapture chatUI exampleQuestions personality type config limitOverrideMessages visibility accessKey secretKey creatorType ownerUserId ownerVisitorId messageLimitMode messageLimitTotal messageLimitUpgradeMessage visitorMultiChatEnabled visitorMultiChatMax includeNameInKnowledge includeTaglineInKnowledge includeNotesInKnowledge allowedDomains platformVisitorWebsiteAllowlist workspaceId')
+      .select('slug name shortDescription description category categories imageUrl openaiApiKeyOverride whisperApiKeyOverride welcomeMessage status isPublic leadCapture chatUI exampleQuestions personality type config limitOverrideMessages visibility accessKey secretKey creatorType ownerUserId ownerVisitorId messageLimitMode messageLimitTotal messageLimitUpgradeMessage visitorMultiChatEnabled visitorMultiChatMax includeNameInKnowledge includeTaglineInKnowledge includeNotesInKnowledge allowedDomains websiteURLAllowlist workspaceId')
       .lean();
     if (!bot) return null;
     const [faqs, knowledgeDescription] = await Promise.all([
@@ -863,7 +910,7 @@ export class BotsService {
     const safeName = String(input.name ?? '').trim() || 'Trial Assistant';
     const safeWelcome = String(input.welcomeMessage ?? '').trim();
     const safeShortDescription = String(input.shortDescription ?? '').trim();
-    const safeDescription = String(input.description ?? '').trim();
+    let safeDescription = String(input.description ?? '').trim();
     const safeImageUrl = String(input.imageUrl ?? '').trim();
     const safeAvatarEmoji = String(input.avatarEmoji ?? '').trim();
 
@@ -873,6 +920,57 @@ export class BotsService {
         'allowedDomain is required and must be a valid public hostname (paste a URL or hostname; we store only the hostname).',
       );
     }
+
+    const extraHosts = (input.extraAllowedDomains ?? [])
+      .map((s) => normalizeUserWebsiteInputToHostname(String(s ?? '').trim()))
+      .filter((h): h is string => Boolean(h));
+    /** Trial `visitor` bots may only store one hostname in `allowedDomains` (embed policy). */
+    const allowedDomainsMerged = [allowedDomainNorm];
+    assertTrialBotAllowedDomainsPolicy('visitor', allowedDomainsMerged);
+    const extraOnly = extraHosts.filter((h) => h !== allowedDomainNorm);
+    if (extraOnly.length) {
+      const line = `\n\nAdditional domains to configure: ${extraOnly.join(', ')}`;
+      safeDescription = (safeDescription + line).slice(0, 1500);
+    }
+
+    const cats = (input.categories ?? [])
+      .map((c) => String(c ?? '').trim().slice(0, 64))
+      .filter(Boolean)
+      .slice(0, 32);
+    const brand = String(input.brandColor ?? '').trim();
+    const primaryColor =
+      brand.startsWith('#') && brand.length >= 4 ? brand.slice(0, 32) : '#14B8A6';
+    const links = (input.menuQuickLinks ?? [])
+      .filter((l) => l && typeof l.text === 'string' && typeof l.route === 'string')
+      .slice(0, 10)
+      .map((l) => ({
+        text: l.text.trim().slice(0, 80),
+        route: l.route.trim().slice(0, 2000),
+        ...(l.icon ? { icon: String(l.icon).slice(0, 64) } : {}),
+      }));
+    const sys = String(input.personalitySystemPrompt ?? '').trim().slice(0, 12000);
+    const toneRaw = String(input.personalityTone ?? '').trim().toLowerCase();
+    const toneOk = (['friendly', 'formal', 'playful', 'technical'] as const).find((t) => t === toneRaw);
+    const presetOk = coerceBehaviorPreset(input.behaviorPreset);
+    const personalityDoc: Record<string, unknown> = {};
+    if (sys) personalityDoc.systemPrompt = sys;
+    if (toneOk) personalityDoc.tone = toneOk;
+    if (presetOk) personalityDoc.behaviorPreset = presetOk;
+    const personality = Object.keys(personalityDoc).length ? personalityDoc : undefined;
+
+    const exampleQuestions = (input.exampleQuestions ?? [])
+      .map((q) => String(q ?? '').trim())
+      .filter(Boolean)
+      .slice(0, 12);
+
+    const chatUIPreset = input.chatUIPreset;
+    const chatUIDoc: Record<string, unknown> =
+      chatUIPreset && Object.keys(chatUIPreset).length > 0
+        ? (chatUIPreset as Record<string, unknown>)
+        : {
+            primaryColor,
+            ...(links.length ? { menuQuickLinks: links, showMenuQuickLinks: true } : {}),
+          };
 
     let slug = await this.generateUniqueSlug(safeName || 'trial-bot');
     for (let attempt = 0; attempt < 5; attempt++) {
@@ -897,8 +995,13 @@ export class BotsService {
           messageLimitTotal: null,
           messageLimitUpgradeMessage: null,
           includeNotesInKnowledge: true,
-          allowedDomains: [allowedDomainNorm],
-          platformVisitorWebsiteAllowlist: [],
+          ...(cats.length ? { categories: cats } : {}),
+          ...(personality ? { personality } : {}),
+          ...(exampleQuestions.length ? { exampleQuestions } : {}),
+          ...(input.leadCapture ? { leadCapture: input.leadCapture } : {}),
+          chatUI: chatUIDoc,
+          allowedDomains: allowedDomainsMerged,
+          websiteURLAllowlist: [],
           createdAt: new Date(),
         });
         return {
@@ -945,7 +1048,7 @@ export class BotsService {
   }): Promise<{
     ok: true;
     botId: string;
-    platformVisitorWebsiteAllowlist: Array<{ platformVisitorId: string; websiteUrl: string }>;
+    websiteURLAllowlist: Array<{ platformVisitorId: string; websiteUrl: string }>;
   }> {
     const id = input.botId?.trim();
     if (!id || !Types.ObjectId.isValid(id)) {
@@ -980,7 +1083,7 @@ export class BotsService {
     }
     let row: { platformVisitorId: string; websiteUrl: string };
     try {
-      row = normalizePlatformVisitorWebsiteAllowlistRowPublic({
+      row = normalizeWebsiteURLAllowlistRowPublic({
         platformVisitorId: input.platformVisitorId,
         websiteUrl: input.websiteUrl,
       });
@@ -988,9 +1091,9 @@ export class BotsService {
       const msg = err instanceof Error ? err.message : '';
       throw new Error(msg || 'E_ALLOWLIST_NORMALIZE');
     }
-    assertPlatformVisitorWebsiteAllowlistWritePolicy('user', [row]);
-    await this.botModel.updateOne({ _id: new Types.ObjectId(id) }, { $set: { platformVisitorWebsiteAllowlist: [row] } });
-    return { ok: true, botId: id, platformVisitorWebsiteAllowlist: [row] };
+    assertWebsiteURLAllowlistWritePolicy('user', [row]);
+    await this.botModel.updateOne({ _id: new Types.ObjectId(id) }, { $set: { websiteURLAllowlist: [row] } });
+    return { ok: true, botId: id, websiteURLAllowlist: [row] };
   }
 
   async updateShowcaseAccessSettings(
@@ -1172,7 +1275,7 @@ export class BotsService {
       messageLimitTotal?: number | null;
       messageLimitUpgradeMessage?: string | null;
       allowedDomains?: string[];
-      platformVisitorWebsiteAllowlist?: Array<{ platformVisitorId: string; websiteUrl: string }>;
+      websiteURLAllowlist?: Array<{ platformVisitorId: string; websiteUrl: string }>;
     },
     createdByUserId?: string,
   ): Promise<{ botId: string; slug: string }> {
@@ -1192,9 +1295,9 @@ export class BotsService {
       .lean();
     const creatorTypeForAllowlist: 'user' | 'visitor' =
       existing && (existing as { creatorType?: string }).creatorType === 'visitor' ? 'visitor' : 'user';
-    assertPlatformVisitorWebsiteAllowlistWritePolicy(
+    assertWebsiteURLAllowlistWritePolicy(
       existing ? creatorTypeForAllowlist : 'user',
-      normalized.platformVisitorWebsiteAllowlist,
+      normalized.websiteURLAllowlist,
     );
     assertTrialBotAllowedDomainsPolicy(
       existing ? creatorTypeForAllowlist : 'user',
@@ -1260,8 +1363,8 @@ export class BotsService {
                   ? normalized.messageLimitUpgradeMessage
                   : (existing as { messageLimitUpgradeMessage?: string | null }).messageLimitUpgradeMessage ?? null,
               ...(normalized.allowedDomains !== undefined ? { allowedDomains: normalized.allowedDomains } : {}),
-              ...(normalized.platformVisitorWebsiteAllowlist !== undefined
-                ? { platformVisitorWebsiteAllowlist: normalized.platformVisitorWebsiteAllowlist }
+              ...(normalized.websiteURLAllowlist !== undefined
+                ? { websiteURLAllowlist: normalized.websiteURLAllowlist }
                 : {}),
               ...(workspaceIdResolved ? { workspaceId: workspaceIdResolved } : {}),
               ...setCreatedBy,
@@ -1323,8 +1426,8 @@ export class BotsService {
           ...(normalized.messageLimitTotal !== undefined ? { messageLimitTotal: normalized.messageLimitTotal } : {}),
           ...(normalized.messageLimitUpgradeMessage !== undefined ? { messageLimitUpgradeMessage: normalized.messageLimitUpgradeMessage } : {}),
           ...(normalized.allowedDomains !== undefined ? { allowedDomains: normalized.allowedDomains } : {}),
-          ...(normalized.platformVisitorWebsiteAllowlist !== undefined
-            ? { platformVisitorWebsiteAllowlist: normalized.platformVisitorWebsiteAllowlist }
+          ...(normalized.websiteURLAllowlist !== undefined
+            ? { websiteURLAllowlist: normalized.websiteURLAllowlist }
             : {}),
           ...(wsForCreate ? { workspaceId: wsForCreate } : {}),
           createdAt: new Date(),
@@ -1384,7 +1487,7 @@ export class BotsService {
       allowedDomains?: string[];
       visitorMultiChatEnabled?: boolean;
       visitorMultiChatMax?: number | null;
-      platformVisitorWebsiteAllowlist?: Array<{ platformVisitorId: string; websiteUrl: string }>;
+      websiteURLAllowlist?: Array<{ platformVisitorId: string; websiteUrl: string }>;
     },
   ): Promise<{ ok: true; botId: string; status: string }> {
     const existing = await this.botModel.findById(id).select('_id type name slug allowedDomains creatorType').lean();
@@ -1393,9 +1496,9 @@ export class BotsService {
     }
     const creatorTypeForAllowlist =
       (existing as { creatorType?: string }).creatorType === 'visitor' ? 'visitor' : 'user';
-    assertPlatformVisitorWebsiteAllowlistWritePolicy(
+    assertWebsiteURLAllowlistWritePolicy(
       creatorTypeForAllowlist,
-      normalized.platformVisitorWebsiteAllowlist,
+      normalized.websiteURLAllowlist,
     );
     assertTrialBotAllowedDomainsPolicy(creatorTypeForAllowlist, normalized.allowedDomains);
     const status = normalized.status === 'published' ? 'published' : 'draft';
@@ -1480,8 +1583,8 @@ export class BotsService {
                 normalized.visitorMultiChatEnabled === true ? normalized.visitorMultiChatMax ?? null : null,
             }
             : {}),
-          ...(normalized.platformVisitorWebsiteAllowlist !== undefined
-            ? { platformVisitorWebsiteAllowlist: normalized.platformVisitorWebsiteAllowlist }
+          ...(normalized.websiteURLAllowlist !== undefined
+            ? { websiteURLAllowlist: normalized.websiteURLAllowlist }
             : {}),
         });
         await this.knowledgeBaseItemService.upsertFaqKnowledgeItemsForBot(id, newFaqs);
@@ -1502,11 +1605,11 @@ export class BotsService {
     const existing = await this.botModel.findById(id).select('creatorType').lean();
     const merged = { ...data };
     if ((existing as { creatorType?: string } | null)?.creatorType === 'visitor') {
-      const al = merged.platformVisitorWebsiteAllowlist;
+      const al = merged.websiteURLAllowlist;
       if (Array.isArray(al) && al.length > 0) {
         throw new Error('Platform visitor website URLs are not allowed on trial bots.');
       }
-      merged.platformVisitorWebsiteAllowlist = [];
+      merged.websiteURLAllowlist = [];
       const ad = merged.allowedDomains;
       if (Array.isArray(ad) && ad.length > 1) {
         throw new Error('Trial bots may have at most one allowed embed domain.');
@@ -1547,5 +1650,743 @@ export class BotsService {
       session.endSession();
     }
     return { deleted: id };
+  }
+
+  /**
+   * After the trial bot exists: sync notes, FAQs (with embeddings), and enqueue uploaded knowledge documents
+   * for the standard ingestion pipeline. Errors are logged and swallowed so one bad asset never fails creation.
+   */
+  private async bootstrapTrialOnboardingKnowledgeFromDraft(botId: string, draftRow: Record<string, unknown>): Promise<void> {
+    const knowledge = (draftRow.knowledge ?? {}) as { notes?: unknown; faqs?: unknown };
+    const notes = String(knowledge.notes ?? '').trim();
+
+    try {
+      await this.knowledgeBaseItemService.upsertNoteKnowledgeItemForBot(botId, notes);
+    } catch (err) {
+      console.error('[trial knowledge] note upsert failed', { botId, err });
+    }
+    try {
+      await this.knowledgeBaseChunkService.replaceNoteKnowledgeChunksForBot(botId);
+    } catch (err) {
+      console.error('[trial knowledge] note chunks failed', { botId, err });
+    }
+
+    const faqs = parseTrialOnboardingFaqsForKnowledgeBase(knowledge.faqs);
+    try {
+      await this.knowledgeBaseItemService.upsertFaqKnowledgeItemsForBot(botId, faqs);
+    } catch (err) {
+      console.error('[trial knowledge] FAQ upsert failed', { botId, err });
+    }
+    try {
+      await this.knowledgeBaseChunkService.replaceFaqKnowledgeChunksForBot(botId);
+    } catch (err) {
+      console.error('[trial knowledge] FAQ chunks failed', { botId, err });
+    }
+
+    let publicBucket: string;
+    try {
+      publicBucket = getS3PublicBucketOrThrow();
+    } catch (err) {
+      console.error('[trial knowledge] S3 public bucket not configured; skipping document ingest bootstrap', err);
+      return;
+    }
+
+    const docAssets = listKnowledgeDocumentAssetsFromDraft(draftRow.uploadedAssets);
+    const uploadSessionId = getTrialOnboardingUploadSessionId();
+    for (const asset of docAssets) {
+      let docId: string | undefined;
+      try {
+        const created = await this.documentsService.create({
+          botId,
+          title: asset.originalFilename.slice(0, 500),
+          sourceType: 'upload',
+          fileName: asset.originalFilename,
+          fileType: asset.mimeType || undefined,
+          fileSize: asset.sizeBytes,
+          status: 'queued',
+          storage: 's3',
+          s3Bucket: publicBucket,
+          s3Key: asset.assetKey,
+          ...(asset.url ? { url: asset.url } : {}),
+          uploadSessionId,
+        });
+        docId = String((created as { _id: { toString: () => string } })._id);
+      } catch (err) {
+        console.error('[trial knowledge] document create failed', { botId, assetKey: asset.assetKey, err });
+        continue;
+      }
+      try {
+        await this.ingestionService.createQueuedJob(botId, docId);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'queue_failed';
+        console.error('[trial knowledge] ingest job enqueue failed', { botId, docId, err });
+        try {
+          await this.documentsService.setFailed(botId, docId, `Could not queue ingestion: ${msg}`.slice(0, 500));
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+  }
+
+  /**
+   * Playground: real bot knowledge state for the session’s created trial agent (documents, FAQs, notes).
+   */
+  async getTrialBotKnowledgeSummaryForSession(rawSessionToken: string): Promise<{
+    ok: true;
+    botId: string;
+    documents: Array<{
+      id: string;
+      title: string;
+      fileName?: string;
+      status?: string;
+      error?: string;
+      active: boolean;
+      createdAt?: string;
+    }>;
+    documentCounts: {
+      docsTotal: number;
+      docsQueued: number;
+      docsProcessing: number;
+      docsReady: number;
+      docsFailed: number;
+      lastIngestedAt?: string;
+      lastFailedDoc?: { docId: string; title: string; error: string; updatedAt?: string };
+    };
+    faqs: Array<{ question: string; answer: string }>;
+    note: { present: boolean; length: number; preview: string };
+  }> {
+    const draftRow = await this.visitorsService.ensureTrialDraftLeanBySession(rawSessionToken);
+    const trialAgent = draftRow.trialAgent as Record<string, unknown> | undefined;
+    const botId = String(trialAgent?.botId ?? '').trim();
+    if (!botId) {
+      throw new HttpException(
+        { error: 'Create your agent first to view knowledge status.', errorCode: 'NO_TRIAL_BOT' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const [docRows, health, faqRows, noteContent] = await Promise.all([
+      this.documentsService.findByBot(botId),
+      this.documentsService.getHealthSummary(botId),
+      this.knowledgeBaseItemService.getFaqsForBot(botId),
+      this.knowledgeBaseItemService.getNoteContentForBot(botId),
+    ]);
+
+    const documents = docRows.map((d) => {
+      const row = d as Record<string, unknown>;
+      const id = String(row._id ?? '');
+      const created = row.createdAt;
+      const createdAt =
+        created instanceof Date
+          ? created.toISOString()
+          : typeof created === 'string'
+            ? created
+            : undefined;
+      return {
+        id,
+        title: String(row.title ?? ''),
+        ...(typeof row.fileName === 'string' ? { fileName: row.fileName } : {}),
+        ...(typeof row.status === 'string' ? { status: row.status } : {}),
+        ...(typeof row.error === 'string' && row.error.trim() ? { error: row.error.trim() } : {}),
+        active: row.active !== false,
+        ...(createdAt ? { createdAt } : {}),
+      };
+    });
+
+    const faqs = faqRows
+      .map((f) => ({
+        question: String(f.question ?? '').trim(),
+        answer: String(f.answer ?? '').trim(),
+      }))
+      .filter((f) => f.question && f.answer);
+
+    const preview =
+      noteContent.length > 600 ? `${noteContent.slice(0, 597)}…` : noteContent;
+
+    return {
+      ok: true,
+      botId,
+      documents,
+      documentCounts: {
+        docsTotal: health.docsTotal,
+        docsQueued: health.docsQueued,
+        docsProcessing: health.docsProcessing,
+        docsReady: health.docsReady,
+        docsFailed: health.docsFailed,
+        ...(health.lastIngestedAt ? { lastIngestedAt: health.lastIngestedAt } : {}),
+        ...(health.lastFailedDoc ? { lastFailedDoc: health.lastFailedDoc } : {}),
+      },
+      faqs,
+      note: {
+        present: noteContent.length > 0,
+        length: noteContent.length,
+        preview,
+      },
+    };
+  }
+
+  /**
+   * Requeue ingestion for a single failed document on the session’s trial bot (standard ingest jobs only).
+   */
+  async retryTrialBotFailedDocumentIngestForSession(
+    rawSessionToken: string,
+    documentId: string,
+  ): Promise<{ ok: true; documentId: string }> {
+    const docId = String(documentId ?? '').trim();
+    if (!Types.ObjectId.isValid(docId)) {
+      throw new HttpException(
+        { error: 'Invalid document id.', errorCode: 'INVALID_DOCUMENT_ID' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const draftRow = await this.visitorsService.ensureTrialDraftLeanBySession(rawSessionToken);
+    const trialAgent = draftRow.trialAgent as Record<string, unknown> | undefined;
+    const botId = String(trialAgent?.botId ?? '').trim();
+    if (!botId) {
+      throw new HttpException(
+        { error: 'Create your agent first.', errorCode: 'NO_TRIAL_BOT' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const bot = await this.botModel.findById(botId).select('type').lean();
+    if (!bot || (bot as { type?: string }).type !== 'visitor-own') {
+      throw new HttpException({ error: 'Bot not found.', errorCode: 'BOT_NOT_FOUND' }, HttpStatus.NOT_FOUND);
+    }
+
+    const doc = await this.documentsService.findOneByBotAndDoc(botId, docId);
+    if (!doc) {
+      throw new HttpException({ error: 'Document not found.', errorCode: 'DOCUMENT_NOT_FOUND' }, HttpStatus.NOT_FOUND);
+    }
+
+    const row = doc as { status?: string; sourceType?: string };
+    if (row.status !== 'failed') {
+      throw new HttpException(
+        {
+          error: 'Only files that failed processing can be retried.',
+          errorCode: 'RETRY_NOT_FAILED',
+        },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const sourceType = String(row.sourceType ?? 'upload');
+    const clearExtractedText = sourceType !== 'manual';
+
+    try {
+      await this.knowledgeBaseChunkService.removeDocumentKnowledgeChunksForDocument(botId, docId);
+    } catch (err) {
+      console.error('[trial knowledge retry] chunk cleanup failed', { botId, docId, err });
+    }
+
+    await this.ingestionService.deleteJobsByDocId(botId, docId);
+    await this.documentsService.requeueDocumentForIngestion(botId, docId, { clearExtractedText });
+
+    try {
+      await this.ingestionService.createQueuedJob(botId, docId);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'queue_failed';
+      console.error('[trial knowledge retry] enqueue failed', { botId, docId, err });
+      try {
+        await this.documentsService.setFailed(
+          botId,
+          docId,
+          `Could not queue ingestion: ${msg}`.slice(0, 500),
+        );
+      } catch {
+        /* ignore */
+      }
+      throw new HttpException(
+        { error: 'Could not queue this file for another try. Please try again shortly.', errorCode: 'RETRY_QUEUE_FAILED' },
+        HttpStatus.BAD_GATEWAY,
+      );
+    }
+
+    return { ok: true, documentId: docId };
+  }
+
+  /** Session + `trialAgent.botId` + `ownerVisitorId` must match (not `platformVisitorId` alone). */
+  private async resolveTrialWorkspaceBotOrThrow(rawSessionToken: string): Promise<{
+    botId: string;
+    platformVisitorId: string;
+    bot: Record<string, unknown>;
+  }> {
+    const draftRow = await this.visitorsService.ensureTrialDraftLeanBySession(rawSessionToken);
+    const platformVisitorId = String(draftRow.platformVisitorId ?? '').trim();
+    if (!platformVisitorId) {
+      throw new HttpException(
+        { error: 'Missing visitor identity on draft.', errorCode: 'INVALID_DRAFT' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const trialAgent = draftRow.trialAgent as Record<string, unknown> | undefined;
+    const botId = String(trialAgent?.botId ?? '').trim();
+    if (!botId) {
+      throw new HttpException(
+        { error: 'Create your agent first to use the workspace.', errorCode: 'NO_TRIAL_BOT' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    if (!Types.ObjectId.isValid(botId)) {
+      throw new HttpException({ error: 'Invalid bot.', errorCode: 'INVALID_BOT' }, HttpStatus.BAD_REQUEST);
+    }
+    const bot = await this.botModel.findById(new Types.ObjectId(botId)).lean();
+    if (!bot || (bot as { type?: string }).type !== 'visitor-own') {
+      throw new HttpException({ error: 'Bot not found.', errorCode: 'BOT_NOT_FOUND' }, HttpStatus.NOT_FOUND);
+    }
+    const owner = String((bot as { ownerVisitorId?: string }).ownerVisitorId ?? '').trim();
+    if (owner !== platformVisitorId) {
+      throw new HttpException({ error: 'Forbidden.', errorCode: 'FORBIDDEN' }, HttpStatus.FORBIDDEN);
+    }
+    return { botId, platformVisitorId, bot: bot as Record<string, unknown> };
+  }
+
+  /**
+   * Full trial workspace payload: profile, behavior, and knowledge (notes + FAQs from KB).
+   */
+  async getTrialWorkspaceAgentForSession(rawSessionToken: string): Promise<{
+    ok: true;
+    botId: string;
+    profile: {
+      name: string;
+      categories: string[];
+      imageUrl: string;
+      brandColor: string;
+      quickLinks: Array<{ text: string; route: string; icon?: string }>;
+      slug: string;
+      allowedDomains: string[];
+      includeNameInKnowledge: boolean;
+      avatarEmoji: string;
+    };
+    behavior: {
+      shortDescription: string;
+      description: string;
+      welcomeMessage: string;
+      exampleQuestions: string[];
+      personality: { systemPrompt: string; behaviorPreset: string; tone: string; thingsToAvoid: string };
+      leadCapture: Record<string, unknown>;
+    };
+    knowledge: {
+      notes: string;
+      faqs: Array<{ question: string; answer: string }>;
+    };
+  }> {
+    const { botId, bot } = await this.resolveTrialWorkspaceBotOrThrow(rawSessionToken);
+    const chatUI = (bot.chatUI ?? {}) as Record<string, unknown>;
+    const personality = (bot.personality ?? {}) as Record<string, unknown>;
+    const [noteContent, faqRows] = await Promise.all([
+      this.knowledgeBaseItemService.getNoteContentForBot(botId),
+      this.knowledgeBaseItemService.getFaqsForBot(botId),
+    ]);
+    const faqs = faqRows
+      .map((f) => ({
+        question: String(f.question ?? '').trim(),
+        answer: String(f.answer ?? '').trim(),
+      }))
+      .filter((f) => f.question && f.answer);
+
+    const menuLinks = Array.isArray(chatUI.menuQuickLinks) ? chatUI.menuQuickLinks : [];
+    const quickLinks = menuLinks
+      .filter((l): l is { text: string; route: string; icon?: string } => {
+        if (!l || typeof l !== 'object') return false;
+        const o = l as Record<string, unknown>;
+        return typeof o.text === 'string' && typeof o.route === 'string';
+      })
+      .map((l) => ({
+        text: String(l.text).trim(),
+        route: String(l.route).trim(),
+        ...(typeof l.icon === 'string' && l.icon.trim() ? { icon: l.icon.trim().slice(0, 64) } : {}),
+      }));
+
+    const primary =
+      typeof chatUI.primaryColor === 'string' && chatUI.primaryColor.trim().startsWith('#')
+        ? chatUI.primaryColor.trim().slice(0, 32)
+        : '#14B8A6';
+
+    const leadRaw = bot.leadCapture;
+    const leadCapture =
+      leadRaw != null && typeof leadRaw === 'object' && !Array.isArray(leadRaw)
+        ? { ...(leadRaw as Record<string, unknown>) }
+        : { enabled: false, fields: [], askStrategy: 'balanced' };
+
+    return {
+      ok: true,
+      botId,
+      profile: {
+        name: String(bot.name ?? ''),
+        categories: Array.isArray(bot.categories)
+          ? (bot.categories as unknown[]).map((c) => String(c).trim()).filter(Boolean)
+          : [],
+        imageUrl: String(bot.imageUrl ?? '').trim(),
+        brandColor: primary,
+        quickLinks,
+        slug: String(bot.slug ?? ''),
+        allowedDomains: Array.isArray(bot.allowedDomains)
+          ? (bot.allowedDomains as unknown[]).map((h) => String(h).trim()).filter(Boolean)
+          : [],
+        includeNameInKnowledge: Boolean((bot as { includeNameInKnowledge?: boolean }).includeNameInKnowledge),
+        avatarEmoji: String((bot as { avatarEmoji?: string }).avatarEmoji ?? '')
+          .trim()
+          .slice(0, 12),
+      },
+      behavior: {
+        shortDescription: String(bot.shortDescription ?? '').trim(),
+        description: String(bot.description ?? '').trim(),
+        welcomeMessage: String(bot.welcomeMessage ?? '').trim(),
+        exampleQuestions: Array.isArray(bot.exampleQuestions)
+          ? (bot.exampleQuestions as unknown[]).map((q) => String(q).trim()).filter(Boolean)
+          : [],
+        personality: {
+          systemPrompt: String(personality.systemPrompt ?? '').trim(),
+          behaviorPreset: String(personality.behaviorPreset ?? 'default').trim() || 'default',
+          tone: String(personality.tone ?? '').trim(),
+          thingsToAvoid: String((personality as { thingsToAvoid?: string }).thingsToAvoid ?? '').trim(),
+        },
+        leadCapture,
+      },
+      knowledge: {
+        notes: noteContent,
+        faqs,
+      },
+    };
+  }
+
+  async patchTrialWorkspaceProfileForSession(
+    rawSessionToken: string,
+    body: unknown,
+  ): Promise<Awaited<ReturnType<BotsService['getTrialWorkspaceAgentForSession']>>> {
+    const { botId } = await this.resolveTrialWorkspaceBotOrThrow(rawSessionToken);
+    const patch = parseTrialWorkspaceProfilePatch(body);
+    if (Object.keys(patch).length === 0) {
+      return this.getTrialWorkspaceAgentForSession(rawSessionToken);
+    }
+
+    const botOid = new Types.ObjectId(botId);
+    const existing = await this.botModel.findById(botOid).lean();
+    if (!existing) {
+      throw new HttpException({ error: 'Bot not found.', errorCode: 'BOT_NOT_FOUND' }, HttpStatus.NOT_FOUND);
+    }
+
+    const $set: Record<string, unknown> = {};
+    if (patch.name !== undefined) $set.name = patch.name;
+    if (patch.categories !== undefined) $set.categories = patch.categories;
+    if (patch.includeNameInKnowledge !== undefined) {
+      $set.includeNameInKnowledge = patch.includeNameInKnowledge;
+    }
+    if (patch.avatarEmoji !== undefined) {
+      const em = patch.avatarEmoji.trim();
+      $set.avatarEmoji = em || undefined;
+    }
+
+    const chatUI = {
+      ...((existing as { chatUI?: Record<string, unknown> }).chatUI ?? {}),
+    };
+    let chatTouched = false;
+
+    if (patch.brandColor !== undefined) {
+      chatUI.primaryColor = patch.brandColor;
+      chatTouched = true;
+    }
+    if (patch.imageUrl !== undefined) {
+      const url = patch.imageUrl.trim();
+      $set.imageUrl = url || undefined;
+      chatUI.launcherAvatarUrl = url;
+      chatTouched = true;
+    }
+    if (patch.quickLinks !== undefined) {
+      chatUI.menuQuickLinks = patch.quickLinks;
+      chatUI.showMenuQuickLinks = patch.quickLinks.length > 0;
+      chatTouched = true;
+    }
+    if (chatTouched) {
+      $set.chatUI = chatUI;
+    }
+
+    await this.botModel.updateOne({ _id: botOid }, { $set });
+    return this.getTrialWorkspaceAgentForSession(rawSessionToken);
+  }
+
+  async patchTrialWorkspaceBehaviorForSession(
+    rawSessionToken: string,
+    body: unknown,
+  ): Promise<Awaited<ReturnType<BotsService['getTrialWorkspaceAgentForSession']>>> {
+    const { botId } = await this.resolveTrialWorkspaceBotOrThrow(rawSessionToken);
+    const patch = parseTrialWorkspaceBehaviorPatch(body);
+    if (Object.keys(patch).length === 0) {
+      return this.getTrialWorkspaceAgentForSession(rawSessionToken);
+    }
+
+    const botOid = new Types.ObjectId(botId);
+    const existing = await this.botModel.findById(botOid).lean() as Record<string, unknown> | null;
+    if (!existing) {
+      throw new HttpException({ error: 'Bot not found.', errorCode: 'BOT_NOT_FOUND' }, HttpStatus.NOT_FOUND);
+    }
+
+    const $set: Record<string, unknown> = {};
+    if (patch.shortDescription !== undefined) $set.shortDescription = patch.shortDescription || undefined;
+    if (patch.description !== undefined) $set.description = patch.description || undefined;
+    if (patch.welcomeMessage !== undefined) $set.welcomeMessage = patch.welcomeMessage || undefined;
+    if (patch.exampleQuestions !== undefined) $set.exampleQuestions = patch.exampleQuestions;
+
+    const existingPers = (existing.personality ?? {}) as Record<string, unknown>;
+    let personalityTouched = false;
+    const pers = { ...existingPers };
+    if (patch.systemPrompt !== undefined) {
+      pers.systemPrompt = patch.systemPrompt || undefined;
+      personalityTouched = true;
+    }
+    if (patch.behaviorPreset !== undefined) {
+      pers.behaviorPreset = patch.behaviorPreset;
+      personalityTouched = true;
+    }
+    if (patch.tone !== undefined) {
+      pers.tone = patch.tone;
+      personalityTouched = true;
+    }
+    if (patch.thingsToAvoid !== undefined) {
+      pers.thingsToAvoid = patch.thingsToAvoid || undefined;
+      personalityTouched = true;
+    }
+    if (personalityTouched) {
+      $set.personality = pers;
+    }
+
+    if (patch.leadCapture !== undefined) {
+      const prev = (existing.leadCapture ?? {}) as Record<string, unknown>;
+      const lc = patch.leadCapture;
+      const next: Record<string, unknown> = { ...prev };
+      if (lc.enabled !== undefined) next.enabled = lc.enabled;
+      if (lc.askStrategy !== undefined) next.askStrategy = lc.askStrategy;
+      if (lc.fields !== undefined) next.fields = lc.fields;
+      $set.leadCapture = next;
+    }
+
+    await this.botModel.updateOne({ _id: botOid }, { $set });
+    return this.getTrialWorkspaceAgentForSession(rawSessionToken);
+  }
+
+  async patchTrialWorkspaceKnowledgeForSession(
+    rawSessionToken: string,
+    body: unknown,
+  ): Promise<Awaited<ReturnType<BotsService['getTrialWorkspaceAgentForSession']>>> {
+    const { botId } = await this.resolveTrialWorkspaceBotOrThrow(rawSessionToken);
+    const patch = parseTrialWorkspaceKnowledgePatch(body);
+    if (patch.notes === undefined && patch.faqs === undefined) {
+      throw new HttpException(
+        { error: 'Include notes and/or faqs to update.', errorCode: 'NO_UPDATES' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    if (patch.notes !== undefined) {
+      await this.knowledgeBaseItemService.upsertNoteKnowledgeItemForBot(botId, patch.notes);
+      try {
+        await this.knowledgeBaseChunkService.replaceNoteKnowledgeChunksForBot(botId);
+      } catch (err) {
+        console.error('[trial workspace] note chunks after patch', { botId, err });
+      }
+    }
+
+    if (patch.faqs !== undefined) {
+      const faqPayload = patch.faqs.map((f) => ({
+        question: f.question,
+        answer: f.answer,
+        active: true as const,
+      }));
+      await this.knowledgeBaseItemService.upsertFaqKnowledgeItemsForBot(botId, faqPayload);
+      try {
+        await this.knowledgeBaseChunkService.replaceFaqKnowledgeChunksForBot(botId);
+      } catch (err) {
+        console.error('[trial workspace] FAQ chunks after patch', { botId, err });
+      }
+    }
+
+    return this.getTrialWorkspaceAgentForSession(rawSessionToken);
+  }
+
+  /**
+   * Creates a visitor trial bot from the persisted onboarding draft (session-authenticated landing flow).
+   */
+  async createTrialAgentFromOnboardingSession(rawSessionToken: string): Promise<{
+    ok: true;
+    alreadyCreated?: boolean;
+    draft: TrialWorkspaceDraftV3Api;
+    bot: { id: string; slug: string; accessKey: string; name: string };
+  }> {
+    const draftRow = await this.visitorsService.ensureTrialDraftLeanBySession(rawSessionToken);
+    const platformVisitorId = String(draftRow.platformVisitorId ?? '').trim();
+    if (!platformVisitorId) {
+      throw new HttpException(
+        { error: 'Missing visitor identity on draft.', errorCode: 'INVALID_DRAFT' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const trialAgent = draftRow.trialAgent as Record<string, unknown> | undefined;
+    if (trialAgent?.botId) {
+      const d = await this.visitorsService.getTrialOnboardingDraftForSessionToken(rawSessionToken);
+      return {
+        ok: true,
+        alreadyCreated: true,
+        draft: d.draft,
+        bot: {
+          id: String(trialAgent.botId),
+          slug: String(trialAgent.slug ?? ''),
+          accessKey: String(trialAgent.accessKey ?? ''),
+          name: String(trialAgent.name ?? ''),
+        },
+      };
+    }
+
+    await this.visitorsService.getOrCreateVisitor(platformVisitorId);
+
+    const agentName = String(draftRow.agentName ?? '').trim() || 'Trial Assistant';
+    const allowedWebsite = String(draftRow.allowedWebsite ?? '').trim();
+    const domainNorm = normalizeUserWebsiteInputToHostname(allowedWebsite);
+    if (!domainNorm) {
+      throw new HttpException(
+        {
+          error: 'Add a valid website on the Go Live step before creating your agent.',
+          errorCode: 'INVALID_DOMAIN',
+        },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const behavior = (draftRow.behavior ?? {}) as Record<string, unknown>;
+    const what =
+      String(behavior.whatAgentDoes ?? '').trim() || String(draftRow.describeAgent ?? '').trim();
+    const weakDescription = isWeakAgentDescription(what);
+
+    const categories = Array.isArray(draftRow.categories)
+      ? (draftRow.categories as unknown[]).map((c) => String(c).trim()).filter(Boolean)
+      : [];
+    const primaryCategoryId = resolvePrimaryCategoryId(categories);
+    const behaviorPreset = mapCategoryToBehaviorPreset(primaryCategoryId);
+    const categoryContext = buildCategoryBehaviorContext(primaryCategoryId);
+
+    const personalitySystemPromptCore = [
+      what,
+      behavior.tone ? `Tone: ${String(behavior.tone)}` : '',
+      behavior.audience ? `Audience: ${String(behavior.audience)}` : '',
+      behavior.responseStyle ? `Response style: ${String(behavior.responseStyle)}` : '',
+      behavior.exampleResponsibilities
+        ? `Responsibilities: ${String(behavior.exampleResponsibilities)}`
+        : '',
+      behavior.additionalGuidance ? `Additional: ${String(behavior.additionalGuidance)}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n\n');
+
+    const personalitySystemPrompt = [
+      personalitySystemPromptCore,
+      categoryContext
+        ? `## Role focus (trial setup — behavioral context only, not a substitute for knowledge base content)\n${categoryContext}`
+        : '',
+    ]
+      .filter(Boolean)
+      .join('\n\n')
+      .slice(0, 12000);
+
+    const shortDescription = what.slice(0, 180);
+    const description = personalitySystemPromptCore.slice(0, 1500);
+
+    const quickLinksRaw = Array.isArray(draftRow.quickLinks) ? draftRow.quickLinks : [];
+    const menuQuickLinks = quickLinksRaw
+      .map((l: unknown) => {
+        if (!l || typeof l !== 'object') return null;
+        const o = l as Record<string, unknown>;
+        const text = String(o.label ?? '').trim();
+        const route = String(o.url ?? '').trim();
+        if (!text || !route) return null;
+        return { text: text.slice(0, 80), route: route.slice(0, 2000) };
+      })
+      .filter((x): x is { text: string; route: string } => x != null)
+      .slice(0, 10);
+
+    const extraRaw = String((draftRow as { allowedDomainsExtra?: string }).allowedDomainsExtra ?? '');
+    const extraAllowedDomains = extraRaw
+      .split(/[\n,]+/)
+      .map((s) => normalizeUserWebsiteInputToHostname(s.trim()))
+      .filter((h): h is string => Boolean(h));
+
+    const brandColor = String(draftRow.brandColor ?? '').trim();
+    const avatarUrl = resolveFinalAvatarUrlFromDraftRow(draftRow as Record<string, unknown>).trim();
+
+    const toneRaw = String(behavior.tone ?? '').toLowerCase();
+    const personalityTone = (['friendly', 'formal', 'playful', 'technical'] as const).find((t) =>
+      toneRaw.includes(t),
+    );
+
+    const welcomeMessage = buildTrialWelcomeMessage(agentName, primaryCategoryId, what, weakDescription);
+    const exampleQuestions = buildTrialExampleQuestions(agentName, primaryCategoryId, what, weakDescription);
+    const chatUIPreset = buildTrialVisitorChatUIPreset({
+      primaryColor: brandColor,
+      launcherAvatarUrl: avatarUrl,
+      menuQuickLinks,
+    });
+    const leadCapture = buildDefaultTrialLeadCapture();
+
+    let created;
+    try {
+      created = await this.createVisitorTrialBot({
+        platformVisitorId,
+        allowedDomain: domainNorm,
+        extraAllowedDomains,
+        name: agentName,
+        imageUrl: avatarUrl || undefined,
+        welcomeMessage,
+        shortDescription: shortDescription || agentName,
+        description: description || shortDescription || agentName,
+        categories,
+        brandColor,
+        menuQuickLinks,
+        personalitySystemPrompt: personalitySystemPrompt || undefined,
+        personalityTone,
+        behaviorPreset,
+        exampleQuestions,
+        leadCapture,
+        chatUIPreset,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '';
+      if (msg.includes('allowedDomain')) {
+        throw new HttpException({ error: msg, errorCode: 'TRIAL_EMBED_DOMAIN_INVALID' }, HttpStatus.BAD_REQUEST);
+      }
+      throw err;
+    }
+
+    await this.bootstrapTrialOnboardingKnowledgeFromDraft(created.botId, draftRow);
+
+    await this.visitorsService.setTrialAgentOnDraft(rawSessionToken, {
+      botId: created.botId,
+      slug: created.slug,
+      accessKey: created.accessKey,
+      name: created.name,
+      imageUrl: created.imageUrl,
+      allowedDomain: domainNorm,
+      createdAt: new Date(),
+    });
+
+    await this.visitorsService.createVisitorEvent({
+      platformVisitorId,
+      type: 'trial_bot_created',
+      botId: created.botId,
+      botSlug: created.slug,
+    });
+
+    const final = await this.visitorsService.getTrialOnboardingDraftForSessionToken(rawSessionToken);
+    return {
+      ok: true,
+      draft: final.draft,
+      bot: {
+        id: created.botId,
+        slug: created.slug,
+        accessKey: created.accessKey,
+        name: created.name,
+      },
+    };
   }
 }

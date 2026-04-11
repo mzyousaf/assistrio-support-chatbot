@@ -80,7 +80,7 @@ export function ShowcaseFlowSheet({ open, onClose, initialSlug }: Props) {
     const base = tryGetPublicApiBaseUrl();
     if (!base) {
       setBots([]);
-      setLoadError("Marketing site is missing NEXT_PUBLIC_ASSISTRIO_API_BASE_URL.");
+      setLoadError("Marketing site is missing NEXT_PUBLIC_API_BASE_URL.");
       setLoading(false);
       return;
     }
@@ -259,10 +259,10 @@ export function ShowcaseFlowSheet({ open, onClose, initialSlug }: Props) {
                         reduceMotion
                           ? { color: active ? "var(--brand-teal-dark)" : undefined }
                           : {
-                              color: active ? "var(--brand-teal-dark)" : undefined,
-                              scale: active ? 1.03 : 1,
-                              fontWeight: active ? 600 : 500,
-                            }
+                            color: active ? "var(--brand-teal-dark)" : undefined,
+                            scale: active ? 1.03 : 1,
+                            fontWeight: active ? 600 : 500,
+                          }
                       }
                       transition={reduceMotion ? { duration: 0.15 } : { type: "spring", stiffness: 420, damping: 28 }}
                     >

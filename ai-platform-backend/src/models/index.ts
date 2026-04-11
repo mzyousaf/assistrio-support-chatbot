@@ -27,6 +27,24 @@ export { Message, MessageSchema } from './message.schema';
 export type { MessageSource } from './message.schema';
 export { Visitor, VisitorSchema } from './visitor.schema';
 export type { VisitorKind } from './visitor.schema';
+export { TrialAccessToken, TrialAccessTokenSchema } from './trial-access-token.schema';
+export {
+  TrialDashboardSession,
+  TrialDashboardSessionSchema,
+} from './trial-dashboard-session.schema';
+export {
+  TrialEmailWorkspace,
+  TrialEmailWorkspaceSchema,
+} from './trial-email-workspace.schema';
+export type { TrialEmailWorkspaceDocument } from './trial-email-workspace.schema';
+export {
+  TrialOnboardingDraft,
+  TrialOnboardingDraftSchema,
+  TrialOnboardingQuickLink,
+  TrialOnboardingQuickLinkSchema,
+  TrialOnboardingAssetMeta,
+  TrialOnboardingAssetMetaSchema,
+} from './trial-onboarding-draft.schema';
 export { VisitorEvent, VisitorEventSchema } from './visitor-event.schema';
 export type { VisitorEventType } from './visitor-event.schema';
 export { RateLimit, RateLimitSchema } from './rate-limit.schema';

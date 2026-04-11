@@ -249,6 +249,30 @@ export class DocumentsService {
     await this.knowledgeBaseItemService.setDocumentKnowledgeItemStatus(botId, docId, { status: 'queued' });
   }
 
+  /**
+   * Reset a document for another ingest run: clear error, queued status, optionally drop extracted text
+   * so uploads/URLs are re-fetched (manual text-only docs keep text when `clearExtractedText` is false).
+   */
+  async requeueDocumentForIngestion(
+    botId: string,
+    docId: string,
+    options?: { clearExtractedText?: boolean },
+  ): Promise<void> {
+    if (!Types.ObjectId.isValid(botId) || !Types.ObjectId.isValid(docId)) return;
+    const clear = options?.clearExtractedText !== false;
+    const update: Record<string, unknown> = {
+      $set: { status: 'queued', error: undefined },
+    };
+    if (clear) {
+      update.$unset = { text: '' };
+    }
+    await this.documentModel.updateOne(
+      { _id: new Types.ObjectId(docId), botId: new Types.ObjectId(botId) },
+      update,
+    );
+    await this.knowledgeBaseItemService.setDocumentKnowledgeItemStatus(botId, docId, { status: 'queued' });
+  }
+
   async setFailed(botId: string, docId: string, errorMessage: string) {
     if (!Types.ObjectId.isValid(botId) || !Types.ObjectId.isValid(docId)) return;
     await this.documentModel.updateOne(

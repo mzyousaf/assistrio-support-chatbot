@@ -323,8 +323,8 @@ export class UserBotsController {
         allowedDomains: Array.isArray(b.allowedDomains)
           ? (b.allowedDomains as unknown[]).map((d) => String(d ?? '').trim()).filter(Boolean)
           : [],
-        platformVisitorWebsiteAllowlist: Array.isArray(b.platformVisitorWebsiteAllowlist)
-          ? (b.platformVisitorWebsiteAllowlist as Array<{ platformVisitorId?: unknown; websiteUrl?: unknown }>).map(
+        websiteURLAllowlist: Array.isArray(b.websiteURLAllowlist)
+          ? (b.websiteURLAllowlist as Array<{ platformVisitorId?: unknown; websiteUrl?: unknown }>).map(
             (e) => ({
               platformVisitorId: String(e?.platformVisitorId ?? '').trim(),
               websiteUrl: String(e?.websiteUrl ?? '').trim(),
@@ -393,8 +393,8 @@ export class UserBotsController {
               normalized.visitorMultiChatEnabled === true ? normalized.visitorMultiChatMax ?? null : null,
           }
           : {}),
-        ...(normalized.platformVisitorWebsiteAllowlist !== undefined
-          ? { platformVisitorWebsiteAllowlist: normalized.platformVisitorWebsiteAllowlist }
+        ...(normalized.websiteURLAllowlist !== undefined
+          ? { websiteURLAllowlist: normalized.websiteURLAllowlist }
           : {}),
       });
     } catch (err) {

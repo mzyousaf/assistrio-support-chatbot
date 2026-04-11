@@ -107,12 +107,12 @@ function normalizeExampleQuestions(input: unknown): string[] {
 
 const MENU_QUICK_LINKS_MAX = 10;
 
-function normalizePlatformVisitorWebsiteAllowlistFromPayload(
+function normalizeWebsiteURLAllowlistFromPayload(
   input: Record<string, unknown>,
   creatorType?: 'user' | 'visitor',
 ): Array<{ platformVisitorId: string; websiteUrl: string }> | undefined {
-  if (!('platformVisitorWebsiteAllowlist' in input)) return undefined;
-  const raw = input.platformVisitorWebsiteAllowlist;
+  if (!('websiteURLAllowlist' in input)) return undefined;
+  const raw = input.websiteURLAllowlist;
   if (!Array.isArray(raw)) return [];
   const map = new Map<string, { platformVisitorId: string; websiteUrl: string }>();
   for (const item of raw) {
@@ -216,14 +216,14 @@ export interface NormalizedBotPayload {
   /** Omitted from PATCH body = leave unchanged on server. */
   allowedDomains?: string[];
   /** Per platform visitor: allowed hostname for this bot (stored in `websiteUrl` field). Omitted = unchanged. */
-  platformVisitorWebsiteAllowlist?: Array<{ platformVisitorId: string; websiteUrl: string }>;
+  websiteURLAllowlist?: Array<{ platformVisitorId: string; websiteUrl: string }>;
   /** Present only when `visitorMultiChatEnabled` is in the request body. */
   visitorMultiChatEnabled?: boolean;
   visitorMultiChatMax?: number | null;
 }
 
 export type NormalizeBotPayloadOptions = {
-  /** When set, restricts `platformVisitorWebsiteAllowlist` and `allowedDomains` for trial bots. */
+  /** When set, restricts `websiteURLAllowlist` and `allowedDomains` for trial bots. */
   creatorType?: 'user' | 'visitor';
 };
 
@@ -231,7 +231,7 @@ export function normalizeBotPayload(
   input: Record<string, unknown>,
   opts?: NormalizeBotPayloadOptions,
 ): NormalizedBotPayload {
-  const platformVisitorWebsiteAllowlist = normalizePlatformVisitorWebsiteAllowlistFromPayload(
+  const websiteURLAllowlist = normalizeWebsiteURLAllowlistFromPayload(
     input,
     opts?.creatorType,
   );
@@ -439,7 +439,7 @@ export function normalizeBotPayload(
     includeTaglineInKnowledge,
     includeNotesInKnowledge,
     ...(allowedDomains !== undefined ? { allowedDomains } : {}),
-    ...(platformVisitorWebsiteAllowlist !== undefined ? { platformVisitorWebsiteAllowlist } : {}),
+    ...(websiteURLAllowlist !== undefined ? { websiteURLAllowlist } : {}),
     ...(visitorMultiPatch ?? {}),
   };
 }

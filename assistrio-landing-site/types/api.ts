@@ -111,7 +111,7 @@ export type RegisterShowcaseWebsiteRequest = {
 export type RegisterShowcaseWebsiteResponse = {
   ok: true;
   botId: string;
-  platformVisitorWebsiteAllowlist: Array<{ platformVisitorId: string; websiteUrl: string }>;
+  websiteURLAllowlist: Array<{ platformVisitorId: string; websiteUrl: string }>;
 };
 
 export class AssistrioApiError extends Error {

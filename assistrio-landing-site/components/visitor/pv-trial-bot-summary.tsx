@@ -242,7 +242,7 @@ export function PvTrialBotSummary({ platformVisitorId, botId, showRefresh = true
       <Card className="border-amber-200/90 bg-amber-50/60 p-5">
         <p className="text-sm font-semibold text-amber-950">Can&apos;t reach the API</p>
         <p className="mt-2 text-sm leading-relaxed text-amber-900/90">
-          Set <code className="rounded bg-white px-1 text-xs">NEXT_PUBLIC_ASSISTRIO_API_BASE_URL</code> in this site&apos;s
+          Set <code className="rounded bg-white px-1 text-xs">NEXT_PUBLIC_API_BASE_URL</code> in this site&apos;s
           env so we can load your summary.
         </p>
       </Card>

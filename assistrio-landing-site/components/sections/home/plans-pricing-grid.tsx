@@ -157,7 +157,7 @@ export function PlansPricingGrid({ plans, density = "default", className = "", t
                       type="button"
                       onClick={() => {
                         track("cta_clicked", { location: trackLocation, label: p.cta, href: p.href });
-                        openTrial();
+                        openTrial({ label: p.cta, location: trackLocation, href: p.href });
                       }}
                       className={`${buttonBaseClass} ${buttonVariantClass[p.variant]} w-full justify-center rounded-xl px-5 py-3.5 text-center text-[0.9375rem] font-semibold leading-snug ${
                         p.featured

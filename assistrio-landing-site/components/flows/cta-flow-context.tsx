@@ -9,12 +9,23 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { ShowcaseFlowSheet } from "@/components/flows/showcase-flow-sheet";
 import { TrialFlowModal } from "@/components/flows/trial-flow-modal";
 import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
+import {
+  buildTrialCtaOpenContext,
+  type TrialCtaOpenContext,
+  type TrialCtaOpenPayload,
+} from "@/lib/flows/trial-cta-types";
+import type { TrialSessionClientPayload } from "@/lib/trial/trial-session-display";
 
 type CtaFlowContextValue = {
-  openTrial: () => void;
+  /**
+   * Opens the trial lead modal. Pass the same fields you send to `cta_clicked` analytics
+   * (`label`, `location`, `href`) plus optional showcase context.
+   */
+  openTrial: (payload?: TrialCtaOpenPayload) => void;
   /** Optional slug jumps straight to preview when the bot exists in the public list. */
   openShowcase: (initialSlug?: string | null) => void;
   close: () => void;
@@ -29,22 +40,41 @@ function captureActiveElement(): HTMLElement | null {
   return a;
 }
 
-export function CtaFlowProvider({ children }: { children: ReactNode }) {
+export function CtaFlowProvider({
+  children,
+  trialSessionClient = null,
+}: {
+  children: ReactNode;
+  /** When set, trial CTAs route to the dashboard instead of opening the lead modal. */
+  trialSessionClient?: TrialSessionClientPayload | null;
+}) {
+  const pathname = usePathname() ?? "/";
+  const router = useRouter();
   const [trialOpen, setTrialOpen] = useState(false);
   const [showcaseOpen, setShowcaseOpen] = useState(false);
   const [showcaseSlug, setShowcaseSlug] = useState<string | null>(null);
+  const [trialCtaContext, setTrialCtaContext] = useState<TrialCtaOpenContext | null>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
 
-  const openTrial = useCallback(() => {
-    returnFocusRef.current = captureActiveElement();
-    setShowcaseOpen(false);
-    setShowcaseSlug(null);
-    setTrialOpen(true);
-  }, []);
+  const openTrial = useCallback(
+    (payload?: TrialCtaOpenPayload) => {
+      if (trialSessionClient) {
+        router.push("/trial/dashboard");
+        return;
+      }
+      returnFocusRef.current = captureActiveElement();
+      setShowcaseOpen(false);
+      setShowcaseSlug(null);
+      setTrialCtaContext(buildTrialCtaOpenContext(pathname, payload));
+      setTrialOpen(true);
+    },
+    [pathname, router, trialSessionClient],
+  );
 
   const openShowcase = useCallback((initialSlug?: string | null) => {
     returnFocusRef.current = captureActiveElement();
     setTrialOpen(false);
+    setTrialCtaContext(null);
     setShowcaseSlug(initialSlug ?? null);
     setShowcaseOpen(true);
   }, []);
@@ -55,6 +85,7 @@ export function CtaFlowProvider({ children }: { children: ReactNode }) {
     setTrialOpen(false);
     setShowcaseOpen(false);
     setShowcaseSlug(null);
+    setTrialCtaContext(null);
     queueMicrotask(() => {
       requestAnimationFrame(() => {
         if (toRestore && document.contains(toRestore) && typeof toRestore.focus === "function") {
@@ -81,7 +112,7 @@ export function CtaFlowProvider({ children }: { children: ReactNode }) {
       >
         {children}
       </div>
-      <TrialFlowModal open={trialOpen} onClose={close} />
+      <TrialFlowModal open={trialOpen} onClose={close} ctaContext={trialCtaContext} />
       <ShowcaseFlowSheet open={showcaseOpen} onClose={close} initialSlug={showcaseSlug} />
     </CtaFlowContext.Provider>
   );

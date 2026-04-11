@@ -1,10 +1,11 @@
-import { Body, Controller, HttpException, HttpStatus, Post, Req } from '@nestjs/common';
+import { Body, Controller, HttpException, HttpStatus, Post, Req, UseGuards } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { VisitorsService } from '../visitors/visitors.service';
 import { isValidPlatformVisitorIdFormat } from './widget-embed-identity.util';
 import { PUBLIC_ANON_RATE_PREFIX, PUBLIC_ANONYMOUS_RATE_LIMITS } from '../rate-limit/public-anonymous-rate-limit.constants';
 import { enforcePublicAnonymousRateLimit } from '../rate-limit/public-anonymous-rate-limit.util';
 import { RateLimitService } from '../rate-limit/rate-limit.service';
+import { LandingSiteApiKeyGuard } from '../landing-site-api-key/landing-site-api-key.guard';
 
 /**
  * **PV-safe** read-only quota aggregates for a known `platformVisitorId` (product-shaped summary).
@@ -19,8 +20,11 @@ import { RateLimitService } from '../rate-limit/rate-limit.service';
  *
  * @see docs/ANALYTICS_BOUNDARIES.md
  * @see docs/PV_SAFE_PUBLIC_APIS.md
+ *
+ * `X-API-Key` required (`LANDING_SITE_X_API_KEY`) — marketing site proxies browser calls.
  */
 @Controller('api/public/visitor-quota')
+@UseGuards(LandingSiteApiKeyGuard)
 export class PublicVisitorQuotaController {
   constructor(
     private readonly visitorsService: VisitorsService,

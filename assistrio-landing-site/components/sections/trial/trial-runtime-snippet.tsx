@@ -34,7 +34,7 @@ export function TrialRuntimeSnippet({ trial }: Props) {
   if (!snippet) {
     return (
       <div className="rounded-[var(--radius-xl)] border border-amber-200/90 bg-amber-50/90 px-4 py-3 text-sm text-amber-950 shadow-[var(--shadow-xs)]">
-        Set <code className="rounded bg-white px-1">NEXT_PUBLIC_ASSISTRIO_API_BASE_URL</code> to generate a snippet with
+        Set <code className="rounded bg-white px-1">NEXT_PUBLIC_API_BASE_URL</code> to generate a snippet with
         your API origin.
       </div>
     );

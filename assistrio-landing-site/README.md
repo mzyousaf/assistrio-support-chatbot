@@ -14,7 +14,7 @@ Next.js app for the public marketing site: showcase gallery, free trial, identit
 
 ## Environment
 
-- **`NEXT_PUBLIC_ASSISTRIO_API_BASE_URL`** — Assistrio API origin (required for gallery, quota, trial, snippets).
+- **`NEXT_PUBLIC_API_BASE_URL`** — Assistrio API origin (required for gallery, quota, trial, snippets).
 - **`NEXT_PUBLIC_ASSISTRIO_WIDGET_JS_URL`** / **`NEXT_PUBLIC_ASSISTRIO_WIDGET_CSS_URL`** — optional overrides for widget CDN URLs (see `lib/widget/cdn-urls.ts`).
 
 ## Development

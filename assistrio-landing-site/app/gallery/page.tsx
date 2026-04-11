@@ -55,7 +55,7 @@ export default async function GalleryPage() {
         <Container>
           <PageIntro eyebrow="Gallery" title="Live AI Agents by Assistrio" />
           <p className="mt-6 rounded-[var(--radius-xl)] border border-amber-200/90 bg-amber-50/90 px-4 py-3 text-sm text-amber-950 shadow-[var(--shadow-xs)]">
-            Set <code className="rounded bg-white px-1">NEXT_PUBLIC_ASSISTRIO_API_BASE_URL</code> in{" "}
+            Set <code className="rounded bg-white px-1">NEXT_PUBLIC_API_BASE_URL</code> in{" "}
             <code className="rounded bg-white px-1">.env.local</code> to load showcase AI Agents from the Assistrio API.
           </p>
         </Container>

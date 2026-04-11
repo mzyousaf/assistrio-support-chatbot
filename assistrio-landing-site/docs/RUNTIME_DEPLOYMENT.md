@@ -81,7 +81,7 @@ Landing defaults: `https://widget.assistrio.com/assistrio-chat.{js,css}` (`assis
 
 ### A) Trial runtime (snippet on customer site)
 
-1. **Build** — Landing (or your CMS) inlines `NEXT_PUBLIC_ASSISTRIO_API_BASE_URL` into the snippet (`buildTrialRuntimeEmbedSnippet` / `TrialRuntimeSnippet`).
+1. **Build** — Landing (or your CMS) inlines `NEXT_PUBLIC_API_BASE_URL` into the snippet (`buildTrialRuntimeEmbedSnippet` / `TrialRuntimeSnippet`).
 2. **Page load** — Browser loads HTML; widget script/CSS from CDN (`getAssistrioWidgetCdnUrls`). Failure here: **CDN / ad blocker** — not CORS to API yet.
 3. **Mount** — `AssistrioChat.mount` → `validateAndInitWidget` → `POST {apiBaseUrl}/api/widget/init` with body including `embedOrigin` from `window.location.origin` (`chat-widget/src/api.ts`, `toInitRequest`).
 4. **Browser** — For cross-origin API, sends `Origin: <page origin>`. **CORS preflight** may run first. Public route → **HTTPS origin reflected** without env allowlist.

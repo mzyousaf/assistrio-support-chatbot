@@ -13,7 +13,6 @@ import {
 } from "react";
 import type { PublicBotListItem, PublicKnowledgeBaseCounts } from "@/types/bot";
 import { parseAgentPrimaryColor, rgbaFromHex } from "@/lib/agentAccent";
-import { tryGetPublicApiBaseUrl } from "@/lib/utils/env";
 
 /** Validates a hex color string for optional accent overrides. */
 export function safeAccent(hex?: string): string | undefined {
@@ -190,12 +189,10 @@ export function GalleryBotCard({ bot, href, displayChatCount, initialKbCarouselS
         ? Math.floor(bot.totalChats)
         : 0;
 
-  const apiBase = tryGetPublicApiBaseUrl();
   const sampleDocHref =
-    apiBase &&
     firstDownloadable?.documentId &&
     bot.slug &&
-    `${apiBase}/api/public/bots/${encodeURIComponent(bot.slug)}/documents/${encodeURIComponent(firstDownloadable.documentId)}/download`;
+    `/api/public/bots/${encodeURIComponent(bot.slug)}/documents/${encodeURIComponent(firstDownloadable.documentId)}/download`;
 
   const categoryLine = bot.category?.trim() ? bot.category : "AI Support Agent";
   const blurb = bot.shortDescription?.trim();

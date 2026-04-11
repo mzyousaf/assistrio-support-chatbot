@@ -29,12 +29,12 @@ import { PLATFORM_VISITOR_EMBED_ANONYMOUS_SENTINEL } from './widget-embed-identi
  * `POST /api/widget/register-website` (embed keys + showcase bots).
  */
 export function platformVisitorEmbedCanBypassAllowedDomainsGate(params: {
-  bot: { platformVisitorWebsiteAllowlist?: unknown };
+  bot: { websiteURLAllowlist?: unknown };
   platformVisitorId?: string;
 }): boolean {
   const pv = params.platformVisitorId?.trim();
   if (!pv || pv === PLATFORM_VISITOR_EMBED_ANONYMOUS_SENTINEL) return false;
-  const list = params.bot.platformVisitorWebsiteAllowlist;
+  const list = params.bot.websiteURLAllowlist;
   if (!Array.isArray(list) || list.length === 0) return false;
   return list.some((e: unknown) => {
     if (!e || typeof e !== 'object') return false;
@@ -43,13 +43,13 @@ export function platformVisitorEmbedCanBypassAllowedDomainsGate(params: {
 }
 
 export function assertPlatformVisitorWebsiteMatchesBotAllowlist(params: {
-  bot: { platformVisitorWebsiteAllowlist?: unknown };
+  bot: { websiteURLAllowlist?: unknown };
   platformVisitorId?: string;
   requestOrigin: string | undefined;
 }): void {
   const pv = params.platformVisitorId?.trim();
   if (!pv || pv === PLATFORM_VISITOR_EMBED_ANONYMOUS_SENTINEL) return;
-  const list = params.bot.platformVisitorWebsiteAllowlist;
+  const list = params.bot.websiteURLAllowlist;
   if (!Array.isArray(list) || list.length === 0) return;
 
   const originRaw = typeof params.requestOrigin === 'string' ? params.requestOrigin.trim() : '';
@@ -76,7 +76,7 @@ export function assertPlatformVisitorWebsiteMatchesBotAllowlist(params: {
  * Normalize a single showcase allowlist row (same rules as admin `bot-payload`).
  * Used by runtime `POST /api/widget/register-website` — **not** a substitute for `platformVisitorId` identity proof.
  */
-export function normalizePlatformVisitorWebsiteAllowlistRowPublic(params: {
+export function normalizeWebsiteURLAllowlistRowPublic(params: {
   platformVisitorId: string;
   websiteUrl: string;
 }): { platformVisitorId: string; websiteUrl: string } {
@@ -97,8 +97,8 @@ export function normalizePlatformVisitorWebsiteAllowlistRowPublic(params: {
   return { platformVisitorId: pv, websiteUrl: host };
 }
 
-/** Reject invalid payloads before persisting `platformVisitorWebsiteAllowlist`. */
-export function assertPlatformVisitorWebsiteAllowlistWritePolicy(
+/** Reject invalid payloads before persisting `websiteURLAllowlist`. */
+export function assertWebsiteURLAllowlistWritePolicy(
   creatorType: 'user' | 'visitor' | undefined,
   allowlist: Array<{ platformVisitorId: string; websiteUrl: string }> | undefined,
 ): void {

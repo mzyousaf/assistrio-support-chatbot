@@ -1,12 +1,12 @@
 import {
   assertPlatformVisitorWebsiteMatchesBotAllowlist,
-  normalizePlatformVisitorWebsiteAllowlistRowPublic,
+  normalizeWebsiteURLAllowlistRowPublic,
 } from './platform-visitor-website-allowlist.util';
 
-describe('normalizePlatformVisitorWebsiteAllowlistRowPublic', () => {
+describe('normalizeWebsiteURLAllowlistRowPublic', () => {
   it('stores hostname only from full URL', () => {
     expect(
-      normalizePlatformVisitorWebsiteAllowlistRowPublic({
+      normalizeWebsiteURLAllowlistRowPublic({
         platformVisitorId: 'pv',
         websiteUrl: 'https://www.app.notech.com/path?q=1#x',
       }),
@@ -16,7 +16,7 @@ describe('normalizePlatformVisitorWebsiteAllowlistRowPublic', () => {
 
 describe('assertPlatformVisitorWebsiteMatchesBotAllowlist', () => {
   const bot = {
-    platformVisitorWebsiteAllowlist: [{ platformVisitorId: 'pv1', websiteUrl: 'www.app.notech.com' }],
+    websiteURLAllowlist: [{ platformVisitorId: 'pv1', websiteUrl: 'www.app.notech.com' }],
   };
 
   it('matches Origin hostname to stored hostname (path-insensitive)', () => {
@@ -38,7 +38,7 @@ describe('assertPlatformVisitorWebsiteMatchesBotAllowlist', () => {
 
   it('matches legacy stored canonical origin by hostname (same port)', () => {
     const legacy = {
-      platformVisitorWebsiteAllowlist: [{ platformVisitorId: 'pv1', websiteUrl: 'https://www.app.notech.com:8443' }],
+      websiteURLAllowlist: [{ platformVisitorId: 'pv1', websiteUrl: 'https://www.app.notech.com:8443' }],
     };
     expect(() =>
       assertPlatformVisitorWebsiteMatchesBotAllowlist({
@@ -51,7 +51,7 @@ describe('assertPlatformVisitorWebsiteMatchesBotAllowlist', () => {
 
   it('matches legacy stored origin to default HTTPS port when hostname matches', () => {
     const legacy = {
-      platformVisitorWebsiteAllowlist: [{ platformVisitorId: 'pv1', websiteUrl: 'https://www.app.notech.com:8443' }],
+      websiteURLAllowlist: [{ platformVisitorId: 'pv1', websiteUrl: 'https://www.app.notech.com:8443' }],
     };
     expect(() =>
       assertPlatformVisitorWebsiteMatchesBotAllowlist({

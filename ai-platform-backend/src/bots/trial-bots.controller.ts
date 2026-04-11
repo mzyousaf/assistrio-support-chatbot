@@ -1,4 +1,4 @@
-import { Body, Controller, HttpException, HttpStatus, Post, Req } from '@nestjs/common';
+import { Body, Controller, HttpException, HttpStatus, Post, Req, UseGuards } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { normalizeUserWebsiteInputToHostname } from './embed-domain.util';
 import { BotsService } from './bots.service';
@@ -7,6 +7,7 @@ import { isValidPlatformVisitorIdFormat } from './widget-embed-identity.util';
 import { PUBLIC_ANON_RATE_PREFIX, PUBLIC_ANONYMOUS_RATE_LIMITS } from '../rate-limit/public-anonymous-rate-limit.constants';
 import { enforcePublicAnonymousRateLimit } from '../rate-limit/public-anonymous-rate-limit.util';
 import { RateLimitService } from '../rate-limit/rate-limit.service';
+import { LandingSiteApiKeyGuard } from '../landing-site-api-key/landing-site-api-key.guard';
 
 type TrialBotCreateBody = {
   platformVisitorId?: unknown;
@@ -80,8 +81,10 @@ function parseCreateBody(body: unknown): {
 /**
  * **Intentionally anonymous** — creates DB rows; rate-limited per IP (Mongo window, multi-instance safe).
  * Ownership/quota: `platformVisitorId` only; `allowedDomain` is runtime location, not identity proof.
+ * Requires `X-API-Key` from the marketing site (`LANDING_SITE_X_API_KEY`).
  */
 @Controller('api/trial/bots')
+@UseGuards(LandingSiteApiKeyGuard)
 export class TrialBotsController {
   constructor(
     private readonly botsService: BotsService,

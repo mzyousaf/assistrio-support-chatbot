@@ -15,7 +15,7 @@ export type RuntimeFailureLayer = {
 export const RUNTIME_FAILURE_LAYERS: RuntimeFailureLayer[] = [
   {
     id: "missing_api",
-    symptom: "Marketing site shows “configure NEXT_PUBLIC_ASSISTRIO_API_BASE_URL” or snippet is empty.",
+    symptom: "Marketing site shows “configure NEXT_PUBLIC_API_BASE_URL” or snippet is empty.",
     fixHint: "Build the landing app with the public API origin set; rebuild after changing env.",
   },
   {

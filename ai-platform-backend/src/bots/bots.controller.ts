@@ -5,7 +5,7 @@ import { BotsService } from './bots.service';
 
 /**
  * **Not** an anonymous or landing route — lists raw bot records (minus `secretKey`).
- * The public marketing gallery is `GET /api/public/bots` (showcase-only, shaped response).
+ * The public marketing gallery is `GET /api/public/bots` (showcase-only, shaped response, `X-API-Key`).
  */
 @Controller('api/bots')
 @UseGuards(AuthGuard, SuperAdminGuard)

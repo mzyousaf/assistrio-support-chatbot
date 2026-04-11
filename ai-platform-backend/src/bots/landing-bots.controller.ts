@@ -1,14 +1,14 @@
 import { Controller, Get, Header, HttpException, HttpStatus, Req, UseGuards } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { BotsService } from './bots.service';
-import { LandingSiteApiKeyGuard } from './landing-site-api-key.guard';
+import { LandingSiteApiKeyGuard } from '../landing-site-api-key/landing-site-api-key.guard';
 import { shapePublicBotListItem } from './public-bot-response.util';
 import { PUBLIC_ANON_RATE_PREFIX, PUBLIC_ANONYMOUS_RATE_LIMITS } from '../rate-limit/public-anonymous-rate-limit.constants';
 import { enforcePublicAnonymousRateLimit } from '../rate-limit/public-anonymous-rate-limit.util';
 import { RateLimitService } from '../rate-limit/rate-limit.service';
 
 /**
- * Curated list for the marketing landing app — requires `X-API-Key` ({@link LandingSiteApiKeyGuard})
+ * Curated list for the marketing landing app — requires `X-API-Key: LANDING_SITE_X_API_KEY` ({@link LandingSiteApiKeyGuard})
  * **and** per-IP rate limiting (defense in depth if the key leaks).
  */
 @Controller('api/public/landing')

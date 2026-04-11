@@ -1,4 +1,4 @@
-import { Controller, Get, Header, HttpException, HttpStatus, Param, Req, Res } from '@nestjs/common';
+import { Controller, Get, Header, HttpException, HttpStatus, Param, Req, Res, UseGuards } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { Types } from 'mongoose';
 import { BotsService } from './bots.service';
@@ -7,6 +7,7 @@ import { PUBLIC_ANON_RATE_PREFIX, PUBLIC_ANONYMOUS_RATE_LIMITS } from '../rate-l
 import { enforcePublicAnonymousRateLimit } from '../rate-limit/public-anonymous-rate-limit.util';
 import { RateLimitService } from '../rate-limit/rate-limit.service';
 import { DocumentsService } from '../documents/documents.service';
+import { LandingSiteApiKeyGuard } from '../landing-site-api-key/landing-site-api-key.guard';
 
 /** Slug path segment for public gallery detail — no slashes or unicode (matches slugify output). */
 const PUBLIC_BOT_SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -23,10 +24,11 @@ function assertPublicGallerySlug(slug: string): string {
 }
 
 /**
- * **Anonymous** marketing gallery — showcase bots only (`findPublicShowcase`).
- * Rate-limited per IP; responses are cacheable (`Cache-Control: public`).
+ * Marketing gallery — showcase bots only (`findPublicShowcase`).
+ * Requires {@link LandingSiteApiKeyGuard} (`X-API-Key: LANDING_SITE_X_API_KEY`); rate-limited per IP; cacheable.
  */
 @Controller('api/public/bots')
+@UseGuards(LandingSiteApiKeyGuard)
 export class PublicBotsController {
   constructor(
     private readonly botsService: BotsService,

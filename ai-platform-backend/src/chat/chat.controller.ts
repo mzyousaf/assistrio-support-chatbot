@@ -100,7 +100,7 @@ export class ChatController {
     bot: {
       allowedDomains?: unknown;
       widgetEmbedRateLimitPerMinute?: unknown;
-      platformVisitorWebsiteAllowlist?: unknown;
+      websiteURLAllowlist?: unknown;
     },
     req: FastifyRequest,
     embedContext: { creatorType: 'visitor' | 'user'; platformVisitorId: string },
@@ -315,7 +315,7 @@ export class ChatController {
       bot as {
         allowedDomains?: unknown;
         widgetEmbedRateLimitPerMinute?: unknown;
-        platformVisitorWebsiteAllowlist?: unknown;
+        websiteURLAllowlist?: unknown;
       },
       req,
       { creatorType, platformVisitorId: resolvedPlatformVisitorId },
@@ -455,7 +455,7 @@ export class ChatController {
       bot as {
         allowedDomains?: unknown;
         widgetEmbedRateLimitPerMinute?: unknown;
-        platformVisitorWebsiteAllowlist?: unknown;
+        websiteURLAllowlist?: unknown;
       },
       req,
       { creatorType, platformVisitorId: resolvedPlatformVisitorId },
@@ -571,7 +571,7 @@ export class ChatController {
       bot as {
         allowedDomains?: unknown;
         widgetEmbedRateLimitPerMinute?: unknown;
-        platformVisitorWebsiteAllowlist?: unknown;
+        websiteURLAllowlist?: unknown;
       },
       req,
       { creatorType, platformVisitorId: resolvedPlatformVisitorId },
@@ -589,7 +589,7 @@ export class ChatController {
       if (creatorType !== 'visitor') {
         try {
           assertPlatformVisitorWebsiteMatchesBotAllowlist({
-            bot: bot as { platformVisitorWebsiteAllowlist?: unknown },
+            bot: bot as { websiteURLAllowlist?: unknown },
             platformVisitorId: pvPolicy,
             requestOrigin: originHeader ?? undefined,
           });

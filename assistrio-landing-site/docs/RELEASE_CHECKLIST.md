@@ -79,7 +79,7 @@ Classifications: **Verified in code** | **Needs manual QA** | **Acceptable trade
 
 | Step | Expected | If broken |
 |------|------------|-------------|
-| Build landing with `NEXT_PUBLIC_ASSISTRIO_API_BASE_URL` pointing at staging/prod API. | Site loads; gallery/trial/quota paths don’t show “configure API URL” amber states. | Missing or wrong origin; fix env and rebuild (Next inlines public env at build time). |
+| Build landing with `NEXT_PUBLIC_API_BASE_URL` pointing at staging/prod API. | Site loads; gallery/trial/quota paths don’t show “configure API URL” amber states. | Missing or wrong origin; fix env and rebuild (Next inlines public env at build time). |
 | Optional: set `NEXT_PUBLIC_ASSISTRIO_WIDGET_*` overrides if not using defaults. | Widget script/css load from intended URLs. | 404 or CSP; check Network tab. |
 
 ### Homepage
@@ -180,7 +180,7 @@ Use two profiles or devices (or one normal + one private window) so **saved ids 
 
 | Variable | Required | Purpose |
 |----------|----------|---------|
-| `NEXT_PUBLIC_ASSISTRIO_API_BASE_URL` | **Yes** | API origin for RSC fetch + browser calls. No trailing slash. |
+| `NEXT_PUBLIC_API_BASE_URL` | **Yes** | API origin for RSC fetch + browser calls. No trailing slash. |
 | `NEXT_PUBLIC_ASSISTRIO_WIDGET_JS_URL` / `NEXT_PUBLIC_ASSISTRIO_WIDGET_CSS_URL` | No | Full override of widget assets. |
 | `NEXT_PUBLIC_ASSISTRIO_WIDGET_CDN_BASE_URL` | No | Base URL; defaults append `/assistrio-chat.js` and `.css`. |
 | Default widget host | Fallback | `https://widget.assistrio.com/...` (`cdn-urls.ts`). |

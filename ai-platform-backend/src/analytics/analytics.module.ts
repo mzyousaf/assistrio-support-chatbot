@@ -13,6 +13,7 @@ import {
   VisitorEventSchema,
 } from '../models';
 import { AuthModule } from '../auth/auth.module';
+import { LandingSiteApiKeyModule } from '../landing-site-api-key/landing-site-api-key.module';
 import { VisitorsModule } from '../visitors/visitors.module';
 import { AnalyticsController } from './analytics.controller';
 import { AnalyticsTrackController } from './analytics-track.controller';
@@ -21,6 +22,7 @@ import { AnalyticsService } from './analytics.service';
 @Module({
   imports: [
     AuthModule,
+    LandingSiteApiKeyModule,
     MongooseModule.forFeature([
       { name: VisitorEvent.name, schema: VisitorEventSchema },
       { name: Visitor.name, schema: VisitorSchema },

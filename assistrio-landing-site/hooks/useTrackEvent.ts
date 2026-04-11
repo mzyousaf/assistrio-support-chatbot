@@ -2,7 +2,6 @@
 
 import { useCallback } from "react";
 import { usePlatformVisitorId } from "@/hooks/usePlatformVisitorId";
-import { tryGetPublicApiBaseUrl } from "@/lib/utils/env";
 
 /** Mirrors `VisitorEventType` in the API — keep aligned with `track-payload.dto.ts`. */
 export type VisitorTrackEventType =
@@ -14,6 +13,12 @@ export type VisitorTrackEventType =
   | "demo_opened"
   | "trial_create_started"
   | "trial_create_succeeded"
+  | "trial_lead_step1_submit_started"
+  | "trial_lead_step1_submit_succeeded"
+  | "trial_lead_step1_submit_failed"
+  | "trial_lead_step1_resend_started"
+  | "trial_lead_step1_resend_succeeded"
+  | "trial_lead_step1_resend_failed"
   | "snippet_copied"
   | "stable_id_copied"
   | "reconnect_submitted"
@@ -38,8 +43,6 @@ export function useTrackEvent() {
       options?: TrackOptions,
     ) => {
       if (status !== "ready" || !platformVisitorId) return;
-      const base = tryGetPublicApiBaseUrl();
-      if (!base) return;
 
       const path =
         typeof window !== "undefined"
@@ -57,7 +60,7 @@ export function useTrackEvent() {
       if (options?.botId) body.botId = options.botId;
       if (options?.botSlug) body.botSlug = options.botSlug;
 
-      void fetch(`${base}/api/analytics/track`, {
+      void fetch("/api/analytics/track", {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify(body),

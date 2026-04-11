@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useTrackEvent } from "@/hooks/useTrackEvent";
 
 /**
- * Sends `page_view` to ingestion (`POST /api/analytics/track`) on client navigations.
+ * Sends `page_view` via same-origin `POST /api/analytics/track` (server proxies to Nest with `X-API-Key`).
  * Must stay inside {@link PlatformVisitorProvider}.
  */
 export function LandingRouteTracker() {

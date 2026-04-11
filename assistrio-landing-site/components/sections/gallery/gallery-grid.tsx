@@ -18,7 +18,7 @@ export function GalleryGrid({ bots, children }: Props) {
       <EmptyState title="No showcase AI Agents to display">
         <p>
           The API returned an empty list. Publish public showcase AI Agents in the Assistrio admin, and ensure{" "}
-          <code className="rounded bg-white px-1 text-xs">NEXT_PUBLIC_ASSISTRIO_API_BASE_URL</code> points at your
+          <code className="rounded bg-white px-1 text-xs">NEXT_PUBLIC_API_BASE_URL</code> points at your
           backend.
         </p>
       </EmptyState>

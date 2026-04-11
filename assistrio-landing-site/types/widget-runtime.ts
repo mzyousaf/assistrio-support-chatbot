@@ -8,7 +8,7 @@
 export type ShowcaseRuntimeEmbedConfig = {
   mode: "runtime";
   botId: string;
-  /** Assistrio API origin (no trailing slash), e.g. same as `NEXT_PUBLIC_ASSISTRIO_API_BASE_URL`. */
+  /** Assistrio API origin (no trailing slash), e.g. same as `NEXT_PUBLIC_API_BASE_URL`. */
   apiBaseUrl: string;
   accessKey: string;
   /**

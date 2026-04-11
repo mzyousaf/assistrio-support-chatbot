@@ -106,7 +106,7 @@ export function AssistrioShowcaseRuntimeEmbed({ botId, accessKey, platformVisito
         <p className="text-sm font-semibold text-amber-950">Runtime embed unavailable</p>
         <p className="mt-2 text-sm text-amber-900/90">
           {reason === "missing_api"
-            ? "Set NEXT_PUBLIC_ASSISTRIO_API_BASE_URL at build time so the browser can call the API."
+            ? "Set NEXT_PUBLIC_API_BASE_URL at build time so the browser can call the API."
             : reason === "missing_embed_keys"
               ? "Missing AI Agent id or access key from the public API response — cannot mount the widget."
               : "Stable identity not ready — wait for platformVisitorId, or use Reconnect on the homepage / trial page."}

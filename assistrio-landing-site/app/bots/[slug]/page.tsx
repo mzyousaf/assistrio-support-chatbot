@@ -9,6 +9,7 @@ import {
   absoluteOgImageUrl,
   DEFAULT_OG_IMAGE_PATH,
   DEFAULT_OG_IMAGE_SIZE,
+  marketingPageMetadata,
 } from "@/lib/site-metadata";
 import { tryGetPublicApiBaseUrl } from "@/lib/utils/env";
 
@@ -17,6 +18,12 @@ export const dynamic = "force-dynamic";
 type Props = { params: Promise<{ slug: string }> };
 
 const FALLBACK_BOT_TITLE = "Showcase AI Support Agent";
+
+const botSlugMetadataFallback: Metadata = marketingPageMetadata({
+  title: FALLBACK_BOT_TITLE,
+  description:
+    "Explore live AI Support Agent examples on Assistrio — knowledge-based answers, lead capture, and branding on the production-style runtime.",
+});
 
 function buildBotDescription(bot: {
   name: string;
@@ -40,11 +47,11 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
   const base = tryGetPublicApiBaseUrl();
   if (!base) {
-    return { title: FALLBACK_BOT_TITLE };
+    return botSlugMetadataFallback;
   }
   try {
     const bot = await fetchPublicBotBySlug(slug);
-    if (!bot) return { title: FALLBACK_BOT_TITLE };
+    if (!bot) return botSlugMetadataFallback;
 
     const titleSegment = `${bot.name} — Live AI Support Agent Example`;
     const description = buildBotDescription(bot);
@@ -76,7 +83,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       },
     };
   } catch {
-    return { title: FALLBACK_BOT_TITLE };
+    return botSlugMetadataFallback;
   }
 }
 
@@ -88,7 +95,7 @@ export default async function BotDetailPage({ params }: Props) {
       <Section spacing="compact" className="pb-20 pt-10">
         <Container size="narrow">
           <p className="rounded-[var(--radius-xl)] border border-amber-200/90 bg-amber-50/90 px-4 py-3 text-sm text-amber-950 shadow-[var(--shadow-xs)]">
-            Configure <code className="rounded bg-white px-1">NEXT_PUBLIC_ASSISTRIO_API_BASE_URL</code> to load showcase
+            Configure <code className="rounded bg-white px-1">NEXT_PUBLIC_API_BASE_URL</code> to load showcase
             AI Agent details.
           </p>
         </Container>

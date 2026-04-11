@@ -4,7 +4,7 @@ import Image from "next/image";
 import { useId, useState } from "react";
 import { useTrackEvent } from "@/hooks/useTrackEvent";
 import { Button } from "@/components/ui/button";
-import { SITE_LOGO, SITE_LOGO_WORDMARK_PX } from "@/lib/site-branding";
+import { SITE_LOGO_MARK, SITE_LOGO_MARK_PX, SITE_LOGO_TEXT, SITE_LOGO_TEXT_PX } from "@/lib/site-branding";
 
 const MAX = { name: 120, email: 254, subject: 200, message: 12_000 } as const;
 
@@ -142,13 +142,21 @@ export function ContactForm({ variant = "standalone", labelledBy }: ContactFormP
         <h2 className="text-lg font-semibold tracking-tight text-slate-900">Send a message</h2>
       ) : (
         <>
-          <div className="flex justify-center">
+          <div className="flex min-w-0 flex-wrap items-center justify-center gap-3 sm:gap-3.5">
             <Image
-              src={SITE_LOGO.wordmark}
+              src={SITE_LOGO_MARK}
+              alt=""
+              width={SITE_LOGO_MARK_PX.width}
+              height={SITE_LOGO_MARK_PX.height}
+              className="h-9 w-9 shrink-0 rounded-xl object-contain sm:h-10 sm:w-10"
+              aria-hidden
+            />
+            <Image
+              src={SITE_LOGO_TEXT}
               alt="Assistrio"
-              width={SITE_LOGO_WORDMARK_PX.width}
-              height={SITE_LOGO_WORDMARK_PX.height}
-              className="h-[22px] w-auto max-w-[min(85vw,14rem)] object-contain sm:h-6 sm:max-w-[16rem]"
+              width={SITE_LOGO_TEXT_PX.width}
+              height={SITE_LOGO_TEXT_PX.height}
+              className="h-[1.3125rem] w-auto max-w-[min(100%,12rem)] shrink-0 object-contain sm:h-[1.5rem] sm:max-w-[min(100%,13rem)]"
             />
           </div>
           <h1 className="text-page-title mt-2 text-center">Contact us</h1>

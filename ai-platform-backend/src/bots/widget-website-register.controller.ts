@@ -1,4 +1,4 @@
-import { Body, Controller, HttpException, HttpStatus, Post, Req } from '@nestjs/common';
+import { Body, Controller, HttpException, HttpStatus, Post, Req, UseGuards } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { BotsService } from './bots.service';
 import { toRuntimeCredentialErrorCode } from './runtime-error-codes.util';
@@ -6,6 +6,7 @@ import { isValidPlatformVisitorIdFormat } from './widget-embed-identity.util';
 import { PUBLIC_ANON_RATE_PREFIX, PUBLIC_ANONYMOUS_RATE_LIMITS } from '../rate-limit/public-anonymous-rate-limit.constants';
 import { enforcePublicAnonymousRateLimit } from '../rate-limit/public-anonymous-rate-limit.util';
 import { RateLimitService } from '../rate-limit/rate-limit.service';
+import { LandingSiteApiKeyGuard } from '../landing-site-api-key/landing-site-api-key.guard';
 
 type RegisterWebsiteBody = {
   botId?: unknown;
@@ -22,8 +23,10 @@ type RegisterWebsiteBody = {
  * Trial bots: use `allowedDomains` + trial creation; this endpoint returns `TRIAL_BOT_NOT_SUPPORTED`.
  *
  * **Intentionally anonymous** (credentials + rate limit per IP) — still mutates allowlist; see `PUBLIC_ANONYMOUS_RATE_LIMITS`.
+ * `POST register-website` requires `X-API-Key` (`LANDING_SITE_X_API_KEY`) — call via marketing site proxy; **`POST /api/widget/init` is unchanged** (embed runtime).
  */
 @Controller('api/widget')
+@UseGuards(LandingSiteApiKeyGuard)
 export class WidgetWebsiteRegisterController {
   constructor(
     private readonly botsService: BotsService,
@@ -88,7 +91,7 @@ export class WidgetWebsiteRegisterController {
       return {
         ok: true,
         botId: result.botId,
-        platformVisitorWebsiteAllowlist: result.platformVisitorWebsiteAllowlist,
+        websiteURLAllowlist: result.websiteURLAllowlist,
       };
     } catch (err) {
       const code = err instanceof Error ? err.message : '';

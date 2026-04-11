@@ -58,7 +58,7 @@ export function ShowcaseWebsiteRegistration({ botId, accessKey }: Props) {
         websiteUrl,
       });
       const stored =
-        res.platformVisitorWebsiteAllowlist?.find((e) => e.platformVisitorId === platformVisitorId)?.websiteUrl ?? null;
+        res.websiteURLAllowlist?.find((e) => e.platformVisitorId === platformVisitorId)?.websiteUrl ?? null;
       setRegisteredHostname(stored);
       setSuccess(true);
     } catch (err) {
@@ -88,7 +88,7 @@ export function ShowcaseWebsiteRegistration({ botId, accessKey }: Props) {
     return (
       <Card className="border-slate-200">
         <p className="text-sm text-[var(--foreground-muted)]">
-          Configure <code className="rounded bg-slate-100 px-1 text-xs">NEXT_PUBLIC_ASSISTRIO_API_BASE_URL</code> to
+          Configure <code className="rounded bg-slate-100 px-1 text-xs">NEXT_PUBLIC_API_BASE_URL</code> to
           register a website for embed.
         </p>
       </Card>

@@ -36,8 +36,11 @@ export function configFactory() {
     awsRegion: process.env.AWS_REGION ?? '',
     s3Bucket: process.env.S3_BUCKET ?? '',
     cloudfrontBaseUrl: process.env.CLOUDFRONT_BASE_URL?.trim().replace(/\/$/, '') ?? '',
-    /** Shared secret for landing site server-to-server calls (e.g. GET /api/public/landing/bots). */
-    landingSiteBotsApiKey: process.env.LANDING_SITE_BOTS_API_KEY?.trim() ?? '',
+    /**
+     * Shared with assistrio-landing-site: marketing server calls send `X-API-Key` (public bots, trial request-access, contact, analytics track, etc.).
+     * Same secret as landing `NEXT_LANDING_SITE_X_API_KEY` or `NEXT_ASSISTRIO_LANDING_SITE_X_API_KEY`.
+     */
+    landingSiteXApiKey: process.env.LANDING_SITE_X_API_KEY?.trim() ?? '',
     /** Shared secret for widget testing endpoints (header: X-API-Key). */
     chatWidgetApiKey: process.env[ENV_CHAT_WIDGET_API_KEY]?.trim() ?? '',
     /** See {@link resolveAllowedPreviewHosts} — assistrio.com; localhost only when `nodeEnv === 'development'`. */
@@ -48,6 +51,12 @@ export function configFactory() {
      * Enabled only when NODE_ENV is development.
      */
     allowLoopbackEmbedOrigin: nodeEnv === 'development',
+    resendApiKey: process.env.RESEND_API_KEY?.trim() ?? '',
+    /** Same origin visitors use for the marketing site (trial verify links). */
+    landingPublicSiteUrl: process.env.LANDING_PUBLIC_SITE_URL?.trim() ?? '',
+    contactFromEmail: process.env.CONTACT_FROM_EMAIL?.trim() ?? '',
+    contactToEmail: process.env.CONTACT_TO_EMAIL?.trim() ?? '',
+    trialFromEmail: process.env.TRIAL_FROM_EMAIL?.trim() ?? '',
   };
 }
 

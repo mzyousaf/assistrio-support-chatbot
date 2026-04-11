@@ -223,7 +223,7 @@ export class WidgetInitController {
     const bypassAllowedDomains =
       !isTrialBot &&
       platformVisitorEmbedCanBypassAllowedDomainsGate({
-        bot: row as { platformVisitorWebsiteAllowlist?: unknown },
+        bot: row as { websiteURLAllowlist?: unknown },
         platformVisitorId: pv,
       });
 
@@ -266,7 +266,7 @@ export class WidgetInitController {
     if (pv && !isTrialBot) {
       try {
         assertPlatformVisitorWebsiteMatchesBotAllowlist({
-          bot: row as { platformVisitorWebsiteAllowlist?: unknown },
+          bot: row as { websiteURLAllowlist?: unknown },
           platformVisitorId: pv,
           requestOrigin: embedOriginResolved,
         });

@@ -45,6 +45,11 @@ function getBucket(visibility: UploadVisibility): string {
   return name;
 }
 
+/** Public bucket name (trial onboarding knowledge uploads use {@link uploadPublic}). */
+export function getS3PublicBucketOrThrow(): string {
+  return getBucket('public');
+}
+
 /**
  * Sanitize filename: keep [a-zA-Z0-9._-], replace spaces with '-', limit to 80 chars.
  */

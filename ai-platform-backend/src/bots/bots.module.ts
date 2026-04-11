@@ -6,10 +6,11 @@ import { PublicBotsController } from './public-bots.controller';
 import { LandingBotsController } from './landing-bots.controller';
 import { WidgetInitController } from './widget-init.controller';
 import { TrialBotsController } from './trial-bots.controller';
+import { LandingTrialCreateAgentController } from './landing-trial-create-agent.controller';
 import { PublicVisitorQuotaController } from './public-visitor-quota.controller';
 import { PublicVisitorBotController } from './public-visitor-bot.controller';
 import { WidgetWebsiteRegisterController } from './widget-website-register.controller';
-import { LandingSiteApiKeyGuard } from './landing-site-api-key.guard';
+import { LandingSiteApiKeyModule } from '../landing-site-api-key/landing-site-api-key.module';
 import { ChatWidgetApiKeyGuard } from './chat-widget-api-key.guard';
 import { WidgetTestingBotController } from './widget-testing-bot.controller';
 import { BotsService } from './bots.service';
@@ -34,15 +35,19 @@ import { KnowledgeModule } from '../knowledge/knowledge.module';
 import { VisitorsModule } from '../visitors/visitors.module';
 import { WorkspacesModule } from '../workspaces/workspaces.module';
 import { DocumentsModule } from '../documents/documents.module';
+import { IngestionModule } from '../ingestion/ingestion.module';
+import { LandingTrialBotKnowledgeController } from './landing-trial-bot-knowledge.controller';
+import { LandingTrialWorkspaceAgentController } from './landing-trial-workspace-agent.controller';
 /**
  * Bot-related HTTP surfaces include:
  * - **Anonymous public (rate-limited):** `TrialBotsController`, `PublicVisitorQuotaController`, `PublicVisitorBotController`,
- *   `WidgetWebsiteRegisterController`, `PublicBotsController` — see `public-anonymous-rate-limit.*` (RateLimitModule is global).
- * - **Landing (API key + rate limit):** `LandingBotsController`.
+ *   `WidgetWebsiteRegisterController` — see `public-anonymous-rate-limit.*` (RateLimitModule is global).
+ * - **Marketing gallery (landing `X-API-Key` + rate limit):** `PublicBotsController`, `LandingBotsController`.
  * - **Internal admin listing (auth):** `BotsController` (`/api/bots`) — not a public gallery; use `/api/public/bots`.
  */
 @Module({
   imports: [
+    LandingSiteApiKeyModule,
     AuthModule,
     WorkspacesModule,
     MongooseModule.forFeature([
@@ -58,6 +63,7 @@ import { DocumentsModule } from '../documents/documents.module';
     KnowledgeModule,
     VisitorsModule,
     DocumentsModule,
+    IngestionModule,
   ],
   controllers: [
     BotsController,
@@ -69,8 +75,11 @@ import { DocumentsModule } from '../documents/documents.module';
     WidgetWebsiteRegisterController,
     WidgetTestingBotController,
     TrialBotsController,
+    LandingTrialCreateAgentController,
+    LandingTrialBotKnowledgeController,
+    LandingTrialWorkspaceAgentController,
   ],
-  providers: [BotsService, LandingSiteApiKeyGuard, ChatWidgetApiKeyGuard, EmbedSessionService],
+  providers: [BotsService, ChatWidgetApiKeyGuard, EmbedSessionService],
   exports: [BotsService, EmbedSessionService],
 })
 export class BotsModule { }

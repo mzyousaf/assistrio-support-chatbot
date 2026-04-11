@@ -81,7 +81,7 @@ export function QuotaSummaryCard() {
       <Card className="border-amber-200/90 bg-amber-50/60">
         <p className="text-sm font-semibold text-amber-950">Usage unavailable</p>
         <p className="mt-2 text-sm text-amber-900/90">
-          Set <code className="rounded bg-white px-1 text-xs">NEXT_PUBLIC_ASSISTRIO_API_BASE_URL</code> to load quota
+          Set <code className="rounded bg-white px-1 text-xs">NEXT_PUBLIC_API_BASE_URL</code> to load quota
           from the API.
         </p>
       </Card>

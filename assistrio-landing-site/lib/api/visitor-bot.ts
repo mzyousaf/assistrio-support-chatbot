@@ -1,4 +1,3 @@
-import { tryGetPublicApiBaseUrl } from "@/lib/utils/env";
 import type {
   PvVisitorBotBasicInsightsResponse,
   PvVisitorBotLeadsSummaryResponse,
@@ -7,19 +6,11 @@ import type {
 import { readJsonOrThrow } from "@/lib/api/http";
 
 /**
- * **PV-safe bot summary reads** — `POST /api/public/visitor-bot/*` only.
- * Do not use for internal dashboards; do not call `/api/track` or `/api/user/analytics` from landing PV flows.
- *
- * @see ai-platform-backend/docs/ANALYTICS_BOUNDARIES.md
- * @see ai-platform-backend/docs/PV_SAFE_PUBLIC_APIS.md
+ * **PV-safe bot summary reads** — same-origin proxies add `X-API-Key` upstream.
  */
 
 function postJson(path: string, body: Record<string, string>) {
-  const base = tryGetPublicApiBaseUrl();
-  if (!base) {
-    throw new Error("Missing NEXT_PUBLIC_ASSISTRIO_API_BASE_URL");
-  }
-  return fetch(`${base}${path}`, {
+  return fetch(path, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify(body),

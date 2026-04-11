@@ -2,12 +2,13 @@ import type { Metadata } from "next";
 import { DM_Sans, Fraunces, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { LandingRouteTracker } from "@/components/analytics/landing-route-tracker";
-import { SiteFooter } from "@/components/layout/site-footer";
-import { SiteHeader } from "@/components/layout/site-header";
+import { RootMarketingChrome } from "@/components/layout/root-marketing-chrome";
 import { CtaFlowProvider } from "@/components/flows/cta-flow-context";
 import { PlatformVisitorProvider } from "@/hooks/usePlatformVisitorId";
-import { getMetadataBaseUrl, SITE_LOGO } from "@/lib/site-branding";
+import { validateTrialDashboardSession } from "@/lib/server/trial-session";
+import { getMetadataBaseUrl, SITE_APPLE_TOUCH_ICON } from "@/lib/site-branding";
 import { SITE_DEFAULT_DESCRIPTION } from "@/lib/site-metadata";
+import { buildTrialSessionClientPayload } from "@/lib/trial/trial-session-display";
 
 const sans = DM_Sans({
   variable: "--font-sans",
@@ -42,7 +43,7 @@ export const metadata: Metadata = {
       { url: "/favicon-16x16.png", sizes: "16x16", type: "image/png" },
       { url: "/favicon-32x32.png", sizes: "32x32", type: "image/png" },
     ],
-    apple: SITE_LOGO.sm,
+    apple: SITE_APPLE_TOUCH_ICON,
   },
   openGraph: {
     type: "website",
@@ -71,22 +72,29 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+/** Fresh session + layout on every request (trial cookie must be visible on `/` with path `/`). */
+export const dynamic = "force-dynamic";
+
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const trialSessionRecord = await validateTrialDashboardSession();
+  const trialSessionClient = trialSessionRecord
+    ? buildTrialSessionClientPayload(trialSessionRecord)
+    : null;
+
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body
+        suppressHydrationWarning
         className={`${sans.variable} ${display.variable} ${mono.variable} flex min-h-screen flex-col overflow-x-clip antialiased`}
       >
         <PlatformVisitorProvider>
-          <CtaFlowProvider>
+          <CtaFlowProvider trialSessionClient={trialSessionClient}>
             <LandingRouteTracker />
-            <SiteHeader />
-            <main className="w-full min-w-0 flex-1">{children}</main>
-            <SiteFooter />
+            <RootMarketingChrome trialSessionClient={trialSessionClient}>{children}</RootMarketingChrome>
           </CtaFlowProvider>
         </PlatformVisitorProvider>
       </body>

@@ -16,7 +16,7 @@ Copy `.env.example` to `.env` and set:
 - `JWT_SECRET` - JWT signing secret for admin auth (unified User table; min 16 chars)
 - `OPENAI_API_KEY` - OpenAI API key
 - `JOB_RUNNER_SECRET` - secret for ingestion job runner (min 16 chars)
-- `LANDING_SITE_BOTS_API_KEY` - shared key for `GET /api/public/landing/bots` (`X-API-Key`)
+- `LANDING_SITE_X_API_KEY` - shared with marketing site (same value as assistrio-landing-site `NEXT_ASSISTRIO_LANDING_SITE_X_API_KEY`): `X-API-Key` for `GET /api/public/bots*` and `GET /api/public/landing/bots`; `Authorization: Bearer` for `POST /api/landing/trial/request-access` and `POST /api/landing/contact`
 - `CHAT_WIDGET_API_KEY` - shared key for widget testing endpoint `GET /api/widget/testing/bot`
 
 ## Runtime Access Contract
