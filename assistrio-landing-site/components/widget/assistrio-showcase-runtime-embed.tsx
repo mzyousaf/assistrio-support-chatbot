@@ -11,28 +11,20 @@ import { reducedEaseTransition } from "@/lib/motion/reduced-motion";
 type Props = {
   botId: string;
   accessKey: string;
-  platformVisitorId: string | null;
-  identityReady: boolean;
 };
 
-type Phase = "waiting_identity" | "blocked" | "loading" | "ready" | "script_error";
+type Phase = "blocked" | "loading" | "ready" | "script_error";
 
 const spring = { type: "spring", stiffness: 380, damping: 32 } as const;
 
 /**
- * **Showcase runtime only** — loads CDN `assistrio-chat.js`, sets `mode: "runtime"`, passes `platformVisitorId`.
- * Chat threads are created inside the widget (not by the landing app).
+ * Loads CDN `assistrio-chat.js` with `mode: "runtime"`, access key, and `embedOrigin: window.location.origin`.
  */
-export function AssistrioShowcaseRuntimeEmbed({ botId, accessKey, platformVisitorId, identityReady }: Props) {
-  const [phase, setPhase] = useState<Phase>("waiting_identity");
+export function AssistrioShowcaseRuntimeEmbed({ botId, accessKey }: Props) {
+  const [phase, setPhase] = useState<Phase>("loading");
   const reduceMotion = useReducedMotion();
 
   useEffect(() => {
-    if (!identityReady || !platformVisitorId) {
-      setPhase("waiting_identity");
-      return;
-    }
-
     const apiBase = tryGetPublicApiBaseUrl();
     if (!apiBase || !accessKey || !botId) {
       setPhase("blocked");
@@ -48,8 +40,7 @@ export function AssistrioShowcaseRuntimeEmbed({ botId, accessKey, platformVisito
         botId,
         apiBaseUrl: apiBase,
         accessKey,
-        platformVisitorId,
-        embedOrigin: window.location.origin,
+        embedOrigin: typeof window !== "undefined" ? window.location.origin : "",
       },
       {
         onScriptError: () => {
@@ -65,42 +56,13 @@ export function AssistrioShowcaseRuntimeEmbed({ botId, accessKey, platformVisito
       cancelled = true;
       unmountAssistrioRuntimeFromCdn();
     };
-  }, [botId, accessKey, platformVisitorId, identityReady]);
+  }, [botId, accessKey]);
 
   const loadTransition = reduceMotion ? reducedEaseTransition : { duration: 0.25, ease: [0.22, 1, 0.36, 1] as const };
   const readyTransition = reduceMotion ? reducedEaseTransition : spring;
 
-  if (phase === "waiting_identity") {
-    return (
-      <Card className="border-[var(--border-default)] bg-slate-50/40">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Widget</p>
-        <h3 className="mt-1 font-[family-name:var(--font-display)] text-lg font-semibold text-slate-900">Runtime demo</h3>
-        <div className="relative mt-4 min-h-[120px] overflow-hidden rounded-[var(--radius-xl)] border border-dashed border-[var(--border-default)] bg-white/80">
-          {reduceMotion ? null : <div className="absolute inset-0 assistrio-shimmer-line opacity-70" />}
-          <div className="relative flex min-h-[120px] flex-col items-center justify-center gap-3 px-4 py-6">
-            {!reduceMotion ? (
-              <div className="flex gap-1.5 typing-dots" aria-hidden>
-                <span className="h-2 w-2 rounded-full bg-[var(--brand-teal)]" />
-                <span className="h-2 w-2 rounded-full bg-[var(--brand-teal)]" />
-                <span className="h-2 w-2 rounded-full bg-[var(--brand-teal)]" />
-              </div>
-            ) : null}
-            <p className="text-sm font-medium text-[var(--foreground-muted)]">Preparing your stable id…</p>
-          </div>
-        </div>
-        <p className="sr-only" role="status">
-          Waiting for workspace identity before loading the chat widget.
-        </p>
-      </Card>
-    );
-  }
-
   if (phase === "blocked") {
-    const reason = !tryGetPublicApiBaseUrl()
-      ? "missing_api"
-      : !accessKey || !botId
-        ? "missing_embed_keys"
-        : "missing_identity";
+    const reason = !tryGetPublicApiBaseUrl() ? "missing_api" : !accessKey || !botId ? "missing_embed_keys" : "unknown";
     return (
       <Card className="border-amber-200/90 bg-amber-50/60">
         <p className="text-sm font-semibold text-amber-950">Runtime embed unavailable</p>
@@ -109,11 +71,11 @@ export function AssistrioShowcaseRuntimeEmbed({ botId, accessKey, platformVisito
             ? "Set NEXT_PUBLIC_ASSISTRIO_API_BASE_URL at build time so the browser can call the API."
             : reason === "missing_embed_keys"
               ? "Missing AI Agent id or access key from the public API response — cannot mount the widget."
-              : "Stable identity not ready — wait for platformVisitorId, or use Reconnect on the homepage / trial page."}
+              : "Could not start the widget."}
         </p>
         <p className="mt-2 text-xs text-amber-900/85">
-          These are <strong className="font-medium">configuration</strong> issues on this page — not CORS or allowed website
-          rules yet (the widget script never started).
+          These are <strong className="font-medium">configuration</strong> issues on this page — not CORS or allowed
+          origin rules yet (the widget script may not have started).
         </p>
       </Card>
     );
@@ -142,8 +104,8 @@ export function AssistrioShowcaseRuntimeEmbed({ botId, accessKey, platformVisito
       <h3 className="mt-1 font-[family-name:var(--font-display)] text-lg font-semibold text-slate-900">Runtime demo</h3>
       <p className="mt-2 text-sm leading-relaxed text-[var(--foreground-muted)]">
         The chat widget mounts as a <strong className="font-medium text-slate-800">floating launcher</strong> on this
-        page. It uses your saved <code className="rounded bg-slate-100 px-1 text-xs">platformVisitorId</code> and this
-        AI Agent&apos;s public access key — showcase demo messages share one quota pool per id.
+        page. It uses this agent&apos;s access key; the API allows this page only if this origin is listed on the agent
+        as an active allowed origin (exact match).
       </p>
       <AnimatePresence mode="wait">
         {phase === "loading" ? (
@@ -184,7 +146,7 @@ export function AssistrioShowcaseRuntimeEmbed({ botId, accessKey, platformVisito
                 className={`flex h-12 w-12 items-center justify-center rounded-full bg-[var(--brand-teal)] text-lg text-white shadow-lg${reduceMotion ? "" : " launcher-pulse"}`}
                 aria-hidden
               >
-                💬
+                {String.fromCodePoint(0x1f4ac)}
               </div>
             </div>
             <p className="sr-only">Loading chat widget script.</p>
@@ -201,10 +163,10 @@ export function AssistrioShowcaseRuntimeEmbed({ botId, accessKey, platformVisito
           >
             <p className="sr-only">Widget loaded. Look for the floating chat launcher on this page.</p>
             <div className="rounded-[var(--radius-lg)] border border-emerald-200/90 bg-emerald-50/70 px-4 py-3 text-sm text-emerald-900">
-              Widget script loaded and mount ran. Look for the floating launcher. If opening chat shows an error, read the
-              message — it may include a <code className="rounded bg-white px-1 text-xs">deploymentHint</code> from the
-              API. Init failures are often <strong className="font-medium">CORS</strong> (no JSON) or{" "}
-              <strong className="font-medium">403</strong> allowlist / identity (JSON with{" "}
+              Widget script loaded and mount ran. Look for the floating launcher. If opening chat shows an error, read
+              the message — it may include a <code className="rounded bg-white px-1 text-xs">deploymentHint</code> from
+              the API. Init failures are often <strong className="font-medium">CORS</strong> (no JSON) or{" "}
+              <strong className="font-medium">403</strong> when this page&apos;s origin is not an active allowed origin (
               <code className="rounded bg-white px-1 text-xs">errorCode</code>
               ).
             </div>
@@ -214,7 +176,7 @@ export function AssistrioShowcaseRuntimeEmbed({ botId, accessKey, platformVisito
                 className={`flex h-11 w-11 items-center justify-center rounded-full bg-[var(--brand-teal)] text-base text-white shadow-md${reduceMotion ? "" : " launcher-pulse"}`}
                 aria-hidden
               >
-                💬
+                {String.fromCodePoint(0x1f4ac)}
               </div>
             </div>
             <RuntimeFailureHints variant="compact" />

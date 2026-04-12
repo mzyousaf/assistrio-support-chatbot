@@ -11,7 +11,6 @@ export interface ChatLogEvent {
   botId?: string;
   conversationId?: string;
   chatVisitorId?: string;
-  platformVisitorId?: string;
   requestId?: string;
   retrievalConfidence?: string;
   messageCount?: number;

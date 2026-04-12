@@ -109,7 +109,7 @@ export class PublicBotsController {
       PUBLIC_ANONYMOUS_RATE_LIMITS.publicBotsDetailPerIpPerMinute,
     );
     const normalized = assertPublicGallerySlug(slug);
-    const bot = await this.botsService.findOneBySlugForPage(normalized, 'showcase');
+    const bot = await this.botsService.findOneBySlugForPage(normalized);
     const shaped = bot ? shapePublicBotDetail(bot) : null;
     if (!shaped) {
       throw new HttpException(

@@ -40,7 +40,6 @@ export function mountAssistrioRuntimeFromCdn(
     botId: config.botId,
     apiBaseUrl: config.apiBaseUrl,
     accessKey: config.accessKey,
-    platformVisitorId: config.platformVisitorId,
     embedOrigin: config.embedOrigin,
   };
 

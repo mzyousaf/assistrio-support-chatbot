@@ -10,12 +10,8 @@ import { ChatEngineService } from './chat-engine.service';
 import type { BotLike } from './chat-engine.types';
 import { WorkspacesService } from '../workspaces/workspaces.service';
 import { normalizeVisitorMultiChatMax } from '../bots/visitor-multi-chat.util';
-import {
-  resolveEmbedChatVisitorIdFromBody,
-  resolvePreviewInitPlatformVisitorIdForAuth,
-} from '../bots/widget-embed-identity.util';
+import { resolveEmbedChatVisitorIdFromBody } from '../bots/widget-embed-identity.util';
 import { isPreviewRequestOriginAllowed } from '../bots/preview-origin.util';
-import { resolveAllowedPreviewHosts } from '../config/config.factory';
 
 type PreviewOverrides = {
   botName?: string;
@@ -38,21 +34,16 @@ type PreviewInitBody = {
   botId?: unknown;
   accessKey?: unknown;
   secretKey?: unknown;
-  platformVisitorId?: unknown;
   chatVisitorId?: unknown;
-  /**
-   * @deprecated Legacy field.
-   *
-   * - **init**: aliases `platformVisitorId` for ownership (prefer sending `platformVisitorId` for parity with chat).
-   * - **chat**: **chat/session identity only** — not used for ownership; send `platformVisitorId` to prove owner for platform-auth preview.
-   */
-  visitorId?: unknown;
   authToken?: unknown;
   previewOverrides?: unknown;
 };
 
 type PreviewChatBody = PreviewInitBody & {
   message?: unknown;
+  visitorId?: unknown;
+  conversationId?: unknown;
+  startNewConversation?: boolean;
 };
 
 const COOKIE_NAME = 'user_token';
@@ -117,11 +108,11 @@ function parsePreviewOverrides(input: unknown): PreviewOverrides | undefined {
       : {}),
     ...(Array.isArray(input.suggestedQuestions)
       ? {
-        suggestedQuestions: input.suggestedQuestions
-          .map((v) => toNonEmptyString(v))
-          .filter((v): v is string => typeof v === 'string')
-          .slice(0, 6),
-      }
+          suggestedQuestions: input.suggestedQuestions
+            .map((v) => toNonEmptyString(v))
+            .filter((v): v is string => typeof v === 'string')
+            .slice(0, 6),
+        }
       : {}),
     ...(toNonEmptyString(input.brandingMessage)
       ? { brandingMessage: toNonEmptyString(input.brandingMessage) }
@@ -143,33 +134,23 @@ function parseInitBody(
   botId: string;
   accessKey?: string;
   secretKey?: string;
-  platformVisitorId?: string;
   chatVisitorId?: string;
   authToken?: string;
   previewOverrides?: PreviewOverrides;
-  /**
-   * @deprecated See `PreviewInitBody.visitorId`. For consistent owner checks, send `platformVisitorId` on **chat** too.
-   */
-  visitorId?: string;
 } | null {
   if (!isPlainRecord(body)) return null;
   const botId = toNonEmptyString((body as PreviewInitBody).botId);
   if (!botId) return null;
   const accessKey = toNonEmptyString((body as PreviewInitBody).accessKey);
   const secretKey = toNonEmptyString((body as PreviewInitBody).secretKey);
-  const platformVisitorId = toNonEmptyString((body as PreviewInitBody).platformVisitorId);
   const chatVisitorId = toNonEmptyString((body as PreviewInitBody).chatVisitorId);
-  // legacy mapping
-  const visitorId = toNonEmptyString((body as PreviewInitBody).visitorId);
   const authToken = toNonEmptyString((body as PreviewInitBody).authToken);
   const previewOverrides = parsePreviewOverrides((body as PreviewInitBody).previewOverrides);
   return {
     botId,
     ...(accessKey ? { accessKey } : {}),
     ...(secretKey ? { secretKey } : {}),
-    ...(platformVisitorId ? { platformVisitorId } : {}),
     ...(chatVisitorId ? { chatVisitorId } : {}),
-    ...(visitorId ? { visitorId } : {}),
     ...(authToken ? { authToken } : {}),
     ...(previewOverrides ? { previewOverrides } : {}),
   };
@@ -182,7 +163,6 @@ function parseChatBody(
   message: string;
   accessKey?: string;
   secretKey?: string;
-  platformVisitorId?: string;
   chatVisitorId?: string;
   visitorId?: string;
   authToken?: string;
@@ -195,11 +175,13 @@ function parseChatBody(
   if (!parsed) return null;
   const message = toNonEmptyString((body as PreviewChatBody).message);
   if (!message) return null;
+  const visitorId = toNonEmptyString((body as PreviewChatBody).visitorId);
   const conversationId = toNonEmptyString((body as Record<string, unknown>).conversationId);
   const startNewConversation = (body as Record<string, unknown>).startNewConversation === true;
   return {
     ...parsed,
     message,
+    ...(visitorId ? { visitorId } : {}),
     ...(conversationId ? { conversationId } : {}),
     ...(startNewConversation ? { startNewConversation: true } : {}),
   };
@@ -209,13 +191,11 @@ function normalizeObjectIdString(value: unknown): string {
   return String(value ?? '').trim();
 }
 
-/** Authenticated dashboard preview: stable chat visitor id (never equal to platform visitor id). */
+/** Stable preview chat visitor id (never equal to platform visitor id). */
 function previewAuthenticatedChatVisitorId(userId: string): string {
   const id = userId.trim() || 'owner';
   return `pa_${id}`;
 }
-
-type PreviewAuthKind = 'platform' | 'user';
 
 @Controller('api/widget/preview')
 export class WidgetPreviewController {
@@ -226,20 +206,15 @@ export class WidgetPreviewController {
     private readonly visitorsService: VisitorsService,
     private readonly chatEngineService: ChatEngineService,
     private readonly workspacesService: WorkspacesService,
-  ) { }
+  ) {}
 
   private assertPreviewOriginAllowed(request: FastifyRequest): void {
     const nodeEnv = this.configService.get<string>('nodeEnv') ?? 'development';
-    const allowed =
-      this.configService.get<string[]>('allowedPreviewHosts') ?? resolveAllowedPreviewHosts(nodeEnv);
-    if (!isPreviewRequestOriginAllowed(request.headers, allowed)) {
-      const devHint =
-        nodeEnv === 'development'
-          ? ' In development, localhost is also allowed.'
-          : '';
+    if (!isPreviewRequestOriginAllowed(request.headers, nodeEnv)) {
+      const devHint = nodeEnv === 'development' ? ' In development, localhost is also allowed.' : '';
       throw new HttpException(
         {
-          error: `Preview is only allowed from assistrio.com (or its subdomains).${devHint}`,
+          error: `Preview is only allowed from Assistrio app origins (exact match).${devHint}`,
           status: 'error' as const,
           errorCode: 'PREVIEW_ORIGIN_NOT_ALLOWED',
         },
@@ -262,36 +237,11 @@ export class WidgetPreviewController {
     return { _id: u._id, email: u.email, role: u.role };
   }
 
-  private async verifyPreviewOwnershipOrThrow(
+  private async verifyPreviewOwnerOrThrow(
     request: FastifyRequest,
     bot: Record<string, unknown>,
-    platformVisitorId: string | undefined,
     authToken?: string,
-  ): Promise<{ runtimeVisitorId: string; previewAuthKind: PreviewAuthKind }> {
-    const requestedPlatformVisitorId = String(platformVisitorId ?? '').trim();
-
-    if (requestedPlatformVisitorId) {
-      const ownerVisitorId = String(bot.ownerVisitorId ?? '').trim();
-      if (!ownerVisitorId || ownerVisitorId !== requestedPlatformVisitorId) {
-        throw new HttpException(
-          { error: 'Preview not allowed for this visitor.', errorCode: 'PREVIEW_FORBIDDEN' },
-          HttpStatus.FORBIDDEN,
-        );
-      }
-      /** Showcase bots: preview only via signed-in workspace user — not platformVisitorId-only auth. */
-      if (String((bot as { type?: string }).type ?? '') === 'showcase') {
-        throw new HttpException(
-          {
-            error:
-              'Preview with platform visitor identity is not allowed for showcase bots. Sign in to preview.',
-            errorCode: 'PREVIEW_PLATFORM_VISITOR_NOT_ALLOWED_FOR_SHOWCASE',
-          },
-          HttpStatus.FORBIDDEN,
-        );
-      }
-      return { runtimeVisitorId: requestedPlatformVisitorId, previewAuthKind: 'platform' };
-    }
-
+  ): Promise<string> {
     const user = await this.resolveAuthenticatedUser(request, authToken);
     if (!user) {
       throw new HttpException(
@@ -299,20 +249,18 @@ export class WidgetPreviewController {
         HttpStatus.UNAUTHORIZED,
       );
     }
-
     const userId = normalizeObjectIdString(user._id);
-    const allowed = this.workspacesService.canUserPreviewShowcaseBotAsOwner(userId, user.role, bot);
+    const allowed = this.workspacesService.canUserPreviewBotAsOwner(userId, user.role, bot);
     if (!allowed) {
       throw new HttpException(
         {
-          error: 'Preview is only available to the bot owner. Sign in as the account that created this agent.',
+          error: 'Preview is only available to the bot owner. Sign in as the account that owns this agent.',
           errorCode: 'PREVIEW_FORBIDDEN',
         },
         HttpStatus.FORBIDDEN,
       );
     }
-
-    return { runtimeVisitorId: userId || 'owner', previewAuthKind: 'user' };
+    return userId || 'owner';
   }
 
   private buildInitResponse(
@@ -350,9 +298,9 @@ export class WidgetPreviewController {
 
     const savedSuggestedQuestions = Array.isArray(bot.exampleQuestions)
       ? (bot.exampleQuestions as unknown[])
-        .map((q) => toNonEmptyString(q))
-        .filter((q): q is string => typeof q === 'string')
-        .slice(0, 6)
+          .map((q) => toNonEmptyString(q))
+          .filter((q): q is string => typeof q === 'string')
+          .slice(0, 6)
       : [];
     const suggestedQuestions = Array.isArray(previewOverrides?.suggestedQuestions)
       ? previewOverrides.suggestedQuestions
@@ -362,8 +310,7 @@ export class WidgetPreviewController {
       toNonEmptyString(previewOverrides?.brandingMessage) ??
       toNonEmptyString(mergedChatUI.brandingMessage);
     const privacyText =
-      toNonEmptyString(previewOverrides?.privacyText) ??
-      toNonEmptyString(mergedChatUI.privacyText);
+      toNonEmptyString(previewOverrides?.privacyText) ?? toNonEmptyString(mergedChatUI.privacyText);
 
     const visitorMultiChatEnabled = (bot as { visitorMultiChatEnabled?: unknown }).visitorMultiChatEnabled === true;
     const visitorMultiChatMax = normalizeVisitorMultiChatMax(
@@ -376,17 +323,13 @@ export class WidgetPreviewController {
         id: String(bot._id ?? ''),
         name: toNonEmptyString(previewOverrides?.botName) ?? String(bot.name ?? ''),
         imageUrl:
-          toNonEmptyString(previewOverrides?.avatarUrl) ??
-          toNonEmptyString(bot.imageUrl),
+          toNonEmptyString(previewOverrides?.avatarUrl) ?? toNonEmptyString(bot.imageUrl),
         avatarEmoji:
-          toNonEmptyString(previewOverrides?.avatarEmoji) ??
-          toNonEmptyString(bot.avatarEmoji),
+          toNonEmptyString(previewOverrides?.avatarEmoji) ?? toNonEmptyString(bot.avatarEmoji),
         tagline:
-          toNonEmptyString(previewOverrides?.tagline) ??
-          toNonEmptyString(bot.shortDescription),
+          toNonEmptyString(previewOverrides?.tagline) ?? toNonEmptyString(bot.shortDescription),
         description:
-          toNonEmptyString(previewOverrides?.description) ??
-          toNonEmptyString(bot.description),
+          toNonEmptyString(previewOverrides?.description) ?? toNonEmptyString(bot.description),
         welcomeMessage:
           toNonEmptyString(previewOverrides?.welcomeMessage) ??
           toNonEmptyString(bot.welcomeMessage),
@@ -407,34 +350,32 @@ export class WidgetPreviewController {
     const mergedLeadCapture =
       isPlainRecord(bot.leadCapture) && isPlainRecord(previewOverrides?.leadCapture)
         ? (mergePlainRecords(
-          bot.leadCapture as Record<string, unknown>,
-          previewOverrides?.leadCapture as Record<string, unknown>,
-        ) as BotLike['leadCapture'])
+            bot.leadCapture as Record<string, unknown>,
+            previewOverrides?.leadCapture as Record<string, unknown>,
+          ) as BotLike['leadCapture'])
         : (previewOverrides?.leadCapture ?? (bot.leadCapture as BotLike['leadCapture']));
     const mergedPersonality =
       isPlainRecord(bot.personality) && isPlainRecord(previewOverrides?.personality)
         ? (mergePlainRecords(
-          bot.personality as Record<string, unknown>,
-          previewOverrides?.personality as Record<string, unknown>,
-        ) as BotLike['personality'])
+            bot.personality as Record<string, unknown>,
+            previewOverrides?.personality as Record<string, unknown>,
+          ) as BotLike['personality'])
         : (previewOverrides?.personality ?? (bot.personality as BotLike['personality']));
     const mergedConfig =
       isPlainRecord(bot.config) && isPlainRecord(previewOverrides?.config)
         ? (mergePlainRecords(
-          bot.config as Record<string, unknown>,
-          previewOverrides?.config as Record<string, unknown>,
-        ) as BotLike['config'])
+            bot.config as Record<string, unknown>,
+            previewOverrides?.config as Record<string, unknown>,
+          ) as BotLike['config'])
         : (previewOverrides?.config ?? (bot.config as BotLike['config']));
 
     return {
       _id: (bot._id as { toString(): string }),
       name: toNonEmptyString(previewOverrides?.botName) ?? String(bot.name ?? ''),
       shortDescription:
-        toNonEmptyString(previewOverrides?.tagline) ??
-        (toNonEmptyString(bot.shortDescription) ?? ''),
+        toNonEmptyString(previewOverrides?.tagline) ?? (toNonEmptyString(bot.shortDescription) ?? ''),
       description:
-        toNonEmptyString(previewOverrides?.description) ??
-        (toNonEmptyString(bot.description) ?? ''),
+        toNonEmptyString(previewOverrides?.description) ?? (toNonEmptyString(bot.description) ?? ''),
       category: toNonEmptyString(bot.category) ?? '',
       openaiApiKeyOverride: toNonEmptyString(bot.openaiApiKeyOverride),
       welcomeMessage:
@@ -474,16 +415,7 @@ export class WidgetPreviewController {
       );
     }
 
-    const { previewAuthKind } = await this.verifyPreviewOwnershipOrThrow(
-      request,
-      bot,
-      resolvePreviewInitPlatformVisitorIdForAuth(parsed.platformVisitorId, parsed.visitorId),
-      parsed.authToken,
-    );
-
-    if (previewAuthKind === 'user') {
-      return { ...this.buildInitResponse(bot, parsed.previewOverrides) };
-    }
+    await this.verifyPreviewOwnerOrThrow(request, bot as Record<string, unknown>, parsed.authToken);
 
     const chatVisitorId =
       parsed.chatVisitorId && parsed.chatVisitorId.trim()
@@ -512,63 +444,29 @@ export class WidgetPreviewController {
 
     const bot = await this.botsService.findOneByIdForExternalRuntime(parsed.botId);
     if (!bot) {
-      throw new HttpException(
-        { error: 'Bot not found', errorCode: 'BOT_NOT_FOUND' },
-        HttpStatus.NOT_FOUND,
-      );
+      throw new HttpException({ error: 'Bot not found', errorCode: 'BOT_NOT_FOUND' }, HttpStatus.NOT_FOUND);
     }
 
-    /**
-     * Preview chat: platform auth uses **only** `platformVisitorId` (or cookie/session via `verifyPreviewOwnershipOrThrow`).
-     * Legacy `visitorId` on this route is chat/session only — never mixed into ownership auth.
-     */
-    const { runtimeVisitorId, previewAuthKind } = await this.verifyPreviewOwnershipOrThrow(
-      request,
-      bot,
-      parsed.platformVisitorId,
-      parsed.authToken,
-    );
-    if (runtimeVisitorId) {
-      await this.visitorsService.getOrCreateVisitor(runtimeVisitorId);
+    const ownerUserId = await this.verifyPreviewOwnerOrThrow(request, bot as Record<string, unknown>, parsed.authToken);
+
+    let chatVisitorResolved = resolveEmbedChatVisitorIdFromBody(parsed.chatVisitorId, parsed.visitorId)?.trim();
+    if (!chatVisitorResolved) {
+      chatVisitorResolved = previewAuthenticatedChatVisitorId(ownerUserId);
+    }
+    try {
+      await this.visitorsService.getOrCreateChatVisitor(chatVisitorResolved);
+    } catch (err) {
+      console.error('[widget/preview/chat] getOrCreateChatVisitor failed', err);
     }
 
-    let chatVisitorId: string;
-    if (previewAuthKind === 'platform') {
-      const fromBody = resolveEmbedChatVisitorIdFromBody(parsed.chatVisitorId, parsed.visitorId);
-      if (!fromBody || !String(fromBody).trim()) {
-        throw new HttpException(
-          { error: 'chatVisitorId is required', errorCode: 'CHAT_VISITOR_ID_REQUIRED' },
-          HttpStatus.BAD_REQUEST,
-        );
-      }
-      chatVisitorId = String(fromBody).trim();
-    } else {
-      chatVisitorId = previewAuthenticatedChatVisitorId(runtimeVisitorId);
-      try {
-        await this.visitorsService.getOrCreateChatVisitor(chatVisitorId);
-      } catch (err) {
-        console.error('[widget/preview/chat] getOrCreateChatVisitor failed', err);
-      }
-    }
-
-    const trialOwnerId =
-      (bot as { creatorType?: string }).creatorType === 'visitor'
-        ? String((bot as { ownerVisitorId?: unknown }).ownerVisitorId ?? '').trim()
-        : '';
-    /**
-     * Preview quota (separate from runtime embed quotas): one bucket per authenticated identity.
-     * - Trial bot: owner’s platform visitor id.
-     * - Platform-auth preview: that platform visitor id.
-     * - Signed-in dashboard preview: same `runtimeVisitorId` (user id) so preview cannot bypass the cap.
-     */
-    const previewQuotaVisitorId = trialOwnerId || String(runtimeVisitorId ?? '').trim();
-    if (previewQuotaVisitorId) {
-      await this.visitorsService.getOrCreateVisitor(previewQuotaVisitorId);
-      const previewQuota = await this.visitorsService.checkPlatformVisitorPreviewMessageQuota(previewQuotaVisitorId);
+    const previewQuotaUserId = String(ownerUserId ?? '').trim();
+    if (previewQuotaUserId) {
+      await this.visitorsService.ensureOwnerPreviewVisitor(previewQuotaUserId);
+      const previewQuota = await this.visitorsService.checkOwnerPreviewMessageQuota(previewQuotaUserId);
       if (!previewQuota.allowed) {
         throw new HttpException(
           {
-            error: 'Preview message limit reached for this platform visitor.',
+            error: 'Preview message limit reached for this account.',
             errorCode: 'PREVIEW_MESSAGE_QUOTA_EXCEEDED',
             current: previewQuota.current,
             limit: previewQuota.limit,
@@ -579,12 +477,9 @@ export class WidgetPreviewController {
     }
 
     const botLike = this.buildPreviewBotLike(bot, parsed.previewOverrides);
-    const platformVisitorIdForChat =
-      trialOwnerId || (runtimeVisitorId && String(runtimeVisitorId).trim()) || undefined;
     const result = await this.chatEngineService.runChat({
       bot: botLike,
-      chatVisitorId,
-      platformVisitorId: platformVisitorIdForChat,
+      chatVisitorId: chatVisitorResolved,
       message: parsed.message,
       mode: 'user',
       requestId: getRequestId(request),
@@ -597,8 +492,8 @@ export class WidgetPreviewController {
       throw new HttpException(result, HttpStatus.BAD_REQUEST);
     }
 
-    if (previewQuotaVisitorId) {
-      await this.visitorsService.incrementPlatformVisitorPreviewMessageCount(previewQuotaVisitorId);
+    if (previewQuotaUserId) {
+      await this.visitorsService.incrementOwnerPreviewMessageCount(previewQuotaUserId);
     }
 
     return {
@@ -609,4 +504,3 @@ export class WidgetPreviewController {
     };
   }
 }
-

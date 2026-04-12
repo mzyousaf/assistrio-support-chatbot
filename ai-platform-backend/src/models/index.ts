@@ -4,6 +4,7 @@ export {
   BotSchema,
   BotLeadField,
   BotLeadCaptureV2,
+  BotAllowedOrigin,
   BotChatUI,
   BotPersonality,
   BotConfig,
@@ -16,7 +17,6 @@ export type {
   LiveIndicatorStyle,
   ChatStatusIndicator,
   BotVisibility,
-  BotCreatorType,
   BotMessageLimitMode,
 } from './bot.schema';
 

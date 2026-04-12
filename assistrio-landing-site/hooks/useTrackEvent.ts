@@ -1,27 +1,14 @@
 "use client";
 
 import { useCallback } from "react";
-import { usePlatformVisitorId } from "@/hooks/usePlatformVisitorId";
+import { useSiteAnalyticsVisitor } from "@/contexts/platform-visitor-context";
 import { tryGetPublicApiBaseUrl } from "@/lib/utils/env";
 
 /** Mirrors `VisitorEventType` in the API — keep aligned with `track-payload.dto.ts`. */
 export type VisitorTrackEventType =
   | "page_view"
-  | "demo_chat_started"
-  | "trial_bot_created"
-  | "trial_chat_started"
   | "cta_clicked"
-  | "demo_opened"
-  | "trial_create_started"
-  | "trial_create_succeeded"
-  | "snippet_copied"
-  | "stable_id_copied"
-  | "reconnect_submitted"
-  | "reconnect_succeeded"
-  | "website_register_started"
-  | "website_register_succeeded"
-  | "widget_runtime_opened"
-  | "quota_viewed";
+  | "demo_opened";
 
 type TrackOptions = {
   botId?: string;
@@ -29,7 +16,7 @@ type TrackOptions = {
 };
 
 export function useTrackEvent() {
-  const { platformVisitorId, status } = usePlatformVisitorId();
+  const { visitorId, status } = useSiteAnalyticsVisitor();
 
   const track = useCallback(
     (
@@ -37,7 +24,7 @@ export function useTrackEvent() {
       metadata?: Record<string, unknown>,
       options?: TrackOptions,
     ) => {
-      if (status !== "ready" || !platformVisitorId) return;
+      if (status !== "ready" || !visitorId) return;
       const base = tryGetPublicApiBaseUrl();
       if (!base) return;
 
@@ -47,7 +34,7 @@ export function useTrackEvent() {
           : undefined;
 
       const body: Record<string, unknown> = {
-        platformVisitorId,
+        visitorId,
         type,
         path,
       };
@@ -63,7 +50,7 @@ export function useTrackEvent() {
         body: JSON.stringify(body),
       }).catch(() => {});
     },
-    [platformVisitorId, status],
+    [visitorId, status],
   );
 
   return { track };

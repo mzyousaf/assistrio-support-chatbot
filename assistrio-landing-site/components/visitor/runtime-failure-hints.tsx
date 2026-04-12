@@ -18,12 +18,14 @@ export function RuntimeFailureHints({ variant = "compact" }: Props) {
         <ul className="mt-2 list-inside list-disc space-y-1.5">
           <li>
             <strong className="text-slate-700">CORS:</strong> DevTools shows a CORS error and <strong>no</strong> JSON from
-            the API → add this page&apos;s origin to <code className="rounded bg-white px-1">CORS_EXTRA_ORIGINS</code>.
+            the API → check HTTPS, preflight, and whether this URL is a <strong>strict</strong> route (Assistrio hosts only
+            in production). Runtime init/chat reflect HTTPS customer origins when the path is in the public embed list.
           </li>
           <li>
-            <strong className="text-slate-700">Allowed websites:</strong> Init returns <strong>403</strong> with{" "}
-            <code className="rounded bg-white px-1">errorCode</code> → fix allowedDomains / registered URL / trial allowed website
-            (see widget error text and <code className="rounded bg-white px-1">deploymentHint</code>).
+            <strong className="text-slate-700">Allowed origins:</strong> Init returns <strong>403</strong> with{" "}
+            <code className="rounded bg-white px-1">errorCode</code> → add an <strong>exact</strong> matching entry in the
+            bot&apos;s active allowed origins for this page origin (see widget error text and{" "}
+            <code className="rounded bg-white px-1">deploymentHint</code>).
           </li>
           <li>
             <strong className="text-slate-700">Script:</strong> JS/CSS request failed → CDN or env URL issue, not init.

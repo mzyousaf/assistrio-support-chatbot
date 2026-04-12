@@ -1,11 +1,10 @@
 /**
- * Stable anonymous **platform** identity for Assistrio landing + embed flows.
+ * Stable anonymous **site analytics** identity for the marketing site (funnels, `POST /api/analytics/track`).
  *
- * - Same value as backend `platformVisitorId`: ties trial ownership, quota, and (for showcase) runtime auth.
- * - Persisted in `localStorage` for return visits; `?platformVisitorId=` enables cross-device reconnect when the user pastes a saved id.
- * - **Not** `chatVisitorId`: chat/session lines are created by the widget/runtime — do not synthesize them here.
+ * - Persisted in `localStorage`; `?platformVisitorId=` is still accepted for backward-compatible deep links.
+ * - **Not** `chatVisitorId`: chat threads are created by the embed widget — do not synthesize them here.
  *
- * Format matches backend validation: 6–120 chars `[a-zA-Z0-9._:-]`
+ * Format: 6–120 chars `[a-zA-Z0-9._:-]`
  */
 export const PLATFORM_VISITOR_ID_STORAGE_KEY = "platform_visitor_id";
 

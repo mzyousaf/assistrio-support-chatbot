@@ -1,13 +1,11 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { AssistrioShowcaseRuntimeEmbed } from "@/components/widget/assistrio-showcase-runtime-embed";
 import { Button } from "@/components/ui/button";
 import { fetchPublicShowcaseBotsClient } from "@/lib/api/public-client";
 import { tryGetPublicApiBaseUrl } from "@/lib/utils/env";
-import { usePlatformVisitorId } from "@/hooks/usePlatformVisitorId";
 import { useFocusTrap } from "@/hooks/useFocusTrap";
 import {
   panelTransition,
@@ -21,8 +19,9 @@ const springSheet = { type: "spring", stiffness: 340, damping: 36, mass: 0.9 } a
 const springContent = { type: "spring", stiffness: 440, damping: 34, mass: 0.72 } as const;
 const springProgress = { type: "spring", stiffness: 260, damping: 28 } as const;
 
-const SHOWCASE_STEP_LABELS = ["Choose a demo AI Agent", "Runtime preview", "Snippets and next steps"] as const;
-const SHOWCASE_STEP_SHORT = ["Pick", "Preview", "Next"] as const;
+const SHOWCASE_STEP_LABELS = ["Choose a demo AI Agent", "Runtime chat"] as const;
+const SHOWCASE_STEP_SHORT = ["Pick", "Chat"] as const;
+const SHOWCASE_STEP_COUNT = 2 as const;
 
 type Props = {
   open: boolean;
@@ -64,9 +63,6 @@ export function ShowcaseFlowSheet({ open, onClose, initialSlug }: Props) {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<PublicBotListItem | null>(null);
-  const { platformVisitorId, status } = usePlatformVisitorId();
-  const identityReady = status === "ready" && !!platformVisitorId;
-
   useLayoutEffect(() => {
     if (!open) return;
     setStep(1);
@@ -135,7 +131,7 @@ export function ShowcaseFlowSheet({ open, onClose, initialSlug }: Props) {
     return () => cancelAnimationFrame(id);
   }, [open, step]);
 
-  const progress = (step / 3) * 100;
+  const progress = (step / SHOWCASE_STEP_COUNT) * 100;
   const panelTransitionVal = panelTransition(reduceMotion, springSheet);
   const contentTransitionVal = stepContentTransition(reduceMotion, springContent);
   const progressTransitionVal = reduceMotion ? { duration: 0.25, ease } : springProgress;
@@ -152,13 +148,6 @@ export function ShowcaseFlowSheet({ open, onClose, initialSlug }: Props) {
     setSelected(b);
     setStep(2);
   }
-
-  function goToSnippets() {
-    setStepDir(1);
-    setStep(3);
-  }
-
-  const nextLabel = step === 2 ? SHOWCASE_STEP_LABELS[2] : "";
 
   return (
     <AnimatePresence>
@@ -189,10 +178,10 @@ export function ShowcaseFlowSheet({ open, onClose, initialSlug }: Props) {
             className="relative z-10 flex h-full w-full max-w-md flex-col border-l border-[var(--border-default)] bg-white shadow-[0_24px_70px_-20px_rgba(15,23,42,0.2),0_10px_32px_-14px_rgba(13,148,136,0.12)] sm:max-h-[100dvh]"
           >
             <p id="showcase-flow-description" className="sr-only">
-              Browse curated demo AI Agents, try runtime chat on this site, then open the full demo page for snippets and setup.
+              Browse curated showcase AI Agents and chat with live runtime on this site.
             </p>
             <div id="showcase-flow-step-live" className="sr-only" aria-live="polite" aria-atomic="true">
-              Step {step} of 3: {SHOWCASE_STEP_LABELS[step - 1]}
+              Step {step} of {SHOWCASE_STEP_COUNT}: {SHOWCASE_STEP_LABELS[step - 1]}
             </div>
 
             <div className="border-b border-[var(--border-default)] bg-gradient-to-br from-[var(--brand-teal-subtle)]/35 to-white px-5 py-4">
@@ -224,9 +213,9 @@ export function ShowcaseFlowSheet({ open, onClose, initialSlug }: Props) {
                 className="mt-4 flex items-center gap-3"
                 role="progressbar"
                 aria-valuemin={1}
-                aria-valuemax={3}
+                aria-valuemax={SHOWCASE_STEP_COUNT}
                 aria-valuenow={step}
-                aria-valuetext={`Step ${step} of 3: ${SHOWCASE_STEP_LABELS[step - 1]}`}
+                aria-valuetext={`Step ${step} of ${SHOWCASE_STEP_COUNT}: ${SHOWCASE_STEP_LABELS[step - 1]}`}
               >
                 <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-200/90">
                   <motion.div
@@ -244,7 +233,7 @@ export function ShowcaseFlowSheet({ open, onClose, initialSlug }: Props) {
                   transition={reduceMotion ? { duration: 0.15 } : { type: "spring", stiffness: 500, damping: 34 }}
                   className="min-w-[2.75rem] text-right text-xs font-semibold tabular-nums text-slate-600"
                 >
-                  {step}/3
+                  {step}/{SHOWCASE_STEP_COUNT}
                 </motion.span>
               </div>
               <div className="mt-3 flex justify-between gap-2 text-[0.65rem] font-medium uppercase tracking-wide text-slate-400" aria-label="Showcase steps">
@@ -289,8 +278,8 @@ export function ShowcaseFlowSheet({ open, onClose, initialSlug }: Props) {
                       tabIndex={-1}
                       className={`text-sm leading-relaxed text-[var(--foreground-muted)] ${focusRing}`}
                     >
-                      Pick a curated AI Agent — you&apos;ll chat with real runtime on this site (showcase quota). Owner preview
-                      stays in the Assistrio app.
+                      Pick a curated AI Agent — you&apos;ll chat with live runtime on this site. Owner preview stays in the
+                      Assistrio app.
                     </p>
                     {loading ? (
                       <div className="mt-6" role="status" aria-live="polite" aria-busy="true">
@@ -342,11 +331,6 @@ export function ShowcaseFlowSheet({ open, onClose, initialSlug }: Props) {
                         ))}
                       </ul>
                     )}
-                    <p className="mt-6 text-center">
-                      <Link href="/gallery" className={`link-inline text-sm font-medium ${focusRing} rounded-sm`} onClick={onClose}>
-                        View full gallery page
-                      </Link>
-                    </p>
                   </motion.div>
                 ) : null}
 
@@ -382,58 +366,17 @@ export function ShowcaseFlowSheet({ open, onClose, initialSlug }: Props) {
                       </div>
                     </div>
                     <p className="text-sm leading-relaxed text-[var(--foreground-muted)]">
-                      Messages use showcase runtime quota for this browser&apos;s workspace session — same API path as
-                      production.
+                      Messages use the same production API path; your browser session is created automatically on this
+                      site.
                     </p>
                     {selected.id && selected.accessKey ? (
-                      <AssistrioShowcaseRuntimeEmbed
-                        botId={selected.id}
-                        accessKey={selected.accessKey}
-                        platformVisitorId={platformVisitorId}
-                        identityReady={identityReady}
-                      />
+                      <AssistrioShowcaseRuntimeEmbed botId={selected.id} accessKey={selected.accessKey} />
                     ) : (
                       <p className="text-sm text-amber-900">This AI Agent is missing runtime credentials in the public list.</p>
                     )}
                   </motion.div>
                 ) : null}
 
-                {step === 3 && selected ? (
-                  <motion.div
-                    key="sh3"
-                    variants={stepVariants}
-                    initial="initial"
-                    animate="animate"
-                    exit="exit"
-                    transition={contentTransitionVal}
-                    className="space-y-4"
-                  >
-                    <p
-                      id="showcase-focus-step-3"
-                      tabIndex={-1}
-                      className={`text-sm font-medium text-slate-900 ${focusRing}`}
-                    >
-                      Snippets & your allowed website
-                    </p>
-                    <p className="text-sm leading-relaxed text-[var(--foreground-muted)]">
-                      Copy access keys, register your site, and get the full embed story on the demo page — no need to hunt
-                      through the marketing site.
-                    </p>
-                    <motion.div {...(reduceMotion ? {} : { whileHover: { scale: 1.01 }, whileTap: { scale: 0.99 } })}>
-                      <Link
-                        href={`/bots/${encodeURIComponent(selected.slug)}`}
-                        className={`flow-primary-cta flow-primary-cta-pulse inline-flex w-full items-center justify-center rounded-[var(--radius-md)] px-5 py-3 text-sm font-semibold bg-[var(--brand-teal)] text-white ${focusRing}`}
-                        onClick={onClose}
-                        aria-label={`Open full demo page for ${selected.name}`}
-                      >
-                        Open full demo page
-                      </Link>
-                    </motion.div>
-                    <p className="text-center text-xs text-[var(--foreground-muted)]">
-                      You can return here anytime from <strong className="font-medium text-slate-700">Browse demos</strong>.
-                    </p>
-                  </motion.div>
-                ) : null}
               </AnimatePresence>
             </div>
 
@@ -449,18 +392,6 @@ export function ShowcaseFlowSheet({ open, onClose, initialSlug }: Props) {
               )}
               <div className="flex gap-2">
                 {step === 2 ? (
-                  <motion.span className="inline-flex" {...tapProps}>
-                    <Button
-                      type="button"
-                      onClick={goToSnippets}
-                      className="flow-primary-cta flow-primary-cta-pulse"
-                      aria-label={nextLabel ? `Continue to ${nextLabel}` : "Continue"}
-                    >
-                      Snippets &amp; next steps
-                    </Button>
-                  </motion.span>
-                ) : null}
-                {step === 3 ? (
                   <motion.span className="inline-flex" {...tapProps}>
                     <Button type="button" variant="ghost" onClick={onClose} aria-label="Close live demos panel">
                       Done

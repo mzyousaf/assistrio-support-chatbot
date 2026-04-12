@@ -1,6 +1,6 @@
 /**
  * Public Assistrio API base URL (no secrets). Used by server routes fetching public bots
- * and by browser calls for trial / quota / widget registration.
+ * and by browser calls for quota / widget registration.
  */
 export function getPublicApiBaseUrl(): string {
   const raw = process.env.NEXT_PUBLIC_ASSISTRIO_API_BASE_URL?.trim();

@@ -17,13 +17,7 @@ import { getDefaultBotCreatePayload } from '../user/default-new-bot.payload';
 import { KnowledgeBaseItemService } from '../knowledge/knowledge-base-item.service';
 import { KnowledgeBaseChunkService } from '../knowledge/knowledge-base-chunk.service';
 import { generateBotAccessKey, generateBotSecretKey } from './bot-keys.util';
-import { normalizeUserWebsiteInputToHostname, parseAllowedDomainRulesFromStoredArray } from './embed-domain.util';
-import {
-  assertPlatformVisitorWebsiteAllowlistWritePolicy,
-  assertTrialBotAllowedDomainsPolicy,
-  normalizePlatformVisitorWebsiteAllowlistRowPublic,
-} from './platform-visitor-website-allowlist.util';
-import { validateRuntimeBotAccess } from './runtime-bot-access.util';
+import type { AllowedOrigin } from './origin-validation.util';
 import { normalizeVisitorMultiChatMax } from './visitor-multi-chat.util';
 import { WorkspacesService } from '../workspaces/workspaces.service';
 
@@ -39,15 +33,18 @@ function slugify(input: string): string {
 
 function getCreatorDefaultsForUserFlow(createdByUserId?: Types.ObjectId) {
   return {
-    creatorType: 'user' as const,
     visibility: 'public' as const,
     messageLimitMode: 'none' as const,
     messageLimitTotal: null as number | null,
     messageLimitUpgradeMessage: null as string | null,
     accessKey: generateBotAccessKey(),
     secretKey: generateBotSecretKey(),
-    ...(createdByUserId ? { ownerUserId: createdByUserId } : {}),
+    ...(createdByUserId ? { ownerId: createdByUserId } : {}),
   };
+}
+
+function hasActiveAllowedOrigin(allowedOrigins: AllowedOrigin[] | undefined): boolean {
+  return (allowedOrigins ?? []).some((o) => o?.isActive !== false && String(o?.origin ?? '').trim().length > 0);
 }
 
 /** Safe KB metadata for marketing gallery (no signed URLs or storage keys; optional public download id). */
@@ -105,23 +102,6 @@ export interface PublicBotDto {
   knowledgeNotePreview?: string;
 }
 
-export interface CreateVisitorTrialBotInput {
-  platformVisitorId?: string;
-  /** @deprecated legacy alias for platformVisitorId */
-  visitorId?: string;
-  /**
-   * Required. Single hostname where the embedded widget is allowed (same limit as non–super-admin accounts).
-   * Example: window.location.hostname from the page that creates the trial.
-   */
-  allowedDomain: string;
-  name?: string;
-  welcomeMessage?: string;
-  shortDescription?: string;
-  description?: string;
-  imageUrl?: string;
-  avatarEmoji?: string;
-}
-
 export interface ShowcaseAccessSettingsInput {
   visibility: 'public' | 'private';
   messageLimitMode: 'none' | 'fixed_total';
@@ -159,21 +139,21 @@ export class BotsService {
     return this.botModel.find().select('-secretKey').lean();
   }
 
-  /** Count showcase bots created by this platform user (for pack generation caps). */
-  async countShowcaseBotsForCreator(userId: string): Promise<number> {
+  /** Count agents-pack bots created by this platform user (pack generation cap). */
+  async countAgentsPackBotsForCreator(userId: string): Promise<number> {
     if (!Types.ObjectId.isValid(userId)) return 0;
     return this.botModel.countDocuments({
-      type: 'showcase',
+      agentsPackAgent: true,
       createdByUserId: new Types.ObjectId(userId),
     });
   }
 
-  /** Primary accent colors already used by this user's showcase bots (for unique pack colors). */
+  /** Primary accent colors already used by this user's pack-generated bots (for unique pack colors). */
   async listShowcasePrimaryColorsForCreator(userId: string): Promise<string[]> {
     if (!Types.ObjectId.isValid(userId)) return [];
     const rows = await this.botModel
       .find({
-        type: 'showcase',
+        agentsPackAgent: true,
         createdByUserId: new Types.ObjectId(userId),
       })
       .select('chatUI.primaryColor')
@@ -186,12 +166,12 @@ export class BotsService {
     return out;
   }
 
-  /** Display names of showcase bots by this creator (for unique pack names). */
+  /** Display names of pack-generated bots by this creator (for unique pack names). */
   async listShowcaseNamesForCreator(userId: string): Promise<string[]> {
     if (!Types.ObjectId.isValid(userId)) return [];
     const rows = await this.botModel
       .find({
-        type: 'showcase',
+        agentsPackAgent: true,
         createdByUserId: new Types.ObjectId(userId),
       })
       .select('name')
@@ -205,22 +185,22 @@ export class BotsService {
   }
 
   /** Lookup showcase bot by client draft id (for access checks before finalize). */
-  async findShowcaseByClientDraftId(clientDraftId: string): Promise<Record<string, unknown> | null> {
+  async findWorkspaceByClientDraftId(clientDraftId: string): Promise<Record<string, unknown> | null> {
     const trimmed = clientDraftId?.trim();
     if (!trimmed) return null;
-    const b = await this.botModel.findOne({ clientDraftId: trimmed, type: 'showcase' }).lean();
+    const b = await this.botModel.findOne({ clientDraftId: trimmed }).lean();
     return b ? (b as Record<string, unknown>) : null;
   }
 
   /**
-   * List bots for user panel with optional status filter (showcase only).
-   * `superadmin` sees all showcase bots; `customer` sees bots in their workspaces or legacy owner/created bots without workspaceId.
+   * List bots for user panel with optional status filter.
+   * `superadmin` sees all bots; `customer` sees bots in their workspaces or owner/created bots without workspaceId.
    */
   async findForAdminList(
     status?: 'draft' | 'published' | 'all',
     access?: { userId: string; platformRole: string; workspaceIds: Types.ObjectId[] },
   ) {
-    const base: Record<string, unknown> = { type: 'showcase' };
+    const base: Record<string, unknown> = {};
     if (status && status !== 'all') base.status = status;
 
     if (!access || access.platformRole === 'superadmin') {
@@ -228,7 +208,7 @@ export class BotsService {
         .find(base)
         .sort({ createdAt: -1 })
         .select(
-          'name type category status isPublic createdAt _id slug visibility creatorType messageLimitMode messageLimitTotal workspaceId chatUI avatarEmoji imageUrl',
+          'name agentsPackAgent category status isPublic createdAt _id slug visibility messageLimitMode messageLimitTotal workspaceId chatUI avatarEmoji imageUrl',
         )
         .lean();
     }
@@ -241,7 +221,7 @@ export class BotsService {
     orClause.push({
       $and: [
         { $or: [{ workspaceId: { $exists: false } }, { workspaceId: null }] },
-        { $or: [{ ownerUserId: userOid }, { createdByUserId: userOid }] },
+        { $or: [{ ownerId: userOid }, { createdByUserId: userOid }] },
       ],
     });
 
@@ -249,19 +229,17 @@ export class BotsService {
       .find({ ...base, $or: orClause })
       .sort({ createdAt: -1 })
       .select(
-        'name type category status isPublic createdAt _id slug visibility creatorType messageLimitMode messageLimitTotal workspaceId chatUI avatarEmoji imageUrl',
+        'name agentsPackAgent category status isPublic createdAt _id slug visibility messageLimitMode messageLimitTotal workspaceId chatUI avatarEmoji imageUrl',
       )
       .lean();
   }
 
   /**
-   * Anonymous public gallery: **showcase** bots only.
-   * Visitor-owned trial bots (`type: 'visitor-own'`) are not listed here — they are not anonymous marketing demos.
+   * Anonymous public gallery: published public bots.
    */
   async findPublicShowcase(): Promise<PublicBotDto[]> {
     const docs = await this.botModel
       .find({
-        type: 'showcase',
         isPublic: true,
         status: 'published',
         visibility: 'public',
@@ -307,7 +285,7 @@ export class BotsService {
   }
 
   /**
-   * Published public showcase bots whose creating user has role `superadmin`.
+   * Published public bots whose creating user has role `superadmin`.
    * Used by the marketing landing site with API-key auth (not for anonymous gallery).
    */
   async findPublicShowcaseBySuperAdminCreators(): Promise<PublicBotDto[]> {
@@ -322,7 +300,6 @@ export class BotsService {
 
     const docs = await this.botModel
       .find({
-        type: 'showcase',
         isPublic: true,
         status: 'published',
         visibility: 'public',
@@ -368,12 +345,11 @@ export class BotsService {
     );
   }
 
-  /** Minimal id lookup for public document download (showcase, published, public). */
+  /** Minimal id lookup for public document download (published, public). */
   async findPublicShowcaseBotIdBySlug(slug: string): Promise<string | null> {
     const doc = await this.botModel
       .findOne({
         slug: slug.trim().toLowerCase(),
-        type: 'showcase',
         isPublic: true,
         status: 'published',
         visibility: 'public',
@@ -403,7 +379,7 @@ export class BotsService {
 
   /**
    * Counts ready, active knowledge rows per bot and sourceType (full totals, not preview-capped).
-   * Only rows whose parent bot is **type `showcase`**, **published**, **public**, and **isPublic** are included
+   * Only rows whose parent bot is **published**, **public**, and **isPublic** are included
    * (defense in depth for public gallery APIs).
    */
   private async attachKnowledgeBaseCounts(bots: PublicBotDto[]): Promise<PublicBotDto[]> {
@@ -427,7 +403,6 @@ export class BotsService {
             { $match: { $expr: { $eq: ['$_id', '$$bid'] } } },
             {
               $match: {
-                type: 'showcase',
                 isPublic: true,
                 status: 'published',
                 visibility: 'public',
@@ -509,7 +484,6 @@ export class BotsService {
             { $match: { $expr: { $eq: ['$_id', '$$bid'] } } },
             {
               $match: {
-                type: 'showcase',
                 isPublic: true,
                 status: 'published',
                 visibility: 'public',
@@ -635,25 +609,16 @@ export class BotsService {
     return this.botModel.findOne({ slug: slug.trim().toLowerCase() }).select('_id').lean();
   }
 
-  /** Find showcase bot by slug for chat (returns BotLike shape; faqs and knowledgeDescription from KB). */
+  /** Find published public bot by slug for marketing pages (returns BotLike shape; faqs and knowledgeDescription from KB). */
   async findOneBySlugForChat(slug: string) {
     const bot = await this.botModel
-      .findOne({ slug: slug.trim().toLowerCase(), type: 'showcase' })
-      .select('_id slug name shortDescription description category openaiApiKeyOverride welcomeMessage leadCapture personality config type limitOverrideMessages includeNameInKnowledge includeTaglineInKnowledge')
-      .lean();
-    if (!bot) return null;
-    const [faqs, knowledgeDescription] = await Promise.all([
-      this.knowledgeBaseItemService.getFaqsForBot(String((bot as { _id: unknown })._id)),
-      this.knowledgeBaseItemService.getNoteContentForBot(String((bot as { _id: unknown })._id)),
-    ]);
-    return { ...bot, faqs, knowledgeDescription } as Record<string, unknown>;
-  }
-
-  /** Find visitor-own bot by slug for chat (faqs and knowledgeDescription from KB). */
-  async findOneBySlugTrial(slug: string) {
-    const bot = await this.botModel
-      .findOne({ slug: slug.trim().toLowerCase(), type: 'visitor-own' })
-      .select('_id slug name shortDescription description category openaiApiKeyOverride welcomeMessage leadCapture personality config type limitOverrideMessages includeNameInKnowledge includeTaglineInKnowledge')
+      .findOne({
+        slug: slug.trim().toLowerCase(),
+        isPublic: true,
+        status: 'published',
+        visibility: 'public',
+      })
+      .select('_id slug name shortDescription description category openaiApiKeyOverride welcomeMessage leadCapture personality config limitOverrideMessages includeNameInKnowledge includeTaglineInKnowledge')
       .lean();
     if (!bot) return null;
     const [faqs, knowledgeDescription] = await Promise.all([
@@ -719,8 +684,8 @@ export class BotsService {
     if (!id || !Types.ObjectId.isValid(id)) return null;
     const bot = await this.botModel
       .findById(new Types.ObjectId(id))
-      .select(
-        '_id slug name shortDescription description category avatarEmoji imageUrl openaiApiKeyOverride welcomeMessage leadCapture personality config chatUI type status isPublic visibility accessKey secretKey creatorType ownerUserId createdByUserId ownerVisitorId messageLimitMode messageLimitTotal messageLimitUpgradeMessage includeNameInKnowledge includeTaglineInKnowledge exampleQuestions allowedDomains platformVisitorWebsiteAllowlist visitorMultiChatEnabled visitorMultiChatMax',
+           .select(
+        '_id slug name shortDescription description category avatarEmoji imageUrl openaiApiKeyOverride welcomeMessage leadCapture personality config chatUI status isPublic visibility accessKey secretKey ownerId createdByUserId messageLimitMode messageLimitTotal messageLimitUpgradeMessage includeNameInKnowledge includeTaglineInKnowledge exampleQuestions allowedOrigins visitorMultiChatEnabled visitorMultiChatMax agentsPackAgent',
       )
       .lean();
     if (!bot) return null;
@@ -731,11 +696,8 @@ export class BotsService {
     return { ...bot, faqs, knowledgeDescription } as Record<string, unknown>;
   }
 
-  /** Find one bot by slug for demo/trial page (public shape; faqs from KB). */
-  async findOneBySlugForPage(
-    slug: string,
-    type: 'showcase' | 'visitor-own',
-  ): Promise<{
+  /** Find one bot by slug for marketing page (public shape; faqs from KB). */
+  async findOneBySlugForPage(slug: string): Promise<{
     id: string;
     slug: string;
     name: string;
@@ -754,7 +716,6 @@ export class BotsService {
     const doc = await this.botModel
       .findOne({
         slug: slug.trim().toLowerCase(),
-        type,
         isPublic: true,
         status: 'published',
         visibility: 'public',
@@ -792,11 +753,11 @@ export class BotsService {
     };
   }
 
-  /** Find bot by id, for ownership check (id + ownerVisitorId + type). */
+  /** Find bot by id, for ownership check. */
   async findOneForOwnership(id: string) {
     return this.botModel
       .findById(id)
-      .select('_id ownerVisitorId type')
+      .select('_id ownerId')
       .lean();
   }
 
@@ -817,11 +778,11 @@ export class BotsService {
     return `${normalized}-${Date.now()}`;
   }
 
-  /** Find showcase bot for user panel GET (faqs and knowledgeDescription from KB). */
-  async findOneShowcaseForAdmin(id: string) {
+  /** Workspace bot for admin GET (faqs and knowledgeDescription from KB). */
+  async findOneWorkspaceForAdmin(id: string) {
     const bot = await this.botModel
       .findById(id)
-      .select('slug name shortDescription description category categories imageUrl openaiApiKeyOverride whisperApiKeyOverride welcomeMessage status isPublic leadCapture chatUI exampleQuestions personality type config limitOverrideMessages visibility accessKey secretKey creatorType ownerUserId ownerVisitorId messageLimitMode messageLimitTotal messageLimitUpgradeMessage visitorMultiChatEnabled visitorMultiChatMax includeNameInKnowledge includeTaglineInKnowledge includeNotesInKnowledge allowedDomains platformVisitorWebsiteAllowlist workspaceId')
+      .select('slug name shortDescription description category categories imageUrl openaiApiKeyOverride whisperApiKeyOverride welcomeMessage status isPublic leadCapture chatUI exampleQuestions personality config limitOverrideMessages visibility accessKey secretKey ownerId messageLimitMode messageLimitTotal messageLimitUpgradeMessage visitorMultiChatEnabled visitorMultiChatMax includeNameInKnowledge includeTaglineInKnowledge includeNotesInKnowledge allowedOrigins workspaceId agentsPackAgent')
       .lean();
     if (!bot) return null;
     const [faqs, knowledgeDescription] = await Promise.all([
@@ -836,164 +797,7 @@ export class BotsService {
     return doc.toObject();
   }
 
-  async createVisitorTrialBot(input: CreateVisitorTrialBotInput): Promise<{
-    botId: string;
-    platformVisitorId: string;
-    /** @deprecated legacy alias for platformVisitorId */
-    visitorId?: string;
-    accessKey: string;
-    status: 'published';
-    visibility: 'public';
-    isPublic: true;
-    type: 'visitor-own';
-    slug: string;
-    name: string;
-    welcomeMessage?: string;
-    imageUrl?: string;
-    avatarEmoji?: string;
-    messageLimitMode: 'none';
-    messageLimitTotal: null;
-    messageLimitUpgradeMessage: null;
-  }> {
-    const platformVisitorId = String((input.platformVisitorId ?? input.visitorId) || '').trim();
-    if (!platformVisitorId) {
-      throw new Error('platformVisitorId is required.');
-    }
-
-    const safeName = String(input.name ?? '').trim() || 'Trial Assistant';
-    const safeWelcome = String(input.welcomeMessage ?? '').trim();
-    const safeShortDescription = String(input.shortDescription ?? '').trim();
-    const safeDescription = String(input.description ?? '').trim();
-    const safeImageUrl = String(input.imageUrl ?? '').trim();
-    const safeAvatarEmoji = String(input.avatarEmoji ?? '').trim();
-
-    const allowedDomainNorm = normalizeUserWebsiteInputToHostname(String(input.allowedDomain ?? ''));
-    if (!allowedDomainNorm) {
-      throw new Error(
-        'allowedDomain is required and must be a valid public hostname (paste a URL or hostname; we store only the hostname).',
-      );
-    }
-
-    let slug = await this.generateUniqueSlug(safeName || 'trial-bot');
-    for (let attempt = 0; attempt < 5; attempt++) {
-      try {
-        const created = await this.botModel.create({
-          name: safeName,
-          slug,
-          type: 'visitor-own',
-          creatorType: 'visitor',
-          ownerVisitorId: platformVisitorId,
-          visibility: 'public',
-          accessKey: generateBotAccessKey(),
-          secretKey: generateBotSecretKey(),
-          status: 'published',
-          isPublic: true,
-          shortDescription: safeShortDescription || undefined,
-          description: safeDescription || undefined,
-          welcomeMessage: safeWelcome || undefined,
-          imageUrl: safeImageUrl || undefined,
-          avatarEmoji: safeAvatarEmoji || undefined,
-          messageLimitMode: 'none',
-          messageLimitTotal: null,
-          messageLimitUpgradeMessage: null,
-          includeNotesInKnowledge: true,
-          allowedDomains: [allowedDomainNorm],
-          platformVisitorWebsiteAllowlist: [],
-          createdAt: new Date(),
-        });
-        return {
-          botId: String((created as { _id: unknown })._id),
-          platformVisitorId,
-          // Deprecated alias for compatibility:
-          visitorId: platformVisitorId,
-          accessKey: (created as { accessKey: string }).accessKey,
-          status: 'published',
-          visibility: 'public',
-          isPublic: true,
-          type: 'visitor-own',
-          slug: (created as { slug: string }).slug,
-          name: (created as { name: string }).name,
-          welcomeMessage: (created as { welcomeMessage?: string }).welcomeMessage,
-          imageUrl: (created as { imageUrl?: string }).imageUrl,
-          avatarEmoji: (created as { avatarEmoji?: string }).avatarEmoji,
-          messageLimitMode: 'none',
-          messageLimitTotal: null,
-          messageLimitUpgradeMessage: null,
-        };
-      } catch (err: unknown) {
-        const e = err as { code?: number; keyPattern?: Record<string, number> };
-        if (e.code === 11000 && (e.keyPattern?.slug || e.keyPattern?.accessKey)) {
-          slug = await this.generateUniqueSlug(safeName || 'trial-bot');
-          continue;
-        }
-        throw err;
-      }
-    }
-    throw new Error('Failed to allocate unique trial bot credentials.');
-  }
-
-  /**
-   * Showcase runtime: pair a **saved** `platformVisitorId` with a **hostname** (from user URL or hostname) for this bot.
-   * Proves control via embed `accessKey`/`secretKey` (not domain alone). Trial bots use `allowedDomains` only.
-   */
-  async registerShowcaseEmbedWebsiteAllowlistForRuntime(input: {
-    botId: string;
-    accessKey: string;
-    secretKey?: string;
-    platformVisitorId: string;
-    websiteUrl: string;
-  }): Promise<{
-    ok: true;
-    botId: string;
-    platformVisitorWebsiteAllowlist: Array<{ platformVisitorId: string; websiteUrl: string }>;
-  }> {
-    const id = input.botId?.trim();
-    if (!id || !Types.ObjectId.isValid(id)) {
-      throw new Error('E_INVALID_BOT_ID');
-    }
-    const bot = await this.botModel
-      .findById(new Types.ObjectId(id))
-      .select('_id type status creatorType visibility accessKey secretKey')
-      .lean();
-    if (!bot) {
-      throw new Error('E_BOT_NOT_FOUND');
-    }
-    const botType = String((bot as { type?: string }).type ?? '');
-    const creatorType = (bot as { creatorType?: string }).creatorType === 'visitor' ? 'visitor' : 'user';
-    if (botType !== 'showcase') {
-      throw new Error('E_SHOWCASE_ONLY');
-    }
-    if (creatorType === 'visitor') {
-      throw new Error('E_TRIAL_BOT_NOT_SUPPORTED');
-    }
-    const access = validateRuntimeBotAccess(
-      {
-        status: (bot.status as string | undefined) ?? undefined,
-        visibility: (bot.visibility as 'public' | 'private' | undefined) ?? undefined,
-        accessKey: (bot.accessKey as string | undefined) ?? undefined,
-        secretKey: (bot.secretKey as string | undefined) ?? undefined,
-      },
-      { accessKey: input.accessKey, secretKey: input.secretKey },
-    );
-    if (!access.ok) {
-      throw new Error(`E_ACCESS_${access.reason}`);
-    }
-    let row: { platformVisitorId: string; websiteUrl: string };
-    try {
-      row = normalizePlatformVisitorWebsiteAllowlistRowPublic({
-        platformVisitorId: input.platformVisitorId,
-        websiteUrl: input.websiteUrl,
-      });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : '';
-      throw new Error(msg || 'E_ALLOWLIST_NORMALIZE');
-    }
-    assertPlatformVisitorWebsiteAllowlistWritePolicy('user', [row]);
-    await this.botModel.updateOne({ _id: new Types.ObjectId(id) }, { $set: { platformVisitorWebsiteAllowlist: [row] } });
-    return { ok: true, botId: id, platformVisitorWebsiteAllowlist: [row] };
-  }
-
-  async updateShowcaseAccessSettings(
+  async updateWorkspaceAccessSettings(
     id: string,
     input: ShowcaseAccessSettingsInput,
   ): Promise<{
@@ -1002,8 +806,6 @@ export class BotsService {
     visibility: 'public' | 'private';
     accessKey: string;
     secretKey: string;
-    creatorType: 'user' | 'visitor';
-    ownerVisitorId?: string;
     messageLimitMode: 'none' | 'fixed_total';
     messageLimitTotal: number | null;
     messageLimitUpgradeMessage: string | null;
@@ -1012,9 +814,9 @@ export class BotsService {
   }> {
     const existing = await this.botModel
       .findById(id)
-      .select('_id type visibility accessKey secretKey creatorType ownerVisitorId messageLimitMode messageLimitTotal messageLimitUpgradeMessage')
+      .select('_id visibility accessKey secretKey messageLimitMode messageLimitTotal messageLimitUpgradeMessage')
       .lean();
-    if (!existing || (existing as { type?: string }).type !== 'showcase') {
+    if (!existing) {
       throw new Error('Bot not found');
     }
     const visibility = input.visibility === 'private' ? 'private' : 'public';
@@ -1055,7 +857,7 @@ export class BotsService {
         },
         { new: true },
       )
-      .select('_id visibility accessKey secretKey creatorType ownerVisitorId messageLimitMode messageLimitTotal messageLimitUpgradeMessage visitorMultiChatEnabled visitorMultiChatMax')
+      .select('_id visibility accessKey secretKey messageLimitMode messageLimitTotal messageLimitUpgradeMessage visitorMultiChatEnabled visitorMultiChatMax')
       .lean();
     if (!updated) throw new Error('Bot not found');
     const bot = updated as Record<string, unknown>;
@@ -1065,8 +867,6 @@ export class BotsService {
       visibility: bot.visibility === 'private' ? 'private' : 'public',
       accessKey: String(bot.accessKey ?? ''),
       secretKey: String(bot.secretKey ?? ''),
-      creatorType: bot.creatorType === 'visitor' ? 'visitor' : 'user',
-      ownerVisitorId: typeof bot.ownerVisitorId === 'string' ? bot.ownerVisitorId : undefined,
       messageLimitMode: bot.messageLimitMode === 'fixed_total' ? 'fixed_total' : 'none',
       messageLimitTotal: typeof bot.messageLimitTotal === 'number' ? bot.messageLimitTotal : null,
       messageLimitUpgradeMessage:
@@ -1076,10 +876,10 @@ export class BotsService {
     };
   }
 
-  async rotateShowcaseAccessKey(id: string): Promise<{ ok: true; botId: string; accessKey: string }> {
+  async rotateWorkspaceAccessKey(id: string): Promise<{ ok: true; botId: string; accessKey: string }> {
     const updated = await this.botModel
       .findOneAndUpdate(
-        { _id: new Types.ObjectId(id), type: 'showcase' },
+        { _id: new Types.ObjectId(id) },
         { accessKey: generateBotAccessKey() },
         { new: true },
       )
@@ -1089,10 +889,10 @@ export class BotsService {
     return { ok: true, botId: String((updated as { _id: unknown })._id), accessKey: String((updated as { accessKey?: unknown }).accessKey ?? '') };
   }
 
-  async rotateShowcaseSecretKey(id: string): Promise<{ ok: true; botId: string; secretKey: string }> {
+  async rotateWorkspaceSecretKey(id: string): Promise<{ ok: true; botId: string; secretKey: string }> {
     const updated = await this.botModel
       .findOneAndUpdate(
-        { _id: new Types.ObjectId(id), type: 'showcase' },
+        { _id: new Types.ObjectId(id) },
         { secretKey: generateBotSecretKey() },
         { new: true },
       )
@@ -1107,7 +907,7 @@ export class BotsService {
     createdByUserId?: string,
   ): Promise<{ botId: string; slug: string }> {
     const existing = await this.botModel
-      .findOne({ clientDraftId, status: 'draft', type: 'showcase' })
+      .findOne({ clientDraftId, status: 'draft' })
       .select('_id slug')
       .lean();
     if (existing) {
@@ -1135,7 +935,7 @@ export class BotsService {
       } catch (err: unknown) {
         const e = err as { code?: number; keyPattern?: Record<string, number> };
         if (e.code === 11000 && e.keyPattern?.clientDraftId) {
-          const dup = await this.botModel.findOne({ clientDraftId, status: 'draft', type: 'showcase' }).select('_id slug').lean();
+          const dup = await this.botModel.findOne({ clientDraftId, status: 'draft' }).select('_id slug').lean();
           if (dup) return { botId: String((dup as { _id: unknown })._id), slug: (dup as { slug: string }).slug };
         }
         if (!(e.code === 11000 && (e.keyPattern?.slug || e.keyPattern?.accessKey))) throw err;
@@ -1171,16 +971,14 @@ export class BotsService {
       messageLimitMode?: 'none' | 'fixed_total';
       messageLimitTotal?: number | null;
       messageLimitUpgradeMessage?: string | null;
-      allowedDomains?: string[];
-      platformVisitorWebsiteAllowlist?: Array<{ platformVisitorId: string; websiteUrl: string }>;
+      allowedOrigins?: AllowedOrigin[];
     },
     createdByUserId?: string,
   ): Promise<{ botId: string; slug: string }> {
     const finalName = normalized.name || 'Draft bot';
     const finalDescription = normalized.description || '';
-    const publishRules = parseAllowedDomainRulesFromStoredArray(normalized.allowedDomains ?? []);
-    if (publishRules.length === 0) {
-      throw new Error('At least one allowed embed domain is required to publish.');
+    if (!hasActiveAllowedOrigin(normalized.allowedOrigins)) {
+      throw new Error('At least one active allowed embed origin is required to publish.');
     }
     const creatorOid =
       createdByUserId && Types.ObjectId.isValid(createdByUserId)
@@ -1188,18 +986,8 @@ export class BotsService {
         : undefined;
     const existing = await this.botModel
       .findOne({ clientDraftId })
-      .select('_id slug name createdAt createdByUserId accessKey secretKey creatorType ownerUserId visibility messageLimitMode messageLimitTotal messageLimitUpgradeMessage workspaceId')
+      .select('_id slug name createdAt createdByUserId accessKey secretKey ownerId visibility messageLimitMode messageLimitTotal messageLimitUpgradeMessage workspaceId')
       .lean();
-    const creatorTypeForAllowlist: 'user' | 'visitor' =
-      existing && (existing as { creatorType?: string }).creatorType === 'visitor' ? 'visitor' : 'user';
-    assertPlatformVisitorWebsiteAllowlistWritePolicy(
-      existing ? creatorTypeForAllowlist : 'user',
-      normalized.platformVisitorWebsiteAllowlist,
-    );
-    assertTrialBotAllowedDomainsPolicy(
-      existing ? creatorTypeForAllowlist : 'user',
-      normalized.allowedDomains,
-    );
     if (existing) {
       let finalSlug = (existing as { slug: string }).slug;
       const shouldUpdateSlug = finalName !== String((existing as { name?: string }).name ?? '');
@@ -1235,18 +1023,13 @@ export class BotsService {
               personality: normalized.personality,
               config: normalized.config,
               limitOverrideMessages: normalized.limitOverrideMessages,
-              type: 'showcase',
               status: 'published',
               clientDraftId: undefined,
               isPublic: normalized.isPublic,
               includeNameInKnowledge: normalized.includeNameInKnowledge,
               includeTaglineInKnowledge: normalized.includeTaglineInKnowledge,
               includeNotesInKnowledge: normalized.includeNotesInKnowledge,
-              creatorType: (existing as { creatorType?: string }).creatorType ?? 'user',
-              ownerUserId:
-                (existing as { ownerUserId?: unknown }).ownerUserId ??
-                creatorOid ??
-                undefined,
+              ownerId: (existing as { ownerId?: unknown }).ownerId ?? creatorOid ?? undefined,
               visibility: normalized.visibility ?? (existing as { visibility?: 'public' | 'private' }).visibility ?? 'public',
               accessKey: (existing as { accessKey?: string }).accessKey || generateBotAccessKey(),
               secretKey: (existing as { secretKey?: string }).secretKey || generateBotSecretKey(),
@@ -1259,10 +1042,7 @@ export class BotsService {
                 normalized.messageLimitUpgradeMessage !== undefined
                   ? normalized.messageLimitUpgradeMessage
                   : (existing as { messageLimitUpgradeMessage?: string | null }).messageLimitUpgradeMessage ?? null,
-              ...(normalized.allowedDomains !== undefined ? { allowedDomains: normalized.allowedDomains } : {}),
-              ...(normalized.platformVisitorWebsiteAllowlist !== undefined
-                ? { platformVisitorWebsiteAllowlist: normalized.platformVisitorWebsiteAllowlist }
-                : {}),
+              ...(normalized.allowedOrigins !== undefined ? { allowedOrigins: normalized.allowedOrigins } : {}),
               ...(workspaceIdResolved ? { workspaceId: workspaceIdResolved } : {}),
               ...setCreatedBy,
             },
@@ -1311,7 +1091,6 @@ export class BotsService {
           personality: normalized.personality,
           config: normalized.config,
           limitOverrideMessages: normalized.limitOverrideMessages,
-          type: 'showcase',
           status: 'published',
           isPublic: normalized.isPublic,
           includeNameInKnowledge: normalized.includeNameInKnowledge,
@@ -1322,10 +1101,7 @@ export class BotsService {
           ...(normalized.messageLimitMode ? { messageLimitMode: normalized.messageLimitMode } : {}),
           ...(normalized.messageLimitTotal !== undefined ? { messageLimitTotal: normalized.messageLimitTotal } : {}),
           ...(normalized.messageLimitUpgradeMessage !== undefined ? { messageLimitUpgradeMessage: normalized.messageLimitUpgradeMessage } : {}),
-          ...(normalized.allowedDomains !== undefined ? { allowedDomains: normalized.allowedDomains } : {}),
-          ...(normalized.platformVisitorWebsiteAllowlist !== undefined
-            ? { platformVisitorWebsiteAllowlist: normalized.platformVisitorWebsiteAllowlist }
-            : {}),
+          ...(normalized.allowedOrigins !== undefined ? { allowedOrigins: normalized.allowedOrigins } : {}),
           ...(wsForCreate ? { workspaceId: wsForCreate } : {}),
           createdAt: new Date(),
           ...(creatorOid ? { createdByUserId: creatorOid } : {}),
@@ -1352,7 +1128,7 @@ export class BotsService {
     throw new Error('Failed to allocate unique slug.');
   }
 
-  async updateShowcase(
+  async updateWorkspaceBot(
     id: string,
     normalized: {
       name: string;
@@ -1381,23 +1157,15 @@ export class BotsService {
       messageLimitMode?: 'none' | 'fixed_total';
       messageLimitTotal?: number | null;
       messageLimitUpgradeMessage?: string | null;
-      allowedDomains?: string[];
+      allowedOrigins?: AllowedOrigin[];
       visitorMultiChatEnabled?: boolean;
       visitorMultiChatMax?: number | null;
-      platformVisitorWebsiteAllowlist?: Array<{ platformVisitorId: string; websiteUrl: string }>;
     },
   ): Promise<{ ok: true; botId: string; status: string }> {
-    const existing = await this.botModel.findById(id).select('_id type name slug allowedDomains creatorType').lean();
-    if (!existing || (existing as { type?: string }).type !== 'showcase') {
+    const existing = await this.botModel.findById(id).select('_id name slug allowedOrigins').lean();
+    if (!existing) {
       throw new Error('Bot not found');
     }
-    const creatorTypeForAllowlist =
-      (existing as { creatorType?: string }).creatorType === 'visitor' ? 'visitor' : 'user';
-    assertPlatformVisitorWebsiteAllowlistWritePolicy(
-      creatorTypeForAllowlist,
-      normalized.platformVisitorWebsiteAllowlist,
-    );
-    assertTrialBotAllowedDomainsPolicy(creatorTypeForAllowlist, normalized.allowedDomains);
     const status = normalized.status === 'published' ? 'published' : 'draft';
     const messageLimitMode = normalized.messageLimitMode === 'fixed_total' ? 'fixed_total' : 'none';
     const parsedMessageLimitTotal =
@@ -1417,15 +1185,14 @@ export class BotsService {
     if (status === 'published') {
       if (!normalized.name?.trim()) throw new Error('Name is required to publish.');
       if (!description) throw new Error('Description is required to publish.');
-      const rawMerged =
-        normalized.allowedDomains !== undefined
-          ? normalized.allowedDomains
-          : Array.isArray((existing as { allowedDomains?: unknown }).allowedDomains)
-            ? ((existing as { allowedDomains: string[] }).allowedDomains as string[])
+      const mergedOrigins =
+        normalized.allowedOrigins !== undefined
+          ? normalized.allowedOrigins
+          : Array.isArray((existing as { allowedOrigins?: unknown }).allowedOrigins)
+            ? ((existing as { allowedOrigins: AllowedOrigin[] }).allowedOrigins as AllowedOrigin[])
             : [];
-      const publishRules = parseAllowedDomainRulesFromStoredArray(rawMerged);
-      if (publishRules.length === 0) {
-        throw new Error('At least one allowed embed domain is required to publish.');
+      if (!hasActiveAllowedOrigin(mergedOrigins)) {
+        throw new Error('At least one active allowed embed origin is required to publish.');
       }
     }
     let nextSlug = String((existing as { slug?: string }).slug ?? '');
@@ -1472,16 +1239,13 @@ export class BotsService {
           messageLimitMode,
           messageLimitTotal,
           messageLimitUpgradeMessage,
-          ...(normalized.allowedDomains !== undefined ? { allowedDomains: normalized.allowedDomains } : {}),
+          ...(normalized.allowedOrigins !== undefined ? { allowedOrigins: normalized.allowedOrigins } : {}),
           ...(normalized.visitorMultiChatEnabled !== undefined
             ? {
               visitorMultiChatEnabled: normalized.visitorMultiChatEnabled === true,
               visitorMultiChatMax:
                 normalized.visitorMultiChatEnabled === true ? normalized.visitorMultiChatMax ?? null : null,
             }
-            : {}),
-          ...(normalized.platformVisitorWebsiteAllowlist !== undefined
-            ? { platformVisitorWebsiteAllowlist: normalized.platformVisitorWebsiteAllowlist }
             : {}),
         });
         await this.knowledgeBaseItemService.upsertFaqKnowledgeItemsForBot(id, newFaqs);
@@ -1499,22 +1263,7 @@ export class BotsService {
   }
 
   async update(id: string, data: Record<string, unknown>) {
-    const existing = await this.botModel.findById(id).select('creatorType').lean();
-    const merged = { ...data };
-    if ((existing as { creatorType?: string } | null)?.creatorType === 'visitor') {
-      const al = merged.platformVisitorWebsiteAllowlist;
-      if (Array.isArray(al) && al.length > 0) {
-        throw new Error('Platform visitor website URLs are not allowed on trial bots.');
-      }
-      merged.platformVisitorWebsiteAllowlist = [];
-      const ad = merged.allowedDomains;
-      if (Array.isArray(ad) && ad.length > 1) {
-        throw new Error('Trial bots may have at most one allowed embed domain.');
-      }
-    }
-    return this.botModel
-      .findByIdAndUpdate(id, { $set: merged }, { new: true })
-      .lean();
+    return this.botModel.findByIdAndUpdate(id, { $set: data }, { new: true }).lean();
   }
 
   async remove(id: string) {

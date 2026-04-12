@@ -1,22 +1,16 @@
 /**
- * Landing-side anonymous identity: `platformVisitorId` is the stable id for ownership/quota continuity
- * (aligned with backend embed + trial APIs). Not a chat/session id — the widget generates chat identity separately.
- *
- * @see `docs/PRODUCT_MODEL.md` for the full surface-area / tradeoff checklist.
+ * Landing-side anonymous id for analytics / continuity (localStorage + optional URL param).
+ * Not used for runtime embed authorization — the API matches the page Origin to allowedOrigins.
  */
-export type PlatformVisitorIdStatus = "loading" | "ready";
+export type SiteAnalyticsVisitorStatus = "loading" | "ready";
 
 export type ReconnectResult = { ok: true } | { ok: false; error: string };
 
-export type UsePlatformVisitorIdResult = {
-  /** Stable id once {@link PlatformVisitorIdStatus} is `ready`. */
-  platformVisitorId: string | null;
-  status: PlatformVisitorIdStatus;
+export type UseSiteAnalyticsVisitorResult = {
+  /** Stable id once {@link SiteAnalyticsVisitorStatus} is `ready`. */
+  visitorId: string | null;
+  status: SiteAnalyticsVisitorStatus;
   /** Present when `?platformVisitorId=` was invalid (ignored; falls back to storage or a new id). */
   queryParamRejected?: boolean;
-  /**
-   * Apply a saved id from another device or a bookmark. Validates format, persists to `localStorage`, updates state.
-   * Does not verify “true” ownership — anyone who knows the id can assume this anonymous bucket (same as backend).
-   */
-  reconnectWithPlatformVisitorId: (rawId: string) => ReconnectResult;
+  reconnectWithVisitorId: (rawId: string) => ReconnectResult;
 };

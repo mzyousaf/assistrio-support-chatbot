@@ -8,7 +8,7 @@ import { Section } from "@/components/layout/section";
 export const metadata: Metadata = marketingPageMetadata({
   title: "Privacy Policy",
   description:
-    "How Assistrio handles identifiers, contact forms, and third parties on this marketing site for AI Support Agent evaluation and gallery demos.",
+    "How Assistrio handles identifiers, contact forms, and third parties on this marketing site for showcase demos and anonymous analytics.",
   path: "/privacy",
 });
 
@@ -23,8 +23,9 @@ export default function PrivacyPage() {
           <section>
             <h2 className="text-base font-semibold text-slate-900">What this site collects</h2>
             <p className="mt-2">
-              This marketing site may store a browser identifier (for example <code className="rounded bg-slate-100 px-1 text-xs">platformVisitorId</code>)
-              to support Explore, gallery demos, and anonymous usage summaries. Technical logs may include IP address and
+              This marketing site may store an anonymous browser identifier (for example{" "}
+              <code className="rounded bg-slate-100 px-1 text-xs">visitorId</code> for analytics)
+              to support showcase demos and anonymous usage summaries. Technical logs may include IP address and
               user agent when you use forms or APIs.
             </p>
           </section>

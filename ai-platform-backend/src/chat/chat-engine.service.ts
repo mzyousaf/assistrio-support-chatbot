@@ -308,7 +308,6 @@ export class ChatEngineService {
   private async resolveMongoConversation(
     bot: BotLike,
     chatVisitorId: string,
-    platformVisitorId: string | undefined,
     now: Date,
     inputConversationId: string | undefined,
     inputStartNew: boolean | undefined,
@@ -327,7 +326,6 @@ export class ChatEngineService {
       const conv = await this.conversationModel.create({
         botId: botOid,
         chatVisitorId,
-        visitorId: platformVisitorId,
         createdAt: now,
         lastActivityAt: now,
       });
@@ -342,7 +340,6 @@ export class ChatEngineService {
           conversationId: conv._id,
           botId: botOid,
           chatVisitorId,
-          visitorId: platformVisitorId,
           role: 'assistant',
           content: welcomeText,
           createdAt: now,
@@ -414,7 +411,6 @@ export class ChatEngineService {
     const {
       bot,
       chatVisitorId,
-      platformVisitorId,
       message,
       mode,
       userApiKey,
@@ -423,8 +419,6 @@ export class ChatEngineService {
       conversationId: inputConversationId,
       startNewConversation: inputStartNew,
       ephemeral: inputEphemeral,
-      countTowardTrialRuntimeQuota: inputCountTowardTrialRuntimeQuota,
-      countTowardShowcaseRuntimeQuota: inputCountTowardShowcaseRuntimeQuota,
     } = input;
     const requestId = inputRequestId ?? `chat-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
     const startTime = Date.now();
@@ -435,7 +429,6 @@ export class ChatEngineService {
       level: 'info',
       botId: bot._id.toString(),
       chatVisitorId,
-      platformVisitorId,
       requestId,
       endpoint,
     });
@@ -483,7 +476,6 @@ export class ChatEngineService {
       const resolved = await this.resolveMongoConversation(
         bot,
         chatVisitorId,
-        platformVisitorId,
         now,
         inputConversationId,
         inputStartNew,
@@ -564,10 +556,7 @@ export class ChatEngineService {
         conversationId: conversation._id,
         botId: bot._id,
         chatVisitorId,
-        visitorId: platformVisitorId,
         role: 'user',
-        ...(inputCountTowardTrialRuntimeQuota === true ? { trialRuntimeUserMessage: true } : {}),
-        ...(inputCountTowardShowcaseRuntimeQuota === true ? { showcaseRuntimeUserMessage: true } : {}),
         content: message,
         createdAt: now,
       });
@@ -891,7 +880,6 @@ export class ChatEngineService {
         conversationId: conversation._id,
         botId: bot._id,
         chatVisitorId,
-        visitorId: platformVisitorId,
         role: 'assistant',
         content: assistantMessage,
         sources: messageSources,

@@ -14,6 +14,8 @@ type Props = {
   label: string;
   variant?: ButtonVariant;
   className?: string;
+  /** When false, skip default button padding (use with `variant="ghost"` + custom `className`). */
+  useButtonChrome?: boolean;
 };
 
 export function TrackedCtaLink({
@@ -23,13 +25,15 @@ export function TrackedCtaLink({
   label,
   variant = "primary",
   className = "",
+  useButtonChrome = true,
 }: Props) {
   const { track } = useTrackEvent();
+  const chrome = useButtonChrome ? `${buttonBaseClass} ${buttonVariantClass[variant]}` : "";
   return (
     <Link
       href={href}
       onClick={() => track("cta_clicked", { location, label, href })}
-      className={`${buttonBaseClass} ${buttonVariantClass[variant]} ${className}`}
+      className={`${chrome} ${className}`.trim()}
     >
       {children}
     </Link>

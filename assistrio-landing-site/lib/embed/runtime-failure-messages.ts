@@ -8,10 +8,10 @@ export function describeRuntimeInitErrorCode(errorCode: string | undefined): {
 } | null {
   if (!errorCode) return null;
   const table: Record<string, { title: string; detail: string }> = {
-    EMBED_DOMAIN_NOT_ALLOWED: {
-      title: "This website is not an allowed website for this AI Agent",
+    EMBED_ORIGIN_NOT_ALLOWED: {
+      title: "This page origin is not allowed for this AI Agent",
       detail:
-        "Update the AI Agent's allowed websites (Explore evaluation) or showcase registration so this page's hostname matches. If the browser blocked the request entirely, fix API CORS first (see Runtime deployment callout).",
+        "Add this page's exact origin (scheme + host + port) as an active allowed origin on the agent. If the browser blocked the request entirely, fix API CORS first.",
     },
     EMBED_ORIGIN_HEADER_REQUIRED: {
       title: "Origin header missing",
@@ -23,35 +23,12 @@ export function describeRuntimeInitErrorCode(errorCode: string | undefined): {
       detail: "Ensure the page is served over a valid URL (https recommended for production).",
     },
     EMBED_NO_ALLOWLIST: {
-      title: "AI Agent has no allowed websites configured",
-      detail: "Configure at least one allowed website (hostname or exact origin) for this AI Agent.",
+      title: "AI Agent has no allowed origins configured",
+      detail: "Configure at least one active allowed https origin for this AI Agent.",
     },
-    TRIAL_PLATFORM_VISITOR_OWNER_MISMATCH: {
-      title: "Wrong stable id for this Explore AI Support Agent",
-      detail: "Use the same platformVisitorId as when the AI Support Agent was created, or reconnect with the saved id.",
-    },
-    PLATFORM_VISITOR_NOT_IN_BOT_ALLOWLIST: {
-      title: "Visitor / URL not registered for this showcase AI Agent",
-      detail: "Use register-website on the gallery detail page or fix allowed websites in the product admin.",
-    },
-    PLATFORM_VISITOR_WEBSITE_ORIGIN_MISMATCH: {
-      title: "Page hostname does not match registration",
-      detail:
-        "The page’s hostname must match the hostname you registered for this platformVisitorId on this AI Agent (we store only the hostname, not path or query).",
-    },
-    SHOWCASE_RUNTIME_PLATFORM_VISITOR_ID_REQUIRED: {
-      title: "Stable id required",
-      detail: "Showcase runtime needs a real platformVisitorId in the widget config.",
-    },
-    TRIAL_RUNTIME_PLATFORM_VISITOR_ID_INVALID: {
-      title: "Invalid stable id for Explore runtime",
-      detail:
-        'Explore runtime cannot use the reserved "anonymous" sentinel — the snippet must include your real platformVisitorId.',
-    },
-    VISITOR_ID_REQUIRED: {
-      title: "platformVisitorId required",
-      detail:
-        "Explore evaluation AI Support Agents require platformVisitorId on init — include it in AssistrioChatConfig (same as AI Support Agent creation).",
+    BOT_OWNER_REQUIRED: {
+      title: "AI Agent is missing workspace ownership",
+      detail: "Runtime embed requires a migrated workspace-owned bot with ownerId set.",
     },
     BOT_NOT_FOUND: {
       title: "AI Agent not available",
@@ -63,7 +40,7 @@ export function describeRuntimeInitErrorCode(errorCode: string | undefined): {
     },
     INVALID_ACCESS_KEY: {
       title: "Invalid access key",
-      detail: "Use the access key from Explore success or public AI Agent detail — must match this AI Agent.",
+      detail: "Use the access key from public AI Agent detail — must match this AI Agent.",
     },
     INVALID_SECRET_KEY: {
       title: "Invalid or missing secret key",

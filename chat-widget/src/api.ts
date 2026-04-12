@@ -46,15 +46,7 @@ function toInitRequest(config: EmbedChatConfig): WidgetInitRequest {
     if (config.sessionPreview === true) {
       return minimalPreviewInit(config);
     }
-    return {
-      botId: config.botId,
-      mode: "preview",
-      ...(config.platformVisitorId ? { platformVisitorId: config.platformVisitorId } : {}),
-      ...(config.chatVisitorId ? { chatVisitorId: config.chatVisitorId } : {}),
-      ...(config.previewOverrides ? { previewOverrides: config.previewOverrides } : {}),
-      ...(config.accessKey ? { accessKey: config.accessKey } : {}),
-      ...(config.secretKey ? { secretKey: config.secretKey } : {}),
-    };
+    throw new Error("Preview mode requires cookie session (sessionPreview: true) or authToken.");
   }
   const embedOrigin = resolveRuntimeEmbedOrigin(config);
   return {
@@ -64,7 +56,6 @@ function toInitRequest(config: EmbedChatConfig): WidgetInitRequest {
     ...(config.accessKey ? { accessKey: config.accessKey } : {}),
     ...(config.secretKey ? { secretKey: config.secretKey } : {}),
     ...(config.chatVisitorId ? { chatVisitorId: config.chatVisitorId } : {}),
-    ...(config.platformVisitorId ? { platformVisitorId: config.platformVisitorId } : {}),
   };
 }
 

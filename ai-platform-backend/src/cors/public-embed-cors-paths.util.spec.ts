@@ -68,10 +68,6 @@ describe('isPublicBrowserEmbedCorsPath', () => {
       expect(isPublicBrowserEmbedCorsPath('/api/widget/init')).toBe(true);
     });
 
-    it('register website exact', () => {
-      expect(isPublicBrowserEmbedCorsPath('/api/widget/register-website')).toBe(true);
-    });
-
     it('chat subtree', () => {
       expect(isPublicBrowserEmbedCorsPath('/api/chat/message')).toBe(true);
       expect(isPublicBrowserEmbedCorsPath('/api/chat/conversations/list')).toBe(true);
@@ -127,9 +123,6 @@ describe('isPublicBrowserEmbedCorsPath', () => {
       expect(isPublicBrowserEmbedCorsPath('/api/public/bots')).toBe(false);
       expect(isPublicBrowserEmbedCorsPath('/api/public/bots/acme-widget')).toBe(false);
       expect(isPublicBrowserEmbedCorsPath('/api/public/landing/bots')).toBe(false);
-      expect(isPublicBrowserEmbedCorsPath('/api/public/visitor-quota/summary')).toBe(false);
-      expect(isPublicBrowserEmbedCorsPath('/api/public/visitor-bot/summary')).toBe(false);
-      expect(isPublicBrowserEmbedCorsPath('/api/trial/bots')).toBe(false);
     });
   });
 
@@ -140,10 +133,6 @@ describe('isPublicBrowserEmbedCorsPath', () => {
 
     it('unknown widget subpath stays strict', () => {
       expect(isPublicBrowserEmbedCorsPath('/api/widget/future-internal')).toBe(false);
-    });
-
-    it('register-website is exact — no prefix widening', () => {
-      expect(isPublicBrowserEmbedCorsPath('/api/widget/register-website/batch')).toBe(false);
     });
 
     it('strict wins over public if both could apply', () => {

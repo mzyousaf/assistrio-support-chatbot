@@ -1,18 +1,23 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 
-/** Platform (marketing / trial) vs embed chat widget identity — both live in `visitors`. */
-export type VisitorKind = 'platform' | 'chat';
+/**
+ * `marketing` — anonymous site analytics id (funnels).
+ * `chat` — embed widget thread identity mirror.
+ * `owner_preview` — authenticated owner preview message quota (visitorId = user ObjectId string).
+ * `platform` — legacy marketing rows (treated like marketing in reads).
+ */
+export type VisitorKind = 'marketing' | 'chat' | 'owner_preview' | 'platform';
 
 @Schema({ timestamps: false })
 export class Visitor {
   /**
-   * External id: `platformVisitorId` (e.g. `v_…`) or `chatVisitorId` (e.g. `c_…`).
+   * External id: analytics `visitorId`, embed `chatVisitorId`, or owner user id for preview quota.
    * Uniqueness is per {@link VisitorKind} — see compound index below.
    */
   @Prop({ required: true })
   visitorId: string;
 
-  @Prop({ required: true, enum: ['platform', 'chat'], default: 'platform' })
+  @Prop({ required: true, enum: ['marketing', 'chat', 'owner_preview', 'platform'], default: 'marketing' })
   visitorType: VisitorKind;
   @Prop()
   name?: string;
@@ -29,15 +34,9 @@ export class Visitor {
   /** @deprecated Prefer {@link previewUserMessageCount}. */
   @Prop({ default: 0 })
   trialPreviewUserMessageCount: number;
-  /** Platform visitor preview quota (`/api/widget/preview/chat`), cap 50. */
+  /** Owner preview quota (`/api/widget/preview/chat`), cap 50 — used with visitorType `owner_preview` only. */
   @Prop({ default: 0 })
   previewUserMessageCount: number;
-  /**
-   * Single allowed embed **origin** for this platform visitor (set on first `POST /api/widget/init` with `platformVisitorId`).
-   * Full URL origin (e.g. `https://assistrio.com`), not a bare hostname. Widget + chat must use this exact origin thereafter.
-   */
-  @Prop()
-  platformEmbedAllowedUrl?: string;
   @Prop({ default: Date.now })
   createdAt: Date;
   @Prop({ default: Date.now })

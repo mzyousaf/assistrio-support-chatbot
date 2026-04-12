@@ -125,10 +125,10 @@ export default async function BotDetailPage({ params }: Props) {
     <Section spacing="compact" className="pb-20 pt-8 sm:pt-10">
       <Container size="narrow">
         <Link
-          href="/gallery"
+          href="/"
           className="inline-flex items-center gap-1 rounded-full border border-[var(--border-default)] bg-white/90 px-3 py-1.5 text-sm font-medium text-[var(--brand-teal-dark)] shadow-[var(--shadow-xs)] transition hover:border-[var(--border-teal-soft)] hover:bg-[var(--brand-teal-subtle)]/50"
         >
-          ← Showcase demos
+          ← Home
         </Link>
 
         <div className="mt-8 rounded-[1.35rem] border border-[var(--border-default)] bg-gradient-to-br from-white via-slate-50/40 to-[var(--brand-teal-subtle)]/15 p-6 shadow-[var(--shadow-sm)] sm:p-8">

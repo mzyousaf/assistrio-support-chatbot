@@ -4,7 +4,7 @@
  */
 
 export type RuntimeFailureLayer = {
-  id: "cors" | "cdn" | "missing_api" | "domain_allowlist" | "identity" | "credentials" | "rate_limit";
+  id: "cors" | "cdn" | "missing_api" | "domain_allowlist" | "credentials" | "rate_limit";
   /** What you observe (DevTools / UI). */
   symptom: string;
   /** What to fix (no secrets). */
@@ -26,17 +26,15 @@ export const RUNTIME_FAILURE_LAYERS: RuntimeFailureLayer[] = [
   {
     id: "cors",
     symptom: "Network: preflight or request to the API fails with a CORS error; **no** JSON error body from init.",
-    fixHint: "Add the **exact** page origin (https://host:port) to API CORS_EXTRA_ORIGINS. This is not the same as AI Agent allowedDomains.",
+    fixHint:
+      "Confirm HTTPS, preflight, and route class (strict paths for Assistrio hosts in production; runtime init uses broad CORS for customer sites). This is not the same as allowedOrigins on the AI Agent.",
   },
   {
     id: "domain_allowlist",
-    symptom: "Network: POST …/api/widget/init returns **403** with JSON containing errorCode (e.g. EMBED_DOMAIN_NOT_ALLOWED, PLATFORM_VISITOR_*).",
-    fixHint: "Fix trial allowedDomain, showcase allowedDomains, or register-website URL vs this page origin.",
-  },
-  {
-    id: "identity",
-    symptom: "403 / 400 with errorCode TRIAL_PLATFORM_VISITOR_* or SHOWCASE_RUNTIME_PLATFORM_VISITOR_ID_REQUIRED.",
-    fixHint: "Use the same platformVisitorId as trial creation; snippet must include the stable id.",
+    symptom:
+      "Network: POST …/api/widget/init returns **403** with JSON containing errorCode (e.g. EMBED_ORIGIN_NOT_ALLOWED, BOT_OWNER_REQUIRED).",
+    fixHint:
+      "Add this page's exact origin as an active allowed origin on the AI Agent (Assistrio app → Publish). Runtime uses exact Origin header match only.",
   },
   {
     id: "credentials",

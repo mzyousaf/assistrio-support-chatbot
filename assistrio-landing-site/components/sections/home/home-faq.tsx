@@ -5,12 +5,12 @@ import { HomeSectionHeader } from "@/components/sections/home/home-section-heade
 
 const faqs: { q: string; a: string }[] = [
   {
-    q: "What’s the difference between gallery live examples and Try it free?",
-    a: "Gallery examples run here with shared demo quota so you can browse quickly. Try it free creates your own evaluation AI Support Agent: it’s tied to your workspace key and the allowed website you set for production-style runtime on your site.",
+    q: "What’s the difference between gallery live examples and my own AI Support Agent?",
+    a: "Gallery examples are curated agents you can chat with on this site. Your own AI Support Agent lives in the Assistrio product: you configure it, set allowed websites, and embed the runtime snippet on your property.",
   },
   {
     q: "Do I need an account to start?",
-    a: "Explore starts without a card — your browser keeps a session so quota and reconnect behave predictably. Launch and Enterprise are agreed with our team outside this flow.",
+    a: "You can browse this site and try showcase demos without signing in. Your browser keeps a lightweight session for those demos. Launch and Enterprise are agreed with our team outside this flow.",
   },
   {
     q: "Where does preview run?",

@@ -8,7 +8,7 @@ import { DocumentsService } from '../documents/documents.service';
 import { IngestionService } from '../ingestion/ingestion.service';
 import { KnowledgeBaseChunkService } from '../knowledge/knowledge-base-chunk.service';
 import { KnowledgeBaseItemService } from '../knowledge/knowledge-base-item.service';
-import { ASSISTRIO_EMBED_ALLOWED_DOMAINS } from './assistrio-embed-allowed-domains';
+import { ASSISTRIO_EMBED_ALLOWED_ORIGINS } from './assistrio-embed-allowed-origins';
 
 /** Max showcase agents a superadmin may have created (pack API). */
 export const SHOWCASE_AGENTS_PACK_MAX_PER_USER = 30;
@@ -500,7 +500,7 @@ Use 3-4 quickLinks with sensible paths. Routes must start with /.`;
     }
 
     const creatorId = params.createdByUserId.toString();
-    const existing = await this.botsService.countShowcaseBotsForCreator(creatorId);
+    const existing = await this.botsService.countAgentsPackBotsForCreator(creatorId);
     if (existing >= SHOWCASE_AGENTS_PACK_MAX_PER_USER) {
       return { created: [], errors: [], skippedDueToCap: count };
     }
@@ -552,7 +552,7 @@ Use 3-4 quickLinks with sensible paths. Routes must start with /.`;
         const bot = await this.botsService.create({
           name: gen.name.slice(0, 120),
           slug,
-          type: 'showcase',
+          agentsPackAgent: true,
           status: 'published',
           isPublic: true,
           visibility: 'public',
@@ -562,12 +562,12 @@ Use 3-4 quickLinks with sensible paths. Routes must start with /.`;
           welcomeMessage: gen.welcomeMessage.slice(0, 2000),
           exampleQuestions: gen.exampleQuestions.filter(Boolean).slice(0, 6).map((q) => String(q).slice(0, 200)),
           personality: gen.personality,
-          allowedDomains: [...ASSISTRIO_EMBED_ALLOWED_DOMAINS],
+          allowedOrigins: ASSISTRIO_EMBED_ALLOWED_ORIGINS.map((o) => ({ ...o })),
           visitorMultiChatEnabled: true,
           visitorMultiChatMax: 5,
           includeNotesInKnowledge: true,
           createdByUserId: params.createdByUserId,
-          ownerUserId: params.createdByUserId,
+          ownerId: params.createdByUserId,
           workspaceId: params.workspaceId,
           ...(imageUrl ? { imageUrl } : {}),
           chatUI: {

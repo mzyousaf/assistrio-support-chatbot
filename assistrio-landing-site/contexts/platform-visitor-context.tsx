@@ -15,29 +15,28 @@ import {
   parseValidPlatformVisitorIdFromSearchParams,
   PLATFORM_VISITOR_ID_STORAGE_KEY,
 } from "@/lib/identity/platform-visitor";
-import type { ReconnectResult, UsePlatformVisitorIdResult } from "@/types/identity";
+import type { ReconnectResult, UseSiteAnalyticsVisitorResult } from "@/types/identity";
 
-const PlatformVisitorContext = createContext<UsePlatformVisitorIdResult | null>(null);
+const SiteAnalyticsVisitorContext = createContext<UseSiteAnalyticsVisitorResult | null>(null);
 
-function usePlatformVisitorIdState(): UsePlatformVisitorIdResult {
-  const [platformVisitorId, setPlatformVisitorId] = useState<string | null>(null);
-  const [status, setStatus] = useState<UsePlatformVisitorIdResult["status"]>("loading");
+function useSiteAnalyticsVisitorState(): UseSiteAnalyticsVisitorResult {
+  const [visitorId, setVisitorId] = useState<string | null>(null);
+  const [status, setStatus] = useState<UseSiteAnalyticsVisitorResult["status"]>("loading");
   const [queryParamRejected, setQueryParamRejected] = useState(false);
 
-  const reconnectWithPlatformVisitorId = useCallback((rawId: string): ReconnectResult => {
+  const reconnectWithVisitorId = useCallback((rawId: string): ReconnectResult => {
     const trimmed = rawId.trim();
     if (!trimmed) {
-      return { ok: false, error: "Enter your saved platform visitor id." };
+      return { ok: false, error: "Enter your saved visitor id." };
     }
     if (!isValidPlatformVisitorIdFormat(trimmed)) {
       return {
         ok: false,
-        error:
-          "Invalid format. Use 6–120 characters: letters, digits, and . _ : - only.",
+        error: "Invalid format. Use 6–120 characters: letters, digits, and . _ : - only.",
       };
     }
     localStorage.setItem(PLATFORM_VISITOR_ID_STORAGE_KEY, trimmed);
-    setPlatformVisitorId(trimmed);
+    setVisitorId(trimmed);
     setStatus("ready");
     setQueryParamRejected(false);
     return { ok: true };
@@ -54,14 +53,14 @@ function usePlatformVisitorIdState(): UsePlatformVisitorIdResult {
 
     if (fromQuery) {
       localStorage.setItem(PLATFORM_VISITOR_ID_STORAGE_KEY, fromQuery);
-      setPlatformVisitorId(fromQuery);
+      setVisitorId(fromQuery);
       setStatus("ready");
       return;
     }
 
     const fromStorage = localStorage.getItem(PLATFORM_VISITOR_ID_STORAGE_KEY);
     if (fromStorage && isValidPlatformVisitorIdFormat(fromStorage)) {
-      setPlatformVisitorId(fromStorage);
+      setVisitorId(fromStorage);
       setStatus("ready");
       return;
     }
@@ -72,40 +71,31 @@ function usePlatformVisitorIdState(): UsePlatformVisitorIdResult {
 
     const generated = generatePlatformVisitorId();
     localStorage.setItem(PLATFORM_VISITOR_ID_STORAGE_KEY, generated);
-    setPlatformVisitorId(generated);
+    setVisitorId(generated);
     setStatus("ready");
   }, []);
 
   return useMemo(
     () => ({
-      platformVisitorId,
+      visitorId,
       status,
       queryParamRejected,
-      reconnectWithPlatformVisitorId,
+      reconnectWithVisitorId,
     }),
-    [platformVisitorId, status, queryParamRejected, reconnectWithPlatformVisitorId],
+    [visitorId, status, queryParamRejected, reconnectWithVisitorId],
   );
 }
 
-/**
- * Single source of truth for anonymous `platformVisitorId` across the landing app (quota, trial, showcase runtime).
- * Wrap the tree once — do not call {@link usePlatformVisitorIdState} directly outside this provider.
- *
- * Product rules: `docs/PRODUCT_MODEL.md`.
- */
-export function PlatformVisitorProvider({ children }: { children: ReactNode }) {
-  const value = usePlatformVisitorIdState();
-  return <PlatformVisitorContext.Provider value={value}>{children}</PlatformVisitorContext.Provider>;
+/** Wrap the app tree once for anonymous marketing `visitorId` (analytics only). */
+export function SiteAnalyticsVisitorProvider({ children }: { children: ReactNode }) {
+  const value = useSiteAnalyticsVisitorState();
+  return <SiteAnalyticsVisitorContext.Provider value={value}>{children}</SiteAnalyticsVisitorContext.Provider>;
 }
 
-/**
- * Stable **platform** visitor id for anonymous landing flows: same bucket as backend `platformVisitorId`.
- * Chat/session ids are owned by the widget, not this hook.
- */
-export function usePlatformVisitorId(): UsePlatformVisitorIdResult {
-  const ctx = useContext(PlatformVisitorContext);
+export function useSiteAnalyticsVisitor(): UseSiteAnalyticsVisitorResult {
+  const ctx = useContext(SiteAnalyticsVisitorContext);
   if (!ctx) {
-    throw new Error("usePlatformVisitorId must be used within PlatformVisitorProvider");
+    throw new Error("useSiteAnalyticsVisitor must be used within SiteAnalyticsVisitorProvider");
   }
   return ctx;
 }

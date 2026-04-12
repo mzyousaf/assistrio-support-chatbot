@@ -9,7 +9,7 @@ import { Section } from "@/components/layout/section";
 export const metadata: Metadata = marketingPageMetadata({
   title: "Contact",
   description:
-    "Contact Assistrio about Launch, Enterprise, or your workspace — or message support@assistrio.com. We help with hosted AI Support Agents, security reviews, and rollout.",
+    "Contact Assistrio — message support@assistrio.com. We read every note about showcase demos and general questions.",
   path: "/contact",
 });
 
@@ -27,24 +27,20 @@ export default function ContactPage() {
           <div className="min-w-0 space-y-8 lg:sticky lg:top-28">
             <PageIntro eyebrow="Support" title="Contact us" titleId={CONTACT_TITLE_ID} className="max-w-lg">
               <p className="text-page-lead">
-                Launch timelines, security reviews, billing — tell us what you need. We read every message at{" "}
-                <strong>support@assistrio.com</strong> and usually reply within one to two business days.
+                Tell us what you need. We read every message at <strong>support@assistrio.com</strong> and usually reply
+                within one to two business days.
               </p>
             </PageIntro>
 
             <ul className="space-y-4">
               {[
                 {
-                  title: "Sales & plans",
-                  body: "Hosted capacity, rollout, and what is included in Launch or Enterprise.",
+                  title: "Product questions",
+                  body: "How showcase demos work, embed behavior, or what you experienced on this site.",
                 },
                 {
-                  title: "Product support",
-                  body: "Workspace issues, embeds on allowed sites, and how to get the most from your agents.",
-                },
-                {
-                  title: "Partnerships",
-                  body: "Integration questions — we will route you to the right person.",
+                  title: "Anything else",
+                  body: "We’ll route your note to the right person.",
                 },
               ].map((item) => (
                 <li
@@ -76,23 +72,10 @@ export default function ContactPage() {
             </ul>
 
             <div className="rounded-xl border border-[var(--border-teal-soft)]/60 bg-[color-mix(in_srgb,var(--brand-teal-subtle)_35%,white)] p-5 text-sm leading-relaxed text-[var(--foreground-muted)]">
-              <p className="font-semibold text-[var(--brand-teal-dark)]">Before you write</p>
+              <p className="font-semibold text-[var(--brand-teal-dark)]">Try a demo first</p>
               <p className="mt-2">
-                Evaluations and demos are also available from the{" "}
-                <Link
-                  href="/gallery"
-                  className="font-medium text-[var(--brand-teal-dark)] underline decoration-[var(--border-teal-soft)] underline-offset-2 hover:decoration-[var(--brand-teal)]"
-                >
-                  gallery
-                </Link>{" "}
-                and{" "}
-                <Link
-                  href="/trial"
-                  className="font-medium text-[var(--brand-teal-dark)] underline decoration-[var(--border-teal-soft)] underline-offset-2 hover:decoration-[var(--brand-teal)]"
-                >
-                  explore
-                </Link>{" "}
-                pages — no credit card required to get started.
+                On the <Link href="/">home page</Link>, open <strong>Try a live demo</strong> to chat with a showcase
+                agent — no account required.
               </p>
             </div>
           </div>

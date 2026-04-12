@@ -1,12 +1,7 @@
 import type { BotChatUI, BotConfig, BotLeadCaptureV2, BotLeadField, BotPersonality } from '../models/bot.schema';
 import type { LeadFieldType } from '../models/bot.schema';
-import {
-  extractHostnameFromUserWebsiteInputLoose,
-  isDisallowedUserEmbedHost,
-  isEmbedDomainInputDisallowedLocalhost,
-  normalizeUserWebsiteInputToHostname,
-  parseAllowedDomainStringForStorage,
-} from '../bots/embed-domain.util';
+import type { AllowedOrigin } from '../bots/origin-validation.util';
+import { normalizeUserAllowedOriginInput } from '../bots/origin-validation.util';
 import { normalizeVisitorMultiChatMax } from '../bots/visitor-multi-chat.util';
 import { normalizeQuickLinkIcon } from './quick-link-icon-ids';
 
@@ -107,65 +102,26 @@ function normalizeExampleQuestions(input: unknown): string[] {
 
 const MENU_QUICK_LINKS_MAX = 10;
 
-function normalizePlatformVisitorWebsiteAllowlistFromPayload(
-  input: Record<string, unknown>,
-  creatorType?: 'user' | 'visitor',
-): Array<{ platformVisitorId: string; websiteUrl: string }> | undefined {
-  if (!('platformVisitorWebsiteAllowlist' in input)) return undefined;
-  const raw = input.platformVisitorWebsiteAllowlist;
+function normalizeAllowedOriginsFromPayload(input: Record<string, unknown>): AllowedOrigin[] | undefined {
+  if (!('allowedOrigins' in input)) return undefined;
+  const raw = input.allowedOrigins;
   if (!Array.isArray(raw)) return [];
-  const map = new Map<string, { platformVisitorId: string; websiteUrl: string }>();
+  const seen = new Set<string>();
+  const out: AllowedOrigin[] = [];
   for (const item of raw) {
     if (!item || typeof item !== 'object') continue;
     const o = item as Record<string, unknown>;
-    const pv = String(o.platformVisitorId ?? '').trim();
-    const wuRaw = String(o.websiteUrl ?? '').trim();
-    if (!pv || !wuRaw) continue;
-    const loose = extractHostnameFromUserWebsiteInputLoose(wuRaw);
-    if (loose && isDisallowedUserEmbedHost(loose)) {
-      throw new Error('Localhost and loopback addresses cannot be used as platform visitor website URLs.');
-    }
-    const host = normalizeUserWebsiteInputToHostname(wuRaw);
-    if (!host) {
-      throw new Error('Invalid website URL in platform visitor allowlist.');
-    }
-    map.set(pv, { platformVisitorId: pv, websiteUrl: host });
-  }
-  const arr = [...map.values()];
-  if (creatorType === 'visitor') {
-    if (arr.length > 0) {
-      throw new Error('Platform visitor website URLs are not allowed on trial bots.');
-    }
-    return undefined;
-  }
-  if (arr.length > 1) {
-    throw new Error('At most one platform visitor website URL is allowed per bot.');
-  }
-  return arr;
-}
-
-function normalizeAllowedDomainsFromPayload(
-  input: Record<string, unknown>,
-  creatorType?: 'user' | 'visitor',
-): string[] | undefined {
-  if (!('allowedDomains' in input)) return undefined;
-  const raw = input.allowedDomains;
-  if (!Array.isArray(raw)) return [];
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const item of raw) {
-    if (typeof item !== 'string') continue;
-    const trimmed = item.trim();
-    const n = parseAllowedDomainStringForStorage(item);
-    if (n && !seen.has(n)) {
-      seen.add(n);
-      out.push(n);
-    } else if (trimmed && !n && isEmbedDomainInputDisallowedLocalhost(item)) {
-      throw new Error('Localhost and loopback addresses cannot be used as allowed embed domains.');
-    }
-  }
-  if (creatorType === 'visitor' && out.length > 1) {
-    throw new Error('Trial bots may have at most one allowed embed domain.');
+    const originRaw = String(o.origin ?? '').trim();
+    const co = normalizeUserAllowedOriginInput(originRaw);
+    if (!co || seen.has(co)) continue;
+    seen.add(co);
+    const label = typeof o.label === 'string' ? o.label.trim().slice(0, 120) : undefined;
+    const isActive = o.isActive !== false;
+    out.push({
+      origin: co,
+      ...(label ? { label } : {}),
+      isActive,
+    });
   }
   return out;
 }
@@ -214,28 +170,14 @@ export interface NormalizedBotPayload {
   includeTaglineInKnowledge?: boolean;
   includeNotesInKnowledge: boolean;
   /** Omitted from PATCH body = leave unchanged on server. */
-  allowedDomains?: string[];
-  /** Per platform visitor: allowed hostname for this bot (stored in `websiteUrl` field). Omitted = unchanged. */
-  platformVisitorWebsiteAllowlist?: Array<{ platformVisitorId: string; websiteUrl: string }>;
+  allowedOrigins?: AllowedOrigin[];
   /** Present only when `visitorMultiChatEnabled` is in the request body. */
   visitorMultiChatEnabled?: boolean;
   visitorMultiChatMax?: number | null;
 }
 
-export type NormalizeBotPayloadOptions = {
-  /** When set, restricts `platformVisitorWebsiteAllowlist` and `allowedDomains` for trial bots. */
-  creatorType?: 'user' | 'visitor';
-};
-
-export function normalizeBotPayload(
-  input: Record<string, unknown>,
-  opts?: NormalizeBotPayloadOptions,
-): NormalizedBotPayload {
-  const platformVisitorWebsiteAllowlist = normalizePlatformVisitorWebsiteAllowlistFromPayload(
-    input,
-    opts?.creatorType,
-  );
-  const allowedDomains = normalizeAllowedDomainsFromPayload(input, opts?.creatorType);
+export function normalizeBotPayload(input: Record<string, unknown>): NormalizedBotPayload {
+  const allowedOrigins = normalizeAllowedOriginsFromPayload(input);
   const name = String(input.name ?? '').trim();
   const shortDescription = String(input.shortDescription ?? '').trim();
   const description = String(input.description ?? '').trim();
@@ -438,8 +380,7 @@ export function normalizeBotPayload(
     includeNameInKnowledge,
     includeTaglineInKnowledge,
     includeNotesInKnowledge,
-    ...(allowedDomains !== undefined ? { allowedDomains } : {}),
-    ...(platformVisitorWebsiteAllowlist !== undefined ? { platformVisitorWebsiteAllowlist } : {}),
+    ...(allowedOrigins !== undefined ? { allowedOrigins } : {}),
     ...(visitorMultiPatch ?? {}),
   };
 }

@@ -17,7 +17,7 @@ export function marketingPageMetadata(opts: {
   /** Segment title before ` · Assistrio` (root `title.template`) */
   title: string;
   description: string;
-  /** Optional canonical path, e.g. `/gallery` */
+  /** Optional canonical path, e.g. `/contact` */
   path?: `/${string}`;
 }): Metadata {
   const { title, description, path } = opts;

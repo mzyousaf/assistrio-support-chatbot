@@ -31,40 +31,29 @@ export function SiteFooter() {
               />
             </p>
             <p className="mt-2 text-sm leading-relaxed text-[var(--foreground-muted)]">
-              AI support on your allowed websites — try it free, see live AI Support Agents, or reach us when you are ready to launch.
+              Try showcase AI Support Agents on this site or reach out — visitor activity is tracked anonymously for
+              product analytics.
             </p>
           </div>
 
           <div className="grid min-w-0 gap-8 sm:grid-cols-2 lg:gap-14">
             <div>
               <p className="text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-[var(--foreground-subtle)]">
-                Legal & contact
+                Legal
               </p>
-              <nav aria-label="Legal and contact" className="mt-4 flex flex-col gap-3">
-                <Link href="/contact" className={linkClass}>
-                  Contact
-                </Link>
-                {/* <Link href="/pricing" className={linkClass}>
-                  Pricing
-                </Link> */}
-                <Link href="/about" className={linkClass}>
-                  About Assistrio
-                </Link>
+              <nav aria-label="Legal" className="mt-4 flex flex-col gap-3">
                 <Link href="/privacy" className={linkClass}>
                   Privacy Policy
-                </Link>
-                <Link href="/refund" className={linkClass}>
-                  Refund Policy
                 </Link>
               </nav>
             </div>
 
             <div>
               <p className="text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-[var(--foreground-subtle)]">
-                Get started
+                Contact
               </p>
               <p className="mt-2 text-sm text-[var(--foreground-muted)]">
-                No credit card needed <span className="text-[var(--foreground-subtle)]">(try it first)</span>.
+                Questions or feedback — we read every message.
               </p>
               <div className="mt-4">
                 <FooterFlowCtas />

@@ -2,9 +2,9 @@
 
 The API uses **`@fastify/cors`** with a **per-request delegator** (`src/main.ts`) that chooses:
 
-1. **Public browser embed / marketing** — any valid **HTTPS** `Origin` is reflected for paths classified in `src/cors/public-embed-cors-paths.util.ts` (see `isPublicBrowserEmbedCorsPath`). Customer domains do **not** need to be listed in `CORS_EXTRA_ORIGINS` for these routes.
+1. **Public browser embed / marketing** — any valid **HTTPS** `Origin` is reflected for paths classified in `src/cors/public-embed-cors-paths.util.ts` (see `isPublicBrowserEmbedCorsPath`). Customer domains are not allowlisted for these routes; CORS only controls which origins may read responses.
 
-2. **Strict** — `Assistrio` hostnames + `CORS_EXTRA_ORIGINS` + dev loopback (`isBrowserOriginAllowedForCors`). Used for preview, authenticated app routes, admin bots listing, jobs, etc.
+2. **Strict** — `Assistrio` hostnames (`assistrio.com`, `*.assistrio.com`) in production, or dev loopback only in development (`isBrowserOriginAllowedForCors`). Used for preview, authenticated app routes, admin bots listing, jobs, etc.
 
 ## Code-grounded route inventory (maintain when controllers change)
 
@@ -15,7 +15,7 @@ The API uses **`@fastify/cors`** with a **per-request delegator** (`src/main.ts`
 | Exact | `/api/widget/init`, `/api/widget/register-website` | No other `/api/widget/*` is broad — avoids prefix typos. |
 | Subtrees | `/api/chat/*`, `/api/public/*`, `/api/trial/*`, `/api/analytics/*` | Deny-first excludes paths listed below. Segment-safe: `/api/chats` is **not** included. Never add `/api` alone. |
 
-**Deny-first (strict, even though under `/api/public` or `/api/trial`):** `GET /api/public/bots`, `GET /api/public/bots/:slug`, `GET /api/public/landing/bots`, `POST /api/public/visitor-quota/summary`, `POST /api/public/visitor-bot/*` (PV-safe owned-bot summaries), `POST /api/trial/bots` — **Assistrio / `CORS_EXTRA_ORIGINS` / dev loopback** only; not arbitrary customer origins.
+**Deny-first (strict, even though under `/api/public` or `/api/trial`):** `GET /api/public/bots`, `GET /api/public/bots/:slug`, `GET /api/public/landing/bots`, `POST /api/public/visitor-quota/summary`, `POST /api/public/visitor-bot/*` (PV-safe owned-bot summaries), `POST /api/trial/bots` — **Assistrio / dev loopback** only; not arbitrary customer origins.
 
 **Note:** `POST /api/analytics/track` is **internal analytics ingestion**, not a PV product summary API — see `docs/PV_SAFE_PUBLIC_APIS.md`. It accepts typed events only; it has **no** per-IP rate limit in the controller today — monitor for abuse; tightening would be a separate change.
 
@@ -48,7 +48,7 @@ Authorization (bot keys, `allowedDomains`, rate limits) is unchanged; CORS is no
 
 ## Final security posture (many-origin public runtime)
 
-- **Public (broad) routes** exist so **customer HTTPS sites** can call **widget init, chat,** and **analytics track** from the browser **without** listing each domain in `CORS_EXTRA_ORIGINS`. Gallery, landing bot list, quota summary, and trial creation are **strict** — use Assistrio hosts + `CORS_EXTRA_ORIGINS` for staging/tooling.
+- **Public (broad) routes** exist so **customer HTTPS sites** can call **widget init, chat,** and **analytics track** from the browser with reflected origins. Gallery, landing bot list, quota summary, and trial creation are **strict** — use Assistrio hosts (or dev loopback in development).
 - **Private / preview / app** traffic stays **strict** (`/api/widget/preview/*`, `/api/user/*`, …).
 - **Runtime authorization is not CORS:** embed domain gates, keys, `platformVisitorId` / trial ownership, showcase registration, and rate limits are enforced **in controllers** after the request arrives. Misconfigured CORS blocks the response **before** the handler; it does **not** replace 403/401 from business rules.
 

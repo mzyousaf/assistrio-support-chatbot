@@ -1,4 +1,4 @@
-"use client";
-
-/** Re-export — implementation lives in {@link PlatformVisitorProvider} (single identity per app). */
-export { usePlatformVisitorId, PlatformVisitorProvider } from "@/contexts/platform-visitor-context";
+/**
+ * @deprecated Import from `@/contexts/platform-visitor-context` — `useSiteAnalyticsVisitor` / `SiteAnalyticsVisitorProvider`.
+ */
+export { SiteAnalyticsVisitorProvider as PlatformVisitorProvider, useSiteAnalyticsVisitor as usePlatformVisitorId } from "@/contexts/platform-visitor-context";

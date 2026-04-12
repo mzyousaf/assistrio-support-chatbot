@@ -50,11 +50,12 @@ type ButtonLinkProps = {
   children: ReactNode;
   variant?: Variant;
   className?: string;
+  onClick?: () => void;
 };
 
-export function ButtonLink({ href, children, variant = "primary", className = "" }: ButtonLinkProps) {
+export function ButtonLink({ href, children, variant = "primary", className = "", onClick }: ButtonLinkProps) {
   return (
-    <Link href={href} className={`${base} ${variantClass[variant]} ${className}`}>
+    <Link href={href} onClick={onClick} className={`${base} ${variantClass[variant]} ${className}`}>
       {children}
     </Link>
   );

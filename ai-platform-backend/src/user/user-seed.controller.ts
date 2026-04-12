@@ -13,7 +13,7 @@ import { BotsService } from '../bots/bots.service';
 import { DocumentsService } from '../documents/documents.service';
 import { IngestionService } from '../ingestion/ingestion.service';
 import { USER_ROLES, type UserRole } from '../models';
-import { ASSISTRIO_EMBED_ALLOWED_DOMAINS } from './assistrio-embed-allowed-domains';
+import { ASSISTRIO_EMBED_ALLOWED_ORIGINS } from './assistrio-embed-allowed-origins';
 import { SHOWCASE_BOTS } from './showcase-bots-seed.data';
 import { AuthService } from '../auth/auth.service';
 import { AuthGuard, type RequestUser } from '../auth/auth.guard';
@@ -88,10 +88,9 @@ export class UserSeedController {
         const bot = await this.botsService.create({
           name: seed.name,
           slug: seed.slug,
-          type: 'showcase',
           status: 'published',
           isPublic: true,
-          allowedDomains: ASSISTRIO_EMBED_ALLOWED_DOMAINS,
+          allowedOrigins: ASSISTRIO_EMBED_ALLOWED_ORIGINS.map((o) => ({ ...o })),
           shortDescription: seed.shortDescription,
           description: seed.description,
           welcomeMessage: seed.welcomeMessage,
@@ -109,7 +108,7 @@ export class UserSeedController {
           leadCapture: { enabled: false, fields: [] },
           faqs: [],
           categories: [],
-          ...(createdByUserId ? { createdByUserId } : {}),
+          ...(createdByUserId ? { createdByUserId, ownerId: createdByUserId } : {}),
           ...(workspaceId ? { workspaceId } : {}),
         });
         const botId = (bot as { _id?: { toString?: () => string } })._id?.toString?.() ?? String((bot as { _id?: unknown })._id);

@@ -72,9 +72,9 @@ export class WorkspacesService {
   }
 
   /**
-   * Access to showcase bot in the admin API or preview: superadmin, workspace member, or legacy owner.
+   * Access to workspace bot in the admin API: superadmin, workspace member, or owner.
    */
-  async canUserAccessShowcaseBot(
+  async canUserAccessWorkspaceBot(
     userId: string,
     platformRole: string,
     bot: Record<string, unknown>,
@@ -88,23 +88,19 @@ export class WorkspacesService {
       return this.isUserMemberOfWorkspace(uid, oidString(ws));
     }
 
-    const owner = oidString(bot.ownerUserId);
+    const owner = oidString(bot.ownerId);
     const createdBy = oidString(bot.createdByUserId);
     return owner === uid || createdBy === uid;
   }
 
   /**
-   * `/api/widget/preview/*` (signed-in user): only the bot owner/creator may preview, not other workspace members.
-   * Superadmin may still preview any bot. Visitor preview uses {@link bot.ownerVisitorId} in the preview controller.
+   * `/api/widget/preview/*`: only `bot.ownerId` may preview. Superadmin may preview any bot.
    */
-  canUserPreviewShowcaseBotAsOwner(userId: string, platformRole: string, bot: Record<string, unknown>): boolean {
+  canUserPreviewBotAsOwner(userId: string, platformRole: string, bot: Record<string, unknown>): boolean {
     if (platformRole === 'superadmin') return true;
     const uid = userId.trim();
     if (!Types.ObjectId.isValid(uid)) return false;
-    const owner = oidString(bot.ownerUserId);
-    const createdBy = oidString(bot.createdByUserId);
-    if (owner && owner === uid) return true;
-    if (createdBy && createdBy === uid) return true;
-    return false;
+    const owner = oidString(bot.ownerId);
+    return !!owner && owner === uid;
   }
 }

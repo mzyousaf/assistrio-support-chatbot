@@ -50,12 +50,12 @@ export class UserChatController {
     const adminUser = req.user;
     const chatVisitorId = adminUser?._id != null ? String(adminUser._id) : 'anonymous';
 
-    const bot = await this.botsService.findOneShowcaseForAdmin(botId);
-    if (!bot || (bot as { type?: string }).type !== 'showcase') {
+    const bot = await this.botsService.findOneWorkspaceForAdmin(botId);
+    if (!bot) {
       throw new HttpException({ error: 'Bot not found' }, HttpStatus.NOT_FOUND);
     }
     const uid = adminUser?._id != null ? String(adminUser._id) : '';
-    const can = await this.workspacesService.canUserAccessShowcaseBot(
+    const can = await this.workspacesService.canUserAccessWorkspaceBot(
       uid,
       adminUser?.role ?? 'customer',
       bot as Record<string, unknown>,
@@ -84,9 +84,6 @@ export class UserChatController {
     const chatResult = await this.chatEngineService.runChat({
       bot: botLike,
       chatVisitorId,
-      // For admin chat we treat the platform identity as both identities temporarily.
-      // (chat identity migration can be made stricter later.)
-      platformVisitorId: chatVisitorId,
       message: parsed.message,
       mode: 'user',
       requestId: getRequestId(req),

@@ -33,7 +33,7 @@ export class AnalyticsTrackController {
     }
 
     try {
-      await this.visitorsService.getOrCreateVisitor(parsed.platformVisitorId);
+      await this.visitorsService.touchMarketingVisitor(parsed.visitorId);
       await this.analyticsService.trackEvent(parsed);
       return { success: true };
     } catch (error) {

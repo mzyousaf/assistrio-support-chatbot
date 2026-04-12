@@ -30,11 +30,11 @@ export class UserDocumentsController {
 
   private async assertBotAccess(botId: string, req: RequestWithUser): Promise<void> {
     const bot = await this.botsService.findOne(botId);
-    if (!bot || (bot as { type?: string }).type !== 'showcase') {
+    if (!bot) {
       throw new HttpException({ error: 'Bot not found' }, HttpStatus.NOT_FOUND);
     }
     const uid = req.user?._id != null ? String(req.user._id) : '';
-    const ok = await this.workspacesService.canUserAccessShowcaseBot(
+    const ok = await this.workspacesService.canUserAccessWorkspaceBot(
       uid,
       req.user?.role ?? 'customer',
       bot as Record<string, unknown>,

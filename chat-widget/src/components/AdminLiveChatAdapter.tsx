@@ -219,10 +219,8 @@ export interface AdminLiveChatAdapterProps {
   chatPostPath?: string;
   accessKey?: string;
   secretKey?: string;
-  /** Chat/session identity only — threads, history, embed cookie binding. Not for quota ownership. */
+  /** Chat/session identity only — threads, history, embed cookie binding. */
   chatVisitorId: string;
-  /** Platform identity — trial quota, allowlist, preview auth; never substitute `chatVisitorId`. */
-  platformVisitorId?: string;
   authToken?: string;
   previewOverrides?: WidgetPreviewOverrides;
   debug?: boolean;
@@ -299,7 +297,6 @@ export function AdminLiveChatAdapter({
   accessKey,
   secretKey,
   chatVisitorId,
-  platformVisitorId,
   authToken,
   previewOverrides,
   debug = true,
@@ -430,7 +427,6 @@ export function AdminLiveChatAdapter({
       botId,
       ...(runtimeEmbedOrigin ? { embedOrigin: runtimeEmbedOrigin } : {}),
       ...(chatVisitorId ? { chatVisitorId } : {}),
-      ...(platformVisitorId ? { platformVisitorId } : {}),
     };
     try {
       const res = await runtimeEmbedPost(listUrl, bodyWithoutKeys, { accessKey, secretKey });
@@ -445,7 +441,7 @@ export function AdminLiveChatAdapter({
         setRuntimeListLoading(false);
       }
     }
-  }, [mode, botId, apiBaseUrl, accessKey, secretKey, runtimeEmbedOrigin, chatVisitorId, platformVisitorId]);
+  }, [mode, botId, apiBaseUrl, accessKey, secretKey, runtimeEmbedOrigin, chatVisitorId]);
 
   useEffect(() => {
     if (mode === "preview") {
@@ -550,7 +546,6 @@ export function AdminLiveChatAdapter({
         conversationId,
         ...(runtimeEmbedOrigin ? { embedOrigin: runtimeEmbedOrigin } : {}),
         ...(chatVisitorId ? { chatVisitorId } : {}),
-        ...(platformVisitorId ? { platformVisitorId } : {}),
       };
       try {
         const res = await runtimeEmbedPost(msgUrl, bodyWithoutKeys, { accessKey, secretKey });
@@ -595,7 +590,6 @@ export function AdminLiveChatAdapter({
       secretKey,
       runtimeEmbedOrigin,
       chatVisitorId,
-      platformVisitorId,
       welcomeMsg,
     ],
   );
@@ -669,7 +663,6 @@ export function AdminLiveChatAdapter({
             ...(accessKey ? { accessKey } : {}),
             ...(secretKey ? { secretKey } : {}),
             ...(chatVisitorId ? { chatVisitorId } : {}),
-            ...(platformVisitorId ? { platformVisitorId } : {}),
             ...(authToken ? { authToken } : {}),
             ...(previewOverrides ? { previewOverrides } : {}),
           };
@@ -698,7 +691,6 @@ export function AdminLiveChatAdapter({
             ...(!startNew && conversationIdRef.current ? { conversationId: conversationIdRef.current } : {}),
             ...(runtimeEmbedOrigin ? { embedOrigin: runtimeEmbedOrigin } : {}),
             ...(chatVisitorId ? { chatVisitorId } : {}),
-            ...(platformVisitorId ? { platformVisitorId } : {}),
           };
           res = await fetchWithNetworkRetry(
             () => runtimeEmbedPost(endpoint, bodyWithoutKeys, { accessKey, secretKey }),
@@ -769,7 +761,6 @@ export function AdminLiveChatAdapter({
       secretKey,
       runtimeEmbedOrigin,
       chatVisitorId,
-      platformVisitorId,
       authToken,
       previewOverrides,
       visitorMultiChatEnabled,

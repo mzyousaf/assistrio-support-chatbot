@@ -7,11 +7,6 @@ import { EmbedSessionService } from '../bots/embed-session.service';
 import { validateRuntimeBotAccess } from '../bots/runtime-bot-access.util';
 import { toRuntimeCredentialErrorCode } from '../bots/runtime-error-codes.util';
 import {
-  checkEmbedDomainGate,
-  parseAllowedDomainRulesFromStoredArray,
-  resolveRuntimeEmbedOriginFromHeaders,
-} from '../bots/embed-domain.util';
-import {
   consumeEmbedRuntimeRateLimitToken,
   EMBED_RUNTIME_RATE_LIMIT_KEY_PREFIX,
   EMBED_RUNTIME_RATE_LIMIT_WINDOW_MS,
@@ -19,20 +14,14 @@ import {
 } from '../bots/embed-runtime-rate-limit.util';
 import { throwEmbedRuntimeIpRateLimited } from '../rate-limit/rate-limit-http-exception.util';
 import { normalizeVisitorMultiChatMax } from '../bots/visitor-multi-chat.util';
+import { resolveEmbedChatVisitorIdFromBody } from '../bots/widget-embed-identity.util';
 import {
-  assertPlatformVisitorWebsiteMatchesBotAllowlist,
-  platformVisitorEmbedCanBypassAllowedDomainsGate,
-} from '../bots/platform-visitor-website-allowlist.util';
-import { trialRuntimePlatformVisitorMatchesOwner } from '../bots/trial-runtime-embed.util';
-import {
-  getEmbedRuntimePlatformIdentityViolation,
-  PLATFORM_VISITOR_EMBED_ANONYMOUS_SENTINEL,
-  resolveEmbedChatVisitorIdFromBody,
-  resolveRuntimeEmbedPlatformVisitorIdForChat,
-} from '../bots/widget-embed-identity.util';
+  coerceAllowedOriginsFromBotDoc,
+  isRuntimeOriginAllowed,
+  resolveRuntimeEmbedOriginFromHeaders,
+} from '../bots/origin-validation.util';
 import { resolveWidgetEmbedRateLimitPerMinute } from '../models/bot.schema';
 import { getRequestId } from '../lib/request-id.helper';
-import { VisitorsService } from '../visitors/visitors.service';
 import { ChatEngineService } from './chat-engine.service';
 import type { BotLike } from './chat-engine.types';
 
@@ -41,10 +30,19 @@ export class ChatController {
   constructor(
     private readonly configService: ConfigService,
     private readonly botsService: BotsService,
-    private readonly visitorsService: VisitorsService,
     private readonly chatEngineService: ChatEngineService,
     private readonly embedSessionService: EmbedSessionService,
-  ) { }
+  ) {}
+
+  private assertBotOwnerPresent(bot: Record<string, unknown>): void {
+    const ownerId = bot.ownerId;
+    if (ownerId == null || String(ownerId).trim() === '') {
+      throw new HttpException(
+        { error: 'Bot is missing workspace ownership', errorCode: 'BOT_OWNER_REQUIRED' },
+        HttpStatus.FORBIDDEN,
+      );
+    }
+  }
 
   /**
    * Published bot + either valid HttpOnly embed session cookie (from `/api/widget/init`, bound to `chatVisitorId`) or access/secret keys.
@@ -91,25 +89,10 @@ export class ChatController {
     }
   }
 
-  /**
-   * **Domain / origin authorization** — whether this embed origin may load the widget (allowedDomains,
-   * optional per-visitor website allowlist bypass). Independent of quota identity; see
-   * {@link getEmbedRuntimePlatformIdentityViolation} for platformVisitorId rules.
-   */
-  private assertEmbedDomainGateForBot(
-    bot: {
-      allowedDomains?: unknown;
-      widgetEmbedRateLimitPerMinute?: unknown;
-      platformVisitorWebsiteAllowlist?: unknown;
-    },
-    req: FastifyRequest,
-    embedContext: { creatorType: 'visitor' | 'user'; platformVisitorId: string },
-  ): void {
+  private assertRuntimeEmbedOriginOrThrow(bot: Record<string, unknown>, req: FastifyRequest): void {
     const limit = resolveWidgetEmbedRateLimitPerMinute(bot);
     const ip = getClientIpForRateLimit(req);
-    if (
-      !consumeEmbedRuntimeRateLimitToken(`${EMBED_RUNTIME_RATE_LIMIT_KEY_PREFIX}:${ip}`, limit)
-    ) {
+    if (!consumeEmbedRuntimeRateLimitToken(`${EMBED_RUNTIME_RATE_LIMIT_KEY_PREFIX}:${ip}`, limit)) {
       throwEmbedRuntimeIpRateLimited(EMBED_RUNTIME_RATE_LIMIT_WINDOW_MS);
     }
 
@@ -124,39 +107,13 @@ export class ChatController {
       );
     }
 
-    const bypassAllowedDomains =
-      embedContext.creatorType !== 'visitor' &&
-      platformVisitorEmbedCanBypassAllowedDomainsGate({
-        bot,
-        platformVisitorId: embedContext.platformVisitorId,
-      });
-
-    if (!bypassAllowedDomains) {
-      const rules = parseAllowedDomainRulesFromStoredArray(bot.allowedDomains);
-      const allowLoopback =
-        this.configService.get<boolean>('allowLoopbackEmbedOrigin') === true;
-      const domainGate = checkEmbedDomainGate(rules, embedOriginResolved, {
-        allowLoopbackOriginWhenLocalDev: allowLoopback,
-      });
-      if (!domainGate.ok) {
-        const errorCode =
-          domainGate.reason === 'no_allowlist'
-            ? 'EMBED_NO_ALLOWLIST'
-            : domainGate.reason === 'missing_origin'
-              ? 'EMBED_ORIGIN_REQUIRED'
-              : domainGate.reason === 'bad_origin'
-                ? 'EMBED_ORIGIN_INVALID'
-                : 'EMBED_DOMAIN_NOT_ALLOWED';
-        const error =
-          domainGate.reason === 'no_allowlist'
-            ? 'This bot has no valid allowed embed rules configured'
-            : domainGate.reason === 'missing_origin'
-              ? 'Origin header is required for embed requests'
-              : domainGate.reason === 'bad_origin'
-                ? 'Origin could not be parsed'
-                : 'This chat widget is not allowed on this site';
-        throw new HttpException({ error, errorCode }, HttpStatus.FORBIDDEN);
-      }
+    const nodeEnv = this.configService.get<string>('nodeEnv') ?? 'development';
+    const allowedOrigins = coerceAllowedOriginsFromBotDoc(bot.allowedOrigins);
+    if (!isRuntimeOriginAllowed(embedOriginResolved, allowedOrigins, nodeEnv)) {
+      throw new HttpException(
+        { error: 'This chat widget is not allowed on this site', errorCode: 'EMBED_ORIGIN_NOT_ALLOWED' },
+        HttpStatus.FORBIDDEN,
+      );
     }
   }
 
@@ -165,15 +122,10 @@ export class ChatController {
     message: string;
     accessKey?: string;
     secretKey?: string;
-    embedOrigin?: string;
     chatVisitorId?: string;
-    platformVisitorId?: string;
     conversationId?: string;
     startNewConversation?: boolean;
-    /**
-     * @deprecated Legacy payload field — **chat/session identity only** on this route.
-     * Never mixed into `platformVisitorId` resolution here (see {@link resolveRuntimeEmbedPlatformVisitorIdForChat}).
-     */
+    /** @deprecated Chat/session identity alias only. */
     visitorId?: string;
   } | null {
     if (body == null || typeof body !== 'object') return null;
@@ -183,9 +135,7 @@ export class ChatController {
     if (!botId || !message) return null;
     const accessKey = typeof o.accessKey === 'string' ? o.accessKey.trim() : '';
     const secretKey = typeof o.secretKey === 'string' ? o.secretKey.trim() : '';
-    const embedOrigin = typeof o.embedOrigin === 'string' ? o.embedOrigin.trim() : '';
     const chatVisitorId = typeof o.chatVisitorId === 'string' ? o.chatVisitorId.trim() : '';
-    const platformVisitorId = typeof o.platformVisitorId === 'string' ? o.platformVisitorId.trim() : '';
     const visitorId = typeof o.visitorId === 'string' ? o.visitorId.trim() : '';
     const conversationId = typeof o.conversationId === 'string' ? o.conversationId.trim() : '';
     const startNewConversation = o.startNewConversation === true;
@@ -194,9 +144,7 @@ export class ChatController {
       message,
       ...(accessKey ? { accessKey } : {}),
       ...(secretKey ? { secretKey } : {}),
-      ...(embedOrigin ? { embedOrigin } : {}),
       ...(chatVisitorId ? { chatVisitorId } : {}),
-      ...(platformVisitorId ? { platformVisitorId } : {}),
       ...(visitorId ? { visitorId } : {}),
       ...(conversationId ? { conversationId } : {}),
       ...(startNewConversation ? { startNewConversation: true } : {}),
@@ -207,10 +155,7 @@ export class ChatController {
     botId: string;
     accessKey?: string;
     secretKey?: string;
-    embedOrigin?: string;
     chatVisitorId?: string;
-    platformVisitorId?: string;
-    /** @deprecated Chat identity alias only — see {@link resolveEmbedChatVisitorIdFromBody}. */
     visitorId?: string;
   } | null {
     if (body == null || typeof body !== 'object') return null;
@@ -221,16 +166,12 @@ export class ChatController {
     if (!botId || (!chatVisitorId && !visitorId)) return null;
     const accessKey = typeof o.accessKey === 'string' ? o.accessKey.trim() : '';
     const secretKey = typeof o.secretKey === 'string' ? o.secretKey.trim() : '';
-    const embedOrigin = typeof o.embedOrigin === 'string' ? o.embedOrigin.trim() : '';
-    const platformVisitorId = typeof o.platformVisitorId === 'string' ? o.platformVisitorId.trim() : '';
     return {
       botId,
       ...(chatVisitorId ? { chatVisitorId } : {}),
       ...(visitorId ? { visitorId } : {}),
       ...(accessKey ? { accessKey } : {}),
       ...(secretKey ? { secretKey } : {}),
-      ...(embedOrigin ? { embedOrigin } : {}),
-      ...(platformVisitorId ? { platformVisitorId } : {}),
     };
   }
 
@@ -269,61 +210,8 @@ export class ChatController {
       secretKey: parsed.secretKey,
     }, resolvedChatVisitorId);
 
-    const creatorType = bot.creatorType === 'visitor' ? 'visitor' : 'user';
-    const botType = String((bot as { type?: string }).type ?? '');
-    const resolvedPlatformVisitorId = resolveRuntimeEmbedPlatformVisitorIdForChat({
-      creatorType,
-      platformVisitorId: parsed.platformVisitorId,
-    });
-
-    if (creatorType === 'visitor' && !resolvedPlatformVisitorId) {
-      throw new HttpException(
-        { error: 'platformVisitorId is required for trial bots', errorCode: 'VISITOR_ID_REQUIRED' },
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-
-    const embedIdentityErr = getEmbedRuntimePlatformIdentityViolation({
-      botType,
-      creatorType,
-      resolvedPlatformVisitorId,
-    });
-    if (!embedIdentityErr.ok) {
-      throw new HttpException(
-        { error: embedIdentityErr.message, errorCode: embedIdentityErr.errorCode },
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-
-    if (
-      creatorType === 'visitor' &&
-      !trialRuntimePlatformVisitorMatchesOwner({
-        ownerVisitorId: (bot as { ownerVisitorId?: unknown }).ownerVisitorId,
-        resolvedPlatformVisitorId,
-      })
-    ) {
-      throw new HttpException(
-        {
-          error: 'platformVisitorId does not match this trial bot owner.',
-          errorCode: 'TRIAL_PLATFORM_VISITOR_OWNER_MISMATCH',
-        },
-        HttpStatus.FORBIDDEN,
-      );
-    }
-
-    this.assertEmbedDomainGateForBot(
-      bot as {
-        allowedDomains?: unknown;
-        widgetEmbedRateLimitPerMinute?: unknown;
-        platformVisitorWebsiteAllowlist?: unknown;
-      },
-      req,
-      { creatorType, platformVisitorId: resolvedPlatformVisitorId },
-    );
-
-    if (creatorType === 'visitor' && resolvedPlatformVisitorId) {
-      await this.visitorsService.getOrCreateVisitor(resolvedPlatformVisitorId);
-    }
+    this.assertBotOwnerPresent(bot as Record<string, unknown>);
+    this.assertRuntimeEmbedOriginOrThrow(bot as Record<string, unknown>, req);
 
     const botOid = new Types.ObjectId(String((bot as { _id: unknown })._id));
     const conversations = await this.chatEngineService.listVisitorConversations({
@@ -345,10 +233,7 @@ export class ChatController {
     conversationId: string;
     accessKey?: string;
     secretKey?: string;
-    embedOrigin?: string;
     chatVisitorId?: string;
-    platformVisitorId?: string;
-    /** @deprecated Chat identity alias only — see {@link resolveEmbedChatVisitorIdFromBody}. */
     visitorId?: string;
   } | null {
     if (body == null || typeof body !== 'object') return null;
@@ -360,16 +245,12 @@ export class ChatController {
     if (!botId || !conversationId || (!chatVisitorId && !visitorId)) return null;
     const accessKey = typeof o.accessKey === 'string' ? o.accessKey.trim() : '';
     const secretKey = typeof o.secretKey === 'string' ? o.secretKey.trim() : '';
-    const embedOrigin = typeof o.embedOrigin === 'string' ? o.embedOrigin.trim() : '';
-    const platformVisitorId = typeof o.platformVisitorId === 'string' ? o.platformVisitorId.trim() : '';
     return {
       botId,
       conversationId,
       ...(chatVisitorId ? { chatVisitorId } : {}),
       ...(accessKey ? { accessKey } : {}),
       ...(secretKey ? { secretKey } : {}),
-      ...(embedOrigin ? { embedOrigin } : {}),
-      ...(platformVisitorId ? { platformVisitorId } : {}),
       ...(visitorId ? { visitorId } : {}),
     };
   }
@@ -409,61 +290,8 @@ export class ChatController {
       secretKey: parsed.secretKey,
     }, resolvedChatVisitorId);
 
-    const creatorType = bot.creatorType === 'visitor' ? 'visitor' : 'user';
-    const botType = String((bot as { type?: string }).type ?? '');
-    const resolvedPlatformVisitorId = resolveRuntimeEmbedPlatformVisitorIdForChat({
-      creatorType,
-      platformVisitorId: parsed.platformVisitorId,
-    });
-
-    if (creatorType === 'visitor' && !resolvedPlatformVisitorId) {
-      throw new HttpException(
-        { error: 'platformVisitorId is required for trial bots', errorCode: 'VISITOR_ID_REQUIRED' },
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-
-    const embedIdentityErr = getEmbedRuntimePlatformIdentityViolation({
-      botType,
-      creatorType,
-      resolvedPlatformVisitorId,
-    });
-    if (!embedIdentityErr.ok) {
-      throw new HttpException(
-        { error: embedIdentityErr.message, errorCode: embedIdentityErr.errorCode },
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-
-    if (
-      creatorType === 'visitor' &&
-      !trialRuntimePlatformVisitorMatchesOwner({
-        ownerVisitorId: (bot as { ownerVisitorId?: unknown }).ownerVisitorId,
-        resolvedPlatformVisitorId,
-      })
-    ) {
-      throw new HttpException(
-        {
-          error: 'platformVisitorId does not match this trial bot owner.',
-          errorCode: 'TRIAL_PLATFORM_VISITOR_OWNER_MISMATCH',
-        },
-        HttpStatus.FORBIDDEN,
-      );
-    }
-
-    this.assertEmbedDomainGateForBot(
-      bot as {
-        allowedDomains?: unknown;
-        widgetEmbedRateLimitPerMinute?: unknown;
-        platformVisitorWebsiteAllowlist?: unknown;
-      },
-      req,
-      { creatorType, platformVisitorId: resolvedPlatformVisitorId },
-    );
-
-    if (creatorType === 'visitor' && resolvedPlatformVisitorId) {
-      await this.visitorsService.getOrCreateVisitor(resolvedPlatformVisitorId);
-    }
+    this.assertBotOwnerPresent(bot as Record<string, unknown>);
+    this.assertRuntimeEmbedOriginOrThrow(bot as Record<string, unknown>, req);
 
     const botOid = new Types.ObjectId(String((bot as { _id: unknown })._id));
     const messages = await this.chatEngineService.getConversationMessagesForEmbed({
@@ -508,8 +336,6 @@ export class ChatController {
       );
     }
 
-    // Resolve chat visitor id (chat history + conversation/message association).
-    // Critical boundary: chatVisitorId must NEVER be derived from platformVisitorId.
     const resolvedChatVisitorId = resolveEmbedChatVisitorIdFromBody(parsed.chatVisitorId, parsed.visitorId);
     if (!resolvedChatVisitorId) {
       throw new HttpException(
@@ -523,136 +349,8 @@ export class ChatController {
       secretKey: parsed.secretKey,
     }, resolvedChatVisitorId);
 
-    const creatorType = bot.creatorType === 'visitor' ? 'visitor' : 'user';
-    const botType = String((bot as { type?: string }).type ?? '');
-
-    /** Platform identity: explicit `platformVisitorId` only (legacy `visitorId` is chat-only on this route). */
-    const resolvedPlatformVisitorId = resolveRuntimeEmbedPlatformVisitorIdForChat({
-      creatorType,
-      platformVisitorId: parsed.platformVisitorId,
-    });
-
-    if (creatorType === 'visitor' && !resolvedPlatformVisitorId) {
-      throw new HttpException(
-        { error: 'platformVisitorId is required for trial bots', errorCode: 'VISITOR_ID_REQUIRED' },
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-
-    const embedIdentityErr = getEmbedRuntimePlatformIdentityViolation({
-      botType,
-      creatorType,
-      resolvedPlatformVisitorId,
-    });
-    if (!embedIdentityErr.ok) {
-      throw new HttpException(
-        { error: embedIdentityErr.message, errorCode: embedIdentityErr.errorCode },
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-
-    if (
-      creatorType === 'visitor' &&
-      !trialRuntimePlatformVisitorMatchesOwner({
-        ownerVisitorId: (bot as { ownerVisitorId?: unknown }).ownerVisitorId,
-        resolvedPlatformVisitorId,
-      })
-    ) {
-      throw new HttpException(
-        {
-          error: 'platformVisitorId does not match this trial bot owner.',
-          errorCode: 'TRIAL_PLATFORM_VISITOR_OWNER_MISMATCH',
-        },
-        HttpStatus.FORBIDDEN,
-      );
-    }
-
-    this.assertEmbedDomainGateForBot(
-      bot as {
-        allowedDomains?: unknown;
-        widgetEmbedRateLimitPerMinute?: unknown;
-        platformVisitorWebsiteAllowlist?: unknown;
-      },
-      req,
-      { creatorType, platformVisitorId: resolvedPlatformVisitorId },
-    );
-
-    if (creatorType === 'visitor' && resolvedPlatformVisitorId) {
-      await this.visitorsService.getOrCreateVisitor(resolvedPlatformVisitorId);
-    }
-
-    const pvPolicy = String(resolvedPlatformVisitorId ?? '').trim();
-    if (pvPolicy && pvPolicy !== PLATFORM_VISITOR_EMBED_ANONYMOUS_SENTINEL) {
-      await this.visitorsService.getOrCreateVisitor(pvPolicy);
-      const originHeader = resolveRuntimeEmbedOriginFromHeaders(req.headers);
-      /** Per-visitor website URL allowlist applies to authenticated users' bots only, not trial bots. */
-      if (creatorType !== 'visitor') {
-        try {
-          assertPlatformVisitorWebsiteMatchesBotAllowlist({
-            bot: bot as { platformVisitorWebsiteAllowlist?: unknown },
-            platformVisitorId: pvPolicy,
-            requestOrigin: originHeader ?? undefined,
-          });
-        } catch (err) {
-          const code = err instanceof Error ? err.message : '';
-          if (code === 'PLATFORM_EMBED_ORIGIN_REQUIRED') {
-            throw new HttpException(
-              { error: 'Origin header is required when using platformVisitorId', errorCode: 'PLATFORM_EMBED_ORIGIN_REQUIRED' },
-              HttpStatus.FORBIDDEN,
-            );
-          }
-          if (code === 'PLATFORM_VISITOR_NOT_IN_BOT_ALLOWLIST') {
-            throw new HttpException(
-              {
-                error:
-                  'This platform visitor id is not listed in this bot website allowlist (superadmin must add it with the correct website URL).',
-                errorCode: 'PLATFORM_VISITOR_NOT_IN_BOT_ALLOWLIST',
-              },
-              HttpStatus.FORBIDDEN,
-            );
-          }
-          if (code === 'PLATFORM_VISITOR_WEBSITE_ORIGIN_MISMATCH') {
-            throw new HttpException(
-              {
-                error: 'This site does not match the website URL configured for this platform visitor on this bot.',
-                errorCode: 'PLATFORM_VISITOR_WEBSITE_ORIGIN_MISMATCH',
-              },
-              HttpStatus.FORBIDDEN,
-            );
-          }
-          throw err;
-        }
-      }
-      /** Trial bots: 30 user messages at runtime (embed) across all trial bots for this platform visitor. */
-      if (creatorType === 'visitor') {
-        const quota = await this.visitorsService.checkTrialVisitorRuntimeMessageQuota(pvPolicy);
-        if (!quota.allowed) {
-          throw new HttpException(
-            {
-              error: 'Trial message limit reached for this visitor (runtime embed).',
-              errorCode: 'PLATFORM_VISITOR_MESSAGE_QUOTA_EXCEEDED',
-              current: quota.current,
-              limit: quota.limit,
-            },
-            HttpStatus.TOO_MANY_REQUESTS,
-          );
-        }
-      } else if (botType === 'showcase' && creatorType === 'user') {
-        /** Showcase bots: 30 user messages at runtime (embed) for this platform visitor. */
-        const quota = await this.visitorsService.checkShowcaseRuntimeMessageQuota(pvPolicy);
-        if (!quota.allowed) {
-          throw new HttpException(
-            {
-              error: 'Showcase message limit reached for this visitor (runtime embed).',
-              errorCode: 'SHOWCASE_RUNTIME_MESSAGE_QUOTA_EXCEEDED',
-              current: quota.current,
-              limit: quota.limit,
-            },
-            HttpStatus.TOO_MANY_REQUESTS,
-          );
-        }
-      }
-    }
+    this.assertBotOwnerPresent(bot as Record<string, unknown>);
+    this.assertRuntimeEmbedOriginOrThrow(bot as Record<string, unknown>, req);
 
     const b = bot as Record<string, unknown>;
     const botLike: BotLike = {
@@ -673,20 +371,9 @@ export class ChatController {
       visitorMultiChatMax: normalizeVisitorMultiChatMax(b.visitorMultiChatMax),
     };
 
-    const pvForEmbed =
-      String(resolvedPlatformVisitorId ?? '').trim() &&
-      String(resolvedPlatformVisitorId ?? '').trim() !== PLATFORM_VISITOR_EMBED_ANONYMOUS_SENTINEL
-        ? String(resolvedPlatformVisitorId ?? '').trim()
-        : undefined;
-
     const chatResult = await this.chatEngineService.runChat({
       bot: botLike,
       chatVisitorId: resolvedChatVisitorId,
-      platformVisitorId:
-        creatorType === 'visitor' ? resolvedPlatformVisitorId : pvForEmbed,
-      countTowardTrialRuntimeQuota: creatorType === 'visitor',
-      countTowardShowcaseRuntimeQuota:
-        botType === 'showcase' && creatorType === 'user' && !!pvForEmbed,
       message: parsed.message,
       mode: 'user',
       requestId: getRequestId(req),

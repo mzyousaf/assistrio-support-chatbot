@@ -41,7 +41,6 @@ export class BotLeadCaptureV2 {
 export type ChatBackgroundStyle = 'auto' | 'light' | 'dark';
 export type ChatLauncherPosition = 'bottom-right' | 'bottom-left';
 export type BotVisibility = 'public' | 'private';
-export type BotCreatorType = 'user' | 'visitor';
 export type BotMessageLimitMode = 'none' | 'fixed_total';
 
 /** Default max embed API requests per minute per IP when not set on the bot document. */
@@ -54,6 +53,17 @@ export function resolveWidgetEmbedRateLimitPerMinute(
   if (typeof v === 'number' && Number.isFinite(v) && v >= 0) return Math.floor(v);
   return DEFAULT_WIDGET_EMBED_RATE_LIMIT_PER_MINUTE;
 }
+
+@Schema({ _id: false })
+export class BotAllowedOrigin {
+  @Prop({ required: true })
+  origin: string;
+  @Prop()
+  label?: string;
+  @Prop({ default: true })
+  isActive?: boolean;
+}
+
 /** Message bubble border radius in pixels (0–32). Affects message bubbles and suggested chips. */
 export const BUBBLE_RADIUS_MIN = 0;
 export const BUBBLE_RADIUS_MAX = 32;
@@ -232,8 +242,11 @@ export class Bot {
   name: string;
   @Prop({ required: true, unique: true, lowercase: true })
   slug: string;
-  @Prop({ required: true, enum: ['showcase', 'visitor-own'] })
-  type: string;
+  /**
+   * True when created via the superadmin “agents pack” generator (caps and bulk delete UX).
+   */
+  @Prop({ default: false })
+  agentsPackAgent?: boolean;
   /**
    * External access visibility gate.
    * Default is "public" to preserve current behavior for existing creation flows.
@@ -246,14 +259,9 @@ export class Bot {
   /** Private credential for secure/private access modes (never expose via public APIs). */
   @Prop({ required: true, default: generateBotSecretKey })
   secretKey: string;
-  /** Distinguishes authenticated-user-created bots from visitor-created bots. */
-  @Prop({ enum: ['user', 'visitor'], default: 'user', index: true })
-  creatorType?: BotCreatorType;
-  /** Owner platform user (separate from createdByUserId for access ownership semantics). */
+  /** Owner workspace user — sole ownership source for preview and admin access checks. */
   @Prop({ type: Types.ObjectId, ref: 'User', index: true })
-  ownerUserId?: Types.ObjectId;
-  @Prop()
-  ownerVisitorId?: string;
+  ownerId?: Types.ObjectId;
   /** Platform user who created this bot (showcase flows from the admin app). */
   @Prop({ type: Types.ObjectId, ref: 'User', index: true })
   createdByUserId?: Types.ObjectId;
@@ -328,25 +336,10 @@ export class Bot {
   @Prop({ type: Types.ObjectId, ref: 'Workspace', index: true })
   workspaceId?: Types.ObjectId;
   /**
-   * Runtime embed allowlist. Each entry is either a hostname (domain mode: includes subdomains)
-   * or `exact:<canonicalOrigin>` for a single origin (scheme + host + port).
+   * Runtime embed allowlist: exact origins only (`https://host[:port]`). Inactive rows are ignored.
    */
-  @Prop({ type: [String], default: [] })
-  allowedDomains?: string[];
-  /**
-   * Optional per-bot mapping: platform visitor id → one allowed website URL (stored as canonical origin).
-   * When non-empty, widget/chat with that `platformVisitorId` must use the same browser `Origin`.
-   */
-  @Prop({
-    type: [
-      {
-        platformVisitorId: { type: String, required: true },
-        websiteUrl: { type: String, required: true },
-      },
-    ],
-    default: [],
-  })
-  platformVisitorWebsiteAllowlist?: Array<{ platformVisitorId: string; websiteUrl: string }>;
+  @Prop({ type: [BotAllowedOrigin], default: [] })
+  allowedOrigins?: BotAllowedOrigin[];
   /**
    * Max combined embed requests per minute per IP for this bot (widget init + gated chat).
    * `0` = disabled. Not exposed in the admin UI yet; set on the document (e.g. DB) when needed.
@@ -364,7 +357,6 @@ BotSchema.index(
     unique: true,
     partialFilterExpression: {
       status: 'draft',
-      type: 'showcase',
       clientDraftId: { $type: 'string' },
     },
   },

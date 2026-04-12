@@ -11,7 +11,7 @@ const readiness = [
   },
   {
     title: "Authorization in the API",
-    body: "Allowed websites, keys, and visitor identity are enforced server-side. CORS lets browsers read responses; it is not the ownership gate.",
+    body: "Allowed origins, keys, and workspace ownership are enforced server-side. CORS lets browsers read responses; it is not the embed gate.",
   },
   {
     title: "Operable in production",

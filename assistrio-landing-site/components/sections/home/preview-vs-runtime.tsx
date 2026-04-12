@@ -22,7 +22,7 @@ export function PreviewVsRuntime() {
               </h3>
               <p className="mt-3 text-sm leading-relaxed text-[var(--foreground-muted)]">
                 Owners test drafts and configuration inside Assistrio-hosted preview. This path is not a substitute for
-                your production embed and does not replace your allowed website for customer traffic.
+                your production embed and does not replace your allowed origins for customer traffic.
               </p>
             </Card>
             <Card className="border-[var(--border-teal-soft)] bg-white/95 shadow-[var(--shadow-xs)] ring-1 ring-[var(--brand-teal)]/10">
@@ -31,10 +31,9 @@ export function PreviewVsRuntime() {
                 Runtime
               </h3>
               <p className="mt-3 text-sm leading-relaxed text-[var(--foreground-muted)]">
-                The widget on your site uses the allowed websites you declare. Explore evaluation AI Agents and showcase embeds enforce
-                origin rules on the server. Your stable{" "}
-                <code className="rounded bg-slate-100 px-1 text-xs">platformVisitorId</code> selects whose quota bucket
-                applies — not the hostname alone.
+                The widget sends your page&apos;s <code className="rounded bg-slate-100 px-1 text-xs">Origin</code> to
+                the API; the server allows runtime only when that string exactly matches an{" "}
+                <strong className="font-medium text-slate-800">active</strong> allowed origin on the agent.
               </p>
             </Card>
           </div>

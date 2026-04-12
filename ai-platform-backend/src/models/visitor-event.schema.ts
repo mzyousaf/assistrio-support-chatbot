@@ -4,13 +4,9 @@ import { Types } from 'mongoose';
 export type VisitorEventType =
   | 'page_view'
   | 'demo_chat_started'
-  | 'trial_bot_created'
-  | 'trial_chat_started'
   /** Landing / marketing (assistrio-landing-site) — details in `metadata` */
   | 'cta_clicked'
   | 'demo_opened'
-  | 'trial_create_started'
-  | 'trial_create_succeeded'
   | 'snippet_copied'
   | 'stable_id_copied'
   | 'reconnect_submitted'
@@ -23,12 +19,8 @@ export type VisitorEventType =
 const VISITOR_EVENT_ENUM: VisitorEventType[] = [
   'page_view',
   'demo_chat_started',
-  'trial_bot_created',
-  'trial_chat_started',
   'cta_clicked',
   'demo_opened',
-  'trial_create_started',
-  'trial_create_succeeded',
   'snippet_copied',
   'stable_id_copied',
   'reconnect_submitted',

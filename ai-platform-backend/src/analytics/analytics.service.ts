@@ -38,7 +38,7 @@ export class AnalyticsService {
   ) {}
 
   async logVisitorEvent(params: {
-    platformVisitorId: string;
+    visitorId: string;
     type: VisitorEventType;
     path?: string;
     botSlug?: string;
@@ -46,7 +46,7 @@ export class AnalyticsService {
     metadata?: Record<string, unknown>;
   }): Promise<void> {
     try {
-      if (!params.platformVisitorId) {
+      if (!params.visitorId) {
         return;
       }
 
@@ -59,7 +59,7 @@ export class AnalyticsService {
         metadata?: Record<string, unknown>;
         createdAt: Date;
       } = {
-        visitorId: params.platformVisitorId,
+        visitorId: params.visitorId,
         type: params.type,
         path: params.path,
         botSlug: params.botSlug,
@@ -78,28 +78,22 @@ export class AnalyticsService {
   }
 
   async getSummary() {
-    const platformVisitorFilter: Record<string, unknown> = {
-      $or: [{ visitorType: 'platform' }, { visitorType: { $exists: false } }],
+    const marketingVisitorFilter: Record<string, unknown> = {
+      $or: [{ visitorType: 'marketing' }, { visitorType: 'platform' }, { visitorType: { $exists: false } }],
     };
 
     const [
-      totalVisitors,
+      marketingVisitorRows,
       totalChatVisitors,
       totalPageViews,
-      trialBotsCreated,
       demoChatsStarted,
-      trialChatsStarted,
-      showcaseBots,
-      visitorOwnedBots,
+      totalBots,
     ] = await Promise.all([
-      this.visitorModel.countDocuments(platformVisitorFilter),
+      this.visitorModel.countDocuments(marketingVisitorFilter),
       this.visitorModel.countDocuments({ visitorType: 'chat' }),
       this.visitorEventModel.countDocuments({ type: 'page_view' }),
-      this.visitorEventModel.countDocuments({ type: 'trial_bot_created' }),
       this.visitorEventModel.countDocuments({ type: 'demo_chat_started' }),
-      this.visitorEventModel.countDocuments({ type: 'trial_chat_started' }),
-      this.botModel.countDocuments({ type: 'showcase' }),
-      this.botModel.countDocuments({ type: 'visitor-own' }),
+      this.botModel.countDocuments({}),
     ]);
     const recentEvents = await this.visitorEventModel
       .find({})
@@ -108,21 +102,16 @@ export class AnalyticsService {
       .select('visitorId type path botSlug createdAt')
       .lean();
     const metrics = [
-      { label: 'Total Visitors', value: totalVisitors },
+      { label: 'Marketing visitor rows', value: marketingVisitorRows },
       { label: 'Chat widget identities', value: totalChatVisitors },
       { label: 'Total Page Views', value: totalPageViews },
-      { label: 'Trial Bots Created', value: trialBotsCreated },
       { label: 'Demo Chats Started', value: demoChatsStarted },
-      { label: 'Trial Chats Started', value: trialChatsStarted },
-      { label: 'Showcase Bots', value: showcaseBots },
-      { label: 'Visitor-Owned Bots', value: visitorOwnedBots },
+      { label: 'Total bots', value: totalBots },
     ];
     return {
       metrics,
       recentEvents: (recentEvents as Record<string, unknown>[]).map((e) => ({
         _id: String(e._id),
-        platformVisitorId: e.visitorId ?? null,
-        /** @deprecated legacy alias */
         visitorId: e.visitorId ?? null,
         type: e.type,
         path: e.path,
@@ -134,7 +123,7 @@ export class AnalyticsService {
 
   /** Create visitor event for /api/analytics/track (throws on error). */
   async trackEvent(params: {
-    platformVisitorId: string;
+    visitorId: string;
     type: VisitorEventType;
     path?: string;
     botSlug?: string;
@@ -150,7 +139,7 @@ export class AnalyticsService {
       metadata?: Record<string, unknown>;
       createdAt: Date;
     } = {
-      visitorId: params.platformVisitorId,
+      visitorId: params.visitorId,
       type: params.type,
       path: params.path,
       botSlug: params.botSlug,
@@ -173,18 +162,18 @@ export class AnalyticsService {
 
     const [
       totalVisitorEvents,
-      trialBotsCreated,
+      legacyTrialBotEvents,
       pageViews,
       ctaClicks,
       demoOpened,
       trialCreateStarted,
       trialCreateSucceeded,
-      showcaseRuntimeUserMessages,
-      trialRuntimeUserMessages,
+      taggedShowcaseRuntimeUserMessages,
+      taggedTrialRuntimeUserMessages,
       totalMessages,
       totalConversations,
-      visitorOwnedBotsCreated,
-      showcaseBotsActive,
+      botsCreatedInRange,
+      publishedBotsActive,
       conversationsWithCapturedLeads,
     ] = await Promise.all([
       this.visitorEventModel.countDocuments(evRange),
@@ -207,18 +196,17 @@ export class AnalyticsService {
       this.messageModel.countDocuments(evRange),
       this.conversationModel.countDocuments(evRange),
       this.botModel.countDocuments({
-        type: 'visitor-own',
         createdAt: { $gte: from, $lte: to },
       }),
-      this.botModel.countDocuments({ type: 'showcase', status: 'published' }),
+      this.botModel.countDocuments({ status: 'published' }),
       this.countConversationsWithCapturedLeadsInRange(from, to),
     ]);
 
     const caveats: string[] = [
-      'Metrics are based on anonymous platformVisitorId / chatVisitorId data; they are not authenticated end-user counts.',
-      'Landing and marketing funnel counts (page_view, cta_clicked, demo_opened, trial_create_*, etc.) depend on clients calling POST /api/analytics/track (and server-side trial_bot_created from trial creation).',
-      'demo_chat_started and trial_chat_started event types are not emitted by this backend today; do not use them as KPIs until instrumented.',
-      'showcaseBotsActive is a point-in-time count of bots with type=showcase and status=published (not scoped to the selected date range).',
+      'Metrics are based on anonymous visitorId / chatVisitorId data; they are not authenticated end-user counts.',
+      'Landing and marketing funnel counts depend on clients calling POST /api/analytics/track.',
+      'legacyTaggedUserMessagesBucket1/2 count user messages where Message.showcaseRuntimeUserMessage / Message.trialRuntimeUserMessage is true (legacy stored fields; new traffic is not tagged).',
+      'publishedBotsCount is a point-in-time count of published bots (not scoped to the selected date range).',
       'conversationsWithCapturedLeads: conversations with lastActivityAt in range (or createdAt if lastActivityAt is missing) and at least one non-empty capturedLeadData value.',
     ];
 
@@ -231,22 +219,24 @@ export class AnalyticsService {
       },
       overview: {
         totalVisitorEvents,
-        trialBotsCreated,
         pageViews,
         ctaClicks,
         demoOpened,
-        trialCreateStarted,
-        trialCreateSucceeded,
+        legacyVisitorEventCounts: {
+          trial_bot_created: legacyTrialBotEvents,
+          trial_create_started: trialCreateStarted,
+          trial_create_succeeded: trialCreateSucceeded,
+        },
       },
       messages: {
-        showcaseRuntimeUserMessages,
-        trialRuntimeUserMessages,
+        legacyTaggedUserMessagesBucket1: taggedShowcaseRuntimeUserMessages,
+        legacyTaggedUserMessagesBucket2: taggedTrialRuntimeUserMessages,
         totalMessages,
         totalConversations,
       },
       bots: {
-        visitorOwnedBotsCreated,
-        showcaseBotsActive,
+        botsCreatedInRange,
+        publishedBotsCount: publishedBotsActive,
       },
       leads: {
         conversationsWithCapturedLeads,
@@ -333,8 +323,8 @@ export class AnalyticsService {
       const id = String(b._id);
       const m = messageMap.get(id);
       const messageCount = m?.messageCount ?? 0;
-      const showcaseRuntimeUserMessages = m?.showcaseRuntimeUserMessages ?? 0;
-      const trialRuntimeUserMessages = m?.trialRuntimeUserMessages ?? 0;
+      const legacyTaggedUserMessagesBucket1 = m?.showcaseRuntimeUserMessages ?? 0;
+      const legacyTaggedUserMessagesBucket2 = m?.trialRuntimeUserMessages ?? 0;
       const conversationCount = conversationMap.get(id) ?? 0;
       const conversationsWithCapturedLeads = leadMap.get(id)?.conversationsWithCapturedLeads ?? 0;
       const createdAt =
@@ -343,7 +333,7 @@ export class AnalyticsService {
         botId: id,
         name: b.name,
         slug: b.slug,
-        type: b.type,
+        agentsPackAgent: Boolean((b as { agentsPackAgent?: boolean }).agentsPackAgent),
         status: b.status ?? 'draft',
         visibility: (b.visibility ?? 'public') as string,
         isPublic: Boolean(b.isPublic),
@@ -353,8 +343,8 @@ export class AnalyticsService {
         createdAt,
         messageCount,
         conversationCount,
-        showcaseRuntimeUserMessages,
-        trialRuntimeUserMessages,
+        legacyTaggedUserMessagesBucket1,
+        legacyTaggedUserMessagesBucket2,
         conversationsWithCapturedLeads,
       };
     });
@@ -513,7 +503,7 @@ export class AnalyticsService {
         botId: String(botDoc._id),
         name: botDoc.name,
         slug: botDoc.slug,
-        type: botDoc.type,
+        agentsPackAgent: Boolean((botDoc as { agentsPackAgent?: boolean }).agentsPackAgent),
         status: botDoc.status ?? 'draft',
         visibility: botDoc.visibility ?? 'public',
         isPublic: Boolean(botDoc.isPublic),
@@ -521,13 +511,13 @@ export class AnalyticsService {
         category: botDoc.category ?? null,
         leadCaptureEnabled: botDoc.leadCapture?.enabled === true,
         createdAt,
-        creatorType: botDoc.creatorType ?? null,
+        ownerId: botDoc.ownerId != null ? String(botDoc.ownerId) : null,
       },
       metrics: {
         messageCount: m0?.messageCount ?? 0,
         conversationCount: c0?.conversationCount ?? 0,
-        showcaseRuntimeUserMessages: m0?.showcaseRuntimeUserMessages ?? 0,
-        trialRuntimeUserMessages: m0?.trialRuntimeUserMessages ?? 0,
+        legacyTaggedUserMessagesBucket1: m0?.showcaseRuntimeUserMessages ?? 0,
+        legacyTaggedUserMessagesBucket2: m0?.trialRuntimeUserMessages ?? 0,
         conversationsWithCapturedLeads: leadConversationsWithCapturedLeads,
       },
       activity: {

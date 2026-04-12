@@ -197,7 +197,6 @@ export function EmbedWidgetRoot({ rawConfig }: EmbedWidgetRootProps) {
       accessKey={config.accessKey}
       secretKey={config.secretKey}
       chatVisitorId={chatVisitorId}
-      platformVisitorId={config.platformVisitorId}
       authToken={config.authToken}
       previewOverrides={config.mode === "preview" ? config.previewOverrides : undefined}
       debug={false}

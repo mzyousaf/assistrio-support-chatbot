@@ -6,7 +6,7 @@ import { useCtaFlow } from "@/components/flows/cta-flow-context";
 import { useTrackEvent } from "@/hooks/useTrackEvent";
 
 type Props = {
-  flow: "trial" | "showcase";
+  flow: "showcase";
   /** For analytics — canonical path the CTA replaces */
   href: string;
   location: string;
@@ -34,7 +34,7 @@ export function TrackedFlowCtaButton({
   "aria-label": ariaLabel,
   "aria-describedby": ariaDescribedBy,
 }: Props) {
-  const { openTrial, openShowcase } = useCtaFlow();
+  const { openShowcase } = useCtaFlow();
   const { track } = useTrackEvent();
   return (
     <button
@@ -44,8 +44,7 @@ export function TrackedFlowCtaButton({
       aria-describedby={ariaDescribedBy}
       onClick={() => {
         track("cta_clicked", { location, label, href });
-        if (flow === "trial") openTrial();
-        else openShowcase(showcaseSlug ?? undefined);
+        if (flow === "showcase") openShowcase(showcaseSlug ?? undefined);
       }}
       className={`${buttonBaseClass} ${buttonVariantClass[variant]} ${className}`}
     >

@@ -162,11 +162,9 @@ const PRESET_MAP: Record<string, string> = {
 export type DefaultBotCreatePayload = {
   name: string;
   slug: string;
-  type: 'showcase';
   visibility: 'public' | 'private';
   accessKey: string;
   secretKey: string;
-  creatorType: 'user' | 'visitor';
   status: 'draft';
   clientDraftId: string;
   isPublic: boolean;
@@ -212,11 +210,9 @@ export function getDefaultBotCreatePayload(
   return {
     name: g.name,
     slug,
-    type: 'showcase',
     visibility: 'public',
     accessKey: generateBotAccessKey(),
     secretKey: generateBotSecretKey(),
-    creatorType: 'user',
     status: pub.status as 'draft',
     clientDraftId,
     isPublic: pub.public,

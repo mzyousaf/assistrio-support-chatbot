@@ -53,14 +53,6 @@ export interface RunChatInput {
    */
   chatVisitorId: string;
 
-  /**
-   * Optional platform visitor id for quota + platform analytics (embed runtime).
-   */
-  platformVisitorId?: string;
-  /** When true, persisted user messages count toward the trial runtime cap (30). */
-  countTowardTrialRuntimeQuota?: boolean;
-  /** When true, persisted user messages count toward the showcase runtime cap (30). */
-  countTowardShowcaseRuntimeQuota?: boolean;
   message: string;
   mode: ChatMode;
   userApiKey?: string;

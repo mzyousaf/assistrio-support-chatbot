@@ -5,10 +5,6 @@ import { BotsController } from './bots.controller';
 import { PublicBotsController } from './public-bots.controller';
 import { LandingBotsController } from './landing-bots.controller';
 import { WidgetInitController } from './widget-init.controller';
-import { TrialBotsController } from './trial-bots.controller';
-import { PublicVisitorQuotaController } from './public-visitor-quota.controller';
-import { PublicVisitorBotController } from './public-visitor-bot.controller';
-import { WidgetWebsiteRegisterController } from './widget-website-register.controller';
 import { LandingSiteApiKeyGuard } from './landing-site-api-key.guard';
 import { ChatWidgetApiKeyGuard } from './chat-widget-api-key.guard';
 import { WidgetTestingBotController } from './widget-testing-bot.controller';
@@ -36,8 +32,7 @@ import { WorkspacesModule } from '../workspaces/workspaces.module';
 import { DocumentsModule } from '../documents/documents.module';
 /**
  * Bot-related HTTP surfaces include:
- * - **Anonymous public (rate-limited):** `TrialBotsController`, `PublicVisitorQuotaController`, `PublicVisitorBotController`,
- *   `WidgetWebsiteRegisterController`, `PublicBotsController` — see `public-anonymous-rate-limit.*` (RateLimitModule is global).
+ * - **Anonymous public (rate-limited):** `PublicBotsController` — see `public-anonymous-rate-limit.*` (RateLimitModule is global).
  * - **Landing (API key + rate limit):** `LandingBotsController`.
  * - **Internal admin listing (auth):** `BotsController` (`/api/bots`) — not a public gallery; use `/api/public/bots`.
  */
@@ -62,13 +57,9 @@ import { DocumentsModule } from '../documents/documents.module';
   controllers: [
     BotsController,
     PublicBotsController,
-    PublicVisitorQuotaController,
-    PublicVisitorBotController,
     LandingBotsController,
     WidgetInitController,
-    WidgetWebsiteRegisterController,
     WidgetTestingBotController,
-    TrialBotsController,
   ],
   providers: [BotsService, LandingSiteApiKeyGuard, ChatWidgetApiKeyGuard, EmbedSessionService],
   exports: [BotsService, EmbedSessionService],

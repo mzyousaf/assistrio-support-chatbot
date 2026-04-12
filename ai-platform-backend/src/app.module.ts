@@ -11,7 +11,6 @@ import { ChatModule } from './chat/chat.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { VisitorsModule } from './visitors/visitors.module';
 import { RateLimitModule } from './rate-limit/rate-limit.module';
-import { LimitsModule } from './limits/limits.module';
 import { KnowledgeModule } from './knowledge/knowledge.module';
 import { JobsCronService } from './worker/jobs-cron.service';
 
@@ -21,7 +20,6 @@ import { JobsCronService } from './worker/jobs-cron.service';
     AppConfigModule,
     MongooseDbModule,
     RateLimitModule,
-    LimitsModule,
     KnowledgeModule,
     UserModule,
     BotsModule,

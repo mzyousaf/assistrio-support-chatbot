@@ -6,7 +6,7 @@ import { useTrackEvent } from "@/hooks/useTrackEvent";
 
 /**
  * Sends `page_view` to ingestion (`POST /api/analytics/track`) on client navigations.
- * Must stay inside {@link PlatformVisitorProvider}.
+ * Must stay inside {@link SiteAnalyticsVisitorProvider}.
  */
 export function LandingRouteTracker() {
   const pathname = usePathname();

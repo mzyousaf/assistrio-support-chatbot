@@ -1,11 +1,11 @@
 /**
  * **Public (broad cross-origin) CORS** — browser `Origin` reflected for valid HTTPS (see `isReflectablePublicEmbedOrigin`
- * in `cors-origin.util.ts`) so customer sites need not be listed in `CORS_EXTRA_ORIGINS`.
+ * in `cors-origin.util.ts`) so customer sites need not be listed in any env allowlist.
  *
- * **Strict CORS** — Assistrio hostnames + `CORS_EXTRA_ORIGINS` + dev loopback — for preview, app auth, admin, jobs, and
+ * **Strict CORS** — Assistrio hostnames + dev loopback (development only) — for preview, app auth, admin, jobs, and
  * any path not explicitly listed below.
  *
- * **Authorization** (keys, `allowedDomains`, identity) is enforced in controllers; CORS only exposes responses to the
+ * **Authorization** (keys, `allowedOrigins`, ownership) is enforced in controllers; CORS only exposes responses to the
  * browser.
  *
  * ---
@@ -51,9 +51,9 @@ export function normalizeRequestPathForCors(url: string): string {
  * broad CORS if a catch-all public rule is ever mis-added. Paths not listed here still default to **strict** when they
  * are not in the public exact/subtree lists.
  *
- * **Marketing / anonymous helpers** (`GET /api/public/bots`, `POST /api/trial/bots`, etc.) — strict so arbitrary
- * customer sites cannot read responses without **`CORS_EXTRA_ORIGINS`** or Assistrio prod hosts. The landing app and
- * gallery on `*.assistrio.com` remain allowed via `isBrowserOriginAllowedForCors`.
+ * **Marketing / anonymous helpers** (`GET /api/public/bots`, etc.) — strict so arbitrary
+ * customer sites cannot read responses without **Assistrio** (`assistrio.com` / `*.assistrio.com`) or dev loopback. The
+ * landing app and gallery on `*.assistrio.com` remain allowed via `isBrowserOriginAllowedForCors`.
  */
 export const STRICT_CORS_PATH_PREFIXES: readonly string[] = [
   '/api/widget/preview',
@@ -63,13 +63,9 @@ export const STRICT_CORS_PATH_PREFIXES: readonly string[] = [
   '/api/jobs',
   '/api/admin',
   '/api/super-admin',
-  /** Gallery + landing curated lists + quota + trial creation — not arbitrary cross-origin browser reads */
+  /** Gallery + landing curated lists + quota — not arbitrary cross-origin browser reads */
   '/api/public/bots',
   '/api/public/landing',
-  '/api/public/visitor-quota',
-  /** PV-safe owned-bot summaries — same CORS posture as visitor-quota (not arbitrary customer origins) */
-  '/api/public/visitor-bot',
-  '/api/trial/bots',
 ];
 
 function isStrictCorsPath(path: string): boolean {
@@ -77,10 +73,7 @@ function isStrictCorsPath(path: string): boolean {
 }
 
 /** Exact paths only under `/api/widget` — avoids `register-website-*` typo routes accidentally widening CORS. */
-export const PUBLIC_WIDGET_EMBED_EXACT_PATHS: ReadonlySet<string> = new Set([
-  '/api/widget/init',
-  '/api/widget/register-website',
-]);
+export const PUBLIC_WIDGET_EMBED_EXACT_PATHS: ReadonlySet<string> = new Set(['/api/widget/init']);
 
 /**
  * Subtree prefixes for **broad** browser CORS (segment-safe via `pathHasApiPrefix`). Do not add `/api` alone.
@@ -88,7 +81,6 @@ export const PUBLIC_WIDGET_EMBED_EXACT_PATHS: ReadonlySet<string> = new Set([
 export const PUBLIC_BROAD_CORS_SUBTREE_PREFIXES: readonly string[] = [
   '/api/chat',
   '/api/public',
-  '/api/trial',
   '/api/analytics',
 ];
 

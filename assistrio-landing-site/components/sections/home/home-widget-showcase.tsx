@@ -15,7 +15,7 @@ const benefits = [
   },
   {
     title: "Aligned with policy",
-    body: "Replies and quota follow the AI Agent you published — escalation and tone stay under your rules.",
+    body: "Replies follow the AI Agent you published — escalation and tone stay under your rules.",
   },
 ];
 
@@ -36,7 +36,7 @@ export function HomeWidgetShowcase() {
             <p className="max-w-2xl text-base leading-relaxed">
               On your site, the widget runs in <strong className="text-emphasis-primary">runtime</strong> mode — not
               the Assistrio preview shell. The browser sends your page origin on init; the API enforces allowed websites and keys;
-              messages and quota follow your AI Agent rules.
+              messages follow your AI Agent rules.
             </p>
           </HomeSectionHeader>
         </ScrollReveal>

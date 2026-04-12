@@ -10,7 +10,6 @@ import { AppModule } from './app.module';
 import {
   isBrowserOriginAllowedForCors,
   isReflectablePublicEmbedOrigin,
-  parseCorsExtraOriginsEnv,
 } from './cors/cors-origin.util';
 import {
   isPublicBrowserEmbedCorsPath,
@@ -19,7 +18,6 @@ import {
 
 async function bootstrap() {
   const nodeEnv = process.env.NODE_ENV ?? 'development';
-  const corsExtraOrigins = parseCorsExtraOriginsEnv(process.env.CORS_EXTRA_ORIGINS);
   /**
    * **TRUST_PROXY:** When the API is behind nginx, ALB, Cloudflare, etc., set `TRUST_PROXY=1` so `req.ip` and rate
    * limits use the **end-client** from `X-Forwarded-For` / `X-Real-IP` (Fastify semantics). If unset while behind a
@@ -56,7 +54,7 @@ async function bootstrap() {
             );
             return;
           }
-          if (isBrowserOriginAllowedForCors(origin, nodeEnv, corsExtraOrigins)) {
+          if (isBrowserOriginAllowedForCors(origin, nodeEnv)) {
             cb2(null, origin);
             return;
           }
