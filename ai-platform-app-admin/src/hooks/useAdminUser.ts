@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Re-exports useUser for admin panel. Use useUser and /user routes for new code.
+ * Operator session — same as {@link useUser}; staff bootstrap uses `GET /api/admin/me`.
  */
 import { useUser } from "./useUser";
 

@@ -123,7 +123,6 @@ export class VisitorsService {
           ownBotMessageCount: 0,
           previewUserMessageCount: seedPreview,
           createdAt: now,
-          lastSeenAt: now,
         },
         $set: { lastSeenAt: now },
       },

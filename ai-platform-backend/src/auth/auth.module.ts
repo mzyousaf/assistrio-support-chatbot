@@ -2,11 +2,16 @@ import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
-import { User, UserSchema } from '../models';
-import { AuthController } from './auth.controller';
-import { AuthService } from './auth.service';
-import { AuthGuard } from './auth.guard';
-import { SuperAdminGuard } from './super-admin.guard';
+import { Bot, BotSchema, User, UserSchema } from '../models';
+import { AdminOpenAiController } from './admin/admin-openai.controller';
+import { AdminPortalController } from './admin/admin-portal.controller';
+import { AdminSessionAuthGuard } from './admin/admin-session.guard';
+import { SuperAdminGuard } from './admin/super-admin.guard';
+import { CustomerGoogleOAuthController } from './customer/customer-google-oauth.controller';
+import { CustomerGoogleOAuthService } from './customer/customer-google-oauth.service';
+import { CustomerPortalController } from './customer/customer-portal.controller';
+import { CustomerSessionAuthGuard } from './customer/customer-session.guard';
+import { AuthService } from './shared/auth.service';
 import { WorkspacesModule } from '../workspaces/workspaces.module';
 
 @Module({
@@ -19,10 +24,31 @@ import { WorkspacesModule } from '../workspaces/workspaces.module';
       }),
       inject: [ConfigService],
     }),
-    MongooseModule.forFeature([{ name: User.name, schema: UserSchema }]),
+    MongooseModule.forFeature([
+      { name: User.name, schema: UserSchema },
+      { name: Bot.name, schema: BotSchema },
+    ]),
   ],
-  controllers: [AuthController],
-  providers: [AuthService, AuthGuard, SuperAdminGuard],
-  exports: [AuthService, AuthGuard, SuperAdminGuard, JwtModule],
+  controllers: [
+    AdminPortalController,
+    AdminOpenAiController,
+    CustomerPortalController,
+    CustomerGoogleOAuthController,
+  ],
+  providers: [
+    AuthService,
+    CustomerGoogleOAuthService,
+    AdminSessionAuthGuard,
+    CustomerSessionAuthGuard,
+    SuperAdminGuard,
+  ],
+  exports: [
+    AuthService,
+    CustomerGoogleOAuthService,
+    AdminSessionAuthGuard,
+    CustomerSessionAuthGuard,
+    SuperAdminGuard,
+    JwtModule,
+  ],
 })
-export class AuthModule { }
+export class AuthModule {}

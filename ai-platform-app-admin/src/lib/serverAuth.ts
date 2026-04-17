@@ -1,25 +1,20 @@
 import { cookies } from "next/headers";
-import { serverApiFetch } from "./api";
+import { fetchAdminMe, parseAdminMeResponse, type AdminMePayload } from "./adminSessionVerify";
 
-/** Logged-in user (from User table). No role restriction. */
-export type ServerUser = { id: string; email: string; role?: string } | null;
+/** Logged-in staff from `GET /api/admin/me` (superadmin). */
+export type ServerUser = AdminMePayload | null;
 
 /**
- * Get the current user from the backend using the request cookie.
- * Returns null if unauthenticated or backend unavailable. Use in server components.
+ * Current user for server components — uses cookies forwarded to the Nest API.
  */
 export async function getServerUser(): Promise<ServerUser> {
   const cookieStore = await cookies();
-  const cookie = cookieStore.toString();
-  if (!cookie) return null;
+  const pairs = cookieStore.getAll();
+  if (pairs.length === 0) return null;
+  const cookieHeader = pairs.map((c) => `${c.name}=${c.value}`).join("; ");
   try {
-    const res = await serverApiFetch("/api/user/me", { cookie });
-    if (!res.ok) return null;
-    const data = (await res.json()) as { id?: string; email?: string; role?: string };
-    if (typeof data?.id === "string" && typeof data?.email === "string") {
-      return { id: data.id, email: data.email, role: data.role };
-    }
-    return null;
+    const res = await fetchAdminMe(cookieHeader);
+    return await parseAdminMeResponse(res);
   } catch {
     return null;
   }

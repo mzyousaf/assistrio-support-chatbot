@@ -48,6 +48,20 @@ export function configFactory() {
      * Enabled only when NODE_ENV is development.
      */
     allowLoopbackEmbedOrigin: nodeEnv === 'development',
+    /** Google OAuth (customer sign-in only). All must be set for `/api/customer/auth/google/*`. */
+    googleOauthClientId: process.env.GOOGLE_OAUTH_CLIENT_ID?.trim() ?? '',
+    googleOauthClientSecret: process.env.GOOGLE_OAUTH_CLIENT_SECRET?.trim() ?? '',
+    /** Registered in Google Cloud Console — must match exactly (e.g. `https://api.assistrio.com/api/customer/auth/google/callback`). */
+    googleOauthRedirectUri: process.env.GOOGLE_OAUTH_REDIRECT_URI?.trim() ?? '',
+    /** Customer web app origin, no trailing slash (e.g. `https://app.assistrio.com`). Used for post-OAuth redirects. */
+    customerAppBaseUrl: process.env.CUSTOMER_APP_BASE_URL?.trim().replace(/\/$/, '') ?? '',
+    /** Marketing site origin (optional; reserved for future redirects / allowlists). */
+    landingSiteBaseUrl: process.env.LANDING_SITE_BASE_URL?.trim().replace(/\/$/, '') ?? '',
+    /**
+     * POST /api/internal/admin-bootstrap/create-superadmin — header `x-admin-bootstrap-token`.
+     * Leave unset to disable the endpoint (503).
+     */
+    adminBootstrapToken: process.env.ADMIN_BOOTSTRAP_TOKEN?.trim() ?? '',
   };
 }
 

@@ -1,5 +1,7 @@
 # CORS strategy (split public vs strict)
 
+**Local dev, app responsibilities, and env alignment:** see monorepo [`docs/ARCHITECTURE_AND_LOCAL_DEV.md`](../../docs/ARCHITECTURE_AND_LOCAL_DEV.md) (repo root).
+
 The API uses **`@fastify/cors`** with a **per-request delegator** (`src/main.ts`) that chooses:
 
 1. **Public browser embed / marketing** — any valid **HTTPS** `Origin` is reflected for paths classified in `src/cors/public-embed-cors-paths.util.ts` (see `isPublicBrowserEmbedCorsPath`). Customer domains are not allowlisted for these routes; CORS only controls which origins may read responses.
@@ -25,7 +27,7 @@ The API uses **`@fastify/cors`** with a **per-request delegator** (`src/main.ts`
 |--------|-----|
 | `/api/widget/preview/*` | Owner preview — Assistrio app / configured hosts, not arbitrary customer sites. |
 | `/api/widget/testing/*` | Internal testing helper. |
-| `/api/user/*` | Auth + app APIs (`/api/user/analytics` is **strict**; contrast with **broad** `/api/analytics/track`). |
+| `/api/customer/*` | Customer workspace app APIs (strict; contrast with **broad** `/api/analytics/track`). |
 | `/api/bots/*` | Authenticated bot listing / admin-style access. |
 | `/api/jobs/*` | Ingestion / cron triggers. |
 | `/api/admin/*`, `/api/super-admin/*` | Reserved — no controllers yet; stays strict so future routes cannot drift into broad CORS by mistake. |
@@ -41,7 +43,7 @@ When you add a new HTTP route:
 - **Default:** it falls into **strict** unless you extend `public-embed-cors-paths.util.ts`.
 - **Under `/api/widget`:** only **`/api/widget/init`** and **`/api/widget/register-website`** are public (exact paths). New widget routes must **not** use a broad prefix allow — add an **exact** path or keep them strict.
 - **Deny-first:** `isStrictCorsPath` runs first. Preview (`/api/widget/preview/...`) and testing (`/api/widget/testing/...`) are always strict.
-- **Segment boundaries:** `pathHasApiPrefix` ensures `/api/user` does not match `/api/users`, and `/api/widget/preview` does not match `/api/widget/previewish`.
+- **Segment boundaries:** `pathHasApiPrefix` ensures `/api/customer` does not match `/api/customers`, and `/api/widget/preview` does not match `/api/widget/previewish`.
 - **Tests:** `src/cors/public-embed-cors-paths.util.spec.ts` — run `npm test` after changing paths.
 
 Authorization (bot keys, `allowedDomains`, rate limits) is unchanged; CORS is not an auth layer.
@@ -49,7 +51,7 @@ Authorization (bot keys, `allowedDomains`, rate limits) is unchanged; CORS is no
 ## Final security posture (many-origin public runtime)
 
 - **Public (broad) routes** exist so **customer HTTPS sites** can call **widget init, chat,** and **analytics track** from the browser with reflected origins. Gallery, landing bot list, quota summary, and trial creation are **strict** — use Assistrio hosts (or dev loopback in development).
-- **Private / preview / app** traffic stays **strict** (`/api/widget/preview/*`, `/api/user/*`, …).
+- **Private / preview / app** traffic stays **strict** (`/api/widget/preview/*`, `/api/customer/*`, …).
 - **Runtime authorization is not CORS:** embed domain gates, keys, `platformVisitorId` / trial ownership, showcase registration, and rate limits are enforced **in controllers** after the request arrives. Misconfigured CORS blocks the response **before** the handler; it does **not** replace 403/401 from business rules.
 
 ## Related

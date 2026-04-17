@@ -7,6 +7,7 @@ import { ADMIN_PAGE_META_TEXT_CLASS } from "@/components/admin/admin-page-classe
 import { Card } from "@/components/ui/Card";
 import { SkeletonDataTable, SkeletonTableRows } from "@/components/ui/Skeleton";
 import { apiFetch } from "@/lib/api";
+import { ADMIN_API_VISITORS } from "@/lib/internal-operator-api";
 import { useAdminUser } from "@/hooks/useAdminUser";
 
 function formatDate(value: string | Date | null | undefined): string {
@@ -33,7 +34,7 @@ export default function AdminVisitorsPage() {
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
-    apiFetch("/api/user/visitors")
+    apiFetch(ADMIN_API_VISITORS)
       .then(async (res) => {
         if (cancelled) return;
         if (!res.ok) {
@@ -121,7 +122,7 @@ export default function AdminVisitorsPage() {
                     <tr key={visitor.visitorId} className="hover:bg-gray-50/80 dark:hover:bg-gray-800/40 transition-colors">
                       <td className="px-4 py-3">
                         <Link
-                          href={`/user/visitors/${encodeURIComponent(visitor.visitorId)}`}
+                          href={`/admin/visitors/${encodeURIComponent(visitor.visitorId)}`}
                           className="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium text-brand-700 dark:text-brand-300 bg-brand-50 dark:bg-brand-500/15 hover:bg-brand-100 dark:hover:bg-brand-500/25 transition-colors"
                         >
                           {visitor.visitorId}

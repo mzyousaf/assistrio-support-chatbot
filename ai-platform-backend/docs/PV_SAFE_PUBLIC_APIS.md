@@ -14,7 +14,7 @@ This document locks the **contract split** between:
 | **Identity** | `platformVisitorId` is the anonymous ownership / quota / continuity key for PV-facing routes. |
 | **Not used for PV analytics views** | `chatVisitorId` — chat thread identity only; do not build PV “insight” screens on chat ids alone. |
 | **No raw internal events to PV** | `POST /api/analytics/track` and `VisitorEvent` streams are **internal**. PV product UIs must call **PV-safe summary** routes only. |
-| **No admin contracts on PV** | `GET /api/user/analytics` (authenticated) is internal; never reuse its shape for anonymous callers. |
+| **No admin contracts on PV** | `GET /api/admin/analytics` (authenticated) is internal; never reuse its shape for anonymous callers. |
 | **Summary-only** | PV routes return aggregates and product-shaped fields — not event arrays, not `secretKey`, not unrelated visitors’ data. |
 
 ## Internal-only (not PV product surfaces)
@@ -22,8 +22,8 @@ This document locks the **contract split** between:
 | Endpoint | Purpose |
 |----------|---------|
 | `POST /api/analytics/track` | Anonymous event ingestion for funnels / ops. Taxonomy may evolve independently. |
-| `GET /api/user/analytics` | Authenticated legacy lifetime summary (`AuthGuard`). |
-| `GET /api/user/analytics/overview` | Authenticated time-bounded internal dashboard aggregates (`AuthGuard`). **Not** for PV. |
+| `GET /api/admin/analytics` | Authenticated lifetime-style dashboard summary (staff). |
+| `GET /api/admin/analytics/overview` | Authenticated time-bounded internal dashboard aggregates (staff). **Not** for PV. |
 
 ## PV-safe public APIs
 
@@ -48,7 +48,7 @@ All PV-safe routes:
 | `components/visitor/pv-trial-bot-summary.tsx` | `POST /api/public/visitor-bot/summary`, `basic-insights`, `leads-summary` (trial success handoff only) |
 | `components/visitor/pv-trial-resume-section.tsx` | Same three endpoints when the landing app restores a **locally remembered** `botId` for the active `platformVisitorId` (`lib/identity/pv-last-trial-bot.ts`) — not a server account |
 
-These call **only** the routes in the table above — not `GET /api/user/analytics/*`, not raw `VisitorEvent` exports.
+These call **only** the routes in the table above — not `GET /api/admin/analytics/*`, not raw `VisitorEvent` exports.
 
 ## Related
 

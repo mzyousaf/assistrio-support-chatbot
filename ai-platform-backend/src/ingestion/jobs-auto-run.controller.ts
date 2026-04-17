@@ -20,14 +20,10 @@ export class JobsAutoRunController {
   @Post('auto-run')
   async autoRun(
     @Headers('x-job-runner-secret') headerSecret: string | undefined,
-    @Query('secret') querySecret: string | undefined,
     @Body() body: { limit?: number } | undefined,
     @Query('limit') queryLimit: string | undefined,
   ) {
-    const secret =
-      (typeof headerSecret === 'string' && headerSecret.trim()) ||
-      (typeof querySecret === 'string' && querySecret.trim()) ||
-      '';
+    const secret = typeof headerSecret === 'string' ? headerSecret.trim() : '';
 
     const expected = this.config.get<string>('jobRunnerSecret');
     if (!secret || secret !== expected) {

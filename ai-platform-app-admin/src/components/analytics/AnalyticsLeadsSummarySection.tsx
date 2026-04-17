@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Internal lead aggregates from GET /api/user/analytics/leads/summary — counts only, no raw PII.
+ * Internal lead aggregates from GET /api/admin/analytics/leads/summary — counts only, no raw PII.
  */
 
 import { Card } from "@/components/ui/Card";

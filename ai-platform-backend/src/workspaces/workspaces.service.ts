@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { Workspace, WorkspaceMembership, type WorkspaceMemberRole } from '../models';
+import { User, Workspace, WorkspaceMembership, type UserRole, type WorkspaceMemberRole } from '../models';
+import { resolvePersonalWorkspaceDisplayName } from './workspace-personal-name.util';
 
 function oidString(v: unknown): string {
   if (v == null) return '';
@@ -13,16 +14,28 @@ function oidString(v: unknown): string {
 @Injectable()
 export class WorkspacesService {
   constructor(
+    @InjectModel(User.name) private readonly userModel: Model<User>,
     @InjectModel(Workspace.name) private readonly workspaceModel: Model<Workspace>,
     @InjectModel(WorkspaceMembership.name) private readonly membershipModel: Model<WorkspaceMembership>,
   ) {}
 
   /**
    * Creates a workspace and makes the user its workspace admin (first membership).
+   * Name is derived from platform role and optional profile fields ({@link resolvePersonalWorkspaceDisplayName}).
    */
-  async createWorkspaceWithAdminMember(userId: Types.ObjectId, name?: string): Promise<{ workspaceId: Types.ObjectId }> {
+  async createWorkspaceWithAdminMember(userId: Types.ObjectId): Promise<{ workspaceId: Types.ObjectId }> {
+    const user = await this.userModel.findById(userId).lean();
+    if (!user) {
+      throw new Error('User not found for workspace creation');
+    }
+    const u = user as { role?: UserRole; firstName?: string; lastName?: string };
+    const displayName = resolvePersonalWorkspaceDisplayName({
+      role: (u.role ?? 'customer') as UserRole,
+      firstName: u.firstName,
+      lastName: u.lastName,
+    });
     const ws = await this.workspaceModel.create({
-      name: (name?.trim() || 'My workspace').slice(0, 120),
+      name: displayName.slice(0, 120),
       createdAt: new Date(),
     });
     const workspaceId = (ws as { _id: Types.ObjectId })._id;
@@ -57,6 +70,26 @@ export class WorkspacesService {
       .select('workspaceId')
       .lean();
     return (rows as { workspaceId: Types.ObjectId }[]).map((r) => r.workspaceId).filter(Boolean);
+  }
+
+  /** Id + display name for each workspace the user belongs to (membership order). */
+  async getWorkspacesSummaryForUser(userId: string): Promise<{ id: string; name: string }[]> {
+    const ids = await this.getWorkspaceIdsForUser(userId);
+    if (!ids.length) return [];
+    const docs = await this.workspaceModel
+      .find({ _id: { $in: ids } })
+      .select('name')
+      .lean();
+    const byId = new Map(
+      (docs as { _id: Types.ObjectId; name?: string }[]).map((d) => [
+        String(d._id),
+        String(d.name ?? '').trim() || 'Workspace',
+      ]),
+    );
+    return ids.map((id) => ({
+      id: String(id),
+      name: byId.get(String(id)) ?? 'Workspace',
+    }));
   }
 
   async isUserMemberOfWorkspace(userId: string, workspaceId: string): Promise<boolean> {

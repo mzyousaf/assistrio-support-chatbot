@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { apiFetch } from "@/lib/api";
+import { ADMIN_API_OPENAI } from "@/lib/internal-operator-api";
 
 import { useBotFormEditor } from "./BotFormEditorContext";
 import { TAB_CONTENT_CLASS, TAB_META } from "./botFormUiConstants";
@@ -66,7 +67,7 @@ export function AiIntegrationsSection() {
                     setTestingKey(true);
                     setTestResult(null);
                     try {
-                      const response = await apiFetch("/api/user/openai/test-key", {
+                      const response = await apiFetch(`${ADMIN_API_OPENAI}/test-key`, {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ apiKey: openaiApiKeyOverride || "" }),

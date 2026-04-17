@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { SkeletonDataTable, SkeletonTableRows } from "@/components/ui/Skeleton";
 import { apiFetch } from "@/lib/api";
+import { ADMIN_API_BOTS } from "@/lib/internal-operator-api";
 import { useAdminUser } from "@/hooks/useAdminUser";
 
 function formatDate(value: string | Date | null | undefined): string {
@@ -60,7 +61,7 @@ function AdminBotsContent() {
   }, [bots, search]);
 
   async function fetchBots() {
-    const url = `/api/user/bots${statusFilter !== "all" ? `?status=${statusFilter}` : ""}`;
+    const url = `${ADMIN_API_BOTS}${statusFilter !== "all" ? `?status=${statusFilter}` : ""}`;
     const res = await apiFetch(url);
     if (!res.ok) {
       const data = (await res.json().catch(() => ({}))) as { error?: string };
@@ -75,7 +76,7 @@ function AdminBotsContent() {
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
-    const url = `/api/user/bots${statusFilter !== "all" ? `?status=${statusFilter}` : ""}`;
+    const url = `${ADMIN_API_BOTS}${statusFilter !== "all" ? `?status=${statusFilter}` : ""}`;
     apiFetch(url)
       .then(async (res) => {
         if (cancelled) return;
@@ -100,7 +101,7 @@ function AdminBotsContent() {
     setDeletingId(botToDelete.id);
     setApiError(null);
     try {
-      const res = await apiFetch(`/api/user/bots/${botToDelete.id}`, { method: "DELETE" });
+      const res = await apiFetch(`${ADMIN_API_BOTS}/${botToDelete.id}`, { method: "DELETE" });
       const data = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
         setApiError(data.error ?? "Failed to delete bot.");
@@ -118,8 +119,8 @@ function AdminBotsContent() {
   if (authLoading || !user) {
     return (
       <AdminShell
-        title="Agents"
-        subtitle="Review and manage agents across the workspace."
+        title="Bots & showcase"
+        subtitle="Global bot list for operators — drafts, published agents, and showcase assets."
       >
         <SkeletonDataTable rows={8} cols={7} />
       </AdminShell>
@@ -128,11 +129,11 @@ function AdminBotsContent() {
 
   return (
     <AdminShell
-      title="Agents"
-      subtitle="Review and manage agents across the workspace."
+      title="Bots & showcase"
+      subtitle="Global bot list for operators — drafts, published agents, and showcase assets."
       actions={
         <CreateNewBotButton
-          label="Create new agent"
+          label="Create bot"
           className="shrink-0 rounded-md bg-brand-500 px-3 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-brand-600"
         />
       }
@@ -330,7 +331,7 @@ export default function AdminBotsPage() {
   return (
     <Suspense
       fallback={
-        <AdminShell title="Agents" subtitle="Review and manage agents across the workspace.">
+        <AdminShell title="Bots & showcase" subtitle="Global bot list for operators — drafts, published agents, and showcase assets.">
           <SkeletonDataTable rows={8} cols={7} />
         </AdminShell>
       }

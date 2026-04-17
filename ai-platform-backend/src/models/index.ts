@@ -31,8 +31,13 @@ export { VisitorEvent, VisitorEventSchema } from './visitor-event.schema';
 export type { VisitorEventType } from './visitor-event.schema';
 export { RateLimit, RateLimitSchema } from './rate-limit.schema';
 export { Config, ConfigSchema } from './config.schema';
-export { User, UserSchema, USER_ROLES } from './user.schema';
-export type { UserRole } from './user.schema';
+export {
+  User,
+  UserSchema,
+  USER_ROLES,
+  AUTH_ACCOUNT_PROVIDERS,
+} from './user.schema';
+export type { UserRole, AccountAuthProvider } from './user.schema';
 export { Workspace, WorkspaceSchema } from './workspace.schema';
 export {
   WorkspaceMembership,

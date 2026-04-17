@@ -9,6 +9,7 @@ import { LaunchReadinessSidebarProvider } from "@/contexts/LaunchReadinessSideba
 import { AgentWorkspaceProvider, type AgentWorkspaceLoadState } from "@/contexts/AgentWorkspaceContext";
 import { useUser } from "@/hooks/useUser";
 import { apiFetch } from "@/lib/api";
+import { ADMIN_API_BOTS } from "@/lib/internal-operator-api";
 import type { DocRow, Health } from "@/lib/agent-workspace-initial-bot";
 
 export function AgentWorkspaceDataLoader({ children }: { children: React.ReactNode }) {
@@ -27,7 +28,7 @@ export function AgentWorkspaceDataLoader({ children }: { children: React.ReactNo
     if (!user || !botId) return;
     let cancelled = false;
     setState("loading");
-    Promise.all([apiFetch(`/api/user/bots/${botId}`), apiFetch(`/api/user/bots/${botId}/documents`)])
+    Promise.all([apiFetch(`${ADMIN_API_BOTS}/${botId}`), apiFetch(`${ADMIN_API_BOTS}/${botId}/documents`)])
       .then(async ([botRes, docsRes]) => {
         if (cancelled) return;
         if (!botRes.ok) {

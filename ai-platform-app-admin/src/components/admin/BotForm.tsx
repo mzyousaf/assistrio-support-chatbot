@@ -12,6 +12,7 @@ import { useDebouncedDirtyNotify } from "@/hooks/useDebouncedDirtyNotify";
 import { useJsonSnapshot } from "@/hooks/useJsonSnapshot";
 import { useUser } from "@/hooks/useUser";
 import { apiFetch } from "@/lib/api";
+import { ADMIN_API_BOTS, ADMIN_API_UPLOAD } from "@/lib/internal-operator-api";
 import { normalizeLeadCapture } from "@/lib/leadCapture";
 import { normalizeVisitorMultiChatMax } from "@/lib/visitorMultiChatMax";
 import { computeLaunchReadiness } from "@/lib/launch-readiness";
@@ -90,7 +91,7 @@ export default function BotForm({
   const maxAllowedOrigins = user?.role === "superadmin" ? 10 : 1;
 
   const [allowedOriginRows, setAllowedOriginRows] = useState<AllowedOriginFormRow[]>(() =>
-       initialAllowedOriginRowsFromBot({
+    initialAllowedOriginRowsFromBot({
       allowedOrigins: initialBot?.allowedOrigins,
     }),
   );
@@ -342,7 +343,7 @@ export default function BotForm({
         try {
           const formData = new FormData();
           formData.append("file", botImageFile);
-          const uploadResponse = await apiFetch("/api/user/upload", {
+          const uploadResponse = await apiFetch(ADMIN_API_UPLOAD, {
             method: "POST",
             body: formData,
           });
@@ -510,7 +511,7 @@ export default function BotForm({
         setAccessActionLoading(null);
         return;
       }
-      const res = await apiFetch(`/api/user/bots/${botId}/access-settings`, {
+      const res = await apiFetch(`${ADMIN_API_BOTS}/${botId}/access-settings`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -545,7 +546,7 @@ export default function BotForm({
     setAccessActionLoading("rotate-access");
     setAccessActionMessage(null);
     try {
-      const res = await apiFetch(`/api/user/bots/${botId}/rotate-access-key`, {
+      const res = await apiFetch(`${ADMIN_API_BOTS}/${botId}/rotate-access-key`, {
         method: "POST",
       });
       const json = (await res.json().catch(() => ({}))) as { error?: string; accessKey?: string };
@@ -566,7 +567,7 @@ export default function BotForm({
     setAccessActionLoading("rotate-secret");
     setAccessActionMessage(null);
     try {
-      const res = await apiFetch(`/api/user/bots/${botId}/rotate-secret-key`, {
+      const res = await apiFetch(`${ADMIN_API_BOTS}/${botId}/rotate-secret-key`, {
         method: "POST",
       });
       const json = (await res.json().catch(() => ({}))) as { error?: string; secretKey?: string };
@@ -808,11 +809,11 @@ export default function BotForm({
         );
       })() ||
       allowedOriginsFingerprint(allowedOriginRows) !==
-        allowedOriginsFingerprint(
-          initialAllowedOriginRowsFromBot({
-            allowedOrigins: initial.allowedOrigins,
-          }),
-        ) ||
+      allowedOriginsFingerprint(
+        initialAllowedOriginRowsFromBot({
+          allowedOrigins: initial.allowedOrigins,
+        }),
+      ) ||
       categoriesStr !== initialCategoriesStr ||
       faqsStr !== initialFaqsStr ||
       exampleQuestionsStr !== initialExampleQuestionsStr ||
@@ -1119,32 +1120,32 @@ export default function BotForm({
         {submitError ? <p className="text-sm text-red-500">{submitError}</p> : null}
 
         <BotFormEditorProvider value={editorModel}>
-        <Tabs defaultValue="general" value={activeTab} onValueChange={handleTabChange} className="space-y-0">
-          {mode === "edit" && workspaceSectionSlug ? null : (
-          <div className="border-b border-gray-200/90 dark:border-gray-700 bg-white/80 dark:bg-gray-900/40 overflow-x-auto">
-            <TabsList className="w-full min-w-0 flex flex-wrap justify-start rounded-none border-0 bg-transparent p-0 gap-x-0 gap-y-1 min-h-0">
-              {TAB_IDS.map((tab) => (
-                <TabsTrigger
-                  key={tab.value}
-                  value={tab.value}
-                  className="rounded-none border-b-2 border-transparent data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 py-3 text-sm font-medium text-gray-600 dark:text-gray-400 data-[state=active]:text-brand-700 dark:data-[state=active]:text-brand-300 data-[state=active]:font-semibold hover:text-gray-900 dark:hover:text-gray-200"
-                >
-                  {tab.label}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </div>
-          )}
-          <div className="flex-1 min-w-0 py-6">
-            <TabsContent value="general" className="mt-0">{() => <ProfileSection />}</TabsContent>
-            <TabsContent value="behavior" className="mt-0">{() => <BehaviorSection />}</TabsContent>
-            <TabsContent value="knowledge" className="mt-0">{() => <KnowledgeSection />}</TabsContent>
-            <TabsContent value="integrations" className="mt-0">{() => <AiIntegrationsSection />}</TabsContent>
-            <TabsContent value="chat-experience" className="mt-0">{() => <ChatSection />}</TabsContent>
-            <TabsContent value="appearance" className="mt-0">{() => <AppearanceSection />}</TabsContent>
-            <TabsContent value="publish" className="mt-0">{() => <PublishSection />}</TabsContent>
-          </div>
-        </Tabs>
+          <Tabs defaultValue="general" value={activeTab} onValueChange={handleTabChange} className="space-y-0">
+            {mode === "edit" && workspaceSectionSlug ? null : (
+              <div className="border-b border-gray-200/90 dark:border-gray-700 bg-white/80 dark:bg-gray-900/40 overflow-x-auto">
+                <TabsList className="w-full min-w-0 flex flex-wrap justify-start rounded-none border-0 bg-transparent p-0 gap-x-0 gap-y-1 min-h-0">
+                  {TAB_IDS.map((tab) => (
+                    <TabsTrigger
+                      key={tab.value}
+                      value={tab.value}
+                      className="rounded-none border-b-2 border-transparent data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 py-3 text-sm font-medium text-gray-600 dark:text-gray-400 data-[state=active]:text-brand-700 dark:data-[state=active]:text-brand-300 data-[state=active]:font-semibold hover:text-gray-900 dark:hover:text-gray-200"
+                    >
+                      {tab.label}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </div>
+            )}
+            <div className="flex-1 min-w-0 py-6">
+              <TabsContent value="general" className="mt-0">{() => <ProfileSection />}</TabsContent>
+              <TabsContent value="behavior" className="mt-0">{() => <BehaviorSection />}</TabsContent>
+              <TabsContent value="knowledge" className="mt-0">{() => <KnowledgeSection />}</TabsContent>
+              <TabsContent value="integrations" className="mt-0">{() => <AiIntegrationsSection />}</TabsContent>
+              <TabsContent value="chat-experience" className="mt-0">{() => <ChatSection />}</TabsContent>
+              <TabsContent value="appearance" className="mt-0">{() => <AppearanceSection />}</TabsContent>
+              <TabsContent value="publish" className="mt-0">{() => <PublishSection />}</TabsContent>
+            </div>
+          </Tabs>
         </BotFormEditorProvider>
 
         <SettingsModal

@@ -21,7 +21,7 @@ export function AdminShellLayout({ children }: AdminShellLayoutProps) {
     <div className="min-h-screen">
       <header className="border-b border-slate-800">
         <div className="mx-auto flex w-full max-w-5xl items-center justify-between p-4">
-          <p className="font-semibold">Assistrio AI - Super Admin</p>
+          <p className="font-semibold">Assistrio — internal admin (legacy layout)</p>
           <LogoutButton />
         </div>
       </header>

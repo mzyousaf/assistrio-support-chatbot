@@ -58,7 +58,8 @@ export function normalizeRequestPathForCors(url: string): string {
 export const STRICT_CORS_PATH_PREFIXES: readonly string[] = [
   '/api/widget/preview',
   '/api/widget/testing',
-  '/api/user',
+  /** Customer app (Vite) — strict Assistrio-origin CORS (not arbitrary cross-site reads). */
+  '/api/customer',
   '/api/bots',
   '/api/jobs',
   '/api/admin',

@@ -1,5 +1,5 @@
 /**
- * Response shapes for `GET /api/user/analytics/*` (authenticated operator dashboards only).
+ * Response shapes for `GET /api/admin/analytics/*` (superadmin operator dashboards only).
  * Do not use for PV UIs — see `ai-platform-backend/docs/ANALYTICS_BOUNDARIES.md`.
  */
 export type InternalAnalyticsOverviewResponse = {
@@ -41,14 +41,14 @@ export type InternalAnalyticsOverviewResponse = {
 
 export type InternalAnalyticsDatePreset = "7d" | "30d" | "90d";
 
-/** Shared `range` block from internal `/api/user/analytics/*` responses. */
+/** Shared `range` block from internal `/api/admin/analytics/*` responses. */
 export type InternalAnalyticsRangeBlock = {
   from: string;
   to: string;
   label: string;
 };
 
-/** GET /api/user/analytics/bots/summary */
+/** GET /api/admin/analytics/bots/summary */
 export type InternalBotsSummaryResponse = {
   schemaVersion: 1;
   range: InternalAnalyticsRangeBlock;
@@ -74,7 +74,7 @@ export type InternalBotsSummaryResponse = {
   caveats: string[];
 };
 
-/** GET /api/user/analytics/leads/summary */
+/** GET /api/admin/analytics/leads/summary */
 export type InternalLeadsSummaryResponse = {
   schemaVersion: 1;
   range: InternalAnalyticsRangeBlock;

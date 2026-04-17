@@ -1,6 +1,6 @@
 import { Controller, Get, Param, UseGuards } from '@nestjs/common';
-import { AuthGuard } from '../auth/auth.guard';
-import { SuperAdminGuard } from '../auth/super-admin.guard';
+import { AdminSessionAuthGuard } from '../auth/admin/admin-session.guard';
+import { SuperAdminGuard } from '../auth/admin/super-admin.guard';
 import { BotsService } from './bots.service';
 
 /**
@@ -8,7 +8,7 @@ import { BotsService } from './bots.service';
  * The public marketing gallery is `GET /api/public/bots` (showcase-only, shaped response).
  */
 @Controller('api/bots')
-@UseGuards(AuthGuard, SuperAdminGuard)
+@UseGuards(AdminSessionAuthGuard, SuperAdminGuard)
 export class BotsController {
   constructor(private readonly botsService: BotsService) {}
 

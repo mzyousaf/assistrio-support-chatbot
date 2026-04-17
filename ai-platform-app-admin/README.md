@@ -1,12 +1,15 @@
 # AI Platform App
 
-Next.js dashboard/admin app for creating, configuring, and previewing bots.
+Next.js **internal admin** app (`/admin/*`): staff bots, analytics, embed preview. Uses **`/api/admin/*`** on the Nest API (separate from customer auth).
+
+**Platform overview, ports, and auth:** see the monorepo doc [`docs/ARCHITECTURE_AND_LOCAL_DEV.md`](../docs/ARCHITECTURE_AND_LOCAL_DEV.md).
 
 ## Environment
 
 Copy `.env.example` to `.env.local`:
 
-- `NEXT_PUBLIC_API_BASE_URL` - backend API origin used by dashboard calls and embed preview/runtime calls
+- **`NEXT_PUBLIC_API_BASE_URL`** — Nest API origin (no trailing slash). Required for API calls and for middleware/server `GET /api/admin/me` session checks.
+- If **`NEXT_PUBLIC_API_BASE_URL`** is unset, middleware cannot verify staff sessions against the API (requests still proceed).
 
 ## Widget Modes (Dashboard Preview)
 

@@ -13,14 +13,20 @@ import {
   VisitorEventSchema,
 } from '../models';
 import { AuthModule } from '../auth/auth.module';
+import { BotsModule } from '../bots/bots.module';
+import { DocumentsModule } from '../documents/documents.module';
 import { VisitorsModule } from '../visitors/visitors.module';
-import { AnalyticsController } from './analytics.controller';
+import { WorkspacesModule } from '../workspaces/workspaces.module';
+import { AdminAnalyticsController } from './admin-analytics.controller';
 import { AnalyticsTrackController } from './analytics-track.controller';
 import { AnalyticsService } from './analytics.service';
 
 @Module({
   imports: [
     AuthModule,
+    BotsModule,
+    DocumentsModule,
+    WorkspacesModule,
     MongooseModule.forFeature([
       { name: VisitorEvent.name, schema: VisitorEventSchema },
       { name: Visitor.name, schema: VisitorSchema },
@@ -30,7 +36,7 @@ import { AnalyticsService } from './analytics.service';
     ]),
     VisitorsModule,
   ],
-  controllers: [AnalyticsController, AnalyticsTrackController],
+  controllers: [AnalyticsTrackController, AdminAnalyticsController],
   providers: [AnalyticsService],
   exports: [AnalyticsService],
 })

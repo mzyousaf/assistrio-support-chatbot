@@ -23,7 +23,7 @@ function assertPublicGallerySlug(slug: string): string {
 }
 
 /**
- * **Anonymous** marketing gallery — showcase bots only (`findPublicShowcase`).
+ * **Anonymous** marketing gallery — published public bots owned by a superadmin (`findPublicShowcase`).
  * Rate-limited per IP; responses are cacheable (`Cache-Control: public`).
  */
 @Controller('api/public/bots')

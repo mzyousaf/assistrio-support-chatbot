@@ -18,7 +18,6 @@ import {
   getWorkspaceHomeHref,
   getWorkspaceSettingsHref,
   MAIN_SIDEBAR,
-  resolveUserHref,
   showAgentWorkspaceChrome,
   WORKSPACE_DISPLAY_NAME,
 } from "@/components/admin/admin-shell-config";
@@ -44,7 +43,7 @@ interface AdminShellProps {
   children: ReactNode;
   /** When true, main content stacks full-width within the shell (still capped at max-w-screen-2xl). */
   fullWidth?: boolean;
-  /** Agent display name when inside /user/bots/[id]/* (agent sidebar header). */
+  /** Agent display name when inside `/admin/bots/[id]/...` (agent sidebar header). */
   agentTitle?: string;
   /** When false, hides the title/subtitle/actions row so the page can render a custom hero; toolbar still shows if set. */
   showTitleRow?: boolean;
@@ -88,7 +87,7 @@ export default function AdminShell({
   const workspaceAsideRef = useRef<HTMLElement>(null);
   const mobileAgentPanelRef = useRef<HTMLDivElement>(null);
 
-  /** Only on `/user/bots/[id]/…` — drives compact rail + second sidebar (nowhere else). */
+  /** Only on `/admin/bots/[id]/…` — drives compact rail + second sidebar (nowhere else). */
   const agentChrome = showAgentWorkspaceChrome(canonicalPath);
   const botWorkspaceId = getBotIdFromPath(canonicalPath);
   const compactMainNav = agentChrome && !mobileNavOpen;
@@ -105,9 +104,9 @@ export default function AdminShell({
   const launchReadinessSidebar = useLaunchReadinessSidebarState();
   const hasWorkspaceAssistantSnapshot = Boolean(
     agentChrome &&
-      botWorkspaceId &&
-      launchReadinessSidebar?.snapshot &&
-      launchReadinessSidebar.snapshot.botId === botWorkspaceId,
+    botWorkspaceId &&
+    launchReadinessSidebar?.snapshot &&
+    launchReadinessSidebar.snapshot.botId === botWorkspaceId,
   );
 
   const displayPageTitle = getShellPageTitle(canonicalPath, title);
@@ -180,8 +179,8 @@ export default function AdminShell({
 
   async function handleLogout() {
     setUserMenuOpen(false);
-    await apiFetch("/api/user/logout", { method: "POST" });
-    router.push("/user/login");
+    await apiFetch("/api/admin/auth/logout", { method: "POST" });
+    router.push("/admin/login");
   }
 
   const shellSurface =
@@ -234,7 +233,7 @@ export default function AdminShell({
             <button
               type="button"
               className="inline-flex h-8 w-8 items-center justify-center rounded-sm border border-slate-200/90 bg-white text-slate-700 transition hover:border-teal-300/80 hover:bg-teal-50/60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
-              aria-label="Open workspace navigation"
+              aria-label="Open main navigation"
               onClick={() => setMobileNavOpen(true)}
             >
               <Menu className="h-[18px] w-[18px]" strokeWidth={2} />
@@ -390,8 +389,8 @@ export default function AdminShell({
         className={cx(
           "flex min-h-0 min-w-0 flex-1 items-stretch",
           agentChrome &&
-            botWorkspaceId &&
-            "lg:!grid lg:gap-0 lg:[grid-template-columns:auto_var(--sidebar-expanded)_minmax(0,1fr)]",
+          botWorkspaceId &&
+          "lg:!grid lg:gap-0 lg:[grid-template-columns:auto_var(--sidebar-expanded)_minmax(0,1fr)]",
         )}
       >
         {/* Sidebar 1 — global workspace (icon rail when in agent workspace) */}
@@ -412,172 +411,172 @@ export default function AdminShell({
             mobileNavOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
           )}
         >
-        <nav className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto overscroll-contain p-3 pt-4" aria-label="Workspace navigation">
-          {MAIN_SIDEBAR.map((item) => {
-            const Icon = item.icon;
-            const active = item.isActive(canonicalPath);
-            return (
-              <div key={item.id} className="space-y-0.5">
+          <nav className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto overscroll-contain p-3 pt-4" aria-label="Workspace navigation">
+            {MAIN_SIDEBAR.map((item) => {
+              const Icon = item.icon;
+              const active = item.isActive(canonicalPath);
+              return (
+                <div key={item.id} className="space-y-0.5">
+                  <Link
+                    href={item.href}
+                    title={item.label}
+                    className={cx(
+                      "flex items-center gap-3 rounded-md py-2 pl-2 pr-2 text-sm font-medium transition-colors",
+                      compactMainNav ? "lg:justify-center lg:px-1.5" : "",
+                      active ? SHELL_NAV_TOP_ACTIVE : SHELL_NAV_TOP_INACTIVE,
+                    )}
+                    onClick={() => setMobileNavOpen(false)}
+                  >
+                    <Icon
+                      className={cx(
+                        "h-[18px] w-[18px] shrink-0",
+                        active ? "text-brand-600 dark:text-brand-400" : "opacity-85",
+                      )}
+                      aria-hidden
+                    />
+                    <span className={cx("truncate", compactMainNav && "lg:sr-only")}>{item.label}</span>
+                  </Link>
+                  {!compactMainNav && item.children && item.children.length > 0 ? (
+                    <div className="ml-2 border-l border-slate-200/90 py-0.5 pl-3 dark:border-slate-700">
+                      {item.children.map((child) => {
+                        const p = canonicalPath.split("?")[0];
+                        const childActive = p === child.href;
+                        return (
+                          <Link
+                            key={child.href}
+                            href={child.href}
+                            className={cx(
+                              "block rounded-md px-2 py-1.5 text-xs font-medium transition-colors",
+                              childActive ? SHELL_NAV_NESTED_ACTIVE : SHELL_NAV_NESTED_INACTIVE,
+                            )}
+                            onClick={() => setMobileNavOpen(false)}
+                          >
+                            {child.label}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+          </nav>
+
+          <div
+            className={cx(
+              "shrink-0 border-t border-slate-200/80 p-4 dark:border-slate-800",
+              compactMainNav && "lg:hidden",
+            )}
+          >
+            {hasWorkspaceAssistantSnapshot && botWorkspaceId ? (
+              <WorkspaceAssistantBlock theme={theme} botId={botWorkspaceId} />
+            ) : null}
+            {!hasWorkspaceAssistantSnapshot ? (
+              <div
+                className={cx(
+                  "rounded-md border p-3",
+                  theme === "dark" ? "border-brand-500/20 bg-brand-500/5" : "border-brand-500/10 bg-brand-50/60",
+                )}
+              >
+                <p className="text-xs font-medium text-slate-800 dark:text-slate-100">Need a hand?</p>
+                <p className="mt-1 text-xs leading-relaxed text-slate-600 dark:text-slate-400">
+                  Docs and best practices for agents and embeddings.
+                </p>
                 <Link
-                  href={resolveUserHref(pathname, item.href)}
-                  title={item.label}
-                  className={cx(
-                    "flex items-center gap-3 rounded-md py-2 pl-2 pr-2 text-sm font-medium transition-colors",
-                    compactMainNav ? "lg:justify-center lg:px-1.5" : "",
-                    active ? SHELL_NAV_TOP_ACTIVE : SHELL_NAV_TOP_INACTIVE,
-                  )}
+                  href={getWorkspaceHomeHref(pathname)}
+                  className="mt-3 inline-flex text-xs font-semibold text-brand-600 hover:text-brand-700 dark:text-brand-400 dark:hover:text-brand-300"
                   onClick={() => setMobileNavOpen(false)}
                 >
-                  <Icon
-                    className={cx(
-                      "h-[18px] w-[18px] shrink-0",
-                      active ? "text-brand-600 dark:text-brand-400" : "opacity-85",
-                    )}
-                    aria-hidden
-                  />
-                  <span className={cx("truncate", compactMainNav && "lg:sr-only")}>{item.label}</span>
+                  Ops overview →
                 </Link>
-                {!compactMainNav && item.children && item.children.length > 0 ? (
-                  <div className="ml-2 border-l border-slate-200/90 py-0.5 pl-3 dark:border-slate-700">
-                    {item.children.map((child) => {
-                      const p = canonicalPath.split("?")[0];
-                      const childActive = p === child.href;
-                      return (
-                        <Link
-                          key={child.href}
-                          href={resolveUserHref(pathname, child.href)}
-                          className={cx(
-                            "block rounded-md px-2 py-1.5 text-xs font-medium transition-colors",
-                            childActive ? SHELL_NAV_NESTED_ACTIVE : SHELL_NAV_NESTED_INACTIVE,
-                          )}
-                          onClick={() => setMobileNavOpen(false)}
-                        >
-                          {child.label}
-                        </Link>
-                      );
-                    })}
-                  </div>
-                ) : null}
-              </div>
-            );
-          })}
-        </nav>
-
-        <div
-          className={cx(
-            "shrink-0 border-t border-slate-200/80 p-4 dark:border-slate-800",
-            compactMainNav && "lg:hidden",
-          )}
-        >
-          {hasWorkspaceAssistantSnapshot && botWorkspaceId ? (
-            <WorkspaceAssistantBlock theme={theme} botId={botWorkspaceId} />
-          ) : null}
-          {!hasWorkspaceAssistantSnapshot ? (
-            <div
-              className={cx(
-                "rounded-md border p-3",
-                theme === "dark" ? "border-brand-500/20 bg-brand-500/5" : "border-brand-500/10 bg-brand-50/60",
-              )}
-            >
-              <p className="text-xs font-medium text-slate-800 dark:text-slate-100">Need a hand?</p>
-              <p className="mt-1 text-xs leading-relaxed text-slate-600 dark:text-slate-400">
-                Docs and best practices for agents and embeddings.
-              </p>
-              <Link
-                href="/user/dashboard"
-                className="mt-3 inline-flex text-xs font-semibold text-brand-600 hover:text-brand-700 dark:text-brand-400 dark:hover:text-brand-300"
-                onClick={() => setMobileNavOpen(false)}
-              >
-                View overview →
-              </Link>
-            </div>
-          ) : null}
-        </div>
-      </aside>
-
-      {/* Sidebar 2 — agent workspace only (not on /user/bots or /user/bots/new) */}
-      {agentChrome && botWorkspaceId ? (
-        <>
-          <div className="hidden min-h-0 overflow-hidden lg:flex lg:h-full lg:min-h-0 lg:w-full lg:flex-col">
-            <AgentSidebar botId={botWorkspaceId} theme={theme} agentLabel={agentTitle} />
-          </div>
-          {mobileAgentOpen ? (
-            <div
-              ref={mobileAgentPanelRef}
-              role="dialog"
-              aria-modal="true"
-              aria-label="Agent navigation"
-              className="fixed bottom-0 right-0 top-12 z-50 flex h-[calc(100dvh-3rem)] min-h-0 flex-col overflow-hidden border-l border-slate-200/90 shadow-[0_8px_30px_rgba(15,23,42,0.1)] dark:border-slate-800 lg:hidden"
-              style={{ width: `min(100vw, ${WORKSPACE_SIDEBAR_EXPANDED_PX}px)` }}
-            >
-              <AgentSidebar botId={botWorkspaceId} theme={theme} agentLabel={agentTitle} />
-            </div>
-          ) : null}
-        </>
-      ) : null}
-
-      {/* Main column — scrollable page content only (header is global above) */}
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        {/* Mobile: agent sections only (no global secondary nav) */}
-        {agentChrome && botWorkspaceId ? (
-          <div
-            className={cx(
-              "flex items-center justify-between gap-2 border-b px-3 py-2 lg:hidden",
-              theme === "dark" ? "border-slate-800 bg-slate-900/40" : "border-slate-200/80 bg-white/70",
-            )}
-          >
-            <p className="text-xs font-medium text-slate-600 dark:text-slate-400">In this agent</p>
-            <button
-              type="button"
-              onClick={() => setMobileAgentOpen(true)}
-              className="rounded-sm border border-brand-200/90 bg-brand-50/80 px-3 py-1.5 text-xs font-semibold text-brand-800 dark:border-brand-500/25 dark:bg-brand-500/10 dark:text-brand-200"
-            >
-              Sections
-            </button>
-          </div>
-        ) : null}
-
-        <main className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-5 sm:px-5 lg:px-7">
-          <div
-            className={cx(
-              "mx-auto flex min-h-0 w-full flex-1 flex-col",
-              fullWidth ? "max-w-[min(1800px,100%)]" : "max-w-screen-2xl",
-              !fullWidth && "space-y-6",
-            )}
-          >
-            {hasPageHeader ? (
-              <div className="space-y-4">
-                {hasTitleRow ? (
-                  <div className="flex flex-col gap-4 border-b border-slate-200/80 pb-5 dark:border-slate-800 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
-                    <div className="min-w-0 flex-1 space-y-1.5">
-                      {displayPageTitle ? (
-                        <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">
-                          {displayPageTitle}
-                        </h1>
-                      ) : null}
-                      {subtitle ? (
-                        <div className="text-sm leading-relaxed text-slate-600 dark:text-slate-400">{subtitle}</div>
-                      ) : null}
-                    </div>
-                    {actions ? (
-                      <div className="flex w-full shrink-0 flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
-                        {actions}
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
-                {toolbar ? (
-                  <div className="flex flex-col gap-3 rounded-md border border-slate-200/90 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900/50 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-4 sm:p-4">
-                    {toolbar}
-                  </div>
-                ) : null}
               </div>
             ) : null}
-            {children}
           </div>
-        </main>
+        </aside>
+
+        {/* Sidebar 2 — bot editor only (not on /admin/bots list or new) */}
+        {agentChrome && botWorkspaceId ? (
+          <>
+            <div className="hidden min-h-0 overflow-hidden lg:flex lg:h-full lg:min-h-0 lg:w-full lg:flex-col">
+              <AgentSidebar botId={botWorkspaceId} theme={theme} agentLabel={agentTitle} />
+            </div>
+            {mobileAgentOpen ? (
+              <div
+                ref={mobileAgentPanelRef}
+                role="dialog"
+                aria-modal="true"
+                aria-label="Agent navigation"
+                className="fixed bottom-0 right-0 top-12 z-50 flex h-[calc(100dvh-3rem)] min-h-0 flex-col overflow-hidden border-l border-slate-200/90 shadow-[0_8px_30px_rgba(15,23,42,0.1)] dark:border-slate-800 lg:hidden"
+                style={{ width: `min(100vw, ${WORKSPACE_SIDEBAR_EXPANDED_PX}px)` }}
+              >
+                <AgentSidebar botId={botWorkspaceId} theme={theme} agentLabel={agentTitle} />
+              </div>
+            ) : null}
+          </>
+        ) : null}
+
+        {/* Main column — scrollable page content only (header is global above) */}
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          {/* Mobile: agent sections only (no global secondary nav) */}
+          {agentChrome && botWorkspaceId ? (
+            <div
+              className={cx(
+                "flex items-center justify-between gap-2 border-b px-3 py-2 lg:hidden",
+                theme === "dark" ? "border-slate-800 bg-slate-900/40" : "border-slate-200/80 bg-white/70",
+              )}
+            >
+              <p className="text-xs font-medium text-slate-600 dark:text-slate-400">In this agent</p>
+              <button
+                type="button"
+                onClick={() => setMobileAgentOpen(true)}
+                className="rounded-sm border border-brand-200/90 bg-brand-50/80 px-3 py-1.5 text-xs font-semibold text-brand-800 dark:border-brand-500/25 dark:bg-brand-500/10 dark:text-brand-200"
+              >
+                Sections
+              </button>
+            </div>
+          ) : null}
+
+          <main className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-5 sm:px-5 lg:px-7">
+            <div
+              className={cx(
+                "mx-auto flex min-h-0 w-full flex-1 flex-col",
+                fullWidth ? "max-w-[min(1800px,100%)]" : "max-w-screen-2xl",
+                !fullWidth && "space-y-6",
+              )}
+            >
+              {hasPageHeader ? (
+                <div className="space-y-4">
+                  {hasTitleRow ? (
+                    <div className="flex flex-col gap-4 border-b border-slate-200/80 pb-5 dark:border-slate-800 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
+                      <div className="min-w-0 flex-1 space-y-1.5">
+                        {displayPageTitle ? (
+                          <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">
+                            {displayPageTitle}
+                          </h1>
+                        ) : null}
+                        {subtitle ? (
+                          <div className="text-sm leading-relaxed text-slate-600 dark:text-slate-400">{subtitle}</div>
+                        ) : null}
+                      </div>
+                      {actions ? (
+                        <div className="flex w-full shrink-0 flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
+                          {actions}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  {toolbar ? (
+                    <div className="flex flex-col gap-3 rounded-md border border-slate-200/90 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900/50 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-4 sm:p-4">
+                      {toolbar}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+              {children}
+            </div>
+          </main>
+        </div>
       </div>
-    </div>
     </div>
   );
 }

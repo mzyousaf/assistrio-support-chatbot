@@ -6,23 +6,25 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
 import { apiFetch } from "@/lib/api";
+import type { ServerUser } from "@/lib/serverAuth";
 
-/** Logged-in user (from User table). No role restriction. */
+/** Logged-in staff (superadmin) from `GET /api/admin/me`. */
 export type User = {
   id: string;
   email: string;
   role?: string;
-  /** Workspace ids the user belongs to (from GET /api/user/me). */
+  /** Workspace ids (personal workspace ensured by backend). */
   workspaceIds?: string[];
 } | null;
 
-/** Dedupes the bootstrap `/api/user/me` call (React Strict Mode runs effects twice in dev). */
+/** Dedupes bootstrap `GET /api/admin/me` (React Strict Mode runs effects twice in dev). */
 let userMeBootstrapInflight: Promise<{ ok: boolean; user: User }> | null = null;
 
 function resetUserMeBootstrapCache(): void {
@@ -32,7 +34,7 @@ function resetUserMeBootstrapCache(): void {
 async function fetchUserMeBootstrapOnce(): Promise<{ ok: boolean; user: User }> {
   if (!userMeBootstrapInflight) {
     userMeBootstrapInflight = (async () => {
-      const res = await apiFetch("/api/user/me");
+      const res = await apiFetch("/api/admin/me");
       if (!res.ok) {
         return { ok: false, user: null };
       }
@@ -50,12 +52,15 @@ type UserContextValue = {
   user: User;
   loading: boolean;
   refetch: () => Promise<void>;
+  /** Admin RSC snapshot — skips client bootstrap flicker on `/admin/*`. */
+  applyServerSnapshot: (snapshot: ServerUser) => void;
 };
 
 const UserContext = createContext<UserContextValue | null>(null);
 
 function isPublicAuthPath(pathname: string): boolean {
-  return pathname === "/user/login" || pathname === "/admin/login";
+  // `/user/login` may still appear briefly before `next.config` redirects to `/admin/login`.
+  return pathname === "/admin/login" || pathname === "/user/login";
 }
 
 async function parseMeResponse(res: Response): Promise<User> {
@@ -81,17 +86,26 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [user, setUser] = useState<User>(null);
   const [loading, setLoading] = useState(true);
+  const serverHydratedRef = useRef(false);
 
-  /** Manual refresh (e.g. after login). Uses current route for redirect rules. */
+  const applyServerSnapshot = useCallback((snapshot: ServerUser) => {
+    serverHydratedRef.current = true;
+    resetUserMeBootstrapCache();
+    setUser(snapshot);
+    setLoading(false);
+  }, []);
+
+  /** Manual refresh (e.g. after login). */
   const refetch = useCallback(async () => {
+    serverHydratedRef.current = false;
     resetUserMeBootstrapCache();
     setLoading(true);
     try {
-      const res = await apiFetch("/api/user/me");
+      const res = await apiFetch("/api/admin/me");
       if (!res.ok) {
         setUser(null);
         if (!isPublicAuthPath(pathname)) {
-          router.replace("/user/login");
+          router.replace("/admin/login");
         }
         return;
       }
@@ -101,13 +115,13 @@ export function UserProvider({ children }: { children: ReactNode }) {
       } else {
         setUser(null);
         if (!isPublicAuthPath(pathname)) {
-          router.replace("/user/login");
+          router.replace("/admin/login");
         }
       }
     } catch {
       setUser(null);
       if (!isPublicAuthPath(pathname)) {
-        router.replace("/user/login");
+        router.replace("/admin/login");
       }
     } finally {
       setLoading(false);
@@ -120,13 +134,16 @@ export function UserProvider({ children }: { children: ReactNode }) {
     const pathAtMount = pathname;
 
     void (async () => {
+      if (serverHydratedRef.current) {
+        return;
+      }
       try {
         const { ok, user: next } = await fetchUserMeBootstrapOnce();
         if (cancelled) return;
         if (!ok || !next) {
           setUser(null);
           if (!isPublicAuthPath(pathAtMount)) {
-            router.replace("/user/login");
+            router.replace("/admin/login");
           }
           return;
         }
@@ -135,7 +152,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
         if (cancelled) return;
         setUser(null);
         if (!isPublicAuthPath(pathAtMount)) {
-          router.replace("/user/login");
+          router.replace("/admin/login");
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -145,11 +162,13 @@ export function UserProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-    // Intentionally empty: one /api/user/me per full app load.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const value = useMemo(() => ({ user, loading, refetch }), [user, loading, refetch]);
+  const value = useMemo(
+    () => ({ user, loading, refetch, applyServerSnapshot }),
+    [user, loading, refetch, applyServerSnapshot],
+  );
 
   return <UserContext.Provider value={value}>{children}</UserContext.Provider>;
 }

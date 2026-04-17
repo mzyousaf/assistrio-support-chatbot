@@ -6,6 +6,7 @@ import { Switch } from "@/components/ui/Switch";
 import { SettingsModal } from "@/components/admin/settings/SettingsModal";
 import { File, FileCode, FileText, Loader2, Play, RefreshCw, Trash2, XCircle } from "lucide-react";
 import { apiFetch } from "@/lib/api";
+import { ADMIN_API_BOTS } from "@/lib/internal-operator-api";
 import { formatSize, formatDate, getStatusMeta, getFileTypeFromText, isLegacyDocWithoutText, truncateMessage } from "./documents-utils";
 import type { DocumentStatus } from "./documents-utils";
 
@@ -137,7 +138,7 @@ export function DocumentsTable({
     }
     setDownloadingId(doc._id);
     try {
-      const res = await apiFetch(`/api/user/bots/${botId}/documents/${doc._id}/download-url`);
+      const res = await apiFetch(`${ADMIN_API_BOTS}/${botId}/documents/${doc._id}/download-url`);
       const data = (await res.json().catch(() => ({}))) as { url?: string };
       if (!res.ok || !data.url) return;
       window.open(data.url, "_blank", "noopener,noreferrer");

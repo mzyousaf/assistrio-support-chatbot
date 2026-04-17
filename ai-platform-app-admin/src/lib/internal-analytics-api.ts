@@ -1,11 +1,12 @@
 /**
  * Internal (authenticated) analytics API helpers for the admin app.
- * Uses session-backed `GET /api/user/analytics/*` — **never** import these from the landing site or PV flows.
+ * Uses session-backed `GET /api/admin/analytics/*` — **never** import these from the landing site or PV flows.
  *
  * @see ai-platform-backend/docs/ANALYTICS_BOUNDARIES.md
  */
 
 import { apiFetch } from "@/lib/api";
+import { ADMIN_API_ANALYTICS } from "@/lib/internal-operator-api";
 import type {
   InternalAnalyticsDatePreset,
   InternalBotsSummaryResponse,
@@ -36,7 +37,7 @@ export async function fetchInternalAnalyticsOverview(
   to: Date,
 ): Promise<InternalAnalyticsOverviewResponse> {
   const qs = buildInternalAnalyticsRangeQuery(from, to);
-  const res = await apiFetch(`/api/user/analytics/overview?${qs}`);
+  const res = await apiFetch(`${ADMIN_API_ANALYTICS}/overview?${qs}`);
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(text || `Failed to load analytics overview (${res.status})`);
@@ -49,7 +50,7 @@ export async function fetchInternalBotsSummary(
   to: Date,
 ): Promise<InternalBotsSummaryResponse> {
   const qs = buildInternalAnalyticsRangeQuery(from, to);
-  const res = await apiFetch(`/api/user/analytics/bots/summary?${qs}`);
+  const res = await apiFetch(`${ADMIN_API_ANALYTICS}/bots/summary?${qs}`);
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(text || `Failed to load bot summary (${res.status})`);
@@ -62,7 +63,7 @@ export async function fetchInternalLeadsSummary(
   to: Date,
 ): Promise<InternalLeadsSummaryResponse> {
   const qs = buildInternalAnalyticsRangeQuery(from, to);
-  const res = await apiFetch(`/api/user/analytics/leads/summary?${qs}`);
+  const res = await apiFetch(`${ADMIN_API_ANALYTICS}/leads/summary?${qs}`);
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(text || `Failed to load leads summary (${res.status})`);
@@ -86,7 +87,7 @@ export type LegacyAnalyticsEventRow = {
 };
 
 export async function fetchLegacyAnalyticsFeed(): Promise<LegacyAnalyticsFeedResponse> {
-  const res = await apiFetch("/api/user/analytics");
+  const res = await apiFetch(ADMIN_API_ANALYTICS);
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(text || `Failed to load activity feed (${res.status})`);

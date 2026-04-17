@@ -7,6 +7,7 @@ import BotForm from "@/components/admin/BotForm";
 import type { BotDocumentItem } from "@/components/admin/BotDocumentsManager";
 import type { BotFaq } from "@/components/admin/BotFaqsEditor";
 import { apiFetch } from "@/lib/api";
+import { ADMIN_API_BOTS } from "@/lib/internal-operator-api";
 import { clearDraftId, rotateDraftId } from "@/lib/draftBot";
 import type {
   BotAllowedOrigin,
@@ -87,7 +88,7 @@ export default function EditBotFormClient({
 
   const handleRetryFaq = async (faqIndex: number) => {
     if (!botId) return;
-    const res = await apiFetch(`/api/user/bots/${botId}/embed/retry-faq`, {
+    const res = await apiFetch(`${ADMIN_API_BOTS}/${botId}/embed/retry-faq`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ faqIndex }),
@@ -100,7 +101,7 @@ export default function EditBotFormClient({
 
   const handleRetryNote = async () => {
     if (!botId) return;
-    const res = await apiFetch(`/api/user/bots/${botId}/embed/retry-note`, {
+    const res = await apiFetch(`${ADMIN_API_BOTS}/${botId}/embed/retry-note`, {
       method: "POST",
     });
     if (!res.ok) {
@@ -133,7 +134,7 @@ export default function EditBotFormClient({
         }
         onSavingChange?.(true);
         try {
-          const response = await apiFetch(`/api/user/bots/${initialBot.id}`, {
+          const response = await apiFetch(`${ADMIN_API_BOTS}/${initialBot.id}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload),
@@ -154,7 +155,7 @@ export default function EditBotFormClient({
       }}
       onCreateAnotherBot={() => {
         rotateDraftId();
-        router.push("/user/bots/new?new=1");
+        router.push("/admin/bots/new?new=1");
       }}
     />
   );

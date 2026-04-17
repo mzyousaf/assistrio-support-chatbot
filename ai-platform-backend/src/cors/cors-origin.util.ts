@@ -9,7 +9,7 @@ import { hostnameIsLoopbackForEmbedBypass } from '../bots/origin-validation.util
  *    **Any valid HTTPS browser origin** is reflected for those paths. Runtime authorization remains **keys + allowed origins**
  *    in the API, not CORS.
  *
- * 2. **Strict allowlist** (everything else, including `/api/widget/preview/*`, `/api/user/*`, `/api/bots`): Assistrio
+ * 2. **Strict allowlist** (everything else, including `/api/widget/preview/*`, `/api/customer/*`, `/api/bots`): Assistrio
  *    hostnames + dev loopback (development only) — admin/auth/preview.
  *
  * **Preview** stays on the strict bucket (`/api/widget/preview/*`).

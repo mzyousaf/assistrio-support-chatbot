@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Internal (admin) analytics dashboard — authenticated GET /api/user/analytics/* (overview, bots/summary, leads/summary).
+ * Internal (admin) analytics dashboard — superadmin GET /api/admin/analytics/* (overview, bots/summary, leads/summary).
  * Do not reuse for public landing pages or PV-safe bot summaries; those use different APIs.
  */
 

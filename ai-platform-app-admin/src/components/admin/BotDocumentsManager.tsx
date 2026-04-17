@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { apiFetch } from "@/lib/api";
+import { ADMIN_API_BOTS, ADMIN_API_JOBS, ADMIN_API_UPLOAD } from "@/lib/internal-operator-api";
 import { Button } from "@/components/ui/Button";
 import { SettingsSectionCard } from "@/components/admin/settings/SettingsSectionCard";
 import { SettingsSideSheet } from "@/components/admin/settings/SettingsSideSheet";
@@ -137,7 +138,7 @@ export default function BotDocumentsManager({
     try {
       const params = new URLSearchParams({ page: String(page), limit: String(limit) });
       const response = await apiFetch(
-        `/api/user/bots/${botId}/knowledge-poll?${params.toString()}`,
+        `${ADMIN_API_BOTS}/${botId}/knowledge-poll?${params.toString()}`,
         { method: "GET" },
       );
       if (!response.ok) throw new Error("Failed to fetch documents");
@@ -218,7 +219,7 @@ export default function BotDocumentsManager({
       for (const file of selectedFiles) {
         formData.append("file", file);
       }
-      const response = await apiFetch("/api/user/upload", {
+      const response = await apiFetch(ADMIN_API_UPLOAD, {
         method: "POST",
         body: formData,
       });
@@ -266,7 +267,7 @@ export default function BotDocumentsManager({
     setError(null);
     setJobRunMessage(null);
     try {
-      const response = await apiFetch("/api/user/jobs/run", {
+      const response = await apiFetch(`${ADMIN_API_JOBS}/run`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ limit: 3 }),
@@ -301,7 +302,7 @@ export default function BotDocumentsManager({
     setError(null);
     const wasOnlyItemOnPage = items.length === 1 && page > 1;
     try {
-      const response = await apiFetch(`/api/user/bots/${botId}/documents/${docId}`, { method: "DELETE" });
+      const response = await apiFetch(`${ADMIN_API_BOTS}/${botId}/documents/${docId}`, { method: "DELETE" });
       if (!response.ok) throw new Error("Delete failed");
       if (wasOnlyItemOnPage) {
         setPage((p) => Math.max(1, p - 1));
@@ -324,7 +325,7 @@ export default function BotDocumentsManager({
     setBulkDeleting(true);
     setError(null);
     try {
-      const response = await apiFetch(`/api/user/bots/${botId}/documents/bulk-delete`, {
+      const response = await apiFetch(`${ADMIN_API_BOTS}/${botId}/documents/bulk-delete`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ docIds }),
@@ -350,7 +351,7 @@ export default function BotDocumentsManager({
     setTogglingActiveId(docId);
     setError(null);
     try {
-      const response = await apiFetch(`/api/user/bots/${botId}/documents/${docId}`, {
+      const response = await apiFetch(`${ADMIN_API_BOTS}/${botId}/documents/${docId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ active }),
@@ -374,7 +375,7 @@ export default function BotDocumentsManager({
     setError(null);
     setJobRunMessage(null);
     try {
-      const response = await apiFetch(`/api/user/bots/${botId}/documents/${docId}/embed`, { method: "POST" });
+      const response = await apiFetch(`${ADMIN_API_BOTS}/${botId}/documents/${docId}/embed`, { method: "POST" });
       const data = (await response.json().catch(() => ({}))) as { error?: string };
       if (!response.ok) {
         setError(`Retry failed (${data.error || "request_failed"}).`);
@@ -395,13 +396,13 @@ export default function BotDocumentsManager({
     setError(null);
     setJobRunMessage(null);
     try {
-      const embedRes = await apiFetch(`/api/user/bots/${botId}/documents/${docId}/embed`, { method: "POST" });
+      const embedRes = await apiFetch(`${ADMIN_API_BOTS}/${botId}/documents/${docId}/embed`, { method: "POST" });
       const embedData = (await embedRes.json().catch(() => ({}))) as { error?: string };
       if (!embedRes.ok) {
         setError(`Force process failed (${embedData.error || "request_failed"}).`);
         return;
       }
-      const runRes = await apiFetch("/api/user/jobs/run", {
+      const runRes = await apiFetch(`${ADMIN_API_JOBS}/run`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ limit: 3 }),
@@ -426,7 +427,7 @@ export default function BotDocumentsManager({
     let retried = 0;
     try {
       for (const doc of failedDocs) {
-        const response = await apiFetch(`/api/user/bots/${botId}/documents/${doc._id}/embed`, {
+        const response = await apiFetch(`${ADMIN_API_BOTS}/${botId}/documents/${doc._id}/embed`, {
           method: "POST",
         });
         if (response.ok) retried += 1;

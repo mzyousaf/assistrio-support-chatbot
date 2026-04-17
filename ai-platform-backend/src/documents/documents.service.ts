@@ -144,28 +144,42 @@ export class DocumentsService {
         docsProcessing: 0,
         docsReady: 0,
         docsFailed: 0,
+        docsIndexedBytes: 0,
         lastIngestedAt: undefined,
         lastFailedDoc: undefined,
       };
     }
-    const [docsTotal, docsQueued, docsProcessing, docsReady, docsFailed, lastReadyDoc, lastFailedDocRaw] =
-      await Promise.all([
-        this.documentModel.countDocuments({ botId: botOid }),
-        this.documentModel.countDocuments({ botId: botOid, status: 'queued' }),
-        this.documentModel.countDocuments({ botId: botOid, status: 'processing' }),
-        this.documentModel.countDocuments({ botId: botOid, status: 'ready' }),
-        this.documentModel.countDocuments({ botId: botOid, status: 'failed' }),
-        this.documentModel
-          .findOne({ botId: botOid, status: 'ready' })
-          .sort({ ingestedAt: -1, createdAt: -1 })
-          .select({ ingestedAt: 1, createdAt: 1 })
-          .lean(),
-        this.documentModel
-          .findOne({ botId: botOid, status: 'failed' })
-          .sort({ createdAt: -1 })
-          .select({ _id: 1, title: 1, error: 1, createdAt: 1 })
-          .lean(),
-      ]);
+    const [
+      docsTotal,
+      docsQueued,
+      docsProcessing,
+      docsReady,
+      docsFailed,
+      indexedAgg,
+      lastReadyDoc,
+      lastFailedDocRaw,
+    ] = await Promise.all([
+      this.documentModel.countDocuments({ botId: botOid }),
+      this.documentModel.countDocuments({ botId: botOid, status: 'queued' }),
+      this.documentModel.countDocuments({ botId: botOid, status: 'processing' }),
+      this.documentModel.countDocuments({ botId: botOid, status: 'ready' }),
+      this.documentModel.countDocuments({ botId: botOid, status: 'failed' }),
+      this.documentModel.aggregate<{ total?: number }>([
+        { $match: { botId: botOid, status: 'ready' } },
+        { $group: { _id: null, total: { $sum: { $ifNull: ['$fileSize', 0] } } } },
+      ]),
+      this.documentModel
+        .findOne({ botId: botOid, status: 'ready' })
+        .sort({ ingestedAt: -1, createdAt: -1 })
+        .select({ ingestedAt: 1, createdAt: 1 })
+        .lean(),
+      this.documentModel
+        .findOne({ botId: botOid, status: 'failed' })
+        .sort({ createdAt: -1 })
+        .select({ _id: 1, title: 1, error: 1, createdAt: 1 })
+        .lean(),
+    ]);
+    const docsIndexedBytes = Math.max(0, Math.floor(Number(indexedAgg[0]?.total ?? 0)));
     const lastIngestedAtValue = (lastReadyDoc as { ingestedAt?: Date; createdAt?: Date } | null)?.ingestedAt
       ?? (lastReadyDoc as { createdAt?: Date } | null)?.createdAt;
     const lastFailed = lastFailedDocRaw as { _id: unknown; title?: string; error?: string; createdAt?: Date } | null;
@@ -175,6 +189,7 @@ export class DocumentsService {
       docsProcessing,
       docsReady,
       docsFailed,
+      docsIndexedBytes,
       lastIngestedAt: lastIngestedAtValue ? new Date(lastIngestedAtValue).toISOString() : undefined,
       lastFailedDoc: lastFailed
         ? {

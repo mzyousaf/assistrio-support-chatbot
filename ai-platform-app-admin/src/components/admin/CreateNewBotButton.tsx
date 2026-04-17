@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 
 import { rotateDraftId } from "@/lib/draftBot";
 
@@ -12,11 +12,9 @@ interface CreateNewBotButtonProps {
 
 export default function CreateNewBotButton({
   className,
-  label = "Create agent",
+  label = "Create bot",
 }: CreateNewBotButtonProps) {
   const router = useRouter();
-  const pathname = usePathname();
-  const base = pathname.startsWith("/admin") ? "/admin" : "/user";
 
   return (
     <button
@@ -27,7 +25,7 @@ export default function CreateNewBotButton({
       }
       onClick={() => {
         rotateDraftId();
-        router.push(`${base}/bots/new?new=1`);
+        router.push("/admin/bots/new?new=1");
       }}
     >
       {label}

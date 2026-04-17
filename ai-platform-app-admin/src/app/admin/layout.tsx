@@ -1,11 +1,15 @@
-"use client";
+import type { ReactNode } from "react";
 
-import { ReactNode } from "react";
+import { AdminUserGate } from "./admin-user-gate";
+import { getServerUser } from "@/lib/serverAuth";
 
-type AdminLayoutProps = {
-  children: ReactNode;
-};
+export default async function AdminLayout({ children }: { children: ReactNode }) {
+  const serverUser = await getServerUser();
 
-export default function AdminLayout({ children }: AdminLayoutProps) {
-  return <>{children}</>;
+  return (
+    <>
+      <AdminUserGate serverUser={serverUser} />
+      {children}
+    </>
+  );
 }

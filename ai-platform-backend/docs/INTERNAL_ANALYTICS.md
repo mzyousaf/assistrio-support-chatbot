@@ -9,10 +9,10 @@ This document describes **Assistrio-internal** analytics: authenticated reportin
 | Layer | Purpose | Examples |
 |-------|---------|----------|
 | **Raw ingestion** | Append-only events from browsers or server | `POST /api/analytics/track`, `VisitorsService.createVisitorEvent` |
-| **Internal reporting** | Aggregates, funnels, admin UI | `GET /api/user/analytics` (today), future `/api/user/analytics/*` |
+| **Internal reporting** | Aggregates, funnels, admin UI | `GET /api/admin/analytics` and `/api/admin/analytics/*` |
 | **PV-safe summaries** | Product-shaped, scoped by `platformVisitorId` | `POST /api/public/visitor-quota/summary`, `POST /api/public/visitor-bot/*` |
 
-PV clients must **never** consume internal event streams or `/api/user/analytics` contracts. See `PV_SAFE_PUBLIC_APIS.md`.
+PV clients must **never** consume internal event streams or `/api/admin/analytics` contracts. See `PV_SAFE_PUBLIC_APIS.md`.
 
 ---
 
@@ -82,7 +82,7 @@ Preview cap, trial runtime cap, showcase runtime cap — **derived from** visito
 | Endpoint | Role |
 |-----------|------|
 | `POST /api/analytics/track` | Ingestion (anonymous), validated DTO — **internal pipeline input**, not PV dashboard. |
-| `GET /api/user/analytics` | **AuthGuard** — current single “dashboard” payload (`metrics` + `recentEvents`). |
+| `GET /api/admin/analytics` | **Staff session** — single “dashboard” payload (`metrics` + `recentEvents`). |
 | `POST /api/public/visitor-quota/summary` etc. | **PV-safe only** — do not use as internal admin API. |
 
 ### 1.7 `VisitorsService.getOneWithDetails`
@@ -170,9 +170,9 @@ Below: **supported** = queryable from current collections with clear semantics; 
 
 ---
 
-## 3. Internal analytics API structure (`/api/user/analytics/*`)
+## 3. Internal analytics API structure (`/api/admin/analytics/*`)
 
-All routes: **`AuthGuard`**, JSON, **no** anonymous access.
+All routes: **superadmin staff session** (`AdminSessionAuthGuard` + `SuperAdminGuard`), JSON, **no** anonymous access.
 
 **Principles:**
 
@@ -184,27 +184,25 @@ All routes: **`AuthGuard`**, JSON, **no** anonymous access.
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| GET | `/api/user/analytics/overview` | Time-bounded dashboard summary (`?from=&to=` optional; default last 30 days). See `AnalyticsService.getAnalyticsOverview`. |
-| GET | `/api/user/analytics/bots/summary` | Per-bot operational metrics for a date range (table-oriented). `AnalyticsService.getBotsSummary`. |
-| GET | `/api/user/analytics/leads/summary` | Lead capture aggregates (counts only; `byBot` breakdown capped). `AnalyticsService.getLeadsSummary`. |
-| GET | `/api/user/analytics/bots/:id` | Single-bot internal analytics — no `secretKey`. `AnalyticsService.getBotAnalyticsDetail`. |
-| GET | `/api/user/analytics` | Legacy lifetime snapshot + 20 recent events (`getSummary`). |
+| GET | `/api/admin/analytics/overview` | Time-bounded dashboard summary (`?from=&to=` optional; default last 30 days). See `AnalyticsService.getAnalyticsOverview`. |
+| GET | `/api/admin/analytics/bots/summary` | Per-bot operational metrics for a date range (table-oriented). `AnalyticsService.getBotsSummary`. |
+| GET | `/api/admin/analytics/leads/summary` | Lead capture aggregates (counts only; `byBot` breakdown capped). `AnalyticsService.getLeadsSummary`. |
+| GET | `/api/admin/analytics/bots/:id` | Single-bot internal analytics — no `secretKey`. `AnalyticsService.getBotAnalyticsDetail`. |
+| GET | `/api/admin/analytics` | Lifetime snapshot + 20 recent events (`getSummary`). |
 
 **Planned (incremental):**
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| GET | `/api/user/analytics/events` | Paginated, filterable `VisitorEvent` (type, date, optional `botSlug`) — **internal** only |
-| GET | `/api/user/analytics/funnel` | Aggregates by event type + optional path (landing funnel) |
-| GET | `/api/user/analytics/timeseries/messages` | Bucketed counts by `trialRuntime` / `showcaseRuntime` / role |
+| GET | `/api/admin/analytics/events` | Paginated, filterable `VisitorEvent` (type, date, optional `botSlug`) — **internal** only |
+| GET | `/api/admin/analytics/funnel` | Aggregates by event type + optional path (landing funnel) |
+| GET | `/api/admin/analytics/timeseries/messages` | Bucketed counts by `trialRuntime` / `showcaseRuntime` / role |
 
-**Deprecate gradually:** fold current `GET /api/user/analytics` into `overview` + small `recentEvents` or redirect with same auth.
-
-**Explicitly not PV:** document that these paths are under `/api/user/` and guarded — never expose to `POST /api/public/*`.
+**Explicitly not PV:** these paths are under `/api/admin/` and guarded — never expose to `POST /api/public/*`.
 
 ---
 
-## 4. Slice 1 — **implemented** (`GET /api/user/analytics/overview`)
+## 4. Slice 1 — **implemented** (`GET /api/admin/analytics/overview`)
 
 - **Query:** `from`, `to` (ISO 8601). Omitted → last **30 days** ending now; max span **366 days** (`analytics-date-range.util.ts`).
 - **Response:** `schemaVersion`, `range`, `overview` (VisitorEvent aggregates by type), `messages` (counts incl. runtime flags), `bots` (visitor-own created in range + published showcase snapshot), `leads` (conversations with captured lead fields in range), `caveats` (honest limitations).

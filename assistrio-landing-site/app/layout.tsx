@@ -5,6 +5,7 @@ import { LandingRouteTracker } from "@/components/analytics/landing-route-tracke
 import { SiteFooter } from "@/components/layout/site-footer";
 import { SiteHeader } from "@/components/layout/site-header";
 import { CtaFlowProvider } from "@/components/flows/cta-flow-context";
+import { LandingCustomerSessionProvider } from "@/contexts/landing-customer-session-context";
 import { SiteAnalyticsVisitorProvider } from "@/contexts/platform-visitor-context";
 import { getMetadataBaseUrl, SITE_LOGO } from "@/lib/site-branding";
 import { SITE_DEFAULT_DESCRIPTION } from "@/lib/site-metadata";
@@ -82,12 +83,14 @@ export default function RootLayout({
         className={`${sans.variable} ${display.variable} ${mono.variable} flex min-h-screen flex-col overflow-x-clip antialiased`}
       >
         <SiteAnalyticsVisitorProvider>
-          <CtaFlowProvider>
-            <LandingRouteTracker />
-            <SiteHeader />
-            <main className="w-full min-w-0 flex-1">{children}</main>
-            <SiteFooter />
-          </CtaFlowProvider>
+          <LandingCustomerSessionProvider>
+            <CtaFlowProvider>
+              <LandingRouteTracker />
+              <SiteHeader />
+              <main className="w-full min-w-0 flex-1">{children}</main>
+              <SiteFooter />
+            </CtaFlowProvider>
+          </LandingCustomerSessionProvider>
         </SiteAnalyticsVisitorProvider>
       </body>
     </html>

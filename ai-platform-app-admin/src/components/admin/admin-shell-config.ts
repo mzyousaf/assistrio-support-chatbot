@@ -1,67 +1,59 @@
 import type { LucideIcon } from "lucide-react";
 import { BarChart3, Bot, Building2 } from "lucide-react";
 
-export type MainNavId = "agents" | "analytics" | "workspace";
+export type MainNavId = "bots" | "analytics" | "settings";
 
 export interface MainNavItem {
   id: MainNavId;
   label: string;
   href: string;
   icon: LucideIcon;
-  /** Highlight when pathname matches (canonical `/user/...` path). */
+  /** Highlight when pathname matches canonical `/admin/...` path. */
   isActive: (canonicalPath: string) => boolean;
-  /** Nested links (e.g. workspace settings) — shown when main sidebar is expanded. */
   children?: { label: string; href: string }[];
 }
 
-/** Primary workspace navigation (sidebar 1). All `href` values use the `/user/...` prefix; use `resolveUserHref` for `/admin` mirrors. */
+/**
+ * Primary internal navigation — all routes under `/admin/*`.
+ * Labels describe operator / platform scope, not the customer product.
+ */
 export const MAIN_SIDEBAR: MainNavItem[] = [
   {
-    id: "agents",
-    label: "Agents",
-    href: "/user/bots",
+    id: "bots",
+    label: "Bots & showcase",
+    href: "/admin/bots",
     icon: Bot,
-    isActive: (p) => p.startsWith("/user/bots") || p.startsWith("/user/visitors"),
+    isActive: (p) => p.startsWith("/admin/bots") || p.startsWith("/admin/visitors"),
   },
   {
     id: "analytics",
-    label: "Analytics",
-    href: "/user/analytics",
+    label: "Global analytics",
+    href: "/admin/analytics",
     icon: BarChart3,
-    isActive: (p) => p.startsWith("/user/analytics"),
+    isActive: (p) => p.startsWith("/admin/analytics"),
     children: [
-      { label: "Overview", href: "/user/analytics" },
-      { label: "Chats", href: "/user/analytics/chats" },
-      { label: "Topics", href: "/user/analytics/topics" },
-      { label: "Sentiment", href: "/user/analytics/sentiment" },
+      { label: "Overview", href: "/admin/analytics" },
+      { label: "Chats", href: "/admin/analytics/chats" },
+      { label: "Topics", href: "/admin/analytics/topics" },
+      { label: "Sentiment", href: "/admin/analytics/sentiment" },
     ],
   },
   {
-    id: "workspace",
-    label: "Workspace Settings",
-    href: "/user/settings/general",
+    id: "settings",
+    label: "Platform settings",
+    href: "/admin/settings/general",
     icon: Building2,
-    isActive: (p) => p.startsWith("/user/settings"),
+    isActive: (p) => p.startsWith("/admin/settings"),
     children: [
-      { label: "General", href: "/user/settings/general" },
-      { label: "Members", href: "/user/settings/members" },
-      { label: "Plans", href: "/user/settings/plans" },
-      { label: "Billing", href: "/user/settings/billing" },
-      { label: "API Keys", href: "/user/settings/api-keys" },
+      { label: "General", href: "/admin/settings/general" },
+      { label: "Members", href: "/admin/settings/members" },
+      { label: "Plans", href: "/admin/settings/plans" },
+      { label: "Billing", href: "/admin/settings/billing" },
+      { label: "API Keys", href: "/admin/settings/api-keys" },
     ],
   },
 ];
 
-/** Map `/user/...` routes to `/admin/...` when the app is under `/admin`. */
-export function resolveUserHref(pathname: string, userHref: string): string {
-  if (!userHref.startsWith("/user")) return userHref;
-  if (pathname.startsWith("/admin")) {
-    return `/admin${userHref.slice("/user".length)}`;
-  }
-  return userHref;
-}
-
-/** Visible page title from route when `AdminShell` `title` is omitted. Uses canonical `/user/...` paths. */
 export function getShellPageTitle(canonicalPath: string, explicitTitle?: string): string | undefined {
   const p = canonicalPath.split("?")[0];
   if (explicitTitle?.trim()) return explicitTitle.trim();
@@ -74,10 +66,10 @@ export function getShellPageTitle(canonicalPath: string, explicitTitle?: string)
     }
   }
 
-  if (p === "/user/dashboard") return "Dashboard";
-  if (p === "/user/bots/new") return "Create agent";
-  if (p === "/user/bots") return "Agents";
-  if (p === "/user/visitors" || p.startsWith("/user/visitors/")) return "Visitors";
+  if (p === "/admin/dashboard") return "Overview";
+  if (p === "/admin/bots/new") return "Create bot";
+  if (p === "/admin/bots") return "Bots & showcase";
+  if (p === "/admin/visitors" || p.startsWith("/admin/visitors/")) return "Visitors";
 
   for (const item of MAIN_SIDEBAR) {
     if (p === item.href) return item.label;
@@ -87,76 +79,60 @@ export function getShellPageTitle(canonicalPath: string, explicitTitle?: string)
 }
 
 /**
- * Normalize legacy `/admin/*` routes to canonical `/user/*` for nav matching.
+ * Normalize pathname to canonical `/admin/...` for nav matching (handles bookmark redirects still using
+ * historical `/user` or `/super-admin` prefixes in memory — live routes are `/admin/*` only).
  */
 export function getCanonicalUserPath(pathname: string): string {
   if (pathname.startsWith("/admin")) {
-    return `/user${pathname.slice("/admin".length)}`;
+    return pathname;
   }
   if (pathname.startsWith("/super-admin")) {
-    return `/user${pathname.slice("/super-admin".length)}`;
+    return `/admin${pathname.slice("/super-admin".length)}`;
   }
   if (pathname.startsWith("/user")) {
-    return pathname;
+    return `/admin${pathname.slice("/user".length)}`;
   }
   return pathname;
 }
 
-/**
- * Extract `/user/bots/[id]` id (including nested routes) when segment is not `new`.
- */
 export function getBotIdFromPath(canonicalPath: string): string | null {
   const p = canonicalPath.split("?")[0];
-  const m = /^\/user\/bots\/([^/]+)/.exec(p);
+  const m = /^\/admin\/bots\/([^/]+)/.exec(p);
   if (!m) return null;
   const id = m[1];
   if (id === "new") return null;
   return id;
 }
 
-/**
- * Agent detail/workspace: `/user/bots/[id]` and nested `/user/bots/[id]/...` only.
- * Excludes `/user/bots`, `/user/bots/new` (no bot id after `new` in path).
- */
 export function isAgentWorkspacePath(canonicalPath: string): boolean {
   return getBotIdFromPath(canonicalPath) !== null;
 }
 
-/**
- * Shell-only: compact main rail + agent sidebar. True **only** on `/user/bots/[id]/…` (real id).
- * False on workspace list, new bot, visitors, analytics, settings, dashboard — avoids agent chrome elsewhere.
- */
 export function showAgentWorkspaceChrome(canonicalPath: string): boolean {
   return isAgentWorkspacePath(canonicalPath);
 }
 
-/** Prefix for bot URLs (supports super-admin / admin mirrors). */
-export function getBotsBasePath(pathname: string): string {
-  if (pathname.startsWith("/super-admin")) return "/super-admin/bots";
-  if (pathname.startsWith("/admin")) return "/admin/bots";
-  return "/user/bots";
+/** Bot URLs always use the internal `/admin/bots` namespace. */
+export function getBotsBasePath(_pathname?: string): string {
+  return "/admin/bots";
 }
 
-/** Shown in the global header as the workspace label (no API name yet). */
-export const WORKSPACE_DISPLAY_NAME = "Assistrio";
+/** Shown in the global header — internal ops shell, not the customer workspace. */
+export const WORKSPACE_DISPLAY_NAME = "Assistrio · Ops";
 
-/** Home for the current app area (user / admin / super-admin). */
-export function getWorkspaceHomeHref(pathname: string): string {
-  if (pathname.startsWith("/super-admin")) return "/super-admin/bots";
-  if (pathname.startsWith("/admin")) return "/admin/dashboard";
-  return "/user/dashboard";
+export function getWorkspaceHomeHref(_pathname: string): string {
+  return "/admin/dashboard";
 }
 
-/** Workspace settings entry (general); super-admin uses user settings for account. */
-export function getWorkspaceSettingsHref(pathname: string): string {
-  if (pathname.startsWith("/admin")) return "/admin/settings/general";
-  return "/user/settings/general";
+export function getWorkspaceSettingsHref(_pathname: string): string {
+  return "/admin/settings/general";
 }
 
+/** Path segments after the top-level app prefix (`admin`, or legacy `user` / `super-admin` in client history). */
 export function getUserAreaSegments(pathname: string): string[] {
   const parts = pathname.split("/").filter(Boolean);
-  if (parts[0] === "user") return parts.slice(1);
-  if (parts[0] === "admin") return parts.slice(1);
-  if (parts[0] === "super-admin") return parts.slice(1);
+  if (parts[0] === "user" || parts[0] === "admin" || parts[0] === "super-admin") {
+    return parts.slice(1);
+  }
   return parts;
 }

@@ -3,7 +3,8 @@ import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
 import { FastifyRequest } from 'fastify';
 import { getRequestId } from '../lib/request-id.helper';
-import { AuthService } from '../auth/auth.service';
+import { AuthService } from '../auth/shared/auth.service';
+import { resolveUserFromPlatformCookieHeader } from '../auth/shared/platform-session.resolve';
 import { BotsService } from '../bots/bots.service';
 import { VisitorsService } from '../visitors/visitors.service';
 import { ChatEngineService } from './chat-engine.service';
@@ -46,24 +47,10 @@ type PreviewChatBody = PreviewInitBody & {
   startNewConversation?: boolean;
 };
 
-const COOKIE_NAME = 'user_token';
-
 function toNonEmptyString(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
   const s = value.trim();
   return s ? s : undefined;
-}
-
-function getCookieFromHeader(cookieHeader: string | undefined): string | null {
-  if (!cookieHeader) return null;
-  const parts = cookieHeader.split(';').map((s) => s.trim());
-  for (const part of parts) {
-    const [name, ...valueParts] = part.split('=');
-    if (name?.trim() === COOKIE_NAME && valueParts.length > 0) {
-      return valueParts.join('=').trim();
-    }
-  }
-  return null;
 }
 
 function getBearerToken(request: FastifyRequest): string | undefined {
@@ -227,13 +214,20 @@ export class WidgetPreviewController {
     request: FastifyRequest,
     bodyAuthToken?: string,
   ): Promise<{ _id: unknown; email: string; role: string } | null> {
-    const cookieToken = getCookieFromHeader(request.headers.cookie);
     const bearerToken = getBearerToken(request);
-    const token = bodyAuthToken ?? bearerToken ?? cookieToken ?? undefined;
-    if (!token) return null;
-    const user = await this.authService.getAuthenticatedUser(token);
-    if (!user) return null;
-    const u = user as unknown as { _id: unknown; email: string; role: string };
+    const explicitToken = bodyAuthToken ?? bearerToken;
+    if (explicitToken) {
+      const user = await this.authService.getAuthenticatedUser(explicitToken);
+      if (!user) return null;
+      const u = user as unknown as { _id: unknown; email: string; role: string };
+      return { _id: u._id, email: u.email, role: u.role };
+    }
+    const fromCookies = await resolveUserFromPlatformCookieHeader(
+      this.authService,
+      request.headers.cookie,
+    );
+    if (!fromCookies) return null;
+    const u = fromCookies as unknown as { _id: unknown; email: string; role: string };
     return { _id: u._id, email: u.email, role: u.role };
   }
 

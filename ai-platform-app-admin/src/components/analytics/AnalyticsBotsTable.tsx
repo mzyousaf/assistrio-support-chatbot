@@ -1,13 +1,11 @@
 "use client";
 
 /**
- * Internal dashboard table — data from GET /api/user/analytics/bots/summary (authenticated).
+ * Internal dashboard table — data from GET /api/admin/analytics/bots/summary (superadmin).
  * Not for PV-safe or public embed clients.
  */
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { resolveUserHref } from "@/components/admin/admin-shell-config";
 import { Card } from "@/components/ui/Card";
 import type { InternalBotsSummaryResponse } from "@/types/internal-analytics";
 
@@ -24,8 +22,6 @@ export function AnalyticsBotsTable({
   bots: BotRow[];
   truncated: boolean;
 }) {
-  const pathname = usePathname();
-
   return (
     <div className="space-y-2">
       {truncated ? (
@@ -50,7 +46,7 @@ export function AnalyticsBotsTable({
             </thead>
             <tbody className="divide-y divide-gray-200 text-gray-800 dark:divide-gray-800 dark:text-gray-200">
               {bots.map((row) => {
-                const href = resolveUserHref(pathname, `/user/bots/${row.botId}/insights/conversations`);
+                const href = `/admin/bots/${row.botId}/insights/conversations`;
                 return (
                   <tr key={row.botId} className="transition-colors hover:bg-gray-50/80 dark:hover:bg-gray-800/40">
                     <td className="px-4 py-3">

@@ -9,6 +9,7 @@ import {
   VisitorEvent,
   type VisitorEventType,
 } from '../models';
+import { DocumentsService } from '../documents/documents.service';
 import type { OverviewDateRangeQuery } from './analytics-date-range.util';
 import { parseOverviewDateRange } from './analytics-date-range.util';
 
@@ -19,8 +20,9 @@ const MAX_BOTS_SUMMARY_ROWS = 400;
 const MAX_LEADS_BY_BOT_ROWS = 40;
 
 /**
- * Internal analytics persistence and **authenticated** `/api/user/analytics` handlers.
+ * Internal analytics persistence and **authenticated** `/api/admin/analytics` handlers.
  * PV-facing product summaries live under `/api/public/visitor-*` — not here.
+ * Customer-facing bot snapshots: {@link getCustomerBotInsights} (`GET /api/customer/bots/:id/insights`).
  * `trackEvent` serves **ingestion** (`POST /api/analytics/track`) — not PV read APIs.
  *
  * @see docs/ANALYTICS_BOUNDARIES.md
@@ -35,6 +37,7 @@ export class AnalyticsService {
     @InjectModel(Bot.name) private readonly botModel: Model<Bot>,
     @InjectModel(Conversation.name) private readonly conversationModel: Model<Conversation>,
     @InjectModel(Message.name) private readonly messageModel: Model<Message>,
+    private readonly documentsService: DocumentsService,
   ) {}
 
   async logVisitorEvent(params: {
@@ -530,6 +533,88 @@ export class AnalyticsService {
           : null,
       },
       caveats,
+    };
+  }
+
+  /**
+   * Small, all-time bot snapshot for the customer app — **no** global aggregates, **no** raw lead values.
+   * Workspace access must be enforced by the caller.
+   */
+  async getCustomerBotInsights(botId: string) {
+    if (!Types.ObjectId.isValid(botId)) {
+      throw new NotFoundException('Bot not found');
+    }
+    const oid = new Types.ObjectId(botId);
+
+    const botDoc = await this.botModel
+      .findById(oid)
+      .select('name slug status createdAt')
+      .lean();
+    if (!botDoc) {
+      throw new NotFoundException('Bot not found');
+    }
+
+    const [
+      totalMessages,
+      totalConversations,
+      leadCountRows,
+      knowledgeDocuments,
+      lastMsg,
+      convLastRows,
+    ] = await Promise.all([
+      this.messageModel.countDocuments({ botId: oid }),
+      this.conversationModel.countDocuments({ botId: oid }),
+      this.conversationModel.aggregate<{ n: number }>([
+        { $match: { botId: oid } },
+        this.hasNonEmptyCapturedLeadPipelineStage(),
+        { $count: 'n' },
+      ]),
+      this.documentsService.countByBot(botId),
+      this.messageModel
+        .findOne({ botId: oid })
+        .sort({ createdAt: -1 })
+        .select('createdAt')
+        .lean(),
+      this.conversationModel.aggregate<{ lastAt: Date | null }>([
+        { $match: { botId: oid } },
+        {
+          $group: {
+            _id: null,
+            lastAt: { $max: { $ifNull: ['$lastActivityAt', '$createdAt'] } },
+          },
+        },
+      ]),
+    ]);
+
+    const msgCreated = lastMsg && 'createdAt' in lastMsg ? (lastMsg as { createdAt?: Date }).createdAt : undefined;
+    const lastMessageAt = msgCreated instanceof Date ? msgCreated : null;
+    const rawConvLast = convLastRows[0]?.lastAt;
+    const lastConvAt = rawConvLast instanceof Date ? rawConvLast : null;
+
+    let lastActivityAt: Date | null = null;
+    if (lastMessageAt && lastConvAt) {
+      lastActivityAt = lastMessageAt > lastConvAt ? lastMessageAt : lastConvAt;
+    } else {
+      lastActivityAt = lastMessageAt ?? lastConvAt ?? null;
+    }
+
+    return {
+      schemaVersion: 1 as const,
+      bot: {
+        id: String(botDoc._id),
+        name: botDoc.name,
+        slug: botDoc.slug,
+        status: botDoc.status ?? 'draft',
+      },
+      metrics: {
+        totalConversations,
+        totalMessages,
+        conversationsWithCapturedLeads: leadCountRows[0]?.n ?? 0,
+        knowledgeDocuments,
+      },
+      activity: {
+        lastActivityAt: lastActivityAt?.toISOString() ?? null,
+      },
     };
   }
 

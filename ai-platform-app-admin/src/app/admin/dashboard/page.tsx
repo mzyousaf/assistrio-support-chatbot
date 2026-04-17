@@ -11,18 +11,18 @@ export default function AdminDashboardPage() {
 
   if (loading || !user) {
     return (
-      <AdminShell title="Dashboard" subtitle="Overview of your workspace and shortcuts to common tasks.">
+      <AdminShell title="Overview" subtitle="Internal operator home — shortcuts to bots, visitors, analytics, and settings.">
         <DashboardPageSkeleton />
       </AdminShell>
     );
   }
 
   return (
-    <AdminShell title="Dashboard" subtitle="Overview of your workspace and shortcuts to common tasks.">
+    <AdminShell title="Overview" subtitle="Internal operator home — shortcuts to bots, visitors, analytics, and settings.">
       <Card>
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Welcome, {user.email}</h2>
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Signed in, {user.email}</h2>
         <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-          Use the sidebar to jump to agents, analytics, or settings.
+          Use the sidebar for bots, global analytics, visitors, and platform settings.
         </p>
       </Card>
 
@@ -30,27 +30,27 @@ export default function AdminDashboardPage() {
         <div className="grid gap-2 sm:grid-cols-2">
           <Link
             className="inline-flex items-center justify-center rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 hover:border-brand-300 hover:text-brand-700 dark:hover:text-brand-300 transition-colors"
-            href="/user/bots"
+            href="/admin/bots"
           >
-            Manage Bots
+            Bots &amp; showcase
           </Link>
           <Link
             className="inline-flex items-center justify-center rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 hover:border-brand-300 hover:text-brand-700 dark:hover:text-brand-300 transition-colors"
-            href="/user/visitors"
+            href="/admin/visitors"
           >
-            Marketing visitors
+            Visitors
           </Link>
           <Link
             className="inline-flex items-center justify-center rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 hover:border-brand-300 hover:text-brand-700 dark:hover:text-brand-300 transition-colors"
-            href="/user/analytics"
+            href="/admin/analytics"
           >
-            Open Analytics
+            Global analytics
           </Link>
           <Link
             className="inline-flex items-center justify-center rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 hover:border-brand-300 hover:text-brand-700 dark:hover:text-brand-300 transition-colors"
-            href="/user/settings/general"
+            href="/admin/settings/general"
           >
-            Workspace settings
+            Platform settings
           </Link>
         </div>
       </Card>

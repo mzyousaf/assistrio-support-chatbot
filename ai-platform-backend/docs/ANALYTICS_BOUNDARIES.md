@@ -7,13 +7,13 @@ One-page map for **maintainers**. Not an end-user spec.
 | Layer | Role | HTTP (read path for “analytics-like” data) | Typical UI consumers |
 |-------|------|---------------------------------------------|----------------------|
 | **Ingestion** | Append-only marketing/ops events | **`POST /api/analytics/track`** (write-only for clients) | **None** — not a read API; taxonomy may evolve without notice |
-| **Internal reporting** | Authenticated operator aggregates | **`GET /api/user/analytics`**, **`GET /api/user/analytics/*`** (`AuthGuard`) | **`ai-platform-app`** `/user/analytics`, `/admin/analytics` |
+| **Internal reporting** | Authenticated operator aggregates | **`GET /api/admin/analytics`**, **`GET /api/admin/analytics/*`** (staff session) | Admin app analytics |
 | **PV-safe summaries** | Anonymous product-shaped summaries | **`POST /api/public/visitor-quota/summary`**, **`POST /api/public/visitor-bot/*`** | **`assistrio-landing-site`** trial / quota / bot snapshot |
 
 ## Hard rules
 
-1. **PV-facing product UIs** must **read** only **`/api/public/visitor-*`** for quota/bot summary data — never **`/api/user/analytics`** or raw **`VisitorEvent`** streams.
-2. **Authenticated dashboards** use **`/api/user/analytics/*`** — never expose those response shapes on the landing site or as PV contracts.
+1. **PV-facing product UIs** must **read** only **`/api/public/visitor-*`** for quota/bot summary data — never **`/api/admin/analytics`** or raw **`VisitorEvent`** streams.
+2. **Authenticated dashboards** use **`/api/admin/analytics/*`** — never expose those response shapes on the landing site or as PV contracts.
 3. **`POST /api/analytics/track`** is **ingestion only** — not a dashboard, not a stable read contract for PV.
 4. **`chatVisitorId`** is for widget threads — **not** the identity for PV summary APIs (**`platformVisitorId`** is).
 

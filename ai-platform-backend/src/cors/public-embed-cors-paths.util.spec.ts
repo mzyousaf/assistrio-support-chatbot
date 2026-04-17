@@ -7,17 +7,17 @@ import {
 } from './public-embed-cors-paths.util';
 
 describe('pathHasApiPrefix', () => {
-  it('matches exact path', () => {
-    expect(pathHasApiPrefix('/api/user', '/api/user')).toBe(true);
+   it('matches exact path', () => {
+    expect(pathHasApiPrefix('/api/customer', '/api/customer')).toBe(true);
   });
 
   it('matches child paths with slash', () => {
-    expect(pathHasApiPrefix('/api/user/login', '/api/user')).toBe(true);
+    expect(pathHasApiPrefix('/api/customer/me', '/api/customer')).toBe(true);
   });
 
   it('does not match sibling segments (near-miss)', () => {
-    expect(pathHasApiPrefix('/api/users', '/api/user')).toBe(false);
-    expect(pathHasApiPrefix('/api/userx', '/api/user')).toBe(false);
+    expect(pathHasApiPrefix('/api/customers', '/api/customer')).toBe(false);
+    expect(pathHasApiPrefix('/api/customerx', '/api/customer')).toBe(false);
   });
 
   it('does not match prefix as substring of a longer first segment', () => {
@@ -77,7 +77,7 @@ describe('isPublicBrowserEmbedCorsPath', () => {
       expect(isPublicBrowserEmbedCorsPath('/api/public/future-route')).toBe(true);
     });
 
-    it('analytics subtree (anonymous track — not /api/user/analytics)', () => {
+    it('analytics subtree (anonymous track — not /api/admin/analytics)', () => {
       expect(isPublicBrowserEmbedCorsPath('/api/analytics/track')).toBe(true);
     });
   });
@@ -92,10 +92,10 @@ describe('isPublicBrowserEmbedCorsPath', () => {
       expect(isPublicBrowserEmbedCorsPath('/api/widget/testing/bot')).toBe(false);
     });
 
-    it('user and admin-style routes', () => {
-      expect(isPublicBrowserEmbedCorsPath('/api/user/login')).toBe(false);
-      expect(isPublicBrowserEmbedCorsPath('/api/user/bots')).toBe(false);
-      expect(isPublicBrowserEmbedCorsPath('/api/user/analytics')).toBe(false);
+    it('customer and admin-style routes', () => {
+      expect(isPublicBrowserEmbedCorsPath('/api/customer/me')).toBe(false);
+      expect(isPublicBrowserEmbedCorsPath('/api/customer/bots')).toBe(false);
+      expect(isPublicBrowserEmbedCorsPath('/api/customer/auth/google/callback')).toBe(false);
     });
 
     it('bots controller', () => {
@@ -136,7 +136,7 @@ describe('isPublicBrowserEmbedCorsPath', () => {
     });
 
     it('strict wins over public if both could apply', () => {
-      expect(isPublicBrowserEmbedCorsPath('/api/user/seed')).toBe(false);
+      expect(isPublicBrowserEmbedCorsPath('/api/admin/seed/run')).toBe(false);
     });
 
     it('chat vs chats — segment boundary', () => {

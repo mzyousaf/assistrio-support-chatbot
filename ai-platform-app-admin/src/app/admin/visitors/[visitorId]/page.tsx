@@ -6,6 +6,7 @@ import AdminShell from "@/components/admin/AdminShell";
 import { Card } from "@/components/ui/Card";
 import { VisitorDetailPageSkeleton } from "@/components/ui/Skeleton";
 import { apiFetch } from "@/lib/api";
+import { ADMIN_API_VISITORS } from "@/lib/internal-operator-api";
 import { useAdminUser } from "@/hooks/useAdminUser";
 
 function formatDate(value: unknown): string {
@@ -40,7 +41,7 @@ export default function VisitorDetailPage() {
   useEffect(() => {
     if (!user || !visitorIdParam) return;
     let cancelled = false;
-    apiFetch(`/api/user/visitors/${encodeURIComponent(visitorIdParam)}`)
+    apiFetch(`${ADMIN_API_VISITORS}/${encodeURIComponent(visitorIdParam)}`)
       .then(async (res) => {
         if (cancelled) return;
         if (!res.ok) {

@@ -4,6 +4,7 @@ import React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { apiFetch } from "@/lib/api";
+import { ADMIN_API_BOTS } from "@/lib/internal-operator-api";
 import { ensureDraftId } from "@/lib/draftBot";
 
 let draftInitInFlight:
@@ -35,7 +36,7 @@ export default function NewBotDraftInitializer() {
           draftInitInFlight = {
             clientDraftId,
             promise: (async () => {
-              const response = await apiFetch("/api/user/bots/draft", {
+              const response = await apiFetch(`${ADMIN_API_BOTS}/draft`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ clientDraftId }),
@@ -53,7 +54,7 @@ export default function NewBotDraftInitializer() {
           throw new Error("Draft bot id missing.");
         }
         if (mounted) {
-          router.replace(`/user/bots/${data.botId}/playground/profile`);
+          router.replace(`/admin/bots/${data.botId}/playground/profile`);
         }
       } catch {
         draftInitInFlight = null;

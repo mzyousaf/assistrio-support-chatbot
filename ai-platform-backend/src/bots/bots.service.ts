@@ -13,7 +13,7 @@ import {
   User,
   VisitorEvent,
 } from '../models';
-import { getDefaultBotCreatePayload } from '../user/default-new-bot.payload';
+import { getDefaultBotCreatePayload } from '../workspace/shared/default-new-bot.payload';
 import { KnowledgeBaseItemService } from '../knowledge/knowledge-base-item.service';
 import { KnowledgeBaseChunkService } from '../knowledge/knowledge-base-chunk.service';
 import { generateBotAccessKey, generateBotSecretKey } from './bot-keys.util';
@@ -135,6 +135,22 @@ export class BotsService {
     private readonly workspacesService: WorkspacesService,
   ) { }
 
+  private async superadminUserObjectIds(): Promise<Types.ObjectId[]> {
+    const rows = await this.userModel.find({ role: 'superadmin' }).select('_id').lean();
+    return (rows as { _id: Types.ObjectId }[]).map((r) => r._id).filter(Boolean);
+  }
+
+  /** Published public gallery bots owned by a platform superadmin (`ownerId`). */
+  private async publicShowcaseMongoFilter(): Promise<Record<string, unknown>> {
+    const superIds = await this.superadminUserObjectIds();
+    return {
+      isPublic: true,
+      status: 'published',
+      visibility: 'public',
+      ownerId: { $in: superIds },
+    };
+  }
+
   async findAll() {
     return this.botModel.find().select('-secretKey').lean();
   }
@@ -208,7 +224,7 @@ export class BotsService {
         .find(base)
         .sort({ createdAt: -1 })
         .select(
-          'name agentsPackAgent category status isPublic createdAt _id slug visibility messageLimitMode messageLimitTotal workspaceId chatUI avatarEmoji imageUrl',
+          'name agentsPackAgent category status isPublic createdAt _id slug visibility messageLimitMode messageLimitTotal workspaceId chatUI avatarEmoji imageUrl shortDescription allowedOrigins leadCapture',
         )
         .lean();
     }
@@ -229,21 +245,120 @@ export class BotsService {
       .find({ ...base, $or: orClause })
       .sort({ createdAt: -1 })
       .select(
-        'name agentsPackAgent category status isPublic createdAt _id slug visibility messageLimitMode messageLimitTotal workspaceId chatUI avatarEmoji imageUrl',
+        'name agentsPackAgent category status isPublic createdAt _id slug visibility messageLimitMode messageLimitTotal workspaceId chatUI avatarEmoji imageUrl shortDescription allowedOrigins leadCapture',
       )
       .lean();
   }
 
   /**
-   * Anonymous public gallery: published public bots.
+   * Batch-fetch lightweight stats for a set of bots (used on the list/card view).
+   * Runs five parallel aggregations: conversations, messages, KB items by sourceType, last activity, last trained.
+   */
+  async getListStatsForBots(
+    botIds: string[],
+  ): Promise<
+    Map<
+      string,
+      {
+        totalConversations: number;
+        totalMessages: number;
+        knowledgeDocs: number;
+        knowledgeFaqs: number;
+        knowledgeSnippets: number;
+        lastActivityAt: string | null;
+        lastTrainedAt: string | null;
+      }
+    >
+  > {
+    const result = new Map<
+      string,
+      {
+        totalConversations: number;
+        totalMessages: number;
+        knowledgeDocs: number;
+        knowledgeFaqs: number;
+        knowledgeSnippets: number;
+        lastActivityAt: string | null;
+        lastTrainedAt: string | null;
+      }
+    >();
+    if (botIds.length === 0) return result;
+
+    const oids = botIds.map((id) => new Types.ObjectId(id));
+    for (const id of botIds) {
+      result.set(id, {
+        totalConversations: 0,
+        totalMessages: 0,
+        knowledgeDocs: 0,
+        knowledgeFaqs: 0,
+        knowledgeSnippets: 0,
+        lastActivityAt: null,
+        lastTrainedAt: null,
+      });
+    }
+
+    type CountRow = { _id: Types.ObjectId; n: number };
+    type KBRow = { _id: { b: Types.ObjectId; t: string }; n: number };
+    type DateRow = { _id: Types.ObjectId; lastAt: Date | null };
+
+    const [convAgg, msgAgg, kbAgg, activityAgg, trainedAgg] = await Promise.all([
+      this.conversationModel.aggregate<CountRow>([
+        { $match: { botId: { $in: oids } } },
+        { $group: { _id: '$botId', n: { $sum: 1 } } },
+      ]),
+      this.messageModel.aggregate<CountRow>([
+        { $match: { botId: { $in: oids } } },
+        { $group: { _id: '$botId', n: { $sum: 1 } } },
+      ]),
+      this.knowledgeBaseItemModel.aggregate<KBRow>([
+        { $match: { botId: { $in: oids }, active: true, sourceType: { $in: ['document', 'faq', 'note'] } } },
+        { $group: { _id: { b: '$botId', t: '$sourceType' }, n: { $sum: 1 } } },
+      ]),
+      this.conversationModel.aggregate<DateRow>([
+        { $match: { botId: { $in: oids } } },
+        { $group: { _id: '$botId', lastAt: { $max: { $ifNull: ['$lastActivityAt', '$createdAt'] } } } },
+      ]),
+      this.documentModel.aggregate<DateRow>([
+        { $match: { botId: { $in: oids }, status: 'ready' } },
+        { $group: { _id: '$botId', lastAt: { $max: { $ifNull: ['$ingestedAt', '$createdAt'] } } } },
+      ]),
+    ]);
+
+    for (const r of convAgg) {
+      const s = result.get(String(r._id));
+      if (s) s.totalConversations = r.n;
+    }
+    for (const r of msgAgg) {
+      const s = result.get(String(r._id));
+      if (s) s.totalMessages = r.n;
+    }
+    for (const r of kbAgg) {
+      const s = result.get(String(r._id));
+      if (!s) continue;
+      const t = String(r._id.t);
+      if (t === 'document') s.knowledgeDocs = r.n;
+      else if (t === 'faq') s.knowledgeFaqs = r.n;
+      else if (t === 'note') s.knowledgeSnippets = r.n;
+    }
+    for (const r of activityAgg) {
+      const s = result.get(String(r._id));
+      if (s && r.lastAt) s.lastActivityAt = r.lastAt.toISOString();
+    }
+    for (const r of trainedAgg) {
+      const s = result.get(String(r._id));
+      if (s && r.lastAt) s.lastTrainedAt = r.lastAt.toISOString();
+    }
+
+    return result;
+  }
+
+  /**
+   * Anonymous public gallery: published public bots **owned by a superadmin** (`ownerId`).
    */
   async findPublicShowcase(): Promise<PublicBotDto[]> {
+    const match = await this.publicShowcaseMongoFilter();
     const docs = await this.botModel
-      .find({
-        isPublic: true,
-        status: 'published',
-        visibility: 'public',
-      })
+      .find(match)
       .sort({ createdAt: -1 })
       .select(
         '_id name slug shortDescription category avatarEmoji imageUrl exampleQuestions chatUI createdAt visibility accessKey',
@@ -285,74 +400,20 @@ export class BotsService {
   }
 
   /**
-   * Published public bots whose creating user has role `superadmin`.
-   * Used by the marketing landing site with API-key auth (not for anonymous gallery).
+   * Same dataset as {@link findPublicShowcase} (superadmin-owned published public bots).
+   * Used by the marketing landing app (API-key auth) and widget testing helpers.
    */
   async findPublicShowcaseBySuperAdminCreators(): Promise<PublicBotDto[]> {
-    const superAdmins = await this.userModel
-      .find({ role: 'superadmin' })
-      .select('_id')
-      .lean();
-    const creatorIds = (superAdmins as { _id: unknown }[])
-      .map((u) => u._id)
-      .filter((id) => id != null);
-    if (creatorIds.length === 0) return [];
-
-    const docs = await this.botModel
-      .find({
-        isPublic: true,
-        status: 'published',
-        visibility: 'public',
-        createdByUserId: { $in: creatorIds },
-      })
-      .sort({ createdAt: -1 })
-      .select(
-        '_id name slug shortDescription category avatarEmoji imageUrl exampleQuestions chatUI createdAt visibility accessKey',
-      )
-      .lean();
-
-    const bots = docs.map((bot: Record<string, unknown>) => ({
-      id: String(bot._id),
-      name: String(bot.name ?? ''),
-      slug: String(bot.slug ?? ''),
-      visibility: 'public' as const,
-      accessKey: String(bot.accessKey ?? ''),
-      shortDescription: bot.shortDescription != null ? String(bot.shortDescription) : undefined,
-      category: bot.category != null ? String(bot.category) : undefined,
-      avatarEmoji: bot.avatarEmoji != null ? String(bot.avatarEmoji) : undefined,
-      imageUrl: bot.imageUrl != null ? String(bot.imageUrl) : undefined,
-      exampleQuestions: Array.isArray(bot.exampleQuestions)
-        ? (bot.exampleQuestions as unknown[]).map((q) => String(q ?? '').trim()).filter(Boolean) as string[]
-        : [],
-      chatUI: bot.chatUI as PublicBotDto['chatUI'] | undefined,
-      createdAt:
-        bot.createdAt instanceof Date
-          ? bot.createdAt.toISOString()
-          : String(bot.createdAt ?? ''),
-      knowledgeBasePreview: [] as PublicKnowledgeBasePreviewItem[],
-      knowledgeBaseCounts: {
-        documents: 0,
-        faqs: 0,
-        notes: 0,
-        urls: 0,
-        html: 0,
-      },
-    }));
-    return this.attachTotalChats(
-      await this.attachKnowledgeBaseCounts(
-        await this.attachKnowledgeNotePreview(await this.attachKnowledgeBasePreview(bots)),
-      ),
-    );
+    return this.findPublicShowcase();
   }
 
-  /** Minimal id lookup for public document download (published, public). */
+  /** Minimal id lookup for public document download (published, public, superadmin-owned). */
   async findPublicShowcaseBotIdBySlug(slug: string): Promise<string | null> {
+    const match = await this.publicShowcaseMongoFilter();
     const doc = await this.botModel
       .findOne({
         slug: slug.trim().toLowerCase(),
-        isPublic: true,
-        status: 'published',
-        visibility: 'public',
+        ...match,
       })
       .select('_id')
       .lean();
@@ -629,8 +690,8 @@ export class BotsService {
   }
 
   /**
-   * Public embed widget bootstrap: same visibility rules as {@link findPublicShowcase}
-   * (published + public). Safe fields only — no API keys or internal config.
+   * Public embed widget bootstrap: published + public (any owner). Stricter than the marketing gallery
+   * ({@link findPublicShowcase}), which is limited to superadmin-owned bots.
    */
   async findOneForPublicWidgetById(botId: string): Promise<{
     id: string;
@@ -696,7 +757,7 @@ export class BotsService {
     return { ...bot, faqs, knowledgeDescription } as Record<string, unknown>;
   }
 
-  /** Find one bot by slug for marketing page (public shape; faqs from KB). */
+  /** Find one bot by slug for marketing page (public shape; faqs from KB). Superadmin-owned gallery bots only. */
   async findOneBySlugForPage(slug: string): Promise<{
     id: string;
     slug: string;
@@ -713,12 +774,11 @@ export class BotsService {
     faqs: Array<{ question: string; answer: string }>;
     exampleQuestions: string[];
   } | null> {
+    const match = await this.publicShowcaseMongoFilter();
     const doc = await this.botModel
       .findOne({
         slug: slug.trim().toLowerCase(),
-        isPublic: true,
-        status: 'published',
-        visibility: 'public',
+        ...match,
       })
       .select(
         '_id slug name shortDescription description category avatarEmoji imageUrl welcomeMessage chatUI exampleQuestions visibility accessKey',

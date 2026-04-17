@@ -57,8 +57,8 @@ function slugToFallbackLabel(slug: string): string {
 
 function workspaceRoot(pathname: string): string {
   if (pathname.startsWith("/admin")) return "/admin";
-  if (pathname.startsWith("/super-admin")) return "/super-admin";
-  return "/user";
+  if (pathname.startsWith("/super-admin")) return "/admin";
+  return "/admin";
 }
 
 export type AgentPlaceholderCopy = {
@@ -76,11 +76,8 @@ export function getAgentPlaceholderCopy(pathname: string, slug: string): AgentPl
   if (s.startsWith("insights/conversations")) {
     return {
       description:
-        "A dedicated inbox for this agent’s conversations—search, transcripts, and handoff—will live here. You can review workspace-wide chat activity in analytics in the meantime.",
-      cta:
-        root === "/super-admin"
-          ? { href: "/user/analytics/chats", label: "Open workspace chats" }
-          : { href: `${root}/analytics/chats`, label: "Open workspace chats" },
+        "A dedicated inbox for this bot’s conversations—search, transcripts, and handoff—will live here. Use global analytics for account-wide chat activity in the meantime.",
+      cta: { href: `${root}/analytics/chats`, label: "Open global chats" },
     };
   }
 
@@ -88,11 +85,8 @@ export function getAgentPlaceholderCopy(pathname: string, slug: string): AgentPl
   if (isAnalyticsChats) {
     return {
       description:
-        "Per-agent chat volume, response quality, and trends will surface here. Explore workspace-level analytics for a full account view.",
-      cta:
-        root === "/super-admin"
-          ? { href: "/user/analytics/chats", label: "Workspace chats" }
-          : { href: `${root}/analytics/chats`, label: "Workspace chats" },
+        "Per-bot chat volume, response quality, and trends will surface here. Use global analytics for the full operator view.",
+      cta: { href: `${root}/analytics/chats`, label: "Global chats" },
     };
   }
 
@@ -101,10 +95,7 @@ export function getAgentPlaceholderCopy(pathname: string, slug: string): AgentPl
     return {
       description:
         "Topic clusters and recurring themes for this agent will appear here once we wire agent-scoped analytics.",
-      cta:
-        root === "/super-admin"
-          ? { href: "/user/analytics/topics", label: "Workspace topics" }
-          : { href: `${root}/analytics/topics`, label: "Workspace topics" },
+      cta: { href: `${root}/analytics/topics`, label: "Global topics" },
     };
   }
 
@@ -113,46 +104,34 @@ export function getAgentPlaceholderCopy(pathname: string, slug: string): AgentPl
     return {
       description:
         "Sentiment and satisfaction signals for this agent’s conversations are on the roadmap.",
-      cta:
-        root === "/super-admin"
-          ? { href: "/user/analytics/sentiment", label: "Workspace sentiment" }
-          : { href: `${root}/analytics/sentiment`, label: "Workspace sentiment" },
+      cta: { href: `${root}/analytics/sentiment`, label: "Global sentiment" },
     };
   }
 
   if (s.startsWith("analytics/")) {
     return {
       description: "This analytics view is under construction for the agent workspace.",
-      cta:
-        root === "/super-admin"
-          ? { href: "/user/analytics", label: "Workspace analytics" }
-          : { href: `${root}/analytics`, label: "Workspace analytics" },
+      cta: { href: `${root}/analytics`, label: "Global analytics" },
     };
   }
 
   if (s.startsWith("insights/")) {
     return {
-      description: "This Insights section is on the roadmap. Configure and tune your agent in Playground.",
-      cta:
-        root === "/super-admin"
-          ? { href: "/user/analytics", label: "Workspace analytics" }
-          : { href: `${root}/analytics`, label: "Workspace analytics" },
+      description: "This Insights section is on the roadmap. Configure and tune the bot in Playground.",
+      cta: { href: `${root}/analytics`, label: "Global analytics" },
     };
   }
 
   if (s.startsWith("activity/") && s !== "activity/leads") {
     return {
-      description: "This activity view is not available in the agent workspace yet.",
-      cta:
-        root === "/super-admin"
-          ? { href: "/user/visitors", label: "Open visitors" }
-          : { href: `${root}/visitors`, label: "Open visitors" },
+      description: "This activity view is not available in the bot editor yet.",
+      cta: { href: `${root}/visitors`, label: "Visitors" },
     };
   }
 
   return {
     description:
-      "This section is on the roadmap. Build and tune your agent in Playground, or return to your workspace.",
-    cta: { href: getBotsBasePath(pathname), label: "All agents" },
+      "This section is on the roadmap. Build and tune the bot in Playground, or return to the bot list.",
+    cta: { href: getBotsBasePath(pathname), label: "All bots" },
   };
 }
