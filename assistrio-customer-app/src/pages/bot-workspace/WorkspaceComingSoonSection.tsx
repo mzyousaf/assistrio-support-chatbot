@@ -16,7 +16,7 @@ export function WorkspaceComingSoonSection({ title, description }: Props) {
       support={
         <SupportPanel title="While you wait">
           <p className="m-0 text-sm leading-relaxed text-slate-600">
-            Use the sidebar to switch sections. Related tools may already live under Knowledge or Publish.
+            Use the sidebar to switch sections. Related tools may already live under Knowledge or Deploy & Go Live.
           </p>
         </SupportPanel>
       }

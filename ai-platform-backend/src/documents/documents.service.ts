@@ -83,6 +83,7 @@ export class DocumentsService {
     const [documents, total] = await Promise.all([
       this.documentModel
         .find({ botId: botOid })
+        .select({ text: 0 })
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(safeLimit)

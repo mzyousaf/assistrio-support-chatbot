@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
+import 'sonner/dist/styles.css';
 import './style.css';
 
 const el = document.getElementById('root');

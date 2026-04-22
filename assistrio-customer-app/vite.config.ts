@@ -8,7 +8,10 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      /** Source entry so dev works without a prior `npm run build` in `chat-widget`. */
+      '@assistrio/chat-widget': path.resolve(__dirname, '../chat-widget/src/index.ts'),
     },
+    dedupe: ['react', 'react-dom'],
   },
   server: {
     port: 3002,

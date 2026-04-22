@@ -84,19 +84,17 @@
   --color-info-accent-bg: #e0f2fe;
   --color-info-accent-text: #0369a1;
 
-  /* ── Shell surface hierarchy
-     Each surface is a step lighter toward white.
-     Primary sidebar is the strongest tint; navbar is crisp white. */
-  --bg-app: #f5fafa;
-  /* Main workspace canvas — subtle teal-tinted field behind centered content */
-  --bg-workspace-canvas: color-mix(in srgb, var(--teal-50) 42%, var(--bg-app));
+  /* ── Shell surface hierarchy (neutral slate — cards stay white; no teal wash) */
+  --bg-app: #f8fafc;
+  /* Main workspace canvas — same family as app for a flat, consistent field */
+  --bg-workspace-canvas: #f8fafc;
   --bg-navbar: #ffffff;
   --bg-sidebar-primary: #ffffff;
   --bg-sidebar-secondary: #ffffff;
   --bg-card: #ffffff;
-  --border-soft: #e5eeed;
-  --border-sidebar: #dfe9e8;
-  --hover-soft: #f5f5f4;
+  --border-soft: #e2e8f0;
+  --border-sidebar: #e2e8f0;
+  --hover-soft: #f1f5f9;
   --active-soft: color-mix(in oklab, var(--color-teal-50) 88%, white);
   --active-text: var(--color-teal-800);
 
@@ -129,8 +127,8 @@
   --layout-main-pad-y: 1.25rem;
   --layout-main-pad-bottom: 2.75rem;
 
-  /* Neutral preview column (distinct from teal-tinted editor) */
-  --preview-stage-bg: #f5f6f8;
+  /* Neutral preview column (aligned with workspace neutrals) */
+  --preview-stage-bg: #f1f5f9;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -155,6 +153,15 @@ html {
 
 body {
   margin: 0;
+}
+
+:where(button, select, [role="switch"]):not(:disabled):not([aria-disabled="true"]) {
+  cursor: pointer;
+}
+
+:where(button, select, [role="switch"]):disabled,
+:where(button, select, [role="switch"])[aria-disabled="true"] {
+  cursor: not-allowed;
 }
 
 #root {
@@ -192,7 +199,7 @@ body {
 /* -------------------------------------------------------------------------- */
 
 .editor-surface {
-  background: color-mix(in srgb, var(--teal-50) 42%, var(--bg-app));
+  background: var(--bg-workspace-canvas);
 }
 
 /** Preview column chrome (header, toolbar): flat neutral, no teal. */

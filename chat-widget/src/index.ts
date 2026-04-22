@@ -6,7 +6,9 @@ export { EmbedWidgetRoot } from "./widget-root";
 
 export type {
   AssistrioChatGlobal,
+  ContainedInlineSize,
   EmbedChatConfig,
+  EmbedPresentation,
   EmbedPosition,
   EmbedRuntimeState,
   LauncherPosition,
@@ -19,6 +21,7 @@ export type {
   WidgetStrings,
 } from "./types";
 
+export { resolveWidgetDisplayModel } from "./lib/resolveWidgetDisplayModel";
 export { mergeWidgetStrings, DEFAULT_WIDGET_STRINGS_EN } from "./lib/widgetStrings";
 export type { WidgetLocale } from "./lib/widgetStrings";
 

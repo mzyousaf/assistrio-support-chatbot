@@ -1,7 +1,7 @@
 import { forwardRef, type ButtonHTMLAttributes } from 'react';
 import { cn } from '@/lib/utils';
 
-type Variant = 'primary' | 'secondary' | 'ghost' | 'danger';
+type Variant = 'primary' | 'secondary' | 'outlinePrimary' | 'ghost' | 'danger';
 type Size = 'sm' | 'md' | 'lg';
 
 export type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -10,10 +10,10 @@ export type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 };
 
 const base = cn(
-  'inline-flex items-center justify-center gap-2 font-medium whitespace-nowrap',
+  'inline-flex cursor-pointer items-center justify-center gap-2 font-medium whitespace-nowrap',
   'rounded-[var(--ui-radius)] transition-[background-color,border-color,color,box-shadow] duration-150 ease-out',
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--ui-surface)]',
-  'disabled:pointer-events-none disabled:opacity-50',
+  'disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50',
 );
 
 const variants: Record<Variant, string> = {
@@ -27,6 +27,15 @@ const variants: Record<Variant, string> = {
     'hover:enabled:border-[var(--ui-border-hover)] hover:enabled:bg-[var(--ui-surface-muted)]',
     'active:enabled:bg-slate-100/90',
     'focus-visible:ring-slate-900/12',
+  ),
+  /** Teal outline — secondary actions that should read as brand (e.g. “Add question”). */
+  outlinePrimary: cn(
+    'border border-[var(--color-teal-600)] bg-white text-[var(--color-teal-700)] shadow-none',
+    '[&_svg]:shrink-0 [&_svg]:text-[var(--color-teal-600)]',
+    'hover:enabled:border-[var(--color-teal-700)] hover:enabled:bg-[var(--teal-50)] hover:enabled:text-[var(--color-teal-800)]',
+    'hover:enabled:[&_svg]:text-[var(--color-teal-700)]',
+    'active:enabled:bg-[color-mix(in_srgb,var(--teal-50)_92%,var(--color-teal-600)_8%)]',
+    'focus-visible:ring-teal-600/25',
   ),
   ghost: cn(
     'border border-transparent bg-transparent text-slate-600 shadow-none',

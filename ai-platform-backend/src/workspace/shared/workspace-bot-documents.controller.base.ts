@@ -138,7 +138,11 @@ export abstract class WorkspaceBotDocumentsControllerBase {
   @Delete(':id')
   async remove(@Param('botId') botId: string, @Param('id') id: string, @Req() req: RequestWithUser) {
     await this.assertBotAccess(botId, req);
-    return this.documentsService.remove(id);
+    if (!Types.ObjectId.isValid(id)) {
+      throw new HttpException({ error: 'Invalid document id' }, HttpStatus.BAD_REQUEST);
+    }
+    await this.documentsService.removeByBotAndDoc(botId, id);
+    return { ok: true, deleted: id };
   }
 
   @Patch(':id')

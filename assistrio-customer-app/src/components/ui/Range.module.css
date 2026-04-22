@@ -1,0 +1,167 @@
+/**
+ * Fully reset native range appearance (no blue accent / system thumb).
+ * WebKit: gradient track via --range-fill. Firefox: ::-moz-range-progress.
+ */
+
+.slider {
+  --range-fill: 0%;
+  box-sizing: border-box;
+  width: 100%;
+  height: 1.75rem;
+  margin: 0;
+  padding: 0;
+  border: none;
+  cursor: pointer;
+  background: transparent;
+  color: inherit;
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+  /* Disable UA accent tint on the control (common source of blue thumb in Chromium). */
+  accent-color: transparent;
+}
+
+.slider::-webkit-slider-runnable-track {
+  width: 100%;
+  height: 6px;
+  border: none;
+  border-radius: 9999px;
+  cursor: pointer;
+  background: linear-gradient(
+    to right,
+    var(--color-teal-600, #0d9488) 0%,
+    var(--color-teal-600, #0d9488) var(--range-fill),
+    rgb(226 232 240) var(--range-fill),
+    rgb(226 232 240) 100%
+  );
+  transition: filter 0.15s ease-out;
+}
+
+.slider:disabled::-webkit-slider-runnable-track {
+  cursor: not-allowed;
+  filter: grayscale(0.25) opacity(0.65);
+}
+
+.slider::-moz-range-track {
+  height: 6px;
+  border: none;
+  border-radius: 9999px;
+  background: rgb(226 232 240);
+}
+
+.slider::-moz-range-progress {
+  height: 6px;
+  border: none;
+  border-radius: 9999px;
+  background: var(--color-teal-600, #0d9488);
+}
+
+.slider:disabled::-moz-range-progress {
+  opacity: 0.55;
+}
+
+/* WebKit thumb: explicit neutral thumb (no system blue). */
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  box-sizing: border-box;
+  width: 14px;
+  height: 14px;
+  margin-top: -4px;
+  border: 1px solid rgb(203 213 225);
+  border-radius: 9999px;
+  background-color: rgb(255 255 255);
+  background-image: none;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.08);
+  cursor: pointer;
+  transition:
+    border-color 0.12s ease-out,
+    box-shadow 0.12s ease-out,
+    transform 0.12s ease-out;
+}
+
+.slider:hover:not(:disabled)::-webkit-slider-thumb {
+  border-color: rgb(148 163 184);
+  box-shadow: 0 1px 3px rgb(15 23 42 / 0.12);
+}
+
+.slider:focus-visible::-webkit-slider-thumb {
+  outline: 2px solid var(--color-primary, #14b8a6);
+  outline-offset: 2px;
+}
+
+.slider:disabled::-webkit-slider-thumb {
+  cursor: not-allowed;
+  opacity: 0.85;
+}
+
+/* Firefox thumb */
+.slider::-moz-range-thumb {
+  -moz-appearance: none;
+  appearance: none;
+  box-sizing: border-box;
+  width: 14px;
+  height: 14px;
+  border: 1px solid rgb(203 213 225);
+  border-radius: 9999px;
+  background-color: rgb(255 255 255);
+  background-image: none;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.08);
+  cursor: pointer;
+  transition:
+    border-color 0.12s ease-out,
+    box-shadow 0.12s ease-out;
+}
+
+.slider:hover:not(:disabled)::-moz-range-thumb {
+  border-color: rgb(148 163 184);
+}
+
+.slider:focus-visible::-moz-range-thumb {
+  outline: 2px solid var(--color-primary, #14b8a6);
+  outline-offset: 2px;
+}
+
+.slider:disabled::-moz-range-thumb {
+  cursor: not-allowed;
+}
+
+/* Legacy Edge / IE (harmless elsewhere) */
+.slider::-ms-track {
+  width: 100%;
+  height: 6px;
+  border: none;
+  border-radius: 9999px;
+  background: rgb(226 232 240);
+}
+
+.slider::-ms-fill-lower {
+  border-radius: 9999px;
+  background: var(--color-teal-600, #0d9488);
+}
+
+.slider::-ms-fill-upper {
+  border-radius: 9999px;
+  background: rgb(226 232 240);
+}
+
+.slider::-ms-thumb {
+  width: 14px;
+  height: 14px;
+  margin-top: 0;
+  border: 1px solid rgb(203 213 225);
+  border-radius: 9999px;
+  background-color: rgb(255 255 255);
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.08);
+  cursor: pointer;
+}
+
+.slider:disabled::-ms-thumb {
+  cursor: not-allowed;
+  opacity: 0.85;
+}
+
+.slider:disabled {
+  cursor: not-allowed;
+  opacity: 1;
+}

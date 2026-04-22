@@ -92,6 +92,15 @@ body {
   font-family: var(--font-body);
 }
 
+:where(button, select, [role="switch"]):not(:disabled):not([aria-disabled="true"]) {
+  cursor: pointer;
+}
+
+:where(button, select, [role="switch"]):disabled,
+:where(button, select, [role="switch"])[aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
 /* Slim scrollbars app-wide (Firefox + WebKit). */
 html {
   scrollbar-width: thin;

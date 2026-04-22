@@ -5,28 +5,14 @@ import { prevStepPath } from '../../onboarding/onboardingState';
 
 import { styles } from './onboardingStep';
 import { Button, Select, Textarea } from '@/components/ui';
+import { BEHAVIOR_PRESETS, TONE_OPTIONS, VALID_TONE_VALUES } from '../bot-workspace/behaviorConstants';
 
 const STEP = 'describe-profile';
-
-const TONES = [
-  { value: 'friendly', label: 'Friendly' },
-  { value: 'formal', label: 'Formal' },
-  { value: 'playful', label: 'Playful' },
-  { value: 'technical', label: 'Technical' },
-] as const;
 
 const LENGTHS = [
   { value: 'short', label: 'Short & direct' },
   { value: 'medium', label: 'Balanced' },
   { value: 'long', label: 'Detailed' },
-] as const;
-
-const PRESETS = [
-  { value: 'default', label: 'General default' },
-  { value: 'support', label: 'Support' },
-  { value: 'sales', label: 'Sales' },
-  { value: 'technical', label: 'Technical' },
-  { value: 'empathetic', label: 'Empathetic' },
 ] as const;
 
 export function OnboardingDescribeStep() {
@@ -43,9 +29,9 @@ export function OnboardingDescribeStep() {
     setDescription(String(bot.description ?? ''));
     const p = (bot.personality as Record<string, unknown> | undefined) ?? {};
     const t = String(p.tone ?? 'friendly');
-    setTone(TONES.some((x) => x.value === t) ? t : 'friendly');
+    setTone(VALID_TONE_VALUES.has(t) ? t : 'friendly');
     const pr = String(p.behaviorPreset ?? 'default');
-    setBehaviorPreset(PRESETS.some((x) => x.value === pr) ? pr : 'default');
+    setBehaviorPreset(BEHAVIOR_PRESETS.some((x) => x.value === pr) ? pr : 'default');
     const cfg = (bot.config as Record<string, unknown> | undefined) ?? {};
     const rl = String(cfg.responseLength ?? 'medium');
     setResponseLength(LENGTHS.some((x) => x.value === rl) ? rl : 'medium');
@@ -105,7 +91,7 @@ export function OnboardingDescribeStep() {
         Tone *
       </label>
       <Select id="onb-describe-tone" quiet value={tone} onChange={(e) => setTone(e.target.value)}>
-        {TONES.map((o) => (
+        {TONE_OPTIONS.map((o) => (
           <option key={o.value} value={o.value}>
             {o.label}
           </option>
@@ -115,7 +101,7 @@ export function OnboardingDescribeStep() {
         Style preset
       </label>
       <Select id="onb-describe-preset" quiet value={behaviorPreset} onChange={(e) => setBehaviorPreset(e.target.value)}>
-        {PRESETS.map((o) => (
+        {BEHAVIOR_PRESETS.map((o) => (
           <option key={o.value} value={o.value}>
             {o.label}
           </option>

@@ -17,13 +17,28 @@ import { normalizeVisitorMultiChatMax } from '../../bots/visitor-multi-chat.util
 import { DocumentsService } from '../../documents/documents.service';
 import { KnowledgeBaseItemService } from '../../knowledge/knowledge-base-item.service';
 import { KnowledgeBaseChunkService } from '../../knowledge/knowledge-base-chunk.service';
-import { normalizeBotPayload } from './bot-payload';
+import { normalizeBotPayload, normalizeWorkspaceBotPatch } from './bot-payload';
 import { assertAllowedOriginsPolicy } from './allowed-origins-policy';
 import { BotOnboardingService } from './bot-onboarding.service';
 import type { RequestUser } from '../../auth/shared/request-user.types';
 import { WorkspacesService } from '../../workspaces/workspaces.service';
+import { uploadPublic } from '../../lib/s3';
 
 type RequestWithUser = FastifyRequest & { user?: RequestUser };
+
+function userUploadedAvatarPath(rawUrl: string): boolean {
+  return /\/uploads\/bot-avatars\//i.test(rawUrl.trim());
+}
+
+function workspaceAvatarSource(b: Record<string, unknown>): 'upload' | 'url' | 'emoji' | 'none' {
+  const s = b.avatarSource;
+  if (s === 'upload' || s === 'url' || s === 'emoji' || s === 'none') return s;
+  const emoji = typeof b.avatarEmoji === 'string' ? b.avatarEmoji.trim() : '';
+  const rawUrl = typeof b.imageUrl === 'string' ? b.imageUrl.trim() : '';
+  if (emoji && !rawUrl) return 'emoji';
+  if (rawUrl) return userUploadedAvatarPath(rawUrl) ? 'upload' : 'url';
+  return 'none';
+}
 
 /**
  * Shared workspace bot HTTP handlers for `/api/admin/bots` and `/api/customer/bots`.
@@ -31,7 +46,7 @@ type RequestWithUser = FastifyRequest & { user?: RequestUser };
  */
 export abstract class WorkspaceBotsControllerBase {
   constructor(
-    private readonly botsService: BotsService,
+    protected readonly botsService: BotsService,
     private readonly documentsService: DocumentsService,
     private readonly botOnboardingService: BotOnboardingService,
     private readonly knowledgeBaseItemService: KnowledgeBaseItemService,
@@ -39,7 +54,7 @@ export abstract class WorkspaceBotsControllerBase {
     private readonly workspacesService: WorkspacesService,
   ) { }
 
-  private async assertCanAccessWorkspaceBot(req: RequestWithUser, botId: string): Promise<void> {
+  protected async assertCanAccessWorkspaceBot(req: RequestWithUser, botId: string): Promise<void> {
     const bot = await this.botsService.findOne(botId);
     if (!bot) {
       throw new HttpException({ error: 'Bot not found' }, HttpStatus.NOT_FOUND);
@@ -278,6 +293,105 @@ export abstract class WorkspaceBotsControllerBase {
     };
   }
 
+  private static readonly AVATAR_MAX_BYTES = 2 * 1024 * 1024;
+  private static readonly AVATAR_ALLOWED_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
+
+  /**
+   * Multipart avatar upload (field `file`). Stores in the public asset bucket and returns HTTPS URL for PATCH `imageUrl` + `avatarSource: upload`.
+   */
+  @Post(':id/avatar')
+  async uploadBotAvatar(@Param('id') id: string, @Req() req: RequestWithUser) {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new HttpException({ error: 'Invalid id' }, HttpStatus.BAD_REQUEST);
+    }
+    await this.assertCanAccessWorkspaceBot(req, id);
+
+    const r = req;
+    if (!r.isMultipart()) {
+      throw new HttpException(
+        { error: 'Expected multipart/form-data with a file field named "file".' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    let buffer: Buffer | null = null;
+    let originalName = 'avatar';
+    let mime = '';
+
+    try {
+      for await (const part of r.parts()) {
+        if (part.type === 'file') {
+          if (part.fieldname !== 'file') {
+            throw new HttpException(
+              { error: 'Unexpected file field. Use field name "file".' },
+              HttpStatus.BAD_REQUEST,
+            );
+          }
+          if (buffer !== null) {
+            throw new HttpException({ error: 'Only one file is allowed per request.' }, HttpStatus.BAD_REQUEST);
+          }
+          /** Read file buffer while iterating — deferring `toBuffer()` until after `parts()` can stall @fastify/multipart. */
+          buffer = await part.toBuffer();
+          originalName = (part.filename || 'avatar').trim() || 'avatar';
+          mime =
+            part.mimetype && part.mimetype !== 'application/octet-stream'
+              ? part.mimetype.toLowerCase()
+              : '';
+        } else if (part.type === 'field') {
+          void String((part as { value?: unknown }).value ?? '');
+        }
+      }
+    } catch (e) {
+      if (e instanceof HttpException) throw e;
+      const err = e as { statusCode?: number; code?: string; message?: string };
+      if (err.statusCode === 413 || String(err.code ?? '').includes('FILE_TOO_LARGE')) {
+        throw new HttpException(
+          { error: 'File too large', maxBytes: WorkspaceBotsControllerBase.AVATAR_MAX_BYTES },
+          HttpStatus.PAYLOAD_TOO_LARGE,
+        );
+      }
+      throw new HttpException({ error: 'Upload failed' }, HttpStatus.BAD_REQUEST);
+    }
+
+    if (!buffer?.length) {
+      throw new HttpException(
+        { error: 'Missing file. Send multipart field "file".' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    if (!mime || !WorkspaceBotsControllerBase.AVATAR_ALLOWED_TYPES.has(mime)) {
+      throw new HttpException(
+        { error: 'Only PNG, JPG, and WebP images are allowed for avatars.' },
+        HttpStatus.UNPROCESSABLE_ENTITY,
+      );
+    }
+
+    if (!buffer.length || buffer.length > WorkspaceBotsControllerBase.AVATAR_MAX_BYTES) {
+      throw new HttpException(
+        { error: 'Image must be under 2MB.' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    try {
+      const uploaded = await uploadPublic({
+        prefix: `uploads/bot-avatars/${id}`,
+        originalName,
+        contentType: mime,
+        body: buffer,
+      });
+      return { ok: true as const, url: uploaded.url };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('[workspace-bots] avatar S3 upload failed', { id, msg });
+      throw new HttpException(
+        { error: 'Avatar storage is not available. Try again later.' },
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
+  }
+
   @Get(':id')
   async getBot(@Param('id') id: string, @Req() req: RequestWithUser) {
     if (!Types.ObjectId.isValid(id)) {
@@ -289,6 +403,8 @@ export abstract class WorkspaceBotsControllerBase {
       throw new HttpException({ error: 'Bot not found' }, HttpStatus.NOT_FOUND);
     }
     const health = await this.documentsService.getHealthSummary(id);
+    const listStats = await this.botsService.getListStatsForBots([id]);
+    const lastTrainedAt = listStats.get(id)?.lastTrainedAt ?? null;
     const b = bot as Record<string, unknown>;
     return {
       ok: true,
@@ -302,6 +418,8 @@ export abstract class WorkspaceBotsControllerBase {
         category: b.category ?? '',
         categories: b.categories ?? [],
         imageUrl: b.imageUrl ?? '',
+        avatarEmoji: typeof b.avatarEmoji === 'string' ? b.avatarEmoji : '',
+        avatarSource: workspaceAvatarSource(b),
         openaiApiKeyOverride: b.openaiApiKeyOverride ?? '',
         whisperApiKeyOverride: b.whisperApiKeyOverride ?? '',
         welcomeMessage: b.welcomeMessage ?? '',
@@ -310,13 +428,13 @@ export abstract class WorkspaceBotsControllerBase {
         isPublic: Boolean(b.isPublic),
         leadCapture: b.leadCapture ?? undefined,
         chatUI: b.chatUI ?? undefined,
-        faqs: Array.isArray(b.faqs)
-          ? (b.faqs as Array<{ question?: unknown; answer?: unknown; active?: unknown }>).map((faq) => ({
+        faqs: (Array.isArray(b.faqs) ? (b.faqs as Array<{ question?: unknown; answer?: unknown; active?: unknown }>) : [])
+          .filter((faq) => (faq as { active?: unknown }).active !== false)
+          .map((faq) => ({
             question: String(faq?.question ?? ''),
             answer: String(faq?.answer ?? ''),
-            active: faq?.active !== false,
-          }))
-          : [],
+            active: true,
+          })),
         exampleQuestions: Array.isArray(b.exampleQuestions)
           ? (b.exampleQuestions as string[]).map((q) => String(q ?? '').trim()).filter(Boolean)
           : [],
@@ -361,6 +479,7 @@ export abstract class WorkspaceBotsControllerBase {
         String((b as { clientDraftId: string }).clientDraftId).trim() !== ''
           ? { clientDraftId: String((b as { clientDraftId: string }).clientDraftId).trim() }
           : {}),
+        lastTrainedAt,
       },
       health,
     };
@@ -380,47 +499,12 @@ export abstract class WorkspaceBotsControllerBase {
     if (!botForType) {
       throw new HttpException({ error: 'Bot not found' }, HttpStatus.NOT_FOUND);
     }
-    const normalized = normalizeBotPayload(body);
-    if (normalized.allowedOrigins !== undefined) {
-      assertAllowedOriginsPolicy(normalized.allowedOrigins.length, req.user?.role);
+    const patch = normalizeWorkspaceBotPatch(body);
+    if (patch.touched.has('allowedOrigins') && patch.allowedOrigins !== undefined) {
+      assertAllowedOriginsPolicy(patch.allowedOrigins.length, req.user?.role);
     }
     try {
-      return await this.botsService.updateWorkspaceBot(id, {
-        name: normalized.name,
-        shortDescription: normalized.shortDescription,
-        description: normalized.description,
-        categories: normalized.categories,
-        imageUrl: normalized.imageUrl,
-        avatarEmoji: normalized.avatarEmoji,
-        openaiApiKeyOverride: normalized.openaiApiKeyOverride,
-        whisperApiKeyOverride: normalized.whisperApiKeyOverride,
-        welcomeMessage: normalized.welcomeMessage,
-        knowledgeDescription: normalized.knowledgeDescription,
-        leadCapture: normalized.leadCapture,
-        chatUI: normalized.chatUI,
-        faqs: normalized.faqs,
-        exampleQuestions: normalized.exampleQuestions,
-        personality: normalized.personality,
-        config: normalized.config,
-        limitOverrideMessages: normalized.limitOverrideMessages,
-        visibility: normalized.visibility,
-        messageLimitMode: normalized.messageLimitMode,
-        messageLimitTotal: normalized.messageLimitTotal,
-        messageLimitUpgradeMessage: normalized.messageLimitUpgradeMessage,
-        isPublic: normalized.isPublic,
-        status: normalized.status,
-        includeNameInKnowledge: normalized.includeNameInKnowledge,
-        includeTaglineInKnowledge: normalized.includeTaglineInKnowledge,
-        includeNotesInKnowledge: normalized.includeNotesInKnowledge,
-        ...(normalized.allowedOrigins !== undefined ? { allowedOrigins: normalized.allowedOrigins } : {}),
-        ...(normalized.visitorMultiChatEnabled !== undefined
-          ? {
-            visitorMultiChatEnabled: normalized.visitorMultiChatEnabled === true,
-            visitorMultiChatMax:
-              normalized.visitorMultiChatEnabled === true ? normalized.visitorMultiChatMax ?? null : null,
-          }
-          : {}),
-      });
+      return await this.botsService.updateWorkspaceBot(id, patch);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Update failed';
       if (msg === 'Bot not found') throw new HttpException({ error: 'Bot not found' }, HttpStatus.NOT_FOUND);

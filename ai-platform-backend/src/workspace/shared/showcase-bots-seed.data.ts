@@ -10,7 +10,7 @@ export interface ShowcaseBotSeed {
   description: string;
   welcomeMessage?: string;
   exampleQuestions: string[];
-  personality: { systemPrompt?: string; tone?: 'friendly' | 'formal' | 'playful' | 'technical'; language?: string };
+  personality: { systemPrompt?: string; tone?: string; language?: string };
   docs: { title: string; text: string }[];
 }
 

@@ -4,6 +4,20 @@ import type { WidgetStrings } from "./lib/widgetStrings";
 export type EmbedPosition = "left" | "right";
 export type WidgetMode = "runtime" | "preview";
 
+/** Default `floating`. `contained` = host-mounted preview (no fixed launcher / viewport panel). */
+export type EmbedPresentation = "floating" | "contained";
+
+/**
+ * Pixel sizes for the non-floating inline panel when `presentation: "contained"`.
+ * Omitted fields fall back to library defaults (400×700 collapsed, 560×75vh expanded).
+ */
+export type ContainedInlineSize = {
+  collapsedWidth?: number;
+  collapsedHeight?: number;
+  expandedWidth?: number;
+  expandedHeight?: number | string;
+};
+
 export type LauncherPosition = "bottom-left" | "bottom-right";
 
 export type WidgetInitStatus = "ok" | "error";
@@ -46,6 +60,14 @@ export type EmbedChatConfig = {
    */
   persistChatSession?: boolean;
   position?: EmbedPosition;
+  presentation?: EmbedPresentation;
+  /** Inline panel dimensions for contained mode (non-floating `AdminLiveChatAdapter` path). */
+  containedInlineSize?: ContainedInlineSize;
+  /**
+   * With `presentation: "contained"`: draw a non-interactive launcher bubble on the widget stage
+   * (bottom corners per `chatUI.launcherPosition`). Does not enable floating mode.
+   */
+  showContainedLauncherPreview?: boolean;
   previewOverrides?: WidgetPreviewOverrides;
   disableRemoteConfig?: boolean;
   /**

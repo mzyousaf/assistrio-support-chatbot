@@ -40,6 +40,59 @@ export type CustomerBotListItem = {
   lastTrainedAt?: string | null;
 };
 
+/** Subset of `leadCapture` aligned with backend `BotLeadCaptureV2` / workspace PATCH. */
+export type CustomerLeadField = {
+  key: string;
+  label: string;
+  type: 'text' | 'email' | 'phone' | 'number' | 'url';
+  required?: boolean;
+  disabled?: boolean;
+  aliases?: string[];
+};
+
+export type CustomerLeadCapture = {
+  enabled?: boolean;
+  fields?: CustomerLeadField[];
+  askStrategy?: 'soft' | 'balanced' | 'direct';
+  politeMode?: boolean;
+  captureMode?: 'chat' | 'form' | 'hybrid';
+};
+
+/** FAQ row from KB (`getFaqsForBot` / PATCH `faqs`). */
+export type CustomerKnowledgeFaq = {
+  question: string;
+  answer: string;
+  /** When false, pair is retained but excluded from retrieval (admin/workspace GET may include inactive). */
+  active?: boolean;
+};
+
+/** Document row from GET `/api/customer/bots/:botId/documents` (list). */
+export type CustomerWorkspaceDocument = {
+  _id?: string | { toString(): string };
+  botId?: string | { toString(): string };
+  title?: string;
+  sourceType?: string;
+  status?: string;
+  error?: string;
+  ingestedAt?: string | Date;
+  fileName?: string;
+  fileType?: string;
+  fileSize?: number;
+  active?: boolean;
+  createdAt?: string | Date;
+};
+
+/** Subset of `personality` aligned with backend `BotPersonality` / workspace PATCH. */
+export type CustomerBotPersonality = {
+  name?: string;
+  description?: string;
+  systemPrompt?: string;
+  behaviorPreset?: string;
+  tone?: string;
+  language?: string;
+  thingsToAvoid?: string;
+};
+
 /** GET /api/customer/bots/:id — `bot` subset used by onboarding and workspace UI. */
 export type CustomerBotDetail = {
   id: string;
@@ -47,6 +100,12 @@ export type CustomerBotDetail = {
   name: string;
   shortDescription?: string;
   description?: string;
+  /** Bot avatar image URL (widget / profile). */
+  imageUrl?: string;
+  /** Single emoji used when no custom image URL is set. */
+  avatarEmoji?: string;
+  /** Persisted avatar mode (legacy bots infer from `imageUrl` / `avatarEmoji`). */
+  avatarSource?: 'upload' | 'url' | 'emoji' | 'none';
   category?: string;
   categories?: string[];
   knowledgeDescription?: string;
@@ -54,9 +113,9 @@ export type CustomerBotDetail = {
   status: string;
   isPublic?: boolean;
   visibility?: string;
-  faqs?: Array<{ question: string; answer: string; active?: boolean }>;
+  faqs?: CustomerKnowledgeFaq[];
   exampleQuestions?: string[];
-  personality?: Record<string, unknown>;
+  personality?: CustomerBotPersonality;
   config?: Record<string, unknown>;
   allowedOrigins?: Array<{ origin: string; label?: string; isActive?: boolean }>;
   includeNameInKnowledge?: boolean;
@@ -65,14 +124,28 @@ export type CustomerBotDetail = {
   messageLimitMode?: string;
   messageLimitTotal?: number | null;
   messageLimitUpgradeMessage?: string | null;
-  leadCapture?: unknown;
+  leadCapture?: CustomerLeadCapture;
   chatUI?: unknown;
   clientDraftId?: string;
   accessKey?: string;
   secretKey?: string;
   visitorMultiChatEnabled?: boolean;
   visitorMultiChatMax?: number | null;
+  /** ISO timestamp: last document ingest used as training signal (see list stats). */
+  lastTrainedAt?: string | null;
 };
+
+/** POST /api/customer/bots/:id/lifecycle-action — success JSON body */
+export type CustomerBotLifecycleResponse =
+  | {
+      ok: true;
+      action: 'publish';
+      status: 'published';
+      embedSnippet: string;
+      accessKey: string;
+      allowedOrigins: string[];
+    }
+  | { ok: true; action: 'draft'; status: 'draft' };
 
 /** GET /api/customer/bots/:id */
 export type CustomerBotDetailResponse = {
@@ -107,10 +180,16 @@ export type CreateDraftResponse = {
 };
 
 export type CustomerDocumentsResponse = {
-  documents: unknown[];
+  documents: CustomerWorkspaceDocument[];
   total: number;
-  counts: Record<string, unknown>;
-  lastIngestedAt?: unknown;
+  counts: {
+    total?: number;
+    queued?: number;
+    processing?: number;
+    ready?: number;
+    failed?: number;
+  };
+  lastIngestedAt?: string | null;
   lastFailedDoc?: unknown;
 };
 
@@ -119,22 +198,25 @@ export type CustomerDocumentDownloadUrlResponse = {
   url: string;
 };
 
-/** POST /api/customer/bots/:botId/documents (multipart) */
+/** One row returned from POST /api/customer/bots/:botId/documents (multipart, 1–5 files). */
+export type CustomerDocumentUploadRow = {
+  _id: string;
+  botId: string;
+  title: string;
+  sourceType: string;
+  status: string;
+  fileName: string;
+  fileType: string;
+  fileSize: number;
+  active: boolean;
+  createdAt: string;
+};
+
+/** POST /api/customer/bots/:botId/documents (multipart: repeat field `file`, max 5 per request) */
 export type CustomerDocumentUploadResponse = {
   ok: true;
-  document: {
-    _id: string;
-    botId: string;
-    title: string;
-    sourceType: string;
-    status: string;
-    fileName: string;
-    fileType: string;
-    fileSize: number;
-    active: boolean;
-    createdAt: string;
-  };
-  ingestion: { jobStatus: 'queued' };
+  documents: CustomerDocumentUploadRow[];
+  ingestions?: Array<{ jobStatus: 'queued' }>;
 };
 
 export type ChatResponse = {

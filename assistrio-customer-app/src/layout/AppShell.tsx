@@ -1,13 +1,21 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type MouseEvent } from 'react';
 import {
+  Check,
+  Database,
+  CheckCircle2,
   ChevronDown,
   ChevronsUpDown,
+  Copy,
   CreditCard,
   Gem,
   Gauge,
+  Globe2,
   HelpCircle,
+  Info,
   LayoutDashboard,
   LogOut,
+  PencilLine,
+  Rocket,
   Settings,
   Sliders,
   Sparkles,
@@ -18,10 +26,17 @@ import {
 } from 'lucide-react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { getCustomerBot } from '../api/customerApi';
+import { getCustomerApiOrigin } from '../api/client';
 import type { CustomerBotDetail, CustomerMe } from '../api/types';
 import { AgentWorkspaceSidebar } from '../pages/bot-workspace/AgentWorkspaceSidebar';
+import { useWorkspaceDiscardModal } from '../pages/bot-workspace/WorkspaceDiscardModal';
 import { useCustomerAuth } from '../auth/CustomerAuthContext';
 import { customerInitials } from '../lib/customerDisplay';
+import { widgetSnippet } from '../lib/embedOrigin';
+import { BotLifecycleModal } from '../components/BotLifecycleModal';
+import { BotLifecycleProvider } from '../context/BotLifecycleContext';
+import { Modal } from '../components/ui/Modal';
+import { ASSISTRIO_NAVBAR_BOT_REFRESH, requestWorkspaceBotRefresh } from '../lib/botSyncEvents';
 import { cn } from '@/lib/utils';
 
 const CREDITS_USED = 10;
@@ -53,6 +68,203 @@ function accountDisplayName(customer: CustomerMe | null): string {
   const n = `${customer.firstName ?? ''} ${customer.lastName ?? ''}`.trim();
   if (n) return n;
   return customer.email?.split('@')[0]?.trim() || 'Account';
+}
+
+function healthNum(h: Record<string, unknown> | null | undefined, key: string): number {
+  const v = h?.[key];
+  return typeof v === 'number' && Number.isFinite(v) ? v : 0;
+}
+
+function healthIsoString(h: Record<string, unknown> | null | undefined, key: string): string | null {
+  const v = h?.[key];
+  if (typeof v !== 'string' || !v.trim()) return null;
+  const d = new Date(v);
+  return Number.isFinite(d.getTime()) ? v : null;
+}
+
+function relTrainedAgo(iso: string | null | undefined): string {
+  if (!iso) return 'never';
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return 'never';
+  const diff = Date.now() - d.getTime();
+  const m = Math.floor(diff / 60_000);
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const days = Math.floor(h / 24);
+  if (days < 30) return `${days}d ago`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months}mo ago`;
+  const years = Math.floor(months / 12);
+  return `${years}y ago`;
+}
+
+function formatBytesCompact(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+  if (bytes < 1024) return `${Math.round(bytes)} B`;
+  const kb = bytes / 1024;
+  if (kb < 1024) return `${Math.max(1, Math.round(kb))} KB`;
+  const mb = kb / 1024;
+  if (mb < 1024) return `${mb >= 10 ? Math.round(mb) : mb.toFixed(1)} MB`;
+  const gb = mb / 1024;
+  return `${gb >= 10 ? Math.round(gb) : gb.toFixed(1)} GB`;
+}
+
+function AgentInfoPopover({
+  agentTitle,
+  currentStatus,
+  trainedAgo,
+  visibilityLabel,
+  notesBytes,
+  qaBytes,
+  docsIndexedBytes,
+  isTrainingNow,
+  onSetDraft,
+  onSetPublished,
+  disableDraft,
+  disablePublished,
+  canPublishFromNavbar,
+  onCopyEmbed,
+  disableCopyEmbed,
+  copyEmbedTitle,
+}: {
+  agentTitle: string | null;
+  currentStatus: 'draft' | 'published';
+  trainedAgo: string;
+  visibilityLabel: string;
+  notesBytes: number;
+  qaBytes: number;
+  docsIndexedBytes: number;
+  isTrainingNow: boolean;
+  onSetDraft: () => void;
+  onSetPublished: () => void;
+  disableDraft: boolean;
+  disablePublished: boolean;
+  canPublishFromNavbar: boolean;
+  onCopyEmbed: () => void;
+  disableCopyEmbed: boolean;
+  copyEmbedTitle: string;
+}) {
+  return (
+    <div
+      className="absolute left-0 top-[calc(100%+0.5rem)] z-50 w-72 rounded-xl bg-white p-4 shadow-[var(--shadow-dropdown)]"
+      style={{ border: '1px solid var(--border-soft)' }}
+      role="region"
+      aria-label="Agent details"
+    >
+      <div className="flex items-center justify-between gap-3">
+        <p className="m-0 truncate text-sm font-semibold text-slate-900" title={agentTitle ?? undefined}>
+          {agentTitle}
+        </p>
+        <button
+          type="button"
+          className={cn(
+            'inline-flex h-6 items-center gap-1 rounded-md border px-2 text-[10px] font-semibold transition-colors',
+            disableCopyEmbed
+              ? 'cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400'
+              : 'border-teal-200 bg-teal-50 text-teal-700 hover:bg-teal-100',
+          )}
+          onClick={onCopyEmbed}
+          disabled={disableCopyEmbed}
+          title={copyEmbedTitle}
+        >
+          <Copy size={11} strokeWidth={2} className="shrink-0" aria-hidden />
+          Embed
+        </button>
+      </div>
+
+      <div className="mt-4 grid grid-cols-[5.25rem_1fr] gap-x-4 gap-y-3 text-xs leading-snug">
+        <span className="inline-flex h-6 items-center font-medium text-slate-500">Status</span>
+        <span
+          className="inline-flex h-6 min-w-[8.6rem] items-center justify-self-end rounded-md border border-slate-200/90 bg-white p-0.5 shadow-[0_1px_2px_rgba(15,23,42,0.05)]"
+          role="radiogroup"
+          aria-label="Agent status"
+        >
+          <button
+            type="button"
+            role="radio"
+            aria-checked={currentStatus === 'draft'}
+            className={cn(
+              'inline-flex h-5 flex-1 items-center justify-center whitespace-nowrap rounded px-2 text-[10px] font-semibold transition-colors',
+              currentStatus === 'draft'
+                ? 'bg-slate-200/80 text-slate-800'
+                : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700',
+              disableDraft && currentStatus !== 'draft' && 'cursor-default opacity-70',
+            )}
+            onClick={onSetDraft}
+            disabled={disableDraft}
+            title={currentStatus === 'draft' ? 'Agent currently in draft' : 'Move this agent back to draft'}
+          >
+            <PencilLine
+              size={10}
+              strokeWidth={2}
+              className={cn('mr-1 shrink-0', currentStatus === 'draft' ? 'text-slate-600' : 'text-slate-400')}
+              aria-hidden
+            />
+            Draft
+          </button>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={currentStatus === 'published'}
+            className={cn(
+              'inline-flex h-5 flex-1 items-center justify-center whitespace-nowrap rounded px-2 text-[10px] font-semibold transition-colors',
+              currentStatus === 'published'
+                ? 'bg-teal-50 text-teal-700'
+                : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700',
+              disablePublished && currentStatus !== 'published' && 'cursor-default opacity-70',
+            )}
+            onClick={onSetPublished}
+            disabled={disablePublished}
+            title={
+              currentStatus === 'published'
+                ? 'Agent is live'
+                : canPublishFromNavbar
+                  ? 'Go live with this agent'
+                  : 'Go live — complete requirements first if prompted'
+            }
+          >
+            <Rocket size={10} strokeWidth={2} className="mr-1 shrink-0" aria-hidden />
+            Go Live
+          </button>
+        </span>
+        <span className="font-medium text-slate-500">Visibility</span>
+        <span className="inline-flex items-center justify-self-end gap-1.5 text-right font-semibold text-slate-600">
+          <Globe2 size={12} strokeWidth={1.9} aria-hidden />
+          {visibilityLabel}
+        </span>
+      </div>
+
+      <div className="mt-5 border-t border-slate-200/90 pt-3.5">
+        <div className="flex items-center justify-between gap-2">
+          <p className="m-0 inline-flex items-center gap-1 text-[11px] font-medium uppercase tracking-wide text-slate-500">
+            <Database size={12} strokeWidth={1.9} aria-hidden />
+            Data sources
+          </p>
+          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-600">
+            <span
+              className={cn(
+                'h-2 w-2 rounded-full',
+                isTrainingNow ? 'animate-pulse bg-blue-500' : 'bg-emerald-500',
+              )}
+              aria-hidden
+            />
+            {isTrainingNow ? 'Training' : 'Trained'}
+          </span>
+        </div>
+        <div className="mt-1 text-[11px] text-slate-500">Last trained {trainedAgo}</div>
+        <div className="mt-2 grid grid-cols-[5.25rem_1fr] gap-x-4 gap-y-1.5 text-xs leading-snug">
+          <span className="font-medium text-slate-500">Notes</span>
+          <span className="justify-self-end text-right font-semibold text-slate-600">{formatBytesCompact(notesBytes)}</span>
+          <span className="font-medium text-slate-500">Q&amp;A</span>
+          <span className="justify-self-end text-right font-semibold text-slate-600">{formatBytesCompact(qaBytes)}</span>
+          <span className="font-medium text-slate-500">Documents</span>
+          <span className="justify-self-end text-right font-semibold text-slate-600">{formatBytesCompact(docsIndexedBytes)}</span>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function UserAvatar({
@@ -100,11 +312,22 @@ export function AppShell() {
 
   const workspaceDetailsRef = useRef<HTMLDetailsElement>(null);
   const topUserDetailsRef = useRef<HTMLDetailsElement>(null);
+  const agentInfoDetailsRef = useRef<HTMLDetailsElement>(null);
 
   const [agentTitle, setAgentTitle] = useState<string | null>(null);
   const [agentBot, setAgentBot] = useState<CustomerBotDetail | null>(null);
   const [agentHealth, setAgentHealth] = useState<Record<string, unknown> | null>(null);
   const [imgFailed, setImgFailed] = useState(false);
+  const [lifecycleBusy, setLifecycleBusy] = useState(false);
+  const [lifecycleOpen, setLifecycleOpen] = useState(false);
+  const [lifecycleAction, setLifecycleAction] = useState<'publish' | 'draft' | null>(null);
+  const [lifecycleRunKey, setLifecycleRunKey] = useState(0);
+  const [statusToast, setStatusToast] = useState<string | null>(null);
+  const statusToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [publishRequirementsOpen, setPublishRequirementsOpen] = useState(false);
+  const [lifecycleConfirmOpen, setLifecycleConfirmOpen] = useState(false);
+  const [lifecycleConfirmAction, setLifecycleConfirmAction] = useState<'publish' | 'draft' | null>(null);
+  const [agentInfoExpanded, setAgentInfoExpanded] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [userCollapsed, setUserCollapsed] = useState(false);
   const [sidebarHovered, setSidebarHovered] = useState(false);
@@ -124,10 +347,84 @@ export function AppShell() {
   const profileName = useMemo(() => accountDisplayName(customer), [customer]);
   const profileEmail = customer?.email?.trim() ?? '';
   const agentId = extractAgentId(location.pathname);
+  const isAgentWorkspace = Boolean(agentId);
+
+  const { requestDiscardIfNeeded } = useWorkspaceDiscardModal();
+
+  const workspaceLeaveGuard = useCallback(
+    (e: MouseEvent, href: string) => {
+      if (!agentId) return;
+      const base = `/bots/${agentId}`;
+      if (!location.pathname.startsWith(`${base}/`) && location.pathname !== base) return;
+      const path = href.split('#')[0]?.split('?')[0] ?? href;
+      if (path.startsWith(base)) return;
+      e.preventDefault();
+      void (async () => {
+        if (await requestDiscardIfNeeded()) navigate(path);
+      })();
+    },
+    [agentId, location.pathname, navigate, requestDiscardIfNeeded],
+  );
+  const currentStatus = String(agentBot?.status ?? '').toLowerCase() === 'published' ? 'published' : 'draft';
+  const visibilityLabel = String(agentBot?.visibility ?? '').toLowerCase() === 'private' ? 'Private' : 'Public';
+  const canPublishFromNavbar = Boolean(
+    String(agentBot?.name ?? '').trim() &&
+      String(agentBot?.description ?? '').trim() &&
+      (agentBot?.allowedOrigins ?? []).some((o) => o?.isActive !== false && String(o?.origin ?? '').trim()),
+  );
+  const lastTrainedAt = healthIsoString(agentHealth, 'lastIngestedAt');
+  const docsQueued = healthNum(agentHealth, 'docsQueued');
+  const docsProcessing = healthNum(agentHealth, 'docsProcessing');
+  const docsIndexedBytes = healthNum(agentHealth, 'docsIndexedBytes');
+  const isTrainingNow = docsQueued + docsProcessing > 0;
+  const trainedAgo = relTrainedAgo(lastTrainedAt);
+  const notesBytes = useMemo(() => {
+    const text = String(agentBot?.knowledgeDescription ?? '');
+    return new TextEncoder().encode(text).length;
+  }, [agentBot?.knowledgeDescription]);
+  const qaBytes = useMemo(() => {
+    const faqs = Array.isArray(agentBot?.faqs) ? agentBot.faqs : [];
+    return faqs.reduce((sum, row) => {
+      const q = String((row as { question?: unknown })?.question ?? '');
+      const a = String((row as { answer?: unknown })?.answer ?? '');
+      return sum + q.length + a.length;
+    }, 0);
+  }, [agentBot?.faqs]);
+  const missingPublishChecks = useMemo(() => {
+    const missing: string[] = [];
+    if (!String(agentBot?.name ?? '').trim()) missing.push('Agent name is required.');
+    if (!String(agentBot?.description ?? '').trim()) missing.push('Agent description is required.');
+    const hasActiveOrigin = (agentBot?.allowedOrigins ?? []).some(
+      (o) => o?.isActive !== false && String(o?.origin ?? '').trim(),
+    );
+    if (!hasActiveOrigin) missing.push('At least one active allowed origin is required.');
+    return missing;
+  }, [agentBot]);
 
   useEffect(() => { setImgFailed(false); }, [picture]);
   useEffect(() => {
     if (location.pathname.startsWith('/settings')) setSettingsOpen(true);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    const onPointerDown = (event: PointerEvent) => {
+      const details = agentInfoDetailsRef.current;
+      if (!details?.open) return;
+      const target = event.target;
+      if (target instanceof Node && !details.contains(target)) {
+        details.removeAttribute('open');
+        setAgentInfoExpanded(false);
+      }
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => document.removeEventListener('pointerdown', onPointerDown);
+  }, []);
+
+  useEffect(() => {
+    agentInfoDetailsRef.current?.removeAttribute('open');
+    setAgentInfoExpanded(false);
+    setLifecycleConfirmOpen(false);
+    setLifecycleConfirmAction(null);
   }, [location.pathname]);
 
   useEffect(() => {
@@ -186,12 +483,18 @@ export function AppShell() {
     }
   }, [location.pathname, settingsOpen, sidebarCollapsed, sidebarPeeking]);
 
-
   useEffect(() => {
     if (!agentId) {
       setAgentTitle(null);
       setAgentBot(null);
       setAgentHealth(null);
+      setPublishRequirementsOpen(false);
+      setLifecycleConfirmOpen(false);
+      setLifecycleConfirmAction(null);
+      setLifecycleOpen(false);
+      setLifecycleAction(null);
+      setAgentInfoExpanded(false);
+      agentInfoDetailsRef.current?.removeAttribute('open');
       return;
     }
     let cancelled = false;
@@ -210,7 +513,9 @@ export function AppShell() {
         setAgentHealth(null);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [agentId]);
 
   async function handleSignOut() {
@@ -223,9 +528,140 @@ export function AppShell() {
   function closeAllMenus() {
     workspaceDetailsRef.current?.removeAttribute('open');
     topUserDetailsRef.current?.removeAttribute('open');
+    agentInfoDetailsRef.current?.removeAttribute('open');
+    setAgentInfoExpanded(false);
   }
 
   const creditsPct = Math.min(100, Math.round((CREDITS_USED / CREDITS_TOTAL) * 100));
+
+  useEffect(() => {
+    return () => {
+      if (statusToastTimerRef.current) clearTimeout(statusToastTimerRef.current);
+    };
+  }, []);
+
+  function showStatusToast(msg: string) {
+    setStatusToast(msg);
+    if (statusToastTimerRef.current) clearTimeout(statusToastTimerRef.current);
+    statusToastTimerRef.current = setTimeout(() => setStatusToast(null), 2200);
+  }
+
+  const refreshAgentFromApi = useCallback(async () => {
+    if (!agentId) return;
+    const refreshed = await getCustomerBot(agentId);
+    if (refreshed.ok) {
+      const bot = refreshed.data.bot as CustomerBotDetail;
+      const name = String(bot?.name ?? '').trim();
+      setAgentTitle(name || 'Untitled agent');
+      setAgentBot(bot ?? null);
+      setAgentHealth(refreshed.data.health ?? null);
+    }
+  }, [agentId]);
+
+  const onLifecycleModalSuccess = useCallback(() => {
+    if (!agentId) return;
+    void (async () => {
+      await refreshAgentFromApi();
+      requestWorkspaceBotRefresh(agentId);
+    })();
+  }, [agentId, refreshAgentFromApi]);
+
+  const openPublishLifecycle = useCallback(() => {
+    if (!agentId || currentStatus === 'published' || lifecycleBusy) return;
+    if (!canPublishFromNavbar) {
+      setPublishRequirementsOpen(true);
+      return;
+    }
+    agentInfoDetailsRef.current?.removeAttribute('open');
+    setAgentInfoExpanded(false);
+    setLifecycleConfirmAction('publish');
+    setLifecycleConfirmOpen(true);
+  }, [agentId, currentStatus, lifecycleBusy, canPublishFromNavbar]);
+
+  const openDraftLifecycle = useCallback(() => {
+    if (!agentId || currentStatus === 'draft' || lifecycleBusy) return;
+    agentInfoDetailsRef.current?.removeAttribute('open');
+    setAgentInfoExpanded(false);
+    setLifecycleConfirmAction('draft');
+    setLifecycleConfirmOpen(true);
+  }, [agentId, currentStatus, lifecycleBusy]);
+
+  const cancelLifecycleConfirm = useCallback(() => {
+    setLifecycleConfirmOpen(false);
+    setLifecycleConfirmAction(null);
+  }, []);
+
+  const confirmLifecycleTransition = useCallback(() => {
+    const act = lifecycleConfirmAction;
+    setLifecycleConfirmOpen(false);
+    setLifecycleConfirmAction(null);
+    agentInfoDetailsRef.current?.removeAttribute('open');
+    setAgentInfoExpanded(false);
+    if (!agentId || lifecycleBusy) return;
+    if (act === 'publish') {
+      if (currentStatus === 'published') return;
+      if (!canPublishFromNavbar) {
+        setPublishRequirementsOpen(true);
+        return;
+      }
+      setLifecycleAction('publish');
+      setLifecycleRunKey((k) => k + 1);
+      setLifecycleOpen(true);
+    } else if (act === 'draft') {
+      if (currentStatus === 'draft') return;
+      setLifecycleAction('draft');
+      setLifecycleRunKey((k) => k + 1);
+      setLifecycleOpen(true);
+    }
+  }, [
+    lifecycleConfirmAction,
+    agentId,
+    lifecycleBusy,
+    currentStatus,
+    canPublishFromNavbar,
+  ]);
+
+  const lifecycleControls = useMemo(
+    () => ({
+      openPublish: openPublishLifecycle,
+      openDraft: openDraftLifecycle,
+    }),
+    [openPublishLifecycle, openDraftLifecycle],
+  );
+
+  useEffect(() => {
+    if (!agentId) return;
+    const onNavRefresh = (e: Event) => {
+      const id = (e as CustomEvent<{ botId?: string }>).detail?.botId;
+      if (id === agentId) void refreshAgentFromApi();
+    };
+    window.addEventListener(ASSISTRIO_NAVBAR_BOT_REFRESH, onNavRefresh);
+    return () => window.removeEventListener(ASSISTRIO_NAVBAR_BOT_REFRESH, onNavRefresh);
+  }, [agentId, refreshAgentFromApi]);
+
+  async function copyEmbedFromPopover() {
+    if (!agentBot || !agentId || currentStatus !== 'published') return;
+    const visibility = String(agentBot.visibility ?? '').toLowerCase() === 'private' ? 'private' : 'public';
+    const embed = widgetSnippet({
+      botId: agentId,
+      apiBaseUrl: getCustomerApiOrigin(),
+      accessKey: String(agentBot.accessKey ?? ''),
+      ...(visibility === 'private' && String(agentBot.secretKey ?? '').trim()
+        ? { secretKey: String(agentBot.secretKey) }
+        : {}),
+      visibility,
+      widgetAssetOrigin:
+        (import.meta.env.VITE_WIDGET_ASSET_ORIGIN ?? '').replace(/\/$/, '') || 'https://widget.assistrio.com',
+    });
+    try {
+      await navigator.clipboard.writeText(embed);
+      showStatusToast('Embed code copied.');
+      agentInfoDetailsRef.current?.removeAttribute('open');
+      setAgentInfoExpanded(false);
+    } catch {
+      showStatusToast('Could not copy embed code.');
+    }
+  }
 
   const sideNavLink = ({ isActive }: { isActive: boolean }) =>
     cn(
@@ -347,23 +783,114 @@ export function AppShell() {
             {agentTitle ? (
               <>
                 <span className="shrink-0 select-none text-sm text-slate-200" aria-hidden>/</span>
-                <span className="inline-flex min-w-0 items-center gap-1.5 max-[900px]:hidden">
+                <span className="inline-flex min-w-0 items-center gap-1.5 align-middle max-[900px]:hidden">
                   <span
-                    className="max-w-[20rem] overflow-hidden text-ellipsis whitespace-nowrap text-sm font-medium text-slate-700"
+                    className="max-w-[20rem] overflow-hidden text-ellipsis whitespace-nowrap text-sm leading-5 font-medium text-slate-700"
                     title={agentTitle}
                   >
                     {agentTitle}
                   </span>
-                  <span className="shrink-0 rounded-md bg-teal-50 px-1.5 py-0.5 text-[0.6rem] font-semibold uppercase tracking-wide text-teal-700">
-                    Agent
-                  </span>
+                  <details
+                    ref={agentInfoDetailsRef}
+                    className="relative"
+                    onToggle={(e) => setAgentInfoExpanded(e.currentTarget.open)}
+                  >
+                    <summary
+                      className="inline-flex h-6 w-6 cursor-pointer list-none items-center justify-center rounded-md p-0 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 [&::-webkit-details-marker]:hidden"
+                      aria-label="Agent details"
+                      aria-expanded={agentInfoExpanded}
+                    >
+                      <Info size={13} strokeWidth={2} aria-hidden />
+                    </summary>
+                    <AgentInfoPopover
+                      agentTitle={agentTitle}
+                      currentStatus={currentStatus}
+                      trainedAgo={trainedAgo}
+                      visibilityLabel={visibilityLabel}
+                      notesBytes={notesBytes}
+                      qaBytes={qaBytes}
+                      docsIndexedBytes={docsIndexedBytes}
+                      isTrainingNow={isTrainingNow}
+                      onSetDraft={openDraftLifecycle}
+                      onSetPublished={openPublishLifecycle}
+                      disableDraft={lifecycleBusy || currentStatus === 'draft'}
+                      disablePublished={lifecycleBusy || currentStatus === 'published'}
+                      canPublishFromNavbar={canPublishFromNavbar}
+                      onCopyEmbed={() => void copyEmbedFromPopover()}
+                      disableCopyEmbed={currentStatus !== 'published'}
+                      copyEmbedTitle={
+                        currentStatus === 'published'
+                          ? 'Copy embed code'
+                          : 'Publish this agent to copy the embed code.'
+                      }
+                    />
+                  </details>
                 </span>
               </>
             ) : null}
           </div>
 
           {/* Right */}
-          <div className="flex shrink-0 items-center gap-1">
+          <div className="flex shrink-0 items-center gap-2">
+            {isAgentWorkspace ? (
+              <>
+                <div
+                  className="inline-flex h-8 min-w-[9.5rem] items-center rounded-lg border border-slate-200/90 bg-white p-0.5 shadow-[0_1px_2px_rgba(15,23,42,0.05)]"
+                  role="radiogroup"
+                  aria-label="Agent status"
+                >
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={currentStatus === 'draft'}
+                    className={cn(
+                      'inline-flex h-7 flex-1 items-center justify-center whitespace-nowrap rounded-md px-2.5 text-xs font-semibold transition-[background-color,color] duration-150',
+                      currentStatus === 'draft'
+                        ? 'bg-slate-100 text-slate-800'
+                        : 'bg-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-700',
+                      (lifecycleBusy || currentStatus === 'draft') && 'cursor-default',
+                    )}
+                    onClick={openDraftLifecycle}
+                    disabled={lifecycleBusy || currentStatus === 'draft'}
+                    title={currentStatus === 'draft' ? 'Agent currently in draft' : 'Move agent to draft'}
+                  >
+                    <PencilLine size={12} strokeWidth={2} className="mr-1 shrink-0" aria-hidden />
+                    {lifecycleBusy && lifecycleAction === 'draft' ? 'Going to draft…' : 'Draft'}
+                  </button>
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={currentStatus === 'published'}
+                    className={cn(
+                      'inline-flex h-7 flex-1 items-center justify-center whitespace-nowrap rounded-md px-2.5 text-xs font-semibold transition-[background-color,color] duration-150',
+                      currentStatus === 'published'
+                        ? 'bg-teal-50 text-teal-700'
+                        : 'bg-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-700',
+                      (lifecycleBusy || currentStatus === 'published') && 'cursor-default',
+                    )}
+                    onClick={openPublishLifecycle}
+                    disabled={lifecycleBusy || currentStatus === 'published'}
+                    title={
+                      currentStatus === 'published'
+                        ? 'Agent is live'
+                        : canPublishFromNavbar
+                          ? 'Go live with this agent'
+                          : 'Go live — complete requirements first if prompted'
+                    }
+                  >
+                    <Rocket size={12} strokeWidth={2} className="mr-1 shrink-0" aria-hidden />
+                    {lifecycleBusy && lifecycleAction === 'publish' ? 'Going live…' : 'Go Live'}
+                  </button>
+                </div>
+                {statusToast ? (
+                  <span className="hidden items-center gap-1 text-xs text-teal-700 sm:inline-flex" role="status" aria-live="polite">
+                    <CheckCircle2 size={13} strokeWidth={2} aria-hidden />
+                    {statusToast}
+                  </span>
+                ) : null}
+              </>
+            ) : null}
+
             {logoutError ? (
               <div
                 className="flex max-w-[20rem] items-center gap-2 rounded-lg border border-[var(--color-danger-border)] bg-[var(--color-danger-bg)] px-3 py-1.5 text-xs text-[var(--color-danger-text)]"
@@ -528,7 +1055,7 @@ export function AppShell() {
                 <div className="flex min-w-[var(--sidebar-width)] flex-1 flex-col overflow-y-auto overflow-x-hidden p-3">
                   {/* Nav links */}
                   <div className="mb-1 flex flex-col gap-1">
-                    <NavLink to="/bots" className={peekNavLink}>
+                    <NavLink to="/bots" className={peekNavLink} onClick={(e) => workspaceLeaveGuard(e, '/bots')}>
                       {({ isActive }) => (
                         <>
                           <Sparkles size={18} strokeWidth={1.75} className={cn('shrink-0 transition-colors duration-150', isActive ? 'text-teal-600' : 'text-slate-400 group-hover:text-teal-600')} aria-hidden />
@@ -536,7 +1063,7 @@ export function AppShell() {
                         </>
                       )}
                     </NavLink>
-                    <NavLink to="/usage" className={peekNavLink}>
+                    <NavLink to="/usage" className={peekNavLink} onClick={(e) => workspaceLeaveGuard(e, '/usage')}>
                       {({ isActive }) => (
                         <>
                           <Gauge size={18} strokeWidth={1.75} className={cn('shrink-0 transition-colors duration-150', isActive ? 'text-teal-600' : 'text-slate-400 group-hover:text-teal-600')} aria-hidden />
@@ -545,7 +1072,11 @@ export function AppShell() {
                       )}
                     </NavLink>
                     {needsOnboarding && (
-                      <NavLink to="/onboarding" className={peekNavLink}>
+                      <NavLink
+                        to="/onboarding"
+                        className={peekNavLink}
+                        onClick={(e) => workspaceLeaveGuard(e, '/onboarding')}
+                      >
                         {({ isActive }) => (
                           <>
                             <UserCog size={18} strokeWidth={1.75} className={cn('shrink-0 transition-colors duration-150', isActive ? 'text-teal-600' : 'text-slate-400 group-hover:text-teal-600')} aria-hidden />
@@ -599,6 +1130,7 @@ export function AppShell() {
                             key={to}
                             to={to}
                             className={sideSubNavLink}
+                            onClick={(e) => workspaceLeaveGuard(e, to)}
                             ref={(el) => { peekSubNavRefs.current[i] = el; }}
                           >
                             {({ isActive }) => (
@@ -625,6 +1157,7 @@ export function AppShell() {
                   </div>
                   <NavLink
                     to="/settings/plans"
+                    onClick={(e) => workspaceLeaveGuard(e, '/settings/plans')}
                     className="mt-2.5 flex w-full items-center justify-center gap-2 rounded-md bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white no-underline shadow-sm transition-all duration-150 hover:bg-teal-700 active:scale-[0.98]"
                   >
                     <Zap size={12} className="shrink-0 fill-white" aria-hidden />
@@ -644,7 +1177,12 @@ export function AppShell() {
             aria-label="Main"
           >
             <div className={cn('mb-1 flex flex-col gap-1', sidebarCollapsed && 'w-full items-center')}>
-              <NavLink to="/bots" className={sideNavLink} title={sidebarCollapsed ? 'Agents' : undefined}>
+              <NavLink
+                to="/bots"
+                className={sideNavLink}
+                title={sidebarCollapsed ? 'Agents' : undefined}
+                onClick={(e) => workspaceLeaveGuard(e, '/bots')}
+              >
                 {({ isActive }) => (
                   <>
                     <Sparkles
@@ -658,7 +1196,12 @@ export function AppShell() {
                 )}
               </NavLink>
 
-              <NavLink to="/usage" className={sideNavLink} title={sidebarCollapsed ? 'Usage' : undefined}>
+              <NavLink
+                to="/usage"
+                className={sideNavLink}
+                title={sidebarCollapsed ? 'Usage' : undefined}
+                onClick={(e) => workspaceLeaveGuard(e, '/usage')}
+              >
                 {({ isActive }) => (
                   <>
                     <Gauge
@@ -673,7 +1216,12 @@ export function AppShell() {
               </NavLink>
 
               {needsOnboarding ? (
-                <NavLink to="/onboarding" className={sideNavLink} title={sidebarCollapsed ? 'Setup' : undefined}>
+                <NavLink
+                  to="/onboarding"
+                  className={sideNavLink}
+                  title={sidebarCollapsed ? 'Setup' : undefined}
+                  onClick={(e) => workspaceLeaveGuard(e, '/onboarding')}
+                >
                   {({ isActive }) => (
                     <>
                       <UserCog
@@ -697,6 +1245,7 @@ export function AppShell() {
                   to="/settings/general"
                   className={sideNavLink}
                   title="Settings"
+                  onClick={(e) => workspaceLeaveGuard(e, '/settings/general')}
                 >
                   {({ isActive }) => (
                     <Settings
@@ -771,6 +1320,7 @@ export function AppShell() {
                         key={to}
                         to={to}
                         className={sideSubNavLink}
+                        onClick={(e) => workspaceLeaveGuard(e, to)}
                         ref={(el) => { settingsSubNavRefs.current[i] = el; }}
                       >
                         {({ isActive }) => (
@@ -834,6 +1384,7 @@ export function AppShell() {
                     </p>
                     <NavLink
                       to="/settings/plans"
+                      onClick={(e) => workspaceLeaveGuard(e, '/settings/plans')}
                       className="flex w-full items-center justify-center gap-2 rounded-md bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white no-underline shadow-sm transition-all duration-150 hover:bg-teal-700 active:scale-[0.98]"
                     >
                       <Zap size={12} className="shrink-0 fill-white" aria-hidden />
@@ -874,9 +1425,170 @@ export function AppShell() {
           className="min-w-0 flex-1 overflow-x-visible overflow-y-auto"
           style={{ background: 'var(--bg-workspace-canvas)' }}
         >
-          <Outlet />
+          <BotLifecycleProvider value={lifecycleControls}>
+            <Outlet />
+          </BotLifecycleProvider>
         </main>
       </div>
+
+      <BotLifecycleModal
+        open={lifecycleOpen}
+        runKey={lifecycleRunKey}
+        action={lifecycleAction}
+        botId={agentId}
+        onBusyChange={setLifecycleBusy}
+        onClose={() => {
+          setLifecycleOpen(false);
+          setLifecycleAction(null);
+        }}
+        onSuccess={onLifecycleModalSuccess}
+      />
+
+      <Modal
+        open={publishRequirementsOpen}
+        onClose={() => setPublishRequirementsOpen(false)}
+        title="Cannot publish yet"
+        description="Complete these requirements first:"
+        size="md"
+        footer={
+          <>
+            <button
+              type="button"
+              className="inline-flex h-10 items-center justify-center rounded-md border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              onClick={() => setPublishRequirementsOpen(false)}
+            >
+              Close
+            </button>
+            <button
+              type="button"
+              className="inline-flex h-10 items-center justify-center rounded-md bg-teal-600 px-4 text-sm font-semibold text-white hover:bg-teal-700"
+              onClick={() => {
+                setPublishRequirementsOpen(false);
+                if (agentId) navigate(`/bots/${agentId}/playground/deploy`);
+              }}
+            >
+              Open Deploy & Go Live
+            </button>
+          </>
+        }
+      >
+        <ul className="m-0 list-disc space-y-2 pl-4 text-sm leading-relaxed text-slate-600">
+          {(missingPublishChecks.length ? missingPublishChecks : ['Complete the publish requirements in the Deploy & Go Live page.']).map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ul>
+      </Modal>
+
+      <Modal
+        open={lifecycleConfirmOpen}
+        onClose={cancelLifecycleConfirm}
+        tone="default"
+        className="max-w-md"
+        title={
+          lifecycleConfirmAction === 'draft' ? (
+            <span className="inline-flex items-center gap-3">
+              <span
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200/95 bg-slate-100 text-slate-700 shadow-sm ring-1 ring-slate-900/[0.04]"
+                aria-hidden
+              >
+                <PencilLine className="h-5 w-5" strokeWidth={2} />
+              </span>
+              Move to draft
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-3">
+              <span
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-teal-100 bg-teal-50 text-teal-600 shadow-sm"
+                aria-hidden
+              >
+                <Rocket className="h-5 w-5" strokeWidth={1.75} />
+              </span>
+              Go live
+            </span>
+          )
+        }
+        description={
+          lifecycleConfirmAction === 'draft' ? (
+            <span>
+              On your allowed websites, the embed will stop showing this agent until you publish again. You can go live
+              again whenever you are ready.
+            </span>
+          ) : (
+            <span>
+              This turns on your chat widget for the allowed websites you configured. You can return to draft anytime.
+            </span>
+          )
+        }
+        size="md"
+        footer={
+          <>
+            <button
+              type="button"
+              className="inline-flex h-10 min-w-[5.5rem] items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm transition-colors hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400"
+              onClick={cancelLifecycleConfirm}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className={cn(
+                'inline-flex h-10 min-w-[8.5rem] items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold text-white shadow-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2',
+                lifecycleConfirmAction === 'draft'
+                  ? 'border border-transparent bg-[var(--color-danger-text-emphasis)] text-white hover:bg-[var(--color-danger-text)] focus-visible:outline-[var(--color-danger-text-emphasis)]'
+                  : 'bg-teal-600 hover:bg-teal-700 focus-visible:outline-teal-600',
+              )}
+              onClick={confirmLifecycleTransition}
+            >
+              {lifecycleConfirmAction === 'draft' ? (
+                <>
+                  <PencilLine size={16} strokeWidth={2} className="shrink-0" aria-hidden />
+                  Move to draft
+                </>
+              ) : (
+                <>
+                  <Rocket size={16} strokeWidth={1.75} className="shrink-0" aria-hidden />
+                  Go live
+                </>
+              )}
+            </button>
+          </>
+        }
+      >
+        <div
+          className={
+            lifecycleConfirmAction === 'draft'
+              ? 'rounded-xl border border-slate-200 bg-slate-100/70 p-3.5 ring-1 ring-slate-900/[0.05]'
+              : 'rounded-xl border border-slate-200/90 bg-slate-50/80 p-3.5 ring-1 ring-slate-900/[0.04]'
+          }
+        >
+          <p className="m-0 text-[11px] font-semibold uppercase tracking-wide text-slate-500">What happens next</p>
+          <ul className="mt-2.5 m-0 list-none space-y-2 p-0 text-sm leading-snug text-slate-700">
+            {lifecycleConfirmAction === 'draft' ? (
+              <>
+                <li className="flex gap-2.5">
+                  <Check className="mt-0.5 h-4 w-4 shrink-0 text-slate-600" strokeWidth={2.5} aria-hidden />
+                  <span>Each allowed website stops showing this agent in the embed until you publish again.</span>
+                </li>
+                <li className="flex gap-2.5">
+                  <Check className="mt-0.5 h-4 w-4 shrink-0 text-slate-600" strokeWidth={2.5} aria-hidden />
+                  <span>Your workspace, knowledge, and Deploy & Go Live settings stay as they are.</span>
+                </li>
+              </>
+            ) : (
+              <>
+                <li className="flex gap-2.5">
+                  <Check className="mt-0.5 h-4 w-4 shrink-0 text-teal-600" strokeWidth={2.5} aria-hidden />
+                  <span>The install snippet works only on allowed websites you list under Deploy & Go Live.</span>
+                </li>
+                <li className="flex gap-2.5">
+                  <Check className="mt-0.5 h-4 w-4 shrink-0 text-teal-600" strokeWidth={2.5} aria-hidden />
+                  <span>You can copy the snippet anytime and move back to draft from the nav or this page.</span>
+                </li>
+              </>
+            )}
+          </ul>
+        </div>
+      </Modal>
     </div>
   );
 }

@@ -6,12 +6,12 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type CSSProperties,
   type ReactNode,
+  type TransitionEvent,
 } from 'react';
-import { ChevronLeft } from 'lucide-react';
-import { Button } from '@/components/ui/Button';
 import { cn } from '@/lib/utils';
 import { WIDGET_PREVIEW_EDITOR_MAX_PX, WIDGET_PREVIEW_PREVIEW_MIN_PX } from './constants';
 import { PreviewCollapseHeaderButton, PreviewExpandEyeButton } from './PreviewCollapseRail';
@@ -23,7 +23,7 @@ export type WidgetPreviewBreakpoint = 'small' | 'medium' | 'large' | 'xlarge';
 
 export type WidgetPreviewShellContextValue = {
   breakpoint: WidgetPreviewBreakpoint;
-  /** Preview / Open preview / Agent Preview (large collapsed) in the section header */
+  /** Reserved; preview opens from the docked preview control on the editor edge */
   showHeaderPreviewTrigger: boolean;
   headerPreviewLabel: 'Preview' | 'Open preview' | 'Agent Preview' | null;
   openPreview: () => void;
@@ -52,6 +52,18 @@ function tierFromMedia(ge1080: boolean, ge1440: boolean, ge1920: boolean): Widge
   if (!ge1440) return 'medium';
   if (!ge1920) return 'large';
   return 'xlarge';
+}
+
+function usePrefersReducedMotion(): boolean {
+  const [reduced, setReduced] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const sync = () => setReduced(mq.matches);
+    sync();
+    mq.addEventListener('change', sync);
+    return () => mq.removeEventListener('change', sync);
+  }, []);
+  return reduced;
 }
 
 function useWidgetPreviewBreakpoint(): WidgetPreviewBreakpoint {
@@ -102,9 +114,8 @@ export type WidgetPreviewContainerProps = {
 
 /**
  * Responsive workspace shell: editor + optional preview.
- * - &lt;1080: editor only; floating full-width preview from header
- * - 1080–1440: editor only; right drawer preview
- * - 1440–1920: inline preview + animated collapse rail between panes
+ * - &lt;1440: editor only; open preview via docked edge control (full-width or drawer)
+ * - 1440–1920: inline preview + collapse control, or docked edge control when collapsed
  * - ≥1920: inline preview (grid, no rail)
  */
 export function WidgetPreviewContainer({
@@ -116,7 +127,13 @@ export function WidgetPreviewContainer({
   className,
 }: WidgetPreviewContainerProps) {
   const tier = useWidgetPreviewBreakpoint();
+  const prefersReducedMotion = usePrefersReducedMotion();
   const [floatingOpen, setFloatingOpen] = useState(false);
+  /** Drives CSS transition after mount / before unmount (floating small & medium only) */
+  const [floatingEntered, setFloatingEntered] = useState(false);
+  /** True while the exit animation runs (avoids stale transitionend + unlocks backdrop hits) */
+  const [floatingClosing, setFloatingClosing] = useState(false);
+  const floatingClosingRef = useRef(false);
   const [inlineCollapsed, setInlineCollapsed] = useState(false);
 
   const resolvedPreview = useMemo(() => {
@@ -132,29 +149,92 @@ export function WidgetPreviewContainer({
   const useXlargeGrid = tier === 'xlarge' && hasResolvedPreview;
 
   useEffect(() => {
-    if (tier === 'xlarge' || tier === 'large') setFloatingOpen(false);
+    if (tier === 'xlarge' || tier === 'large') {
+      setFloatingOpen(false);
+      setFloatingEntered(false);
+      floatingClosingRef.current = false;
+      setFloatingClosing(false);
+    }
     if (tier === 'xlarge') setInlineCollapsed(false);
   }, [tier]);
 
   useEffect(() => {
+    const isFloatTier = tier === 'small' || tier === 'medium';
+    if (!floatingOpen || !isFloatTier) {
+      setFloatingEntered(false);
+      return;
+    }
+    if (prefersReducedMotion) {
+      setFloatingEntered(true);
+      return;
+    }
+    const id = requestAnimationFrame(() => {
+      requestAnimationFrame(() => setFloatingEntered(true));
+    });
+    return () => cancelAnimationFrame(id);
+  }, [floatingOpen, tier, prefersReducedMotion]);
+
+  const finishFloatingClose = useCallback(() => {
+    floatingClosingRef.current = false;
+    setFloatingClosing(false);
+    setFloatingOpen(false);
+    setFloatingEntered(false);
+  }, []);
+
+  const requestCloseFloating = useCallback(() => {
+    if (prefersReducedMotion) {
+      finishFloatingClose();
+      return;
+    }
+    floatingClosingRef.current = true;
+    setFloatingClosing(true);
+    setFloatingEntered(false);
+  }, [prefersReducedMotion, finishFloatingClose]);
+
+  const onFloatingPanelTransitionEnd = useCallback(
+    (e: TransitionEvent<HTMLDivElement>) => {
+      if (e.target !== e.currentTarget) return;
+      const p = e.propertyName;
+      if (p !== 'transform' && p !== '-webkit-transform') return;
+      /** Opening also transitions transform; only commit unmount after a user-initiated close */
+      if (!floatingClosingRef.current) return;
+      finishFloatingClose();
+    },
+    [finishFloatingClose],
+  );
+
+  /** If transitionend never fires (browser quirks), still tear down the modal layer */
+  useEffect(() => {
+    if (!floatingClosing) return;
+    const id = window.setTimeout(() => {
+      finishFloatingClose();
+    }, 420);
+    return () => window.clearTimeout(id);
+  }, [floatingClosing, finishFloatingClose]);
+
+  useEffect(() => {
     if (!floatingOpen) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setFloatingOpen(false);
+      if (e.key === 'Escape') requestCloseFloating();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [floatingOpen]);
+  }, [floatingOpen, requestCloseFloating]);
 
-  const closeFloating = useCallback(() => setFloatingOpen(false), []);
+  const closeFloating = requestCloseFloating;
 
   const openPreview = useCallback(() => {
     if (tier === 'large' && inlineCollapsed) setInlineCollapsed(false);
-    else if (tier === 'small' || tier === 'medium') setFloatingOpen(true);
+    else if (tier === 'small' || tier === 'medium') {
+      floatingClosingRef.current = false;
+      setFloatingClosing(false);
+      setFloatingOpen(true);
+    }
   }, [tier, inlineCollapsed]);
 
   const closePreview = useCallback(() => {
-    if (tier === 'small' || tier === 'medium') setFloatingOpen(false);
-  }, [tier]);
+    if (tier === 'small' || tier === 'medium') requestCloseFloating();
+  }, [tier, requestCloseFloating]);
 
   const toggleLargeInline = useCallback(() => {
     if (tier === 'large') setInlineCollapsed((c) => !c);
@@ -180,31 +260,21 @@ export function WidgetPreviewContainer({
     };
   }, [tier, inlineCollapsed, floatingOpen, openPreview, closePreview]);
 
-  const floatingLeadingToolbar = (
-    <div className="flex items-center gap-1 border-b border-slate-200/80 px-2 py-2 sm:px-3">
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        className="h-9 gap-1.5 px-2 text-slate-700"
-        onClick={closeFloating}
-      >
-        <ChevronLeft className="h-4 w-4" aria-hidden />
-        Editor
-      </Button>
-    </div>
-  );
-
   const editorColumn = (
     <div
       className={cn(
         'relative flex min-h-0 min-w-0 w-full flex-col',
         useLargeCollapsibleGrid ? 'overflow-x-hidden overflow-y-hidden' : 'overflow-hidden',
+        /** Preview aside is after this node in the grid; when collapsed, stack editor (and docked expand control) above a 0-width lane */
+        useLargeCollapsibleGrid && inlineCollapsed && 'z-30',
         !useLargeCollapsibleGrid && !useXlargeGrid && 'flex-1',
       )}
     >
       {useLargeCollapsibleGrid && inlineCollapsed ? (
         <PreviewExpandEyeButton onExpand={toggleLargeInline} />
+      ) : null}
+      {hasResolvedPreview && (tier === 'small' || tier === 'medium') && !floatingOpen ? (
+        <PreviewExpandEyeButton onExpand={openPreview} />
       ) : null}
       <div className="flex min-h-0 min-w-0 w-full flex-1 overflow-x-hidden overflow-y-auto">
         <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col px-4 py-6 pb-12 sm:px-6 md:px-8 md:py-8">
@@ -219,8 +289,10 @@ export function WidgetPreviewContainer({
       className={cn(
         'relative flex h-full min-h-0 min-w-0 flex-col border-l border-slate-200/80 bg-white',
         useLargeCollapsibleGrid ? 'overflow-x-hidden overflow-y-hidden' : 'overflow-hidden',
+        useLargeCollapsibleGrid && inlineCollapsed && 'pointer-events-none',
       )}
       aria-label="Preview"
+      aria-hidden={useLargeCollapsibleGrid && inlineCollapsed ? true : undefined}
     >
       <PreviewPane
         title={previewTitle}
@@ -315,7 +387,12 @@ export function WidgetPreviewContainer({
           <>
             <button
               type="button"
-              className="fixed z-[35] cursor-default border-0 bg-slate-900/25"
+              className={cn(
+                'fixed z-[35] cursor-default border-0 bg-slate-900/25 transition-opacity duration-300 ease-[cubic-bezier(0.33,1,0.68,1)] motion-reduce:transition-none',
+                floatingEntered ? 'opacity-100' : 'opacity-0',
+                /** Exit: full-screen hit target was staying above the editor at opacity-0 → “stuck” UI */
+                floatingClosing && 'pointer-events-none',
+              )}
               style={{
                 top: 'var(--nav-height)',
                 left: 0,
@@ -327,19 +404,28 @@ export function WidgetPreviewContainer({
             />
             <div
               className={cn(
-                'fixed z-40 flex flex-col overflow-hidden bg-white shadow-2xl',
+                'fixed z-40 flex flex-col overflow-hidden bg-white shadow-2xl will-change-transform',
+                'transition-transform duration-300 ease-[cubic-bezier(0.33,1,0.68,1)] motion-reduce:transition-none motion-reduce:will-change-auto',
+                floatingClosing && 'pointer-events-none',
                 tier === 'small'
                   ? 'inset-x-0 bottom-0 top-[var(--nav-height)] border-t border-slate-200/80'
                   : 'bottom-0 right-0 top-[var(--nav-height)] w-[min(440px,100%)] max-w-full border-l border-slate-200/80',
+                tier === 'small' &&
+                  (floatingEntered ? 'translate-y-0' : 'translate-y-full'),
+                tier === 'medium' &&
+                  (floatingEntered ? 'translate-x-0' : 'translate-x-full'),
               )}
               role="dialog"
               aria-modal="true"
               aria-label={previewTitle}
+              onTransitionEnd={onFloatingPanelTransitionEnd}
             >
               <PreviewPane
                 title={previewTitle}
                 description={previewDescription}
-                leadingToolbar={floatingLeadingToolbar}
+                headerTrailing={
+                  <PreviewCollapseHeaderButton onCollapse={closeFloating} />
+                }
                 className="min-h-0 min-w-0 flex-1 border-l-0 border-t-0"
               >
                 {resolvedPreview}

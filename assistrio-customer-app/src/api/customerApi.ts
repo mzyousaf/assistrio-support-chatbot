@@ -4,6 +4,7 @@ import type {
   CreateDraftResponse,
   CustomerBotDetailResponse,
   CustomerBotInsightsResponse,
+  CustomerBotLifecycleResponse,
   CustomerBotListItem,
   CustomerDocumentDownloadUrlResponse,
   CustomerDocumentUploadResponse,
@@ -56,11 +57,41 @@ export function postCustomerBotDraftFinalize(body: { clientDraftId: string; payl
   });
 }
 
+/**
+ * PATCH `/api/customer/bots/:id` with a **sparse** body: only send keys you want to change.
+ * The backend applies partial updates and does not default or overwrite omitted fields.
+ */
 export function patchCustomerBot(id: string, body: Record<string, unknown>) {
   return customerFetch<unknown>(`${P}/bots/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
+  });
+}
+
+/** Dedicated publish/draft lifecycle (not sparse PATCH). */
+export function postCustomerBotLifecycleAction(botId: string, action: 'publish' | 'draft') {
+  return customerFetch<CustomerBotLifecycleResponse>(
+    `${P}/bots/${encodeURIComponent(botId)}/lifecycle-action`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action }),
+    },
+  );
+}
+
+/** Multipart: field `file` (PNG/JPEG/WebP, max 2MB). Returns public `url` for PATCH `imageUrl` + `avatarSource: 'upload'`. */
+export function postCustomerBotAvatar(botId: string, formData: FormData) {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), 120_000);
+  const path = `${P}/bots/${encodeURIComponent(botId)}/avatar`;
+  return customerFetch<{ ok: true; url: string }>(path, {
+    method: 'POST',
+    body: formData,
+    signal: controller.signal,
+  }).finally(() => {
+    window.clearTimeout(timer);
   });
 }
 
@@ -108,8 +139,27 @@ export function deleteCustomerBotDocument(botId: string, documentId: string) {
   );
 }
 
+/** Re-queue ingestion for a document (same as admin “retry processing”). */
+export function postCustomerBotDocumentRequeue(botId: string, documentId: string) {
+  return customerFetch<{ ok: boolean }>(
+    `${P}/bots/${encodeURIComponent(botId)}/documents/${encodeURIComponent(documentId)}/embed`,
+    { method: 'POST' },
+  );
+}
+
+export function postCustomerBotDocumentsBulkDelete(botId: string, docIds: string[]) {
+  return customerFetch<{ ok: boolean; deleted: number }>(
+    `${P}/bots/${encodeURIComponent(botId)}/documents/bulk-delete`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ docIds }),
+    },
+  );
+}
+
 /**
- * Multipart upload: field `file` (required), optional `title`.
+ * Multipart upload: one or more parts named `file` (max 5 per request), optional `title` (only when a single file).
  * Do not set Content-Type; the browser sets the boundary.
  */
 export function postCustomerBotDocumentUpload(botId: string, formData: FormData) {

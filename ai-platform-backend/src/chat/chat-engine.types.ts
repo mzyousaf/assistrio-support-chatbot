@@ -28,7 +28,7 @@ export interface BotLike {
     name?: string;
     description?: string;
     behaviorPreset?: string;
-    tone?: 'friendly' | 'formal' | 'playful' | 'technical';
+    tone?: string;
     language?: string;
     systemPrompt?: string;
     thingsToAvoid?: string;

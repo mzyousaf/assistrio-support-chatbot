@@ -4,6 +4,9 @@
  */
 export const MAX_BOT_DOCUMENT_UPLOAD_BYTES = 5 * 1024 * 1024;
 
+/** Max files per `POST .../documents` multipart request (customer workspace). */
+export const MAX_BOT_DOCUMENT_FILES_PER_REQUEST = 5;
+
 /** Extensions supported by {@link KbService.extractTextFromUpload} (ingestion pipeline). */
 export const BOT_DOCUMENT_UPLOAD_EXTENSIONS = new Set([
   'txt',

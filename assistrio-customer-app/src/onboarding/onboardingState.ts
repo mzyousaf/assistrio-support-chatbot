@@ -2,7 +2,7 @@ export const ONBOARDING_STEPS = [
   { path: 'agent-profile', label: 'Agent Profile' },
   { path: 'describe-profile', label: 'Describe Profile' },
   { path: 'knowledge-base', label: 'Knowledge Base' },
-  { path: 'go-live', label: 'Go Live' },
+  { path: 'go-live', label: 'Deploy & Go Live' },
 ] as const;
 
 export type OnboardingStepPath = (typeof ONBOARDING_STEPS)[number]['path'];

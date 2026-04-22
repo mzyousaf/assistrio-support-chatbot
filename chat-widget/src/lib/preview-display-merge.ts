@@ -28,6 +28,22 @@ function toNonEmptyString(value: unknown): string | undefined {
   return s ? s : undefined;
 }
 
+function hasOwnOverride(overrides: WidgetPreviewOverrides, key: keyof WidgetPreviewOverrides): boolean {
+  return Object.prototype.hasOwnProperty.call(overrides, key);
+}
+
+/** When the key is present on overrides, use trimmed string or `undefined` (clears). Otherwise inherit from init bot. */
+function pickOptionalStringField(
+  overrides: WidgetPreviewOverrides,
+  key: "botName" | "avatarUrl" | "avatarEmoji" | "tagline" | "description",
+  inherit: unknown,
+): unknown {
+  if (!hasOwnOverride(overrides, key)) return inherit;
+  const v = overrides[key];
+  if (typeof v !== "string") return inherit;
+  return v.trim() || undefined;
+}
+
 function suggestedQuestionsFromResponse(response: WidgetInitResponse): string[] {
   const source = response.bot?.suggestedQuestions ?? response.bot?.exampleQuestions ?? [];
   if (!Array.isArray(source)) return [];
@@ -100,11 +116,15 @@ export function mergePreviewInitResponse(
     ...base,
     bot: {
       ...bot,
-      name: toNonEmptyString(overrides.botName) ?? (typeof bot.name === "string" ? bot.name : ""),
-      imageUrl: toNonEmptyString(overrides.avatarUrl) ?? bot.imageUrl,
-      avatarEmoji: toNonEmptyString(overrides.avatarEmoji) ?? bot.avatarEmoji,
-      tagline: toNonEmptyString(overrides.tagline) ?? bot.tagline,
-      description: toNonEmptyString(overrides.description) ?? bot.description,
+      name: hasOwnOverride(overrides, "botName")
+        ? (toNonEmptyString(overrides.botName) ?? "")
+        : typeof bot.name === "string"
+          ? bot.name
+          : "",
+      imageUrl: pickOptionalStringField(overrides, "avatarUrl", bot.imageUrl) as typeof bot.imageUrl,
+      avatarEmoji: pickOptionalStringField(overrides, "avatarEmoji", bot.avatarEmoji) as typeof bot.avatarEmoji,
+      tagline: pickOptionalStringField(overrides, "tagline", bot.tagline) as typeof bot.tagline,
+      description: pickOptionalStringField(overrides, "description", bot.description) as typeof bot.description,
       welcomeMessage: toNonEmptyString(overrides.welcomeMessage) ?? bot.welcomeMessage,
       suggestedQuestions,
       exampleQuestions: suggestedQuestions,

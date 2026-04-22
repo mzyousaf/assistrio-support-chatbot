@@ -1,12 +1,11 @@
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { AdminLiveChatAdapter } from "./components/AdminLiveChatAdapter";
 import { validateAndInitWidget } from "./api";
 import { normalizeEmbedConfig } from "./config";
-import { mergePreviewInitResponse } from "./lib/preview-display-merge";
 import { mergeWidgetStrings } from "./lib/widgetStrings";
-import { normalizeWidgetSettings } from "./normalize";
-import type { EmbedChatConfig, NormalizedWidgetSettings, WidgetInitResponse } from "./types";
+import { resolveWidgetDisplayModel } from "./lib/resolveWidgetDisplayModel";
+import type { EmbedChatConfig, WidgetInitResponse } from "./types";
 
 type Phase = "loading" | "error" | "ready";
 
@@ -18,12 +17,18 @@ function chatVisitorIdStorageKey(botId: string, mode: "runtime" | "preview"): st
 
 /** Init re-fetch only when identity/session/config changes — not on every previewOverrides tweak. */
 function initKeyFromRawConfig(raw: Partial<EmbedChatConfig> | undefined): string {
-  const rc = raw ?? {};
-  if (rc.mode === "preview") {
-    const { previewOverrides: _omit, ...rest } = rc as Record<string, unknown>;
-    return JSON.stringify(rest);
+  const rest = { ...(raw ?? {}) } as Record<string, unknown>;
+  delete rest.previewOverrides;
+  /** Layout-only; does not change init payload or server identity. */
+  delete rest.presentation;
+  delete rest.containedInlineSize;
+  delete rest.showContainedLauncherPreview;
+  /** Stable key order: avoid spurious init when object insertion order differs between renders. */
+  const sorted: Record<string, unknown> = {};
+  for (const k of Object.keys(rest).sort()) {
+    sorted[k] = rest[k];
   }
-  return JSON.stringify(rc);
+  return JSON.stringify(sorted);
 }
 
 export interface EmbedWidgetRootProps {
@@ -41,7 +46,24 @@ export function EmbedWidgetRoot({ rawConfig }: EmbedWidgetRootProps) {
     (rawConfig as { previewOverrides?: unknown })?.previewOverrides ?? null,
   );
 
-  const initKey = useMemo(() => initKeyFromRawConfig(rawConfig), [rawConfig]);
+  /** Stable primitive: do not depend on `rawConfig` object identity (host may pass a new object each render). */
+  const initKey = useMemo(() => initKeyFromRawConfig(rawConfig), [
+    rawConfig?.botId,
+    rawConfig?.apiBaseUrl,
+    rawConfig?.mode,
+    rawConfig?.accessKey,
+    rawConfig?.secretKey,
+    rawConfig?.authToken,
+    rawConfig?.sessionPreview,
+    rawConfig?.persistChatSession,
+    rawConfig?.position,
+    rawConfig?.chatPostPath,
+    rawConfig?.widgetInitPath,
+    rawConfig?.embedOrigin,
+    rawConfig?.locale,
+    rawConfig?.disableRemoteConfig,
+    rawConfig?.chatVisitorId,
+  ]);
 
   const config = useMemo(() => normalizeEmbedConfig(rawConfig), [rawConfig, rawPreviewOverridesKey]);
 
@@ -122,19 +144,39 @@ export function EmbedWidgetRoot({ rawConfig }: EmbedWidgetRootProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- previewOverrides excluded from initKey; rawConfig read when initKey changes
   }, [initKey, retryNonce]);
 
-  const displaySettings = useMemo((): NormalizedWidgetSettings | null => {
-    if (!initResponse) return null;
-    if (config.mode === "runtime") {
-      return normalizeWidgetSettings(initResponse, config);
-    }
-    const merged = mergePreviewInitResponse(initResponse, config.previewOverrides);
-    return normalizeWidgetSettings(merged, config);
-  }, [initResponse, config]);
+  const displaySettings = useMemo(
+    () => resolveWidgetDisplayModel(initResponse, config),
+    /** `rawPreviewOverridesKey` ensures preview UI re-merges when overrides content changes even if `config` identity were ever stable. */
+    [initResponse, config, rawPreviewOverridesKey],
+  );
 
   const loadingPositionClass =
     rawConfig?.position === "left" ? "bottom-4 left-4" : "bottom-4 right-4";
+  const contained = (config.presentation ?? "floating") === "contained";
+
+  const containedCollapsedW =
+    typeof config.containedInlineSize?.collapsedWidth === "number" &&
+    Number.isFinite(config.containedInlineSize.collapsedWidth)
+      ? Math.round(config.containedInlineSize.collapsedWidth)
+      : 400;
+  const containedCollapsedH =
+    typeof config.containedInlineSize?.collapsedHeight === "number" &&
+    Number.isFinite(config.containedInlineSize.collapsedHeight)
+      ? Math.round(config.containedInlineSize.collapsedHeight)
+      : 700;
 
   if (phase === "loading") {
+    if (contained) {
+      return (
+        <div
+          aria-hidden
+          className="inline-flex shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-slate-200/90 bg-slate-50/80"
+          style={{ width: containedCollapsedW, height: containedCollapsedH }}
+        >
+          <div className="h-9 w-9 animate-pulse rounded-full bg-slate-300/90" />
+        </div>
+      );
+    }
     return (
       <div
         aria-hidden
@@ -144,24 +186,38 @@ export function EmbedWidgetRoot({ rawConfig }: EmbedWidgetRootProps) {
   }
 
   if (phase === "error") {
+    const errorCard = (
+      <div className="rounded-xl border border-gray-600/80 bg-gray-900 px-3 py-2.5 text-sm text-gray-100 shadow-lg dark:bg-gray-900">
+        <p className="font-medium leading-snug">{shellStrings.initErrorTitle}</p>
+        {initErrorMessage.trim() ? (
+          <p className="mt-1.5 text-xs leading-relaxed text-gray-400 break-words">{initErrorMessage}</p>
+        ) : null}
+        <button
+          type="button"
+          className="mt-2.5 w-full rounded-lg bg-gray-100 px-3 py-2 text-sm font-semibold text-gray-900 transition-colors hover:bg-white"
+          onClick={() => setRetryNonce((n) => n + 1)}
+        >
+          {shellStrings.initErrorRetry}
+        </button>
+      </div>
+    );
+    if (contained) {
+      return (
+        <div
+          className="inline-flex max-w-full shrink-0 flex-col items-stretch p-1"
+          style={{ width: containedCollapsedW, minWidth: 0 }}
+          role="alert"
+        >
+          {errorCard}
+        </div>
+      );
+    }
     return (
       <div
         className={`fixed z-[9999] max-w-[min(100vw-2rem,18rem)] ${loadingPositionClass}`}
         role="alert"
       >
-        <div className="rounded-xl border border-gray-600/80 bg-gray-900 px-3 py-2.5 text-sm text-gray-100 shadow-lg dark:bg-gray-900">
-          <p className="font-medium leading-snug">{shellStrings.initErrorTitle}</p>
-          {initErrorMessage.trim() ? (
-            <p className="mt-1.5 text-xs leading-relaxed text-gray-400 break-words">{initErrorMessage}</p>
-          ) : null}
-          <button
-            type="button"
-            className="mt-2.5 w-full rounded-lg bg-gray-100 px-3 py-2 text-sm font-semibold text-gray-900 transition-colors hover:bg-white"
-            onClick={() => setRetryNonce((n) => n + 1)}
-          >
-            {shellStrings.initErrorRetry}
-          </button>
-        </div>
+        {errorCard}
       </div>
     );
   }
@@ -201,10 +257,15 @@ export function EmbedWidgetRoot({ rawConfig }: EmbedWidgetRootProps) {
       previewOverrides={config.mode === "preview" ? config.previewOverrides : undefined}
       debug={false}
       footerPrivacyText={displaySettings.privacyText}
-      useFloatingLauncher
+      useFloatingLauncher={!contained}
       visitorMultiChatEnabled={displaySettings.visitorMultiChatEnabled}
       visitorMultiChatMax={displaySettings.visitorMultiChatMax}
       widgetStrings={shellStrings}
+      inlinePanelCollapsedWidth={config.containedInlineSize?.collapsedWidth}
+      inlinePanelCollapsedHeight={config.containedInlineSize?.collapsedHeight}
+      inlinePanelExpandedWidth={config.containedInlineSize?.expandedWidth}
+      inlinePanelExpandedHeight={config.containedInlineSize?.expandedHeight}
+      showContainedLauncherPreview={contained && config.showContainedLauncherPreview === true}
     />
   );
 }

@@ -10,6 +10,7 @@ import {
 import { useParams } from 'react-router-dom';
 import { getCustomerBot } from '../../api/customerApi';
 import type { CustomerBotDetail } from '../../api/types';
+import { ASSISTRIO_WORKSPACE_BOT_REFRESH, requestNavbarBotRefresh } from '../../lib/botSyncEvents';
 
 export type BotWorkspaceLoadState = 'loading' | 'ok' | 'not_found' | 'forbidden' | 'error';
 
@@ -20,6 +21,8 @@ type BotWorkspaceValue = {
   loadState: BotWorkspaceLoadState;
   loadMessage: string;
   reload: () => Promise<void>;
+  /** Refetch bot + health without setting `loadState` to loading (use after PATCH saves). */
+  softReload: () => Promise<void>;
 };
 
 const BotWorkspaceContext = createContext<BotWorkspaceValue | null>(null);
@@ -62,6 +65,29 @@ export function BotWorkspaceProvider({ children }: { children: ReactNode }) {
     setLoadState('ok');
   }, [id]);
 
+  const softReload = useCallback(async () => {
+    if (!id) return;
+    const res = await getCustomerBot(id);
+    if (!res.ok) {
+      /** Avoid full workspace `loading` shell after document/FAQ saves on transient API errors. */
+      return;
+    }
+    setBot(res.data.bot as CustomerBotDetail);
+    setHealth(res.data.health as Record<string, unknown>);
+    setLoadState((prev) => (prev === 'loading' ? prev : 'ok'));
+    requestNavbarBotRefresh(id);
+  }, [id]);
+
+  useEffect(() => {
+    if (!id) return;
+    const onShellRefresh = (e: Event) => {
+      const detail = (e as CustomEvent<{ botId?: string }>).detail;
+      if (detail?.botId === id) void softReload();
+    };
+    window.addEventListener(ASSISTRIO_WORKSPACE_BOT_REFRESH, onShellRefresh);
+    return () => window.removeEventListener(ASSISTRIO_WORKSPACE_BOT_REFRESH, onShellRefresh);
+  }, [id, softReload]);
+
   useEffect(() => {
     void reload();
   }, [reload]);
@@ -74,8 +100,9 @@ export function BotWorkspaceProvider({ children }: { children: ReactNode }) {
       loadState,
       loadMessage,
       reload,
+      softReload,
     }),
-    [id, bot, health, loadState, loadMessage, reload],
+    [id, bot, health, loadState, loadMessage, reload, softReload],
   );
 
   return <BotWorkspaceContext.Provider value={value}>{children}</BotWorkspaceContext.Provider>;

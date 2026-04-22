@@ -16,6 +16,8 @@ import type { BotPersonality } from "@/models/Bot";
 import { useBotFormEditor } from "./BotFormEditorContext";
 import {
   BEHAVIOR_PRESETS,
+  DEFAULT_PRESET_HELPER,
+  TONE_OPTIONS,
   CATEGORY_OPTIONS,
   EXAMPLE_QUESTIONS_MAX,
   TAB_CONTENT_CLASS,
@@ -119,7 +121,11 @@ export function BehaviorSection() {
           <SettingsFieldRow
             label="Preset"
             htmlFor="behavior-preset"
-            helperText="Base template; customize further with the description below."
+            helperText={
+              behaviorPreset === "default"
+                ? DEFAULT_PRESET_HELPER
+                : "Adds a starter role; your instructions still extend or override details below."
+            }
           >
             <select
               id="behavior-preset"
@@ -137,7 +143,7 @@ export function BehaviorSection() {
           <SettingsFieldRow
             label="Tone"
             htmlFor="behavior-tone"
-            helperText="How the bot sounds in replies—including when it asks for contact details."
+            helperText="How the assistant sounds in replies—voice, warmth, and formality."
           >
             <select
               id="behavior-tone"
@@ -150,16 +156,17 @@ export function BehaviorSection() {
               }
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-400/40 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
             >
-              <option value="friendly">Friendly</option>
-              <option value="formal">Formal</option>
-              <option value="playful">Playful</option>
-              <option value="technical">Technical</option>
+              {TONE_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
             </select>
           </SettingsFieldRow>
           <SettingsFieldRow
-            label="Description"
+            label="Instructions"
             htmlFor="behavior-description"
-            helperText="Additional system instructions that override or extend the preset."
+            helperText="What the assistant should do and how—merged into the system prompt with your preset."
             tooltip="Shown to the model as part of the system prompt."
           >
             <Textarea
@@ -171,9 +178,9 @@ export function BehaviorSection() {
             />
           </SettingsFieldRow>
           <SettingsFieldRow
-            label="Things to avoid"
+            label="Avoid instructions"
             htmlFor="things-to-avoid"
-            helperText="Topics or behaviours the bot should not engage with. Shown to the model as behaviour context."
+            helperText="Short red lines only—one idea per line is fine. Put detailed facts, policies, and FAQs in Knowledge, not here."
           >
             <Textarea
               id="things-to-avoid"

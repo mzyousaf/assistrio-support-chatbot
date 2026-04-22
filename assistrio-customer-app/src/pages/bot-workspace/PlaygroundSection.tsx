@@ -80,23 +80,17 @@ export function PlaygroundSection() {
 
             <div className="mb-3 flex max-h-[420px] flex-col gap-3 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50/80 p-3">
               {messages.length === 0 ? (
-                <p className="m-0 text-[0.9375rem] leading-[1.5] text-slate-400">
+                <p className={ws.workspacePageLead}>
                   Send a message to see how your assistant replies.
                 </p>
               ) : (
                 messages.map((m) =>
                   m.role === 'user' ? (
-                    <div
-                      key={m.id}
-                      className="max-w-[92%] self-end rounded-lg bg-primary px-3 py-[0.55rem] text-[0.9375rem] leading-[1.45] text-white"
-                    >
+                    <div key={m.id} className={ws.bubbleUser}>
                       {m.text}
                     </div>
                   ) : (
-                    <div
-                      key={m.id}
-                      className="max-w-[92%] self-start rounded-lg border border-slate-200 bg-white px-3 py-[0.55rem] text-[0.9375rem] leading-[1.45] text-slate-900"
-                    >
+                    <div key={m.id} className={ws.bubbleAsst}>
                       {m.text}
                     </div>
                   ),

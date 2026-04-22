@@ -1,7 +1,6 @@
 import type { CustomerBotDetail } from '../api/types';
+import { VALID_TONE_VALUES } from '../pages/bot-workspace/behaviorConstants';
 import type { OnboardingSessionV1 } from './onboardingSessionStorage';
-
-const TONES = new Set(['friendly', 'formal', 'playful', 'technical']);
 const LENGTHS = new Set(['short', 'medium', 'long']);
 
 /** Infer completed steps from persisted session + server bot state (resume after refresh). */
@@ -15,7 +14,7 @@ export function mergeStepsCompleted(
   if (String(bot.name ?? '').trim()) set.add('agent-profile');
 
   const pers = bot.personality as Record<string, unknown> | undefined;
-  const toneOk = pers && TONES.has(String(pers.tone ?? ''));
+  const toneOk = pers && VALID_TONE_VALUES.has(String(pers.tone ?? ''));
   const descOk = String(bot.description ?? '').trim().length > 0;
   const cfg = bot.config as Record<string, unknown> | undefined;
   const lenOk = cfg && LENGTHS.has(String(cfg.responseLength ?? ''));

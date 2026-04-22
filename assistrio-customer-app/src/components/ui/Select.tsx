@@ -1,42 +1,270 @@
-import { forwardRef, type SelectHTMLAttributes } from 'react';
+import {
+  useState,
+  useRef,
+  useEffect,
+  useLayoutEffect,
+  useId,
+  useCallback,
+  Children,
+  isValidElement,
+  forwardRef,
+  type ChangeEvent,
+  type ReactNode,
+  type KeyboardEvent,
+  type SelectHTMLAttributes,
+} from 'react';
+import { createPortal } from 'react-dom';
+import { Check, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-export type SelectProps = SelectHTMLAttributes<HTMLSelectElement> & {
+export type SelectProps = Omit<SelectHTMLAttributes<HTMLSelectElement>, 'size'> & {
   invalid?: boolean;
-  /** Extra-neutral focus (same border emphasis as default; reserved for parity with Input). */
+  /** Extra-neutral focus (reserved for parity with Input). */
   quiet?: boolean;
 };
 
-const chevron =
-  "bg-[length:0.875rem] bg-[right_0.625rem_center] bg-no-repeat pr-8 bg-[url('data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2216%22%20height%3D%2216%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%2394a3b8%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')]";
+type OptionRow = { value: string; label: string; disabled?: boolean };
 
-const base = cn(
-  'w-full max-w-full appearance-none rounded-[var(--ui-radius)] border bg-[var(--ui-surface)] py-0',
-  'h-8 min-h-8 text-[0.8125rem] leading-tight text-slate-900',
-  'shadow-none transition-[border-color,box-shadow] duration-150 ease-out',
+function parseOptions(children: ReactNode): OptionRow[] {
+  const rows: OptionRow[] = [];
+  Children.forEach(children, (child) => {
+    if (!isValidElement(child)) return;
+    if (child.type !== 'option') return;
+    const p = child.props as { value?: string; disabled?: boolean; children?: ReactNode };
+    const label =
+      typeof p.children === 'string' || typeof p.children === 'number'
+        ? String(p.children)
+        : '';
+    const v = String(p.value ?? '');
+    rows.push({
+      value: v,
+      label: label || v,
+      disabled: p.disabled,
+    });
+  });
+  return rows;
+}
+
+const triggerBase = cn(
+  'inline-flex w-full max-w-full min-h-9 h-9 items-center justify-between gap-2 rounded-[var(--ui-radius)] border bg-[var(--ui-surface)]',
+  'px-3 text-left text-sm font-normal leading-tight text-slate-900 antialiased',
+  'shadow-none transition-[border-color,box-shadow,background-color] duration-150 ease-out',
+  'cursor-pointer',
   'focus:outline-none focus-visible:border-[var(--ui-border-focus)] focus-visible:ring-1 focus-visible:ring-slate-900/[0.06]',
   'disabled:cursor-not-allowed disabled:bg-[var(--ui-surface-muted)] disabled:text-slate-400',
-  'px-3',
-  chevron,
 );
 
-export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select(
-  { className, invalid, quiet: _quiet = false, disabled, ...props },
+const listboxVisual = cn(
+  'overflow-y-auto overflow-x-hidden',
+  'rounded-lg border border-slate-200/95 bg-white py-1',
+  'shadow-[0_12px_40px_-12px_rgba(15,23,42,0.14),0_4px_14px_-4px_rgba(15,23,42,0.08)]',
+  'ring-1 ring-slate-900/[0.05]',
+);
+
+type MenuRect = { top: number; left: number; width: number; maxHeight: number };
+
+function computeMenuRect(el: HTMLElement): MenuRect {
+  const r = el.getBoundingClientRect();
+  const gap = 4;
+  const margin = 8;
+  const vh = typeof window !== 'undefined' ? window.innerHeight : 800;
+  const spaceBelow = vh - r.bottom - gap - margin;
+  const spaceAbove = r.top - gap - margin;
+  const maxList = 16 * 16; /* 16rem */
+  const openUp = spaceBelow < 120 && spaceAbove > spaceBelow;
+  const maxHeight = Math.min(maxList, Math.max(120, openUp ? spaceAbove : spaceBelow));
+  if (openUp) {
+    return {
+      top: Math.max(margin, r.top - gap - maxHeight),
+      left: r.left,
+      width: r.width,
+      maxHeight,
+    };
+  }
+  return {
+    top: r.bottom + gap,
+    left: r.left,
+    width: r.width,
+    maxHeight,
+  };
+}
+
+/**
+ * Custom listbox select: styled trigger + rich dropdown (not the OS native menu).
+ * List renders in a portal with fixed positioning so it is not clipped by overflow ancestors.
+ * Accepts `<option value="…">Label</option>` children; API matches native `onChange` / `value`.
+ */
+export const Select = forwardRef<HTMLButtonElement, SelectProps>(function Select(
+  {
+    className,
+    invalid,
+    quiet: _quiet = false,
+    disabled,
+    children,
+    value,
+    defaultValue,
+    onChange,
+    id,
+    name,
+    required,
+  },
   ref,
 ) {
+  const opts = parseOptions(children);
+  const [open, setOpen] = useState(false);
+  const [menuRect, setMenuRect] = useState<MenuRect | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+  const listId = useId();
+  const current = String(value ?? defaultValue ?? '');
+  const selected = opts.find((o) => o.value === current);
+  const displayLabel = selected?.label ?? (current ? current : opts[0]?.label ?? '—');
+
+  const updateMenuRect = useCallback(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    setMenuRect(computeMenuRect(el));
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setMenuRect(null);
+      return;
+    }
+    updateMenuRect();
+  }, [open, updateMenuRect]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onScrollOrResize = () => updateMenuRect();
+    window.addEventListener('resize', onScrollOrResize);
+    window.addEventListener('scroll', onScrollOrResize, true);
+    return () => {
+      window.removeEventListener('resize', onScrollOrResize);
+      window.removeEventListener('scroll', onScrollOrResize, true);
+    };
+  }, [open, updateMenuRect]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (containerRef.current?.contains(t)) return;
+      if (listRef.current?.contains(t)) return;
+      setOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [open]);
+
+  const emitChange = (val: string) => {
+    onChange?.({ target: { value: val } } as ChangeEvent<HTMLSelectElement>);
+  };
+
+  const onTriggerKeyDown = (e: KeyboardEvent<HTMLButtonElement>) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      setOpen(false);
+      return;
+    }
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      if (!disabled) setOpen((o) => !o);
+    }
+    if (e.key === 'ArrowDown' && !open && !disabled) {
+      e.preventDefault();
+      setOpen(true);
+    }
+  };
+
+  const listContent =
+    open && menuRect ? (
+      <ul
+        ref={listRef}
+        id={listId}
+        role="listbox"
+        className={listboxVisual}
+        tabIndex={-1}
+        style={{
+          position: 'fixed',
+          top: menuRect.top,
+          left: menuRect.left,
+          width: menuRect.width,
+          maxHeight: menuRect.maxHeight,
+          zIndex: 1100,
+        }}
+      >
+        {opts.map((o) => {
+          const isSelected = o.value === current;
+          return (
+            <li key={o.value} role="presentation" className="px-1">
+              <button
+                type="button"
+                role="option"
+                aria-selected={isSelected}
+                disabled={o.disabled}
+                className={cn(
+                  'flex w-full cursor-pointer items-start gap-2 rounded-md px-2.5 py-2 text-left text-sm leading-snug text-slate-800',
+                  'transition-colors duration-100',
+                  'hover:bg-slate-50 focus:bg-slate-50 focus:outline-none',
+                  isSelected &&
+                    'bg-[var(--teal-50)] text-[var(--color-teal-800)] hover:bg-[color-mix(in_srgb,var(--teal-50)_92%,var(--color-teal-600)_8%)]',
+                  o.disabled && 'cursor-not-allowed opacity-45 hover:bg-transparent',
+                )}
+                onClick={() => {
+                  if (o.disabled) return;
+                  emitChange(o.value);
+                  setOpen(false);
+                }}
+              >
+                <span
+                  className={cn(
+                    'mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center',
+                    !isSelected && 'opacity-0',
+                  )}
+                  aria-hidden
+                >
+                  {isSelected ? <Check className="h-3.5 w-3.5 text-[var(--color-teal-700)]" strokeWidth={2.5} /> : null}
+                </span>
+                <span className="min-w-0 flex-1">{o.label}</span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    ) : null;
+
   return (
-    <select
-      ref={ref}
-      disabled={disabled}
-      aria-invalid={invalid || undefined}
-      className={cn(
-        base,
-        invalid
-          ? 'border-[var(--color-danger-border)] focus-visible:border-[var(--color-danger-text-emphasis)] focus-visible:ring-red-900/10'
-          : 'border-[var(--ui-border)] hover:enabled:border-[var(--ui-border-hover)]',
-        className,
-      )}
-      {...props}
-    />
+    <div ref={containerRef} className={cn('relative w-full min-w-0', className)}>
+      {name ? <input type="hidden" name={name} value={current} readOnly /> : null}
+      <button
+        type="button"
+        ref={ref}
+        id={id}
+        disabled={disabled}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-controls={open ? listId : undefined}
+        aria-invalid={invalid || undefined}
+        aria-required={required || undefined}
+        className={cn(
+          triggerBase,
+          invalid
+            ? 'border-[var(--color-danger-border)] focus-visible:border-[var(--color-danger-text-emphasis)] focus-visible:ring-red-900/10'
+            : 'border-[var(--ui-border)] hover:enabled:border-[var(--ui-border-hover)] hover:enabled:bg-white',
+        )}
+        onClick={() => !disabled && setOpen((o) => !o)}
+        onKeyDown={onTriggerKeyDown}
+      >
+        <span className="min-w-0 flex-1 truncate text-left">{displayLabel}</span>
+        <ChevronDown
+          strokeWidth={2}
+          className={cn('h-4 w-4 shrink-0 text-slate-400 transition-transform duration-200', open && 'rotate-180')}
+          aria-hidden
+        />
+      </button>
+
+      {typeof document !== 'undefined' && listContent ? createPortal(listContent, document.body) : null}
+    </div>
   );
 });

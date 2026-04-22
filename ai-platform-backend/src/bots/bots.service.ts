@@ -20,6 +20,9 @@ import { generateBotAccessKey, generateBotSecretKey } from './bot-keys.util';
 import type { AllowedOrigin } from './origin-validation.util';
 import { normalizeVisitorMultiChatMax } from './visitor-multi-chat.util';
 import { WorkspacesService } from '../workspaces/workspaces.service';
+import type { WorkspaceBotPatchNormalized } from '../workspace/shared/bot-payload';
+import { buildCustomerEmbedSnippet } from '../workspace/shared/customer-embed-snippet.util';
+import type { BotLifecycleAction } from '../workspace/shared/bot-lifecycle-action.dto';
 
 function slugify(input: string): string {
   const slug = input
@@ -842,7 +845,7 @@ export class BotsService {
   async findOneWorkspaceForAdmin(id: string) {
     const bot = await this.botModel
       .findById(id)
-      .select('slug name shortDescription description category categories imageUrl openaiApiKeyOverride whisperApiKeyOverride welcomeMessage status isPublic leadCapture chatUI exampleQuestions personality config limitOverrideMessages visibility accessKey secretKey ownerId messageLimitMode messageLimitTotal messageLimitUpgradeMessage visitorMultiChatEnabled visitorMultiChatMax includeNameInKnowledge includeTaglineInKnowledge includeNotesInKnowledge allowedOrigins workspaceId agentsPackAgent')
+      .select('slug name shortDescription description category categories imageUrl avatarEmoji openaiApiKeyOverride whisperApiKeyOverride welcomeMessage status isPublic leadCapture chatUI exampleQuestions personality config limitOverrideMessages visibility accessKey secretKey ownerId messageLimitMode messageLimitTotal messageLimitUpgradeMessage visitorMultiChatEnabled visitorMultiChatMax includeNameInKnowledge includeTaglineInKnowledge includeNotesInKnowledge allowedOrigins workspaceId agentsPackAgent')
       .lean();
     if (!bot) return null;
     const [faqs, knowledgeDescription] = await Promise.all([
@@ -1190,136 +1193,315 @@ export class BotsService {
 
   async updateWorkspaceBot(
     id: string,
-    normalized: {
-      name: string;
-      shortDescription?: string;
-      description?: string;
-      categories: string[];
-      imageUrl?: string;
-      avatarEmoji?: string;
-      openaiApiKeyOverride?: string;
-      whisperApiKeyOverride?: string;
-      welcomeMessage?: string;
-      knowledgeDescription?: string;
-      leadCapture?: unknown;
-      chatUI?: unknown;
-      faqs?: unknown;
-      exampleQuestions?: string[];
-      personality?: unknown;
-      config?: unknown;
-      limitOverrideMessages?: number;
-      isPublic: boolean;
-      status?: 'draft' | 'published';
-      includeNameInKnowledge?: boolean;
-      includeTaglineInKnowledge?: boolean;
-      includeNotesInKnowledge: boolean;
-      visibility?: 'public' | 'private';
-      messageLimitMode?: 'none' | 'fixed_total';
-      messageLimitTotal?: number | null;
-      messageLimitUpgradeMessage?: string | null;
-      allowedOrigins?: AllowedOrigin[];
-      visitorMultiChatEnabled?: boolean;
-      visitorMultiChatMax?: number | null;
-    },
+    patch: WorkspaceBotPatchNormalized,
   ): Promise<{ ok: true; botId: string; status: string }> {
-    const existing = await this.botModel.findById(id).select('_id name slug allowedOrigins').lean();
-    if (!existing) {
+    const existingFull = await this.botModel.findById(id).lean();
+    if (!existingFull) {
       throw new Error('Bot not found');
     }
-    const status = normalized.status === 'published' ? 'published' : 'draft';
-    const messageLimitMode = normalized.messageLimitMode === 'fixed_total' ? 'fixed_total' : 'none';
-    const parsedMessageLimitTotal =
-      typeof normalized.messageLimitTotal === 'number' && Number.isFinite(normalized.messageLimitTotal)
-        ? Math.floor(normalized.messageLimitTotal)
-        : null;
-    if (messageLimitMode === 'fixed_total' && (!parsedMessageLimitTotal || parsedMessageLimitTotal <= 0)) {
-      throw new Error('messageLimitTotal must be a positive integer when messageLimitMode is fixed_total.');
+    const ex = existingFull as Record<string, unknown>;
+
+    if (patch.touched.size === 0) {
+      const st = String(ex.status ?? '') === 'published' ? 'published' : 'draft';
+      return { ok: true, botId: id, status: st };
     }
-    const messageLimitTotal = messageLimitMode === 'fixed_total' ? parsedMessageLimitTotal : null;
-    const messageLimitUpgradeMessage =
-      typeof normalized.messageLimitUpgradeMessage === 'string' && normalized.messageLimitUpgradeMessage.trim()
-        ? normalized.messageLimitUpgradeMessage.trim()
-        : null;
-    const finalName = normalized.name?.trim() || 'New bot';
-    const description = String(normalized.description ?? '').trim();
-    if (status === 'published') {
-      if (!normalized.name?.trim()) throw new Error('Name is required to publish.');
-      if (!description) throw new Error('Description is required to publish.');
-      const mergedOrigins =
-        normalized.allowedOrigins !== undefined
-          ? normalized.allowedOrigins
-          : Array.isArray((existing as { allowedOrigins?: unknown }).allowedOrigins)
-            ? ((existing as { allowedOrigins: AllowedOrigin[] }).allowedOrigins as AllowedOrigin[])
-            : [];
-      if (!hasActiveAllowedOrigin(mergedOrigins)) {
+
+    const effectiveStatus: 'draft' | 'published' =
+      patch.touched.has('status') && patch.status
+        ? patch.status === 'published'
+          ? 'published'
+          : 'draft'
+        : String(ex.status ?? '') === 'published'
+          ? 'published'
+          : 'draft';
+
+    const effectiveName =
+      patch.touched.has('name') ? (patch.name?.trim() || 'New bot') : String(ex.name ?? '').trim() || 'New bot';
+
+    const effectiveDescription = patch.touched.has('description')
+      ? String(patch.description ?? '').trim()
+      : String(ex.description ?? '').trim();
+
+    let mergedOriginsForPublish: AllowedOrigin[] = [];
+    if (patch.touched.has('allowedOrigins')) {
+      mergedOriginsForPublish = patch.allowedOrigins ?? [];
+    } else if (Array.isArray(ex.allowedOrigins)) {
+      mergedOriginsForPublish = ex.allowedOrigins as AllowedOrigin[];
+    }
+
+    if (effectiveStatus === 'published') {
+      if (!effectiveName.trim()) throw new Error('Name is required to publish.');
+      if (!effectiveDescription) throw new Error('Description is required to publish.');
+      if (!hasActiveAllowedOrigin(mergedOriginsForPublish)) {
         throw new Error('At least one active allowed embed origin is required to publish.');
       }
     }
-    let nextSlug = String((existing as { slug?: string }).slug ?? '');
-    const shouldUpdateSlug = finalName !== String((existing as { name?: string }).name ?? '');
-    if (shouldUpdateSlug) {
-      nextSlug = await this.generateUniqueSlug(finalName, id);
+
+    let mlm: 'none' | 'fixed_total' =
+      ex.messageLimitMode === 'fixed_total' ? 'fixed_total' : 'none';
+    let mlt: number | null =
+      typeof ex.messageLimitTotal === 'number' && Number.isFinite(ex.messageLimitTotal)
+        ? Math.floor(ex.messageLimitTotal as number)
+        : null;
+    let mlum: string | null =
+      typeof ex.messageLimitUpgradeMessage === 'string' && ex.messageLimitUpgradeMessage.trim()
+        ? String(ex.messageLimitUpgradeMessage).trim()
+        : null;
+
+    if (patch.touched.has('messageLimitMode')) {
+      mlm = patch.messageLimitMode === 'fixed_total' ? 'fixed_total' : 'none';
+    }
+    if (patch.touched.has('messageLimitTotal')) {
+      mlt =
+        patch.messageLimitTotal == null
+          ? null
+          : typeof patch.messageLimitTotal === 'number' && Number.isFinite(patch.messageLimitTotal)
+            ? Math.floor(patch.messageLimitTotal)
+            : null;
+    }
+    if (patch.touched.has('messageLimitUpgradeMessage')) {
+      mlum =
+        patch.messageLimitUpgradeMessage == null
+          ? null
+          : typeof patch.messageLimitUpgradeMessage === 'string' && patch.messageLimitUpgradeMessage.trim()
+            ? patch.messageLimitUpgradeMessage.trim()
+            : null;
     }
 
-    const newFaqs = Array.isArray(normalized.faqs)
-      ? (normalized.faqs as Array<{ question?: string; answer?: string; active?: boolean }>).map((f) => ({
-        question: String(f?.question ?? '').trim(),
-        answer: String(f?.answer ?? '').trim(),
-        active: f?.active !== false,
-      })).filter((f) => f.question || f.answer)
-      : [];
-    const newKnowledgeDescription = String(normalized.knowledgeDescription ?? '').trim();
+    if (mlm === 'none') mlt = null;
+
+    if (mlm === 'fixed_total' && (!mlt || mlt <= 0)) {
+      throw new Error('messageLimitTotal must be a positive integer when messageLimitMode is fixed_total.');
+    }
+
+    const updateDoc: Record<string, unknown> = {};
+
+    let nextSlug = String(ex.slug ?? '');
+    let finalNameForSlug = String(ex.name ?? '').trim() || 'New bot';
+    if (patch.touched.has('name')) {
+      updateDoc.name = effectiveName;
+      finalNameForSlug = patch.name!.trim() || 'New bot';
+      const shouldUpdateSlug = finalNameForSlug !== String(ex.name ?? '').trim();
+      if (shouldUpdateSlug) {
+        nextSlug = await this.generateUniqueSlug(finalNameForSlug, id);
+      }
+      updateDoc.slug = nextSlug;
+    }
+
+    if (patch.touched.has('shortDescription')) {
+      updateDoc.shortDescription = patch.shortDescription ?? '';
+    }
+    if (patch.touched.has('description')) {
+      updateDoc.description = effectiveDescription;
+    }
+    if (patch.touched.has('categories')) {
+      updateDoc.categories = patch.categories;
+      updateDoc.category = patch.categories?.[0];
+    }
+    if (patch.touched.has('imageUrl')) {
+      updateDoc.imageUrl = patch.imageUrl ?? '';
+    }
+    if (patch.touched.has('avatarEmoji')) {
+      updateDoc.avatarEmoji = patch.avatarEmoji ?? '';
+    }
+    if (patch.touched.has('avatarSource')) {
+      const a = patch.avatarSource;
+      if (a === 'upload' || a === 'url' || a === 'emoji' || a === 'none') {
+        updateDoc.avatarSource = a;
+      }
+    }
+    if (patch.touched.has('welcomeMessage')) {
+      updateDoc.welcomeMessage = patch.welcomeMessage ?? '';
+    }
+    if (patch.touched.has('exampleQuestions')) {
+      updateDoc.exampleQuestions = patch.exampleQuestions ?? [];
+    }
+    if (patch.touched.has('leadCapture')) {
+      updateDoc.leadCapture = patch.leadCapture;
+    }
+    if (patch.touched.has('chatUI')) {
+      updateDoc.chatUI = patch.chatUI;
+    }
+    if (patch.touched.has('personality')) {
+      /** Replace subdocument (same as pre-partial PATCH): sparse normalized object overwrites stored personality. */
+      updateDoc.personality = patch.personality && typeof patch.personality === 'object' ? patch.personality : {};
+    }
+    if (patch.touched.has('config')) {
+      updateDoc.config = patch.config && typeof patch.config === 'object' ? patch.config : {};
+    }
+    if (patch.touched.has('openaiApiKeyOverride')) {
+      updateDoc.openaiApiKeyOverride = patch.openaiApiKeyOverride;
+    }
+    if (patch.touched.has('whisperApiKeyOverride')) {
+      updateDoc.whisperApiKeyOverride = patch.whisperApiKeyOverride;
+    }
+    if (patch.touched.has('limitOverrideMessages')) {
+      updateDoc.limitOverrideMessages = patch.limitOverrideMessages;
+    }
+    if (patch.touched.has('visibility') && patch.visibility) {
+      updateDoc.visibility = patch.visibility;
+    }
+    if (patch.touched.has('messageLimitMode') || patch.touched.has('messageLimitTotal') || patch.touched.has('messageLimitUpgradeMessage')) {
+      updateDoc.messageLimitMode = mlm;
+      updateDoc.messageLimitTotal = mlt;
+      updateDoc.messageLimitUpgradeMessage = mlum;
+    }
+    if (patch.touched.has('isPublic')) {
+      updateDoc.isPublic = patch.isPublic !== false;
+    }
+    if (patch.touched.has('status') && patch.status) {
+      updateDoc.status = patch.status === 'published' ? 'published' : 'draft';
+    }
+    if (patch.touched.has('includeNameInKnowledge')) {
+      updateDoc.includeNameInKnowledge = patch.includeNameInKnowledge === true;
+    }
+    if (patch.touched.has('includeTaglineInKnowledge')) {
+      updateDoc.includeTaglineInKnowledge = patch.includeTaglineInKnowledge === true;
+    }
+    if (patch.touched.has('includeNotesInKnowledge')) {
+      updateDoc.includeNotesInKnowledge = patch.includeNotesInKnowledge !== false;
+    }
+    if (patch.touched.has('allowedOrigins')) {
+      updateDoc.allowedOrigins = patch.allowedOrigins ?? [];
+    }
+    if (patch.touched.has('visitorMultiChatEnabled')) {
+      updateDoc.visitorMultiChatEnabled = patch.visitorMultiChatEnabled === true;
+      updateDoc.visitorMultiChatMax =
+        patch.visitorMultiChatEnabled === true ? patch.visitorMultiChatMax ?? null : null;
+    }
+
+    const faqRowsForKb =
+      patch.touched.has('faqs') && Array.isArray(patch.faqs)
+        ? (patch.faqs as Array<{ question?: string; answer?: string; active?: boolean }>)
+          .map((f) => ({
+            question: String(f?.question ?? '').trim(),
+            answer: String(f?.answer ?? '').trim(),
+            active: f?.active !== false,
+          }))
+          .filter((f) => f.question || f.answer)
+        : null;
+    const noteBodyForKb =
+      patch.touched.has('knowledgeDescription') ? String(patch.knowledgeDescription ?? '').trim() : null;
+
+    const outStatus =
+      patch.touched.has('status') && patch.status
+        ? patch.status === 'published'
+          ? 'published'
+          : 'draft'
+        : String(ex.status ?? '') === 'published'
+          ? 'published'
+          : 'draft';
+
+    const runKbSideEffects = async () => {
+      if (faqRowsForKb) {
+        await this.knowledgeBaseItemService.upsertFaqKnowledgeItemsForBot(id, faqRowsForKb);
+        await this.knowledgeBaseChunkService.replaceFaqKnowledgeChunksForBot(id);
+      }
+      if (noteBodyForKb !== null) {
+        await this.knowledgeBaseItemService.upsertNoteKnowledgeItemForBot(id, noteBodyForKb);
+        await this.knowledgeBaseChunkService.replaceNoteKnowledgeChunksForBot(id);
+      }
+    };
+
+    const mongoKeys = Object.keys(updateDoc);
+    if (mongoKeys.length === 0) {
+      await runKbSideEffects();
+      return { ok: true, botId: id, status: outStatus };
+    }
 
     for (let attempt = 0; attempt < 5; attempt++) {
       try {
-        await this.botModel.findByIdAndUpdate(id, {
-          name: finalName,
-          slug: nextSlug,
-          shortDescription: normalized.shortDescription ?? '',
-          description,
-          categories: normalized.categories,
-          category: normalized.categories?.[0],
-          imageUrl: normalized.imageUrl ?? '',
-          avatarEmoji: normalized.avatarEmoji ?? '',
-          openaiApiKeyOverride: normalized.openaiApiKeyOverride,
-          whisperApiKeyOverride: normalized.whisperApiKeyOverride,
-          welcomeMessage: normalized.welcomeMessage ?? '',
-          exampleQuestions: normalized.exampleQuestions ?? [],
-          leadCapture: normalized.leadCapture,
-          chatUI: normalized.chatUI,
-          personality: normalized.personality,
-          config: normalized.config,
-          limitOverrideMessages: normalized.limitOverrideMessages,
-          isPublic: normalized.isPublic,
-          status,
-          includeNameInKnowledge: normalized.includeNameInKnowledge,
-          includeTaglineInKnowledge: normalized.includeTaglineInKnowledge,
-          includeNotesInKnowledge: normalized.includeNotesInKnowledge,
-          ...(normalized.visibility ? { visibility: normalized.visibility } : {}),
-          messageLimitMode,
-          messageLimitTotal,
-          messageLimitUpgradeMessage,
-          ...(normalized.allowedOrigins !== undefined ? { allowedOrigins: normalized.allowedOrigins } : {}),
-          ...(normalized.visitorMultiChatEnabled !== undefined
-            ? {
-              visitorMultiChatEnabled: normalized.visitorMultiChatEnabled === true,
-              visitorMultiChatMax:
-                normalized.visitorMultiChatEnabled === true ? normalized.visitorMultiChatMax ?? null : null,
-            }
-            : {}),
-        });
-        await this.knowledgeBaseItemService.upsertFaqKnowledgeItemsForBot(id, newFaqs);
-        await this.knowledgeBaseItemService.upsertNoteKnowledgeItemForBot(id, newKnowledgeDescription);
-        await this.knowledgeBaseChunkService.replaceFaqKnowledgeChunksForBot(id);
-        await this.knowledgeBaseChunkService.replaceNoteKnowledgeChunksForBot(id);
-        return { ok: true, botId: id, status };
+        await this.botModel.findByIdAndUpdate(id, updateDoc);
+        await runKbSideEffects();
+        return { ok: true, botId: id, status: outStatus };
       } catch (err: unknown) {
         const e = err as { code?: number; keyPattern?: Record<string, number> };
         if (!(e.code === 11000 && e.keyPattern?.slug)) throw err;
-        nextSlug = await this.generateUniqueSlug(finalName, id);
+        if (!patch.touched.has('name')) throw err;
+        nextSlug = await this.generateUniqueSlug(finalNameForSlug, id);
+        updateDoc.slug = nextSlug;
       }
     }
     throw new Error('Failed to allocate unique slug.');
+  }
+
+  private activeAllowedOriginSummary(ex: Record<string, unknown>): string[] {
+    const raw = Array.isArray(ex.allowedOrigins) ? (ex.allowedOrigins as AllowedOrigin[]) : [];
+    return raw
+      .filter((o) => o?.isActive !== false && typeof o?.origin === 'string' && o.origin.trim() !== '')
+      .map((o) => o.origin!.trim());
+  }
+
+  /** Same publish rules as `updateWorkspaceBot` when transitioning to published (name, description, active origins). */
+  private assertExistingWorkspaceBotPublishableForLifecycle(ex: Record<string, unknown>): void {
+    const effectiveName = String(ex.name ?? '').trim() || 'New bot';
+    const effectiveDescription = String(ex.description ?? '').trim();
+    const mergedOrigins = Array.isArray(ex.allowedOrigins) ? (ex.allowedOrigins as AllowedOrigin[]) : [];
+    if (!effectiveName.trim()) throw new Error('Name is required to publish.');
+    if (!effectiveDescription) throw new Error('Description is required to publish.');
+    if (!hasActiveAllowedOrigin(mergedOrigins)) {
+      throw new Error('At least one active allowed embed origin is required to publish.');
+    }
+  }
+
+  /**
+   * Dedicated customer lifecycle transition (not sparse PATCH). Validates then sets `status` only.
+   */
+  async customerBotLifecycleAction(
+    id: string,
+    action: BotLifecycleAction,
+    opts: { publicApiBaseUrl: string; widgetAssetOrigin: string },
+  ): Promise<
+    | {
+        ok: true;
+        action: 'publish';
+        status: 'published';
+        embedSnippet: string;
+        accessKey: string;
+        allowedOrigins: string[];
+      }
+    | { ok: true; action: 'draft'; status: 'draft' }
+  > {
+    const existingFull = await this.botModel.findById(id).lean();
+    if (!existingFull) {
+      throw new Error('Bot not found');
+    }
+    const ex = existingFull as Record<string, unknown>;
+    const currentStatus = String(ex.status ?? '') === 'published' ? 'published' : 'draft';
+
+    if (action === 'draft') {
+      if (currentStatus !== 'draft') {
+        await this.botModel.updateOne({ _id: new Types.ObjectId(id) }, { $set: { status: 'draft' } });
+      }
+      return { ok: true, action: 'draft', status: 'draft' };
+    }
+
+    this.assertExistingWorkspaceBotPublishableForLifecycle(ex);
+    if (currentStatus !== 'published') {
+      await this.botModel.updateOne({ _id: new Types.ObjectId(id) }, { $set: { status: 'published' } });
+    }
+
+    const accessKey = typeof ex.accessKey === 'string' ? ex.accessKey : '';
+    const visibility =
+      ex.visibility === 'private' || ex.visibility === 'public' ? ex.visibility : 'public';
+    const secretKey = typeof ex.secretKey === 'string' ? ex.secretKey : '';
+    const embedSnippet = buildCustomerEmbedSnippet({
+      botId: id,
+      apiBaseUrl: opts.publicApiBaseUrl,
+      accessKey,
+      visibility,
+      ...(visibility === 'private' && secretKey.trim() ? { secretKey: secretKey.trim() } : {}),
+      widgetAssetOrigin: opts.widgetAssetOrigin,
+    });
+
+    return {
+      ok: true,
+      action: 'publish',
+      status: 'published',
+      embedSnippet,
+      accessKey,
+      allowedOrigins: this.activeAllowedOriginSummary(ex),
+    };
   }
 
   async update(id: string, data: Record<string, unknown>) {

@@ -10,6 +10,7 @@ import { UnifiedKnowledgeRetrievalService } from '../rag/unified-knowledge-retri
 import { extractChunkHeading, normalizeSourceExcerpt } from '../rag/retrieval-helpers';
 import type { EnrichedChunk } from '../rag/retrieval.types';
 import { buildChatKnowledgeContext, formatPromptFromContext } from './chat-context-builder';
+import { resolvePersonalityLanguageForPrompt } from './response-language.util';
 import { buildModelConversationContext } from './conversation-memory.helper';
 import type { BotLike, ChatDebugInfo, DebugChunkExcerpt, ChatSource, DisplaySource, RunChatInput, RunChatResult } from './chat-engine.types';
 import type { ChatContextEvidenceItem } from './chat-context.types';
@@ -785,7 +786,7 @@ export class ChatEngineService {
       personalityDescription: personality.description,
       thingsToAvoid: personality.thingsToAvoid,
       tone: personality.tone ?? 'friendly',
-      language: personality.language ?? 'en',
+      language: resolvePersonalityLanguageForPrompt(personality.language),
       responseLength: cfg.responseLength ?? 'medium',
       systemPrompt: personality.systemPrompt,
       leadCapture: leadCaptureContext,

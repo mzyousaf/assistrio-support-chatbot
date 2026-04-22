@@ -53,12 +53,17 @@
   }
 
   button:not(:disabled),
-  [role="button"]:not([aria-disabled="true"]) {
+  [role="button"]:not([aria-disabled="true"]),
+  select:not(:disabled),
+  [role="switch"]:not(:disabled):not([aria-disabled="true"]) {
     cursor: pointer;
   }
 
   button:disabled,
-  [role="button"][aria-disabled="true"] {
+  [role="button"][aria-disabled="true"],
+  select:disabled,
+  [role="switch"]:disabled,
+  [role="switch"][aria-disabled="true"] {
     cursor: not-allowed;
   }
 

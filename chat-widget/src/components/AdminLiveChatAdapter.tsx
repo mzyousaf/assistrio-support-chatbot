@@ -1,19 +1,19 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Bot, MessageCircle } from "lucide-react";
+import { Bot } from "lucide-react";
 
 import { usePreferredColorScheme } from "../hooks/usePreferredColorScheme";
 import { Chat, ChatWithLauncher } from "./chat-ui";
 import type { ChatUIMessage, ChatUISource } from "./chat-ui";
 import { mapSources } from "./chat-ui";
+import { ContainedLauncherPreview } from "./ContainedLauncherPreview";
 import { cx } from "./chat-ui/utils";
-import { normalizeLauncherIcon } from "../lib/launcherIconNormalize";
-import { normalizeLauncherWhenOpen } from "../lib/launcherWhenOpenNormalize";
+import { launcherBubbleFromChatUI } from "../lib/launcherBubbleFromChatUI";
 import { apiFetch } from "../lib/apiFetch";
 import { fetchWithNetworkRetry } from "../lib/fetchWithRetry";
 import { runtimeEmbedPost } from "../lib/runtimeEmbedPost";
 import { mergeWidgetStrings, type WidgetStrings } from "../lib/widgetStrings";
 import { resolveWelcomeMessage } from "../lib/welcomeMessage";
-import type { BotChatUI, ChatLauncherWhenOpen } from "../models/botChatUI";
+import type { BotChatUI } from "../models/botChatUI";
 import type { WidgetPreviewOverrides } from "../types";
 
 function generateId(): string {
@@ -91,111 +91,6 @@ function truncateSubtitle(text: string, maxLen: number): string {
   return t.slice(0, maxLen).trimEnd().replace(/\s+\S*$/, "") + "…";
 }
 
-/** Bot glyph: fallback for “Bot avatar” when no image/emoji, and for “Custom” when no custom URL is set. */
-function LauncherAvatarPlaceholder() {
-  return (
-    <span className="flex h-full w-full items-center justify-center text-white" aria-hidden>
-      <Bot className="h-[55%] w-[55%] min-h-[18px] min-w-[18px]" strokeWidth={1.75} />
-    </span>
-  );
-}
-
-/**
- * Maps Appearance launcher settings to `ChatLauncherBubble` props (floating embed only).
- * — default: chat icon with optional ring (launcherAvatarRingWidth); when open uses `launcherWhenOpen`.
- * — bot-avatar: bot profile image, else emoji, else bot placeholder.
- * — custom: custom URL if set; otherwise bot placeholder until a URL is added.
- */
-function launcherBubbleFromChatUI(
-  chatUI: BotChatUI | undefined,
-  avatarUrl?: string,
-  avatarEmoji?: string,
-): {
-  size?: number;
-  shadowIntensity?: "none" | "low" | "medium" | "high";
-  avatar?: React.ReactNode;
-  avatarWithBackground?: boolean;
-  avatarRingWidth?: number;
-  launcherWhenOpen: ChatLauncherWhenOpen;
-} {
-  const icon = normalizeLauncherIcon(chatUI?.launcherIcon);
-  const launcherWhenOpen = normalizeLauncherWhenOpen(chatUI?.launcherWhenOpen);
-  const size =
-    typeof chatUI?.launcherSize === "number" && chatUI.launcherSize > 0
-      ? Math.min(96, Math.max(32, Math.round(chatUI.launcherSize)))
-      : undefined;
-  const shadowIntensity =
-    chatUI?.shadowIntensity === "none" ||
-      chatUI?.shadowIntensity === "low" ||
-      chatUI?.shadowIntensity === "medium" ||
-      chatUI?.shadowIntensity === "high"
-      ? chatUI.shadowIntensity
-      : undefined;
-  const ring =
-    typeof chatUI?.launcherAvatarRingWidth === "number"
-      ? Math.max(0, Math.min(30, chatUI.launcherAvatarRingWidth))
-      : 18;
-
-  if (icon === "bot-avatar") {
-    const img = avatarUrl?.trim() ? (
-      <img src={avatarUrl.trim()} alt="" className="h-full w-full object-cover rounded-full" />
-    ) : avatarEmoji?.trim() ? (
-      <span className="flex h-full w-full items-center justify-center text-2xl" aria-hidden>
-        {avatarEmoji.trim()}
-      </span>
-    ) : (
-      <LauncherAvatarPlaceholder />
-    );
-    return {
-      size,
-      shadowIntensity,
-      avatar: img,
-      avatarWithBackground: true,
-      avatarRingWidth: ring,
-      launcherWhenOpen,
-    };
-  }
-  if (icon === "custom") {
-    const customUrl = chatUI?.launcherAvatarUrl?.trim();
-    if (customUrl) {
-      return {
-        size,
-        shadowIntensity,
-        avatar: (
-          <img
-            src={customUrl}
-            alt=""
-            className="h-full w-full object-cover rounded-full"
-          />
-        ),
-        avatarWithBackground: true,
-        avatarRingWidth: ring,
-        launcherWhenOpen,
-      };
-    }
-    return {
-      size,
-      shadowIntensity,
-      avatar: <LauncherAvatarPlaceholder />,
-      avatarWithBackground: true,
-      avatarRingWidth: ring,
-      launcherWhenOpen,
-    };
-  }
-  return {
-    size,
-    shadowIntensity,
-    avatar: (
-      <span className="flex h-full w-full items-center justify-center text-white" aria-hidden>
-        <MessageCircle className="h-[55%] w-[55%] min-h-[18px] min-w-[18px]" strokeWidth={2} />
-      </span>
-    ),
-    avatarWithBackground: true,
-    avatarRingWidth: ring,
-    launcherWhenOpen,
-  };
-}
-
 export interface AdminLiveChatAdapterProps {
   botId: string;
   mode?: "runtime" | "preview";
@@ -234,6 +129,16 @@ export interface AdminLiveChatAdapterProps {
   widgetStrings?: WidgetStrings;
   className?: string;
   style?: React.CSSProperties;
+  /** Non-floating inline panel sizes (defaults 400×700 collapsed, 560×75vh expanded). */
+  inlinePanelCollapsedWidth?: number;
+  inlinePanelCollapsedHeight?: number;
+  inlinePanelExpandedWidth?: number;
+  inlinePanelExpandedHeight?: number | string;
+  /**
+   * When `useFloatingLauncher` is false: show a non-interactive launcher bubble pinned to the widget stage
+   * (requires `EmbedChatConfig.showContainedLauncherPreview` from the host).
+   */
+  showContainedLauncherPreview?: boolean;
 }
 
 const DEFAULT_PRIMARY = "#14B8A6";
@@ -307,6 +212,11 @@ export function AdminLiveChatAdapter({
   widgetStrings,
   className,
   style,
+  inlinePanelCollapsedWidth,
+  inlinePanelCollapsedHeight,
+  inlinePanelExpandedWidth,
+  inlinePanelExpandedHeight,
+  showContainedLauncherPreview = false,
 }: AdminLiveChatAdapterProps) {
   void expandHref;
   void debug;
@@ -360,7 +270,7 @@ export function AdminLiveChatAdapter({
   const [isSending, setIsSending] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [floatingPanelExpanded, setFloatingPanelExpanded] = useState(false);
-  const { primaryColor, dark, bubbleBorderRadius, showBranding } = resolveChatUI(chatUI, preferredScheme);
+  const { primaryColor, dark, bubbleBorderRadius } = resolveChatUI(chatUI, preferredScheme);
   const launcherBubble = useMemo(
     () => launcherBubbleFromChatUI(chatUI, avatarUrl, avatarEmoji),
     [chatUI, avatarUrl, avatarEmoji],
@@ -960,6 +870,11 @@ export function AdminLiveChatAdapter({
     onMic: () => { },
   };
 
+  const inlineCollapsedW = inlinePanelCollapsedWidth ?? 400;
+  const inlineCollapsedH = inlinePanelCollapsedHeight ?? 700;
+  const inlineExpandedW = inlinePanelExpandedWidth ?? 560;
+  const inlineExpandedH = inlinePanelExpandedHeight ?? "75vh";
+
   if (useFloatingLauncher) {
     return (
       <ChatWithLauncher
@@ -987,24 +902,34 @@ export function AdminLiveChatAdapter({
 
   return (
     <div
-      className={cx("assistrio-chat-widget overflow-hidden", className)}
+      className={cx("assistrio-chat-widget relative overflow-visible", className)}
       style={{
-        width: expanded ? 560 : 400,
-        height: expanded ? "75vh" : 700,
+        width: expanded ? inlineExpandedW : inlineCollapsedW,
+        height: expanded ? inlineExpandedH : inlineCollapsedH,
         transition: "width 0.3s ease-out, height 0.3s ease-out",
         ...style,
       }}
     >
-      <Chat
-        {...chatShared}
-        showMenuExpand={chatUI?.showMenuExpand !== false}
-        onMenuExpand={() => setExpanded((e) => !e)}
-        isExpanded={expanded}
-        strings={{
-          ...chatShared.strings,
-          expandLabel: expanded ? "Collapse" : "Expand chat",
-        }}
-      />
+      {showContainedLauncherPreview ? (
+        <ContainedLauncherPreview
+          chatUI={chatUI}
+          avatarUrl={avatarUrl}
+          avatarEmoji={avatarEmoji}
+          primaryColor={primaryColor}
+        />
+      ) : null}
+      <div className="flex h-full w-full min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl">
+        <Chat
+          {...chatShared}
+          showMenuExpand={chatUI?.showMenuExpand !== false}
+          onMenuExpand={() => setExpanded((e) => !e)}
+          isExpanded={expanded}
+          strings={{
+            ...chatShared.strings,
+            expandLabel: expanded ? "Collapse" : "Expand chat",
+          }}
+        />
+      </div>
     </div>
   );
 }

@@ -1,5 +1,8 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import { BotWorkspaceProvider, useBotWorkspace } from './BotWorkspaceContext';
+import { CustomerWidgetPreviewHost } from './CustomerWidgetPreviewHost';
+import { CustomerWidgetPreviewProvider } from './CustomerWidgetPreviewContext';
+import { WorkspaceBeforeUnload } from './WorkspaceBeforeUnload';
 import { ws } from './workspace';
 import { InlineLoader } from '../../components/PageLoader';
 import { WorkspaceContentContainer } from '@/layout/workspace-layout';
@@ -30,13 +33,21 @@ function BotWorkspaceShell() {
 
   if (!bot || !botId) return null;
 
-  return <Outlet />;
+  return (
+    <>
+      <WorkspaceBeforeUnload />
+      <CustomerWidgetPreviewHost />
+      <Outlet />
+    </>
+  );
 }
 
 export function BotWorkspaceLayout() {
   return (
     <BotWorkspaceProvider>
-      <BotWorkspaceShell />
+      <CustomerWidgetPreviewProvider>
+        <BotWorkspaceShell />
+      </CustomerWidgetPreviewProvider>
     </BotWorkspaceProvider>
   );
 }

@@ -9,6 +9,8 @@
 @source "../components/chat-ui/**/*.tsx";
 @source "../components/chat-ui/chatShadowStyles.ts";
 @source "../components/AdminLiveChatAdapter.tsx";
+@source "../components/ContainedLauncherPreview.tsx";
+@source "../lib/launcherBubbleFromChatUI.tsx";
 @source "../hooks/usePreferredColorScheme.ts";
 @source "../*.tsx";
 

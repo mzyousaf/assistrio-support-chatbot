@@ -90,7 +90,7 @@ function normalizeFaqs(input: unknown): Array<{ question: string; answer: string
     .filter((f) => f.question && f.answer);
 }
 
-const EXAMPLE_QUESTIONS_MAX = 6;
+const EXAMPLE_QUESTIONS_MAX = 5;
 
 function normalizeExampleQuestions(input: unknown): string[] {
   if (!Array.isArray(input)) return [];
@@ -101,6 +101,46 @@ function normalizeExampleQuestions(input: unknown): string[] {
 }
 
 const MENU_QUICK_LINKS_MAX = 10;
+
+const BEHAVIOR_PRESETS = new Set([
+  'default', 'support', 'sales', 'technical', 'marketing',
+  'consultative', 'teacher', 'empathetic', 'strict',
+  'concise', 'creative', 'research', 'executive', 'hospitality',
+  'coach', 'analyst', 'storyteller', 'startup', 'journalistic',
+  'companion', 'simplifier', 'facilitator', 'advocate', 'negotiator', 'interviewer',
+]);
+
+const WORKSPACE_PATCH_RECOGNIZED_KEYS = new Set([
+  'name',
+  'shortDescription',
+  'description',
+  'categories',
+  'imageUrl',
+  'avatarEmoji',
+  'avatarSource',
+  'knowledgeDescription',
+  'welcomeMessage',
+  'faqs',
+  'exampleQuestions',
+  'leadCapture',
+  'chatUI',
+  'personality',
+  'config',
+  'openaiApiKeyOverride',
+  'whisperApiKeyOverride',
+  'limitOverrideMessages',
+  'visibility',
+  'messageLimitMode',
+  'messageLimitTotal',
+  'messageLimitUpgradeMessage',
+  'isPublic',
+  'status',
+  'includeNameInKnowledge',
+  'includeTaglineInKnowledge',
+  'includeNotesInKnowledge',
+  'allowedOrigins',
+  'visitorMultiChatEnabled',
+]);
 
 function normalizeAllowedOriginsFromPayload(input: Record<string, unknown>): AllowedOrigin[] | undefined {
   if (!('allowedOrigins' in input)) return undefined;
@@ -140,6 +180,135 @@ function normalizeMenuQuickLinks(input: unknown): Array<{ text: string; route: s
       return icon ? { text, route, icon } : { text, route };
     })
     .filter((x): x is { text: string; route: string; icon?: string } => x != null);
+}
+
+/** Shared chatUI normalizer (full object) for finalize-draft and PATCH when `chatUI` is present. */
+export function buildNormalizedChatUI(chatUIInput: Record<string, unknown>): BotChatUI {
+  const bubbleRadius =
+    typeof chatUIInput.bubbleBorderRadius === 'number' && chatUIInput.bubbleBorderRadius >= 0 && chatUIInput.bubbleBorderRadius <= 32
+      ? Math.round(chatUIInput.bubbleBorderRadius)
+      : chatUIInput.bubbleStyle === 'squared'
+        ? 0
+        : 20;
+  const timePos =
+    chatUIInput.timePosition === 'bottom' || chatUIInput.timePosition === 'bottom-right' ? 'bottom' : 'top';
+  const chatPanelBorderWidth =
+    typeof chatUIInput.chatPanelBorderWidth === 'number' &&
+      chatUIInput.chatPanelBorderWidth >= 0 &&
+      chatUIInput.chatPanelBorderWidth <= 5
+      ? Math.round(chatUIInput.chatPanelBorderWidth)
+      : 1;
+  const menuQuickLinksMenuIcon = normalizeQuickLinkIcon(chatUIInput.menuQuickLinksMenuIcon);
+  return {
+    primaryColor: typeof chatUIInput.primaryColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(chatUIInput.primaryColor.trim()) ? chatUIInput.primaryColor.trim() : '#14B8A6',
+    backgroundStyle: chatUIInput.backgroundStyle === 'auto' || chatUIInput.backgroundStyle === 'light' || chatUIInput.backgroundStyle === 'dark' ? chatUIInput.backgroundStyle as BotChatUI['backgroundStyle'] : 'light',
+    bubbleBorderRadius: bubbleRadius,
+    chatPanelBorderWidth,
+    launcherPosition: chatUIInput.launcherPosition === 'bottom-left' || chatUIInput.launcherPosition === 'bottom-right' ? chatUIInput.launcherPosition as BotChatUI['launcherPosition'] : 'bottom-right',
+    shadowIntensity:
+      chatUIInput.shadowIntensity === 'none' ||
+        chatUIInput.shadowIntensity === 'low' ||
+        chatUIInput.shadowIntensity === 'medium' ||
+        chatUIInput.shadowIntensity === 'high'
+        ? (chatUIInput.shadowIntensity as BotChatUI['shadowIntensity'])
+        : 'medium',
+    showChatBorder: chatUIInput.showChatBorder !== false,
+    launcherIcon:
+      chatUIInput.launcherIcon === 'bot-avatar' || chatUIInput.launcherIcon === 'custom' ? chatUIInput.launcherIcon : 'default',
+    launcherAvatarUrl:
+      typeof chatUIInput.launcherAvatarUrl === 'string' ? chatUIInput.launcherAvatarUrl.trim() || undefined : undefined,
+    launcherAvatarRingWidth:
+      typeof chatUIInput.launcherAvatarRingWidth === 'number' &&
+        chatUIInput.launcherAvatarRingWidth >= 0 &&
+        chatUIInput.launcherAvatarRingWidth <= 30
+        ? Math.round(chatUIInput.launcherAvatarRingWidth)
+        : 18,
+    launcherSize:
+      typeof chatUIInput.launcherSize === 'number' && chatUIInput.launcherSize >= 32 && chatUIInput.launcherSize <= 96
+        ? Math.round(chatUIInput.launcherSize)
+        : 48,
+    launcherWhenOpen:
+      chatUIInput.launcherWhenOpen === 'close' || chatUIInput.launcherWhenOpen === 'same'
+        ? chatUIInput.launcherWhenOpen
+        : 'chevron-down',
+    chatOpenAnimation:
+      chatUIInput.chatOpenAnimation === 'fade'
+        ? 'fade'
+        : chatUIInput.chatOpenAnimation === 'expand' || chatUIInput.chatOpenAnimation === 'scale'
+          ? 'expand'
+          : 'slide-up-fade',
+    openChatOnLoad: chatUIInput.openChatOnLoad !== false,
+    showBranding: chatUIInput.showBranding !== false,
+    brandingMessage: typeof chatUIInput.brandingMessage === 'string' ? chatUIInput.brandingMessage.trim() : '',
+    showPrivacyText: chatUIInput.showPrivacyText !== false,
+    privacyText: typeof chatUIInput.privacyText === 'string' ? chatUIInput.privacyText.trim() : '',
+    liveIndicatorStyle: chatUIInput.liveIndicatorStyle === 'dot-only' ? 'dot-only' : 'label',
+    statusIndicator: chatUIInput.statusIndicator === 'live' || chatUIInput.statusIndicator === 'active' ? chatUIInput.statusIndicator as BotChatUI['statusIndicator'] : 'none',
+    statusDotStyle: chatUIInput.statusDotStyle === 'static' ? 'static' : 'blinking',
+    showScrollToBottom: chatUIInput.showScrollToBottom !== false,
+    showScrollToBottomLabel: chatUIInput.showScrollToBottomLabel !== false,
+    scrollToBottomLabel:
+      typeof chatUIInput.scrollToBottomLabel === 'string' ? chatUIInput.scrollToBottomLabel.trim() : '',
+    showScrollbar: chatUIInput.showScrollbar !== false,
+    composerAsSeparateBox: chatUIInput.composerAsSeparateBox !== false,
+    composerBorderWidth:
+      typeof chatUIInput.composerBorderWidth === 'number' &&
+        chatUIInput.composerBorderWidth >= 0 &&
+        chatUIInput.composerBorderWidth <= 6
+        ? (() => {
+          const w = Number(chatUIInput.composerBorderWidth);
+          return w > 0 && w < 0.5 ? 0.5 : Math.max(0, Math.min(6, w));
+        })()
+        : (chatUIInput as { showComposerBorder?: boolean }).showComposerBorder === false
+          ? 0
+          : 1,
+    composerBorderColor: chatUIInput.composerBorderColor === 'default' ? 'default' : 'primary',
+    showMenuExpand: chatUIInput.showMenuExpand !== false,
+    showMenuQuickLinks: chatUIInput.showMenuQuickLinks !== false,
+    menuQuickLinks: normalizeMenuQuickLinks(chatUIInput.menuQuickLinks),
+    ...(menuQuickLinksMenuIcon ? { menuQuickLinksMenuIcon } : {}),
+    showComposerWithSuggestedQuestions: chatUIInput.showComposerWithSuggestedQuestions === true,
+    showAvatarInHeader: chatUIInput.showAvatarInHeader !== false,
+    senderName: typeof chatUIInput.senderName === 'string' ? chatUIInput.senderName.trim() : '',
+    showSenderName: chatUIInput.showSenderName !== false,
+    showTime: chatUIInput.showTime !== false,
+    showCopyButton: chatUIInput.showCopyButton !== false,
+    showSources: chatUIInput.showSources !== false,
+    timePosition: timePos,
+    showEmoji: chatUIInput.showEmoji !== false,
+    allowFileUpload: chatUIInput.allowFileUpload === true,
+    showMic: chatUIInput.showMic === true,
+  };
+}
+
+export function normalizePersonalityInput(personalityInput: Record<string, unknown>): BotPersonality {
+  const personality: BotPersonality = {};
+  if (typeof personalityInput.name === 'string' && personalityInput.name.trim()) personality.name = personalityInput.name.trim();
+  if (typeof personalityInput.description === 'string' && personalityInput.description.trim()) personality.description = personalityInput.description.trim();
+  if (typeof personalityInput.systemPrompt === 'string' && personalityInput.systemPrompt.trim()) personality.systemPrompt = personalityInput.systemPrompt.trim();
+  const presetVal = String(personalityInput.behaviorPreset ?? '').trim();
+  if (BEHAVIOR_PRESETS.has(presetVal)) personality.behaviorPreset = presetVal;
+  const toneStr = String(personalityInput.tone ?? '');
+  if (
+    [
+      'friendly', 'warm', 'supportive', 'empathetic', 'professional', 'formal',
+      'confident', 'authoritative', 'casual', 'conversational', 'playful', 'enthusiastic',
+      'neutral', 'diplomatic', 'direct', 'patient', 'calm', 'technical',
+    ].includes(toneStr)
+  ) {
+    personality.tone = personalityInput.tone as BotPersonality['tone'];
+  }
+  if (typeof personalityInput.language === 'string' && personalityInput.language.trim()) personality.language = personalityInput.language.trim();
+  if (typeof personalityInput.thingsToAvoid === 'string' && personalityInput.thingsToAvoid.trim()) personality.thingsToAvoid = personalityInput.thingsToAvoid.trim();
+  return personality;
+}
+
+export function normalizeConfigInput(configInput: Record<string, unknown>): BotConfig {
+  const configCandidate: BotConfig = {};
+  if (typeof configInput.temperature === 'number' && configInput.temperature >= 0 && configInput.temperature <= 1) configCandidate.temperature = configInput.temperature;
+  if (typeof configInput.maxTokens === 'number' && Number.isFinite(configInput.maxTokens)) configCandidate.maxTokens = Math.max(1, Math.floor(configInput.maxTokens));
+  if (['short', 'medium', 'long'].includes(String(configInput.responseLength))) configCandidate.responseLength = configInput.responseLength as BotConfig['responseLength'];
+  return configCandidate;
 }
 
 export interface NormalizedBotPayload {
@@ -224,123 +393,14 @@ export function normalizeBotPayload(input: Record<string, unknown>): NormalizedB
   const leadCapture = normalizeLeadCapture(input.leadCapture);
 
   const chatUIInput = (input.chatUI ?? {}) as Record<string, unknown>;
-  const bubbleRadius =
-    typeof chatUIInput.bubbleBorderRadius === 'number' && chatUIInput.bubbleBorderRadius >= 0 && chatUIInput.bubbleBorderRadius <= 32
-      ? Math.round(chatUIInput.bubbleBorderRadius)
-      : chatUIInput.bubbleStyle === 'squared'
-        ? 0
-        : 20;
-  const timePos =
-    chatUIInput.timePosition === 'bottom' || chatUIInput.timePosition === 'bottom-right' ? 'bottom' : 'top';
-  const chatPanelBorderWidth =
-    typeof chatUIInput.chatPanelBorderWidth === 'number' &&
-      chatUIInput.chatPanelBorderWidth >= 0 &&
-      chatUIInput.chatPanelBorderWidth <= 5
-      ? Math.round(chatUIInput.chatPanelBorderWidth)
-      : 1;
-  const menuQuickLinksMenuIcon = normalizeQuickLinkIcon(chatUIInput.menuQuickLinksMenuIcon);
-  const chatUI: BotChatUI = {
-    primaryColor: typeof chatUIInput.primaryColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(chatUIInput.primaryColor.trim()) ? chatUIInput.primaryColor.trim() : '#14B8A6',
-    backgroundStyle: chatUIInput.backgroundStyle === 'auto' || chatUIInput.backgroundStyle === 'light' || chatUIInput.backgroundStyle === 'dark' ? chatUIInput.backgroundStyle as BotChatUI['backgroundStyle'] : 'light',
-    bubbleBorderRadius: bubbleRadius,
-    chatPanelBorderWidth,
-    launcherPosition: chatUIInput.launcherPosition === 'bottom-left' || chatUIInput.launcherPosition === 'bottom-right' ? chatUIInput.launcherPosition as BotChatUI['launcherPosition'] : 'bottom-right',
-    shadowIntensity:
-      chatUIInput.shadowIntensity === 'none' ||
-        chatUIInput.shadowIntensity === 'low' ||
-        chatUIInput.shadowIntensity === 'medium' ||
-        chatUIInput.shadowIntensity === 'high'
-        ? (chatUIInput.shadowIntensity as BotChatUI['shadowIntensity'])
-        : 'medium',
-    showChatBorder: chatUIInput.showChatBorder !== false,
-    launcherIcon:
-      chatUIInput.launcherIcon === 'bot-avatar' || chatUIInput.launcherIcon === 'custom' ? chatUIInput.launcherIcon : 'default',
-    launcherAvatarUrl:
-      typeof chatUIInput.launcherAvatarUrl === 'string' ? chatUIInput.launcherAvatarUrl.trim() || undefined : undefined,
-    launcherAvatarRingWidth:
-      typeof chatUIInput.launcherAvatarRingWidth === 'number' &&
-        chatUIInput.launcherAvatarRingWidth >= 0 &&
-        chatUIInput.launcherAvatarRingWidth <= 30
-        ? Math.round(chatUIInput.launcherAvatarRingWidth)
-        : 18,
-    launcherSize:
-      typeof chatUIInput.launcherSize === 'number' && chatUIInput.launcherSize >= 32 && chatUIInput.launcherSize <= 96
-        ? Math.round(chatUIInput.launcherSize)
-        : 48,
-    launcherWhenOpen:
-      chatUIInput.launcherWhenOpen === 'close' || chatUIInput.launcherWhenOpen === 'same'
-        ? chatUIInput.launcherWhenOpen
-        : 'chevron-down',
-    chatOpenAnimation:
-      chatUIInput.chatOpenAnimation === 'fade'
-        ? 'fade'
-        : chatUIInput.chatOpenAnimation === 'expand' || chatUIInput.chatOpenAnimation === 'scale'
-          ? 'expand'
-          : 'slide-up-fade',
-    openChatOnLoad: chatUIInput.openChatOnLoad !== false,
-    showBranding: chatUIInput.showBranding !== false,
-    brandingMessage: typeof chatUIInput.brandingMessage === 'string' ? chatUIInput.brandingMessage.trim() : '',
-    showPrivacyText: chatUIInput.showPrivacyText !== false,
-    privacyText: typeof chatUIInput.privacyText === 'string' ? chatUIInput.privacyText.trim() : '',
-    liveIndicatorStyle: chatUIInput.liveIndicatorStyle === 'dot-only' ? 'dot-only' : 'label',
-    statusIndicator: chatUIInput.statusIndicator === 'live' || chatUIInput.statusIndicator === 'active' ? chatUIInput.statusIndicator as BotChatUI['statusIndicator'] : 'none',
-    statusDotStyle: chatUIInput.statusDotStyle === 'static' ? 'static' : 'blinking',
-    showScrollToBottom: chatUIInput.showScrollToBottom !== false,
-    showScrollToBottomLabel: chatUIInput.showScrollToBottomLabel !== false,
-    scrollToBottomLabel:
-      typeof chatUIInput.scrollToBottomLabel === 'string' ? chatUIInput.scrollToBottomLabel.trim() : '',
-    showScrollbar: chatUIInput.showScrollbar !== false,
-    composerAsSeparateBox: chatUIInput.composerAsSeparateBox !== false,
-    composerBorderWidth:
-      typeof chatUIInput.composerBorderWidth === 'number' &&
-        chatUIInput.composerBorderWidth >= 0 &&
-        chatUIInput.composerBorderWidth <= 6
-        ? (() => {
-          const w = Number(chatUIInput.composerBorderWidth);
-          return w > 0 && w < 0.5 ? 0.5 : Math.max(0, Math.min(6, w));
-        })()
-        : (chatUIInput as { showComposerBorder?: boolean }).showComposerBorder === false
-          ? 0
-          : 1,
-    composerBorderColor: chatUIInput.composerBorderColor === 'default' ? 'default' : 'primary',
-    showMenuExpand: chatUIInput.showMenuExpand !== false,
-    showMenuQuickLinks: chatUIInput.showMenuQuickLinks !== false,
-    menuQuickLinks: normalizeMenuQuickLinks(chatUIInput.menuQuickLinks),
-    ...(menuQuickLinksMenuIcon ? { menuQuickLinksMenuIcon } : {}),
-    showComposerWithSuggestedQuestions: chatUIInput.showComposerWithSuggestedQuestions === true,
-    showAvatarInHeader: chatUIInput.showAvatarInHeader !== false,
-    senderName: typeof chatUIInput.senderName === 'string' ? chatUIInput.senderName.trim() : '',
-    showSenderName: chatUIInput.showSenderName !== false,
-    showTime: chatUIInput.showTime !== false,
-    showCopyButton: chatUIInput.showCopyButton !== false,
-    showSources: chatUIInput.showSources !== false,
-    timePosition: timePos,
-    showEmoji: chatUIInput.showEmoji !== false,
-    allowFileUpload: chatUIInput.allowFileUpload === true,
-    showMic: chatUIInput.showMic === true,
-  };
+  const chatUI = buildNormalizedChatUI(chatUIInput);
 
-  const BEHAVIOR_PRESETS = new Set([
-    'default', 'support', 'sales', 'technical', 'marketing',
-    'consultative', 'teacher', 'empathetic', 'strict',
-  ]);
   const personalityInput = (input.personality ?? {}) as Record<string, unknown>;
-  const personality: BotPersonality = {};
-  if (typeof personalityInput.name === 'string' && personalityInput.name.trim()) personality.name = personalityInput.name.trim();
-  if (typeof personalityInput.description === 'string' && personalityInput.description.trim()) personality.description = personalityInput.description.trim();
-  if (typeof personalityInput.systemPrompt === 'string' && personalityInput.systemPrompt.trim()) personality.systemPrompt = personalityInput.systemPrompt.trim();
-  const presetVal = String(personalityInput.behaviorPreset ?? '').trim();
-  if (BEHAVIOR_PRESETS.has(presetVal)) personality.behaviorPreset = presetVal;
-  if (['friendly', 'formal', 'playful', 'technical'].includes(String(personalityInput.tone))) personality.tone = personalityInput.tone as BotPersonality['tone'];
-  if (typeof personalityInput.language === 'string' && personalityInput.language.trim()) personality.language = personalityInput.language.trim();
-  if (typeof personalityInput.thingsToAvoid === 'string' && personalityInput.thingsToAvoid.trim()) personality.thingsToAvoid = personalityInput.thingsToAvoid.trim();
+  const personality = normalizePersonalityInput(personalityInput);
   const personalityOut = Object.keys(personality).length ? personality : undefined;
 
   const configInput = (input.config ?? {}) as Record<string, unknown>;
-  const configCandidate: BotConfig = {};
-  if (typeof configInput.temperature === 'number' && configInput.temperature >= 0 && configInput.temperature <= 1) configCandidate.temperature = configInput.temperature;
-  if (typeof configInput.maxTokens === 'number' && Number.isFinite(configInput.maxTokens)) configCandidate.maxTokens = Math.max(1, Math.floor(configInput.maxTokens));
-  if (['short', 'medium', 'long'].includes(String(configInput.responseLength))) configCandidate.responseLength = configInput.responseLength as BotConfig['responseLength'];
+  const configCandidate = normalizeConfigInput(configInput);
   const config = Object.keys(configCandidate).length ? configCandidate : undefined;
 
   const visitorMultiPatch =
@@ -383,4 +443,175 @@ export function normalizeBotPayload(input: Record<string, unknown>): NormalizedB
     ...(allowedOrigins !== undefined ? { allowedOrigins } : {}),
     ...(visitorMultiPatch ?? {}),
   };
+}
+
+/**
+ * Sparse PATCH: only keys present in the request body are normalized and marked in `touched`.
+ * Omitted keys must not be written by the service (preserves existing DB values).
+ */
+export type WorkspaceBotPatchNormalized = {
+  touched: Set<string>;
+  name?: string;
+  shortDescription?: string;
+  description?: string;
+  categories?: string[];
+  imageUrl?: string;
+  avatarEmoji?: string;
+  avatarSource?: 'upload' | 'url' | 'emoji' | 'none';
+  knowledgeDescription?: string;
+  welcomeMessage?: string;
+  faqs?: Array<{ question: string; answer: string; active?: boolean }>;
+  exampleQuestions?: string[];
+  leadCapture?: BotLeadCaptureV2;
+  chatUI?: BotChatUI;
+  personality?: BotPersonality;
+  config?: BotConfig;
+  openaiApiKeyOverride?: string;
+  whisperApiKeyOverride?: string;
+  limitOverrideMessages?: number;
+  visibility?: 'public' | 'private';
+  messageLimitMode?: 'none' | 'fixed_total';
+  messageLimitTotal?: number | null;
+  messageLimitUpgradeMessage?: string | null;
+  isPublic?: boolean;
+  status?: 'draft' | 'published';
+  includeNameInKnowledge?: boolean;
+  includeTaglineInKnowledge?: boolean;
+  includeNotesInKnowledge?: boolean;
+  allowedOrigins?: AllowedOrigin[];
+  visitorMultiChatEnabled?: boolean;
+  visitorMultiChatMax?: number | null;
+};
+
+export function normalizeWorkspaceBotPatch(input: Record<string, unknown>): WorkspaceBotPatchNormalized {
+  const touched = new Set<string>();
+  for (const k of Object.keys(input)) {
+    if (WORKSPACE_PATCH_RECOGNIZED_KEYS.has(k)) touched.add(k);
+  }
+
+  const out: WorkspaceBotPatchNormalized = { touched };
+
+  if (touched.has('name')) {
+    out.name = String(input.name ?? '').trim();
+  }
+  if (touched.has('shortDescription')) {
+    const s = String(input.shortDescription ?? '').trim();
+    out.shortDescription = s || undefined;
+  }
+  if (touched.has('description')) {
+    const s = String(input.description ?? '').trim();
+    out.description = s || undefined;
+  }
+  if (touched.has('categories')) {
+    out.categories = Array.isArray(input.categories)
+      ? (input.categories as unknown[]).map((e) => String(e).trim()).filter(Boolean) as string[]
+      : [];
+  }
+  if (touched.has('imageUrl')) {
+    const s = String(input.imageUrl ?? '').trim();
+    out.imageUrl = s || undefined;
+  }
+  if (touched.has('avatarEmoji')) {
+    const s = String(input.avatarEmoji ?? '').trim();
+    out.avatarEmoji = s || undefined;
+  }
+  if (touched.has('avatarSource')) {
+    const v = String(input.avatarSource ?? '').trim();
+    if (v === 'upload' || v === 'url' || v === 'emoji' || v === 'none') {
+      out.avatarSource = v;
+    }
+  }
+  if (touched.has('knowledgeDescription')) {
+    const s = String(input.knowledgeDescription ?? '').trim();
+    out.knowledgeDescription = s || undefined;
+  }
+  if (touched.has('welcomeMessage')) {
+    const s = String(input.welcomeMessage ?? '').trim();
+    out.welcomeMessage = s || undefined;
+  }
+  if (touched.has('faqs')) {
+    out.faqs = normalizeFaqs(input.faqs);
+  }
+  if (touched.has('exampleQuestions')) {
+    out.exampleQuestions = normalizeExampleQuestions(input.exampleQuestions);
+  }
+  if (touched.has('leadCapture')) {
+    out.leadCapture = normalizeLeadCapture(input.leadCapture);
+  }
+  if (touched.has('chatUI')) {
+    const raw = input.chatUI;
+    const chatUIInput = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+    out.chatUI = buildNormalizedChatUI(chatUIInput);
+  }
+  if (touched.has('personality') && input.personality && typeof input.personality === 'object') {
+    out.personality = normalizePersonalityInput(input.personality as Record<string, unknown>);
+  }
+  if (touched.has('config') && input.config && typeof input.config === 'object') {
+    out.config = normalizeConfigInput(input.config as Record<string, unknown>);
+  }
+  if (touched.has('openaiApiKeyOverride')) {
+    const s = String(input.openaiApiKeyOverride ?? '').trim();
+    out.openaiApiKeyOverride = s || undefined;
+  }
+  if (touched.has('whisperApiKeyOverride')) {
+    const s = String(input.whisperApiKeyOverride ?? '').trim();
+    out.whisperApiKeyOverride = s || undefined;
+  }
+  if (touched.has('limitOverrideMessages')) {
+    out.limitOverrideMessages =
+      typeof input.limitOverrideMessages === 'number' && Number.isFinite(input.limitOverrideMessages)
+        ? Math.max(0, Math.floor(input.limitOverrideMessages))
+        : undefined;
+  }
+  if (touched.has('visibility')) {
+    out.visibility =
+      input.visibility === 'private' || input.visibility === 'public' ? input.visibility : undefined;
+  }
+  if (touched.has('messageLimitMode')) {
+    out.messageLimitMode =
+      input.messageLimitMode === 'none' || input.messageLimitMode === 'fixed_total'
+        ? input.messageLimitMode
+        : undefined;
+  }
+  if (touched.has('messageLimitTotal')) {
+    out.messageLimitTotal =
+      input.messageLimitTotal == null
+        ? null
+        : typeof input.messageLimitTotal === 'number' && Number.isFinite(input.messageLimitTotal)
+          ? Math.max(0, Math.floor(input.messageLimitTotal))
+          : undefined;
+  }
+  if (touched.has('messageLimitUpgradeMessage')) {
+    out.messageLimitUpgradeMessage =
+      input.messageLimitUpgradeMessage == null
+        ? null
+        : typeof input.messageLimitUpgradeMessage === 'string'
+          ? input.messageLimitUpgradeMessage.trim() || null
+          : undefined;
+  }
+  if (touched.has('isPublic')) {
+    out.isPublic = input.isPublic !== false;
+  }
+  if (touched.has('status')) {
+    out.status = input.status === 'draft' || input.status === 'published' ? input.status : undefined;
+  }
+  if (touched.has('includeNameInKnowledge')) {
+    out.includeNameInKnowledge = input.includeNameInKnowledge === true;
+  }
+  if (touched.has('includeTaglineInKnowledge')) {
+    out.includeTaglineInKnowledge = input.includeTaglineInKnowledge === true;
+  }
+  if (touched.has('includeNotesInKnowledge')) {
+    out.includeNotesInKnowledge = input.includeNotesInKnowledge !== false;
+  }
+  if (touched.has('allowedOrigins')) {
+    out.allowedOrigins = normalizeAllowedOriginsFromPayload(input) ?? [];
+  }
+  if (touched.has('visitorMultiChatEnabled')) {
+    const en = input.visitorMultiChatEnabled === true;
+    out.visitorMultiChatEnabled = en;
+    out.visitorMultiChatMax = !en ? null : normalizeVisitorMultiChatMax(input.visitorMultiChatMax);
+  }
+
+  return out;
 }

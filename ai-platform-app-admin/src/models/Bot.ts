@@ -12,7 +12,25 @@ export interface BotPersonality {
   systemPrompt?: string;
   /** Behavior preset key (default, support, sales, …). Persisted so dropdown reflects after reload. */
   behaviorPreset?: string;
-  tone?: "friendly" | "formal" | "playful" | "technical";
+  tone?:
+    | "friendly"
+    | "warm"
+    | "supportive"
+    | "empathetic"
+    | "professional"
+    | "formal"
+    | "confident"
+    | "authoritative"
+    | "casual"
+    | "conversational"
+    | "playful"
+    | "enthusiastic"
+    | "neutral"
+    | "diplomatic"
+    | "direct"
+    | "patient"
+    | "calm"
+    | "technical";
   language?: string;
   /** Things the bot should avoid (topics, behaviours). Used in behaviour context. */
   thingsToAvoid?: string;

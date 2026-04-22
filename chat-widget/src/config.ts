@@ -1,4 +1,11 @@
-import type { EmbedChatConfig, EmbedPosition, WidgetMode, WidgetStrings } from "./types";
+import type {
+  ContainedInlineSize,
+  EmbedChatConfig,
+  EmbedPosition,
+  EmbedPresentation,
+  WidgetMode,
+  WidgetStrings,
+} from "./types";
 
 
 function toNonEmptyString(value: unknown): string | undefined {
@@ -21,6 +28,39 @@ function normalizeMode(value: unknown): WidgetMode | undefined {
   return undefined;
 }
 
+function normalizePresentation(value: unknown): EmbedPresentation | undefined {
+  if (value === "contained") return "contained";
+  if (value === "floating") return "floating";
+  return undefined;
+}
+
+function parseContainedInlineSize(value: unknown): ContainedInlineSize | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const o = value as Record<string, unknown>;
+  const n = (k: string): number | undefined => {
+    const v = o[k];
+    return typeof v === "number" && Number.isFinite(v) ? Math.round(v) : undefined;
+  };
+  const collapsedWidth = n("collapsedWidth");
+  const collapsedHeight = n("collapsedHeight");
+  const expandedWidth = n("expandedWidth");
+  const expandedHeight =
+    typeof o.expandedHeight === "string" && o.expandedHeight.trim()
+      ? o.expandedHeight.trim()
+      : typeof o.expandedHeight === "number" && Number.isFinite(o.expandedHeight)
+        ? Math.round(o.expandedHeight)
+        : undefined;
+  if (
+    collapsedWidth == null &&
+    collapsedHeight == null &&
+    expandedWidth == null &&
+    expandedHeight === undefined
+  ) {
+    return undefined;
+  }
+  return { collapsedWidth, collapsedHeight, expandedWidth, expandedHeight };
+}
+
 function parseObjectConfig(input: unknown): Partial<EmbedChatConfig> {
   if (!input || typeof input !== "object") return {};
   const cfg = input as Record<string, unknown>;
@@ -36,6 +76,10 @@ function parseObjectConfig(input: unknown): Partial<EmbedChatConfig> {
     chatVisitorId: toNonEmptyString(cfg.chatVisitorId),
     authToken: toNonEmptyString(cfg.authToken),
     position: normalizePosition(cfg.position),
+    ...((): { presentation?: EmbedPresentation } => {
+      const presentation = normalizePresentation(cfg.presentation);
+      return presentation ? { presentation } : {};
+    })(),
     previewOverrides:
       cfg.previewOverrides && typeof cfg.previewOverrides === "object"
         ? (cfg.previewOverrides as EmbedChatConfig["previewOverrides"])
@@ -53,6 +97,13 @@ function parseObjectConfig(input: unknown): Partial<EmbedChatConfig> {
     ...(toNonEmptyString(cfg.locale) ? { locale: toNonEmptyString(cfg.locale) } : {}),
     ...(cfg.widgetStrings && typeof cfg.widgetStrings === "object"
       ? { widgetStrings: cfg.widgetStrings as Partial<WidgetStrings> }
+      : {}),
+    ...((): { containedInlineSize?: ContainedInlineSize } => {
+      const containedInlineSize = parseContainedInlineSize(cfg.containedInlineSize);
+      return containedInlineSize ? { containedInlineSize } : {};
+    })(),
+    ...(typeof cfg.showContainedLauncherPreview === "boolean"
+      ? { showContainedLauncherPreview: cfg.showContainedLauncherPreview }
       : {}),
   };
 }
@@ -91,6 +142,9 @@ export function normalizeEmbedConfig(input: Partial<EmbedChatConfig>): EmbedChat
         ? input.persistChatSession
         : !toNonEmptyString(input.authToken) && input.sessionPreview !== true,
     position: normalizePosition(input.position),
+    presentation: normalizePresentation(input.presentation) ?? "floating",
+    containedInlineSize: input.containedInlineSize,
+    showContainedLauncherPreview: input.showContainedLauncherPreview === true,
     previewOverrides: input.previewOverrides,
     disableRemoteConfig:
       typeof input.disableRemoteConfig === "boolean" ? input.disableRemoteConfig : undefined,

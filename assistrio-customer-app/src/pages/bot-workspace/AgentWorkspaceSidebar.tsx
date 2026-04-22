@@ -1,8 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type MouseEvent } from 'react';
 import {
   ChevronDown,
   User,
-  Brain,
   BookOpen,
   Cpu,
   MessageCircle,
@@ -17,11 +16,19 @@ import {
   MessagesSquare,
   Tags,
   SmilePlus,
+  ClipboardList,
+  Sparkles,
 } from 'lucide-react';
 import { NavLink, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { getCustomerBot } from '../../api/customerApi';
 import type { CustomerBotDetail } from '../../api/types';
 import { cn } from '@/lib/utils';
+import {
+  hasManualSaveDirty,
+  hasManualSaveDirtyExcluding,
+  hasManualSaveGuardDirty,
+} from './workspaceManualSaveGuard';
+import { useWorkspaceDiscardModal } from './WorkspaceDiscardModal';
 
 type Props = { bot?: CustomerBotDetail | null; health?: Record<string, unknown> | null };
 
@@ -100,7 +107,7 @@ function TrainingStatusCard({
     const sizePart = formatIndexedKb(indexedBytes);
     if (ago) {
       const base = `Last trained ${ago}`;
-      return sizePart ? `${base} • ${sizePart}` : base;
+      return sizePart ? `${base} · ${sizePart}` : base;
     }
     if (isTraining) return sizePart ? `Indexing documents… • ${sizePart}` : 'Indexing documents…';
     return 'No indexed documents yet';
@@ -129,7 +136,7 @@ function TrainingStatusCard({
             {!live ? 'Training status' : isTraining ? 'Training' : 'Trained'}
           </span>
         </div>
-        <p className="text-[0.75rem] font-normal leading-snug text-slate-500">{subline}</p>
+        <p className="text-xs font-normal leading-snug text-slate-500">{subline}</p>
       </div>
     </div>
   );
@@ -143,7 +150,7 @@ const navCls = (isActive: boolean) =>
 
 const subCls = (isActive: boolean) =>
   cn(
-    'group flex items-center gap-2 rounded-md py-[0.375rem] pl-2.5 pr-2 text-[0.8125rem] font-medium no-underline leading-[1.3] transition-[background-color,color] duration-150',
+    'group flex items-center gap-2 rounded-md py-[0.375rem] pl-2.5 pr-2 text-sm font-medium no-underline leading-[1.3] transition-[background-color,color] duration-150',
     isActive ? 'nav-active font-semibold' : 'text-slate-400 nav-hover',
   );
 
@@ -165,6 +172,41 @@ export function AgentWorkspaceSidebar({ bot: _bot, health }: Props) {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const base = routeBotId ? `/bots/${routeBotId}` : '';
+
+  const { requestDiscardIfNeeded, requestDiscardKnowledgeNotesIfNeeded } = useWorkspaceDiscardModal();
+
+  const guardNav = useCallback(
+    (e: MouseEvent<HTMLAnchorElement>) => {
+      if (!hasManualSaveDirty()) return;
+      e.preventDefault();
+      const href = e.currentTarget.getAttribute('href');
+      if (!href) return;
+      void (async () => {
+        if (await requestDiscardIfNeeded()) navigate(href);
+      })();
+    },
+    [navigate, requestDiscardIfNeeded],
+  );
+
+  /** Knowledge sub-routes: full discard if other sections are dirty; notes-only discard if only notes are dirty. */
+  const kbKnowledgeSubNavClick = useCallback(
+    (e: MouseEvent<HTMLAnchorElement>, to: string) => {
+      if (!hasManualSaveDirty()) return;
+      e.preventDefault();
+      void (async () => {
+        const notesDirty = hasManualSaveGuardDirty('knowledge-notes');
+        const otherDirty = hasManualSaveDirtyExcluding('knowledge-notes');
+        let ok = true;
+        if (otherDirty) {
+          ok = await requestDiscardIfNeeded();
+        } else if (notesDirty) {
+          ok = await requestDiscardKnowledgeNotesIfNeeded();
+        }
+        if (ok) navigate(to);
+      })();
+    },
+    [navigate, requestDiscardIfNeeded, requestDiscardKnowledgeNotesIfNeeded],
+  );
 
   const match = (suffix: string) => Boolean(base) && pathname.startsWith(`${base}/${suffix}`);
 
@@ -242,23 +284,35 @@ export function AgentWorkspaceSidebar({ bot: _bot, health }: Props) {
         {routeBotId ? <TrainingStatusCard health={health ?? null} botId={routeBotId} /> : null}
 
         {/* ── Playground ── */}
-        <p className="mb-2.5 ml-2.5 mt-2 text-[0.65rem] font-semibold uppercase tracking-widest text-slate-400">
+        <p className="mb-2.5 ml-2.5 mt-2 text-xs font-semibold uppercase tracking-widest text-slate-400">
           Playground
         </p>
 
         <div className="flex flex-col gap-1">
-          <NavLink to={`${base}/playground/profile`} className={({ isActive }) => navCls(isActive)}>
+          <NavLink to={`${base}/playground/profile`} onClick={guardNav} className={({ isActive }) => navCls(isActive)}>
             {({ isActive }) => <><User size={18} strokeWidth={1.75} className={iconCls(isActive)} />Profile</>}
           </NavLink>
-          <NavLink to={`${base}/playground/behavior`} className={({ isActive }) => navCls(isActive)}>
-            {({ isActive }) => <><Brain size={18} strokeWidth={1.75} className={iconCls(isActive)} />Behavior</>}
+          <NavLink to={`${base}/playground/behavior`} onClick={guardNav} className={({ isActive }) => navCls(isActive)}>
+            {({ isActive }) => <><Sparkles size={18} strokeWidth={1.75} className={iconCls(isActive)} />Behavior</>}
+          </NavLink>
+          <NavLink to={`${base}/playground/capture-leads`} onClick={guardNav} className={({ isActive }) => navCls(isActive)}>
+            {({ isActive }) => (
+              <>
+                <ClipboardList size={18} strokeWidth={1.75} className={iconCls(isActive)} />
+                Leads Capture
+              </>
+            )}
           </NavLink>
 
           {/* Knowledge Base */}
           <button type="button" className={parentBtnCls(isKnowledgeParent)} onClick={() => {
             const opening = !kbOpen;
             setKbOpen(opening);
-            if (opening && !isKnowledgeParent) navigate(`${base}/knowledge/notes`);
+            if (opening && !isKnowledgeParent) {
+              void (async () => {
+                if (await requestDiscardIfNeeded()) navigate(`${base}/knowledge/notes`);
+              })();
+            }
           }}>
             <BookOpen size={18} strokeWidth={1.75} className={iconCls(isKnowledgeParent)} />
             <span className="flex-1">Knowledge Base</span>
@@ -282,6 +336,7 @@ export function AgentWorkspaceSidebar({ bot: _bot, health }: Props) {
                 <NavLink
                   key={item.to}
                   to={item.to}
+                  onClick={(e) => kbKnowledgeSubNavClick(e, item.to)}
                   className={() => subCls(item.active)}
                   ref={(el) => { kbSubNavRefs.current[i] = el; }}
                 >
@@ -292,17 +347,27 @@ export function AgentWorkspaceSidebar({ bot: _bot, health }: Props) {
             </div>
           )}
 
-          <NavLink to={`${base}/playground/ai`} className={({ isActive }) => navCls(isActive)}>
-            {({ isActive }) => <><Cpu size={18} strokeWidth={1.75} className={iconCls(isActive)} />AI & Integrations</>}
+          <NavLink to={`${base}/playground/ai`} onClick={guardNav} className={({ isActive }) => navCls(isActive)}>
+            {({ isActive }) => <><Cpu size={18} strokeWidth={1.75} className={iconCls(isActive)} />AI & Responses</>}
           </NavLink>
-          <NavLink to={`${base}/playground/chat`} className={({ isActive }) => navCls(isActive)}>
-            {({ isActive }) => <><MessageCircle size={18} strokeWidth={1.75} className={iconCls(isActive)} />Chat</>}
+          <NavLink to={`${base}/playground/chat`} onClick={guardNav} className={({ isActive }) => navCls(isActive)}>
+            {({ isActive }) => (
+              <>
+                <MessageCircle size={18} strokeWidth={1.75} className={iconCls(isActive)} />
+                Chat Experience
+              </>
+            )}
           </NavLink>
-          <NavLink to={`${base}/playground/appearance`} className={({ isActive }) => navCls(isActive)}>
-            {({ isActive }) => <><Palette size={18} strokeWidth={1.75} className={iconCls(isActive)} />Appearance</>}
+          <NavLink to={`${base}/playground/appearance`} onClick={guardNav} className={({ isActive }) => navCls(isActive)}>
+            {({ isActive }) => (
+              <>
+                <Palette size={18} strokeWidth={1.75} className={iconCls(isActive)} />
+                Widget Appearance
+              </>
+            )}
           </NavLink>
-          <NavLink to={`${base}/playground/publish`} className={({ isActive }) => navCls(isActive)}>
-            {({ isActive }) => <><Rocket size={18} strokeWidth={1.75} className={iconCls(isActive)} />Publish</>}
+          <NavLink to={`${base}/playground/deploy`} onClick={guardNav} className={({ isActive }) => navCls(isActive)}>
+            {({ isActive }) => <><Rocket size={18} strokeWidth={1.75} className={iconCls(isActive)} />Deploy & Go Live</>}
           </NavLink>
         </div>
 
@@ -310,15 +375,15 @@ export function AgentWorkspaceSidebar({ bot: _bot, health }: Props) {
         <div className="mx-2.5 my-3" style={{ borderTop: '1px solid var(--border-soft)' }} />
 
         {/* ── Insights ── */}
-        <p className="mb-2.5 ml-2.5 mt-1 text-[0.65rem] font-semibold uppercase tracking-widest text-slate-400">
+        <p className="mb-2.5 ml-2.5 mt-1 text-xs font-semibold uppercase tracking-widest text-slate-400">
           Insights
         </p>
 
         <div className="flex flex-col gap-1">
-          <NavLink to={`${base}/activity/chat-logs`} className={({ isActive }) => navCls(isActive)}>
+          <NavLink to={`${base}/activity/chat-logs`} onClick={guardNav} className={({ isActive }) => navCls(isActive)}>
             {({ isActive }) => <><MessageSquare size={18} strokeWidth={1.75} className={iconCls(isActive)} />Conversations</>}
           </NavLink>
-          <NavLink to={`${base}/activity/leads`} className={({ isActive }) => navCls(isActive)}>
+          <NavLink to={`${base}/activity/leads`} onClick={guardNav} className={({ isActive }) => navCls(isActive)}>
             {({ isActive }) => <><UserCheck size={18} strokeWidth={1.75} className={iconCls(isActive)} />Leads</>}
           </NavLink>
 
@@ -326,7 +391,11 @@ export function AgentWorkspaceSidebar({ bot: _bot, health }: Props) {
           <button type="button" className={parentBtnCls(isAnalyticsParent)} onClick={() => {
             const opening = !analyticsOpen;
             setAnalyticsOpen(opening);
-            if (opening && !isAnalyticsParent) navigate(`${base}/analytics/chats`);
+            if (opening && !isAnalyticsParent) {
+              void (async () => {
+                if (await requestDiscardIfNeeded()) navigate(`${base}/analytics/chats`);
+              })();
+            }
           }}>
             <BarChart3 size={18} strokeWidth={1.75} className={iconCls(isAnalyticsParent)} />
             <span className="flex-1">Analytics</span>

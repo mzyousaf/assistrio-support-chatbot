@@ -203,6 +203,9 @@ export class BotChatUI {
 const BEHAVIOR_PRESET_VALUES = [
   'default', 'support', 'sales', 'technical', 'marketing',
   'consultative', 'teacher', 'empathetic', 'strict',
+  'concise', 'creative', 'research', 'executive', 'hospitality',
+  'coach', 'analyst', 'storyteller', 'startup', 'journalistic',
+  'companion', 'simplifier', 'facilitator', 'advocate', 'negotiator', 'interviewer',
 ] as const;
 
 @Schema({ _id: false })
@@ -217,7 +220,13 @@ export class BotPersonality {
   /** UI behavior preset key (e.g. default, support, sales). Persisted so dropdown reflects after reload. */
   @Prop({ enum: BEHAVIOR_PRESET_VALUES })
   behaviorPreset?: string;
-  @Prop({ enum: ['friendly', 'formal', 'playful', 'technical'] })
+  @Prop({
+    enum: [
+      'friendly', 'warm', 'supportive', 'empathetic', 'professional', 'formal',
+      'confident', 'authoritative', 'casual', 'conversational', 'playful', 'enthusiastic',
+      'neutral', 'diplomatic', 'direct', 'patient', 'calm', 'technical',
+    ],
+  })
   tone?: string;
   @Prop()
   language?: string;
@@ -286,6 +295,9 @@ export class Bot {
   avatarEmoji?: string;
   @Prop()
   imageUrl?: string;
+  /** How the workspace chose the avatar: uploaded file, external URL, emoji, or none. */
+  @Prop({ enum: ['upload', 'url', 'emoji', 'none'], default: undefined })
+  avatarSource?: 'upload' | 'url' | 'emoji' | 'none';
   @Prop()
   openaiApiKeyOverride?: string;
   /** Whisper API key for voice input when chatUI.showMic is true (e.g. OpenAI key or Whisper endpoint key). */

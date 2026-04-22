@@ -87,7 +87,16 @@ function buildBehaviorSection(behavior: ChatContextBehavior): string {
   if (behavior.personalityPreset) bits.push(`Preset: ${behavior.personalityPreset}.`);
   if (behavior.personalityDescription?.trim()) bits.push(behavior.personalityDescription.trim());
   if (behavior.thingsToAvoid?.trim()) bits.push(`Avoid: ${behavior.thingsToAvoid.trim()}.`);
-  bits.push(`Tone: ${behavior.tone || 'friendly'}. Language: ${behavior.language || 'English'}.`);
+  bits.push(`Tone: ${behavior.tone || 'friendly'}.`);
+  const langRaw = behavior.language?.trim();
+  const matchVisitor = !langRaw || langRaw.toLowerCase() === 'auto';
+  if (matchVisitor) {
+    bits.push(
+      'Match the visitor’s language: reply in the same language they use (including mixed languages if they switch).',
+    );
+  } else {
+    bits.push(`Respond in ${langRaw}.`);
+  }
   if (behavior.responseLength === 'short') bits.push('Keep replies short (1-2 sentences).');
   else if (behavior.responseLength === 'long') bits.push('Give detailed answers when appropriate.');
   let out = '\n--- Behavior ---\n' + (bits.length ? bits.join(' ') : '');

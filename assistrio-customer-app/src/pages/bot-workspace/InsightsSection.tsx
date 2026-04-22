@@ -80,7 +80,7 @@ export function InsightsSection() {
     >
       <span
         className={cn(
-          'mb-5 inline-block rounded-full px-[0.55rem] py-[0.2rem] text-[0.75rem] font-semibold',
+          'mb-5 inline-block rounded-full px-[0.55rem] py-[0.2rem] text-xs font-semibold',
           bot.status === 'published'
             ? 'bg-[var(--color-success-fill)] text-[var(--color-success-text)]'
             : 'bg-slate-100 text-slate-600',
@@ -98,31 +98,36 @@ export function InsightsSection() {
           { label: 'Last activity', value: formatWhen(activity.lastActivityAt), hint: 'Latest message or chat update', smallValue: true },
         ].map((card) => (
           <div key={card.label} className="rounded-[0.625rem] border border-slate-100 bg-white p-[1rem_1rem_0.95rem]">
-            <p className="mb-[0.35rem] mt-0 text-[0.75rem] font-semibold uppercase tracking-[0.04em] text-slate-400">
+            <p className="mb-[0.35rem] mt-0 text-xs font-semibold uppercase tracking-[0.04em] text-slate-400">
               {card.label}
             </p>
-            <p className={cn('m-0 font-semibold tracking-tight text-slate-900', card.smallValue ? 'text-base' : 'text-[1.375rem]')}>
+            <p
+              className={cn(
+                'm-0 font-semibold tracking-tight text-slate-900',
+                card.smallValue ? 'text-base' : 'text-xl',
+              )}
+            >
               {card.value}
             </p>
-            <p className="mt-[0.35rem] text-[0.75rem] leading-[1.35] text-slate-300">{card.hint}</p>
+            <p className="mt-[0.35rem] text-xs leading-snug text-slate-400">{card.hint}</p>
           </div>
         ))}
       </div>
 
       {!hasAnyActivity && (
         <div className="mt-6 rounded-[0.625rem] border border-dashed border-slate-200 bg-slate-50 p-[1.35rem_1.25rem]">
-          <p className="mb-2 mt-0 text-base font-semibold text-slate-900">No visitor activity yet</p>
-          <p className="mb-3 text-[0.9375rem] leading-[1.5] text-slate-600">
+          <p className={cn(ws.workspaceEditorSectionTitle, 'mb-2 mt-0')}>No visitor activity yet</p>
+          <p className="mb-3 text-sm leading-relaxed text-slate-600">
             When people chat with your assistant on your site or in the wild, counts will show up
             here. Add knowledge and publish when you're ready so visitors get great answers.
           </p>
           <div className="flex flex-wrap gap-3">
             {[
               [`/bots/${botId}/knowledge/documents`, 'Knowledge'],
-              [`/bots/${botId}/playground/publish`, 'Publish'],
+              [`/bots/${botId}/playground/deploy`, 'Deploy & Go Live'],
               [`/bots/${botId}/playground/chat`, 'Playground'],
             ].map(([to, label]) => (
-              <Link key={to} to={to} className="text-[0.875rem] font-semibold text-primary no-underline hover:text-[var(--teal-800)] hover:underline">
+              <Link key={to} to={to} className={cn(ws.back, 'hover:underline')}>
                 {label}
               </Link>
             ))}

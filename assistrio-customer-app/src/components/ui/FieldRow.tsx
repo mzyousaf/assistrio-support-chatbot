@@ -8,6 +8,8 @@ type Props = {
   required?: boolean;
   helperText?: ReactNode;
   labelAddon?: ReactNode;
+  /** Classes for the label + `labelAddon` row (e.g. `gap-1` to sit icons closer to the label). */
+  labelRowClassName?: string;
   error?: string | null;
   disabled?: boolean;
   disabledNote?: string;
@@ -21,6 +23,7 @@ export function FieldRow({
   required,
   helperText,
   labelAddon,
+  labelRowClassName,
   error,
   disabled,
   disabledNote,
@@ -32,7 +35,7 @@ export function FieldRow({
 
   return (
     <div className={cn('flex flex-col gap-1.5', disabled && 'opacity-[0.72]', className)}>
-      <div className="flex min-h-[1.125rem] items-center gap-2">
+      <div className={cn('flex w-full min-h-[1.125rem] items-center gap-2', labelRowClassName)}>
         <Label htmlFor={id} required={required}>
           {label}
         </Label>

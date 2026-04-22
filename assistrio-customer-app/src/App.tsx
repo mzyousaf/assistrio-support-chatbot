@@ -1,14 +1,20 @@
+import { createPortal } from 'react-dom';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { CustomerAuthProvider } from './auth/CustomerAuthContext';
 import { AppShell } from './layout/AppShell';
+import { WorkspaceDiscardModalProvider } from './pages/bot-workspace/WorkspaceDiscardModal';
 import { ProtectedRoute } from './layout/ProtectedRoute';
 import { PublicLoginRoute } from './layout/PublicLoginRoute';
 import { BotWorkspaceLayout } from './pages/bot-workspace/BotWorkspaceLayout';
-import { GoLiveSection } from './pages/bot-workspace/GoLiveSection';
+import { PublishWorkspacePage } from './pages/bot-workspace/PublishWorkspacePage';
 import { InsightsSection } from './pages/bot-workspace/InsightsSection';
-import { KnowledgeSection } from './pages/bot-workspace/KnowledgeSection';
-import { PlaygroundSection } from './pages/bot-workspace/PlaygroundSection';
+import { KnowledgeBaseWorkspacePage } from './pages/bot-workspace/KnowledgeBaseWorkspacePage';
+import { WidgetAppearanceWorkspacePage } from './pages/bot-workspace/WidgetAppearanceWorkspacePage';
+import { BehaviorWorkspacePage } from './pages/bot-workspace/BehaviorWorkspacePage';
+import { CaptureLeadsWorkspacePage } from './pages/bot-workspace/CaptureLeadsWorkspacePage';
+import { ChatExperienceWorkspacePage } from './pages/bot-workspace/ChatExperienceWorkspacePage';
 import { ProfileWorkspacePage } from './pages/bot-workspace/ProfileWorkspacePage';
+import { AiIntegrationsWorkspacePage } from './pages/bot-workspace/AiIntegrationsWorkspacePage';
 import { WorkspaceComingSoonSection } from './pages/bot-workspace/WorkspaceComingSoonSection';
 import { BotsListPage } from './pages/BotsListPage';
 import { LoginPage } from './pages/LoginPage';
@@ -24,11 +30,14 @@ import { OnboardingKnowledgeStep } from './pages/onboarding/OnboardingKnowledgeS
 import { OnboardingGate } from './pages/onboarding/OnboardingGate';
 import { OnboardingLayout } from './pages/onboarding/OnboardingLayout';
 import { PostLoginRedirect } from './routes/PostLoginRedirect';
+import { AppToaster } from './components/AppToaster';
 
 export function App() {
   return (
     <CustomerAuthProvider>
       <BrowserRouter>
+        <>
+        <WorkspaceDiscardModalProvider>
         <Routes>
           <Route
             path="/login"
@@ -85,16 +94,18 @@ export function App() {
 
               {/* ── Playground ── */}
               <Route path="playground/profile" element={<ProfileWorkspacePage />} />
-              <Route path="playground/behavior" element={<WorkspaceComingSoonSection title="Behavior" description="Tone presets, custom instructions, and conversation rules will be configured here." />} />
-              <Route path="playground/ai" element={<WorkspaceComingSoonSection title="AI & Integrations" description="Model selection, API key overrides, and third-party integrations will be managed here." />} />
-              <Route path="playground/chat" element={<PlaygroundSection />} />
-              <Route path="playground/appearance" element={<WorkspaceComingSoonSection title="Appearance" description="Widget colors, launcher style, and branding options will be configured here." />} />
-              <Route path="playground/publish" element={<GoLiveSection />} />
+              <Route path="playground/behavior" element={<BehaviorWorkspacePage />} />
+              <Route path="playground/capture-leads" element={<CaptureLeadsWorkspacePage />} />
+              <Route path="playground/ai" element={<AiIntegrationsWorkspacePage />} />
+              <Route path="playground/chat" element={<ChatExperienceWorkspacePage />} />
+              <Route path="playground/appearance" element={<WidgetAppearanceWorkspacePage />} />
+              <Route path="playground/deploy" element={<PublishWorkspacePage />} />
+              <Route path="playground/publish" element={<Navigate to="../deploy" replace />} />
 
               {/* ── Knowledge Base ── */}
-              <Route path="knowledge/notes" element={<KnowledgeSection />} />
-              <Route path="knowledge/faqs" element={<KnowledgeSection />} />
-              <Route path="knowledge/documents" element={<KnowledgeSection />} />
+              <Route path="knowledge/notes" element={<KnowledgeBaseWorkspacePage />} />
+              <Route path="knowledge/faqs" element={<KnowledgeBaseWorkspacePage />} />
+              <Route path="knowledge/documents" element={<KnowledgeBaseWorkspacePage />} />
 
               {/* ── Insights ── */}
               <Route path="activity/chat-logs" element={<WorkspaceComingSoonSection title="Conversations" description="A full conversation log with search and filters will appear here." />} />
@@ -115,6 +126,10 @@ export function App() {
           </Route>
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
+        </WorkspaceDiscardModalProvider>
+        {/* Portaled to body so toasts paint above Modal overlays (z-[300]) on document.body */}
+        {createPortal(<AppToaster />, document.body)}
+        </>
       </BrowserRouter>
     </CustomerAuthProvider>
   );
