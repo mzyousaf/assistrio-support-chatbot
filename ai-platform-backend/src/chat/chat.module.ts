@@ -20,6 +20,8 @@ import { WidgetPreviewController } from './widget-preview.controller';
 import { ChatEngineService } from './chat-engine.service';
 import { ChatService } from './chat.service';
 import { SummaryJobService } from './summary-job.service';
+import { WhisperTranscriptionService } from './whisper-transcription.service';
+import { WidgetSpeechService } from './widget-speech.service';
 
 @Module({
   imports: [
@@ -36,7 +38,7 @@ import { SummaryJobService } from './summary-job.service';
     ]),
   ],
   controllers: [ChatController, WidgetPreviewController],
-  providers: [ChatService, ChatEngineService, SummaryJobService],
-  exports: [ChatService, ChatEngineService, SummaryJobService],
+  providers: [ChatService, ChatEngineService, SummaryJobService, WhisperTranscriptionService, WidgetSpeechService],
+  exports: [ChatService, ChatEngineService, SummaryJobService, WidgetSpeechService],
 })
 export class ChatModule { }

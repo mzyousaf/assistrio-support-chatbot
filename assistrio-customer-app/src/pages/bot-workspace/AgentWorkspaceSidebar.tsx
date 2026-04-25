@@ -210,9 +210,16 @@ export function AgentWorkspaceSidebar({ bot: _bot, health }: Props) {
 
   const match = (suffix: string) => Boolean(base) && pathname.startsWith(`${base}/${suffix}`);
 
-  const isKnowledgeNotes = match('knowledge/notes') || match('knowledge/text');
-  const isKnowledgeFaqs = match('knowledge/faqs') || match('knowledge/qa');
-  const isKnowledgeDocs = match('knowledge/documents') || match('knowledge/files') || pathname === `${base}/knowledge`;
+  const isKnowledgeNotes =
+    match('playground/knowledgebase/notes') || match('knowledge/notes') || match('knowledge/text');
+  const isKnowledgeFaqs =
+    match('playground/knowledgebase/faqs') || match('knowledge/faqs') || match('knowledge/qa');
+  const isKnowledgeDocs =
+    match('playground/knowledgebase/documents') ||
+    match('knowledge/documents') ||
+    match('knowledge/files') ||
+    pathname === `${base}/knowledge` ||
+    pathname === `${base}/playground/knowledgebase`;
   const isKnowledgeParent = isKnowledgeNotes || isKnowledgeFaqs || isKnowledgeDocs;
 
   const isAnalyticsChats = match('analytics/chats');
@@ -224,9 +231,9 @@ export function AgentWorkspaceSidebar({ bot: _bot, health }: Props) {
   const [analyticsOpen, setAnalyticsOpen] = useState(isAnalyticsParent);
 
   const kbSubNav = [
-    { to: `${base}/knowledge/notes`, label: 'Notes', Icon: StickyNote, active: isKnowledgeNotes },
-    { to: `${base}/knowledge/faqs`, label: 'FAQs', Icon: HelpCircle, active: isKnowledgeFaqs },
-    { to: `${base}/knowledge/documents`, label: 'Documents', Icon: FileText, active: isKnowledgeDocs },
+    { to: `${base}/playground/knowledgebase/notes`, label: 'Notes', Icon: StickyNote, active: isKnowledgeNotes },
+    { to: `${base}/playground/knowledgebase/faqs`, label: 'FAQs', Icon: HelpCircle, active: isKnowledgeFaqs },
+    { to: `${base}/playground/knowledgebase/documents`, label: 'Documents', Icon: FileText, active: isKnowledgeDocs },
   ];
 
   const analyticsSubNav = [
@@ -310,7 +317,7 @@ export function AgentWorkspaceSidebar({ bot: _bot, health }: Props) {
             setKbOpen(opening);
             if (opening && !isKnowledgeParent) {
               void (async () => {
-                if (await requestDiscardIfNeeded()) navigate(`${base}/knowledge/notes`);
+                if (await requestDiscardIfNeeded()) navigate(`${base}/playground/knowledgebase/notes`);
               })();
             }
           }}>
@@ -348,7 +355,7 @@ export function AgentWorkspaceSidebar({ bot: _bot, health }: Props) {
           )}
 
           <NavLink to={`${base}/playground/ai`} onClick={guardNav} className={({ isActive }) => navCls(isActive)}>
-            {({ isActive }) => <><Cpu size={18} strokeWidth={1.75} className={iconCls(isActive)} />AI & Responses</>}
+            {({ isActive }) => <><Cpu size={18} strokeWidth={1.75} className={iconCls(isActive)} />AI & Advanced</>}
           </NavLink>
           <NavLink to={`${base}/playground/chat`} onClick={guardNav} className={({ isActive }) => navCls(isActive)}>
             {({ isActive }) => (
@@ -380,7 +387,7 @@ export function AgentWorkspaceSidebar({ bot: _bot, health }: Props) {
         </p>
 
         <div className="flex flex-col gap-1">
-          <NavLink to={`${base}/activity/chat-logs`} onClick={guardNav} className={({ isActive }) => navCls(isActive)}>
+          <NavLink to={`${base}/insights/conversations`} onClick={guardNav} className={({ isActive }) => navCls(isActive)}>
             {({ isActive }) => <><MessageSquare size={18} strokeWidth={1.75} className={iconCls(isActive)} />Conversations</>}
           </NavLink>
           <NavLink to={`${base}/activity/leads`} onClick={guardNav} className={({ isActive }) => navCls(isActive)}>

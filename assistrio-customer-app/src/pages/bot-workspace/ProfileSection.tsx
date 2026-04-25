@@ -26,6 +26,7 @@ import { useBotWorkspace } from './BotWorkspaceContext';
 import { useCustomerWidgetPreview } from './CustomerWidgetPreviewContext';
 import { registerManualSaveGuard } from './workspaceManualSaveGuard';
 import { Button, Card, CardBody, Checkbox, FieldRow, Input, Modal, Textarea, Tooltip } from '@/components/ui';
+import { BOT_FIELD_MAX, clampStr } from '@/lib/botFieldLimits';
 import { cn } from '@/lib/utils';
 import {
   clampAvatarEmojiInput,
@@ -122,9 +123,9 @@ export function ProfileSection() {
   const discardProfile = useCallback(() => {
     if (!bot) return;
     const b = bot as BotWithExtras;
-    setName(String(b.name ?? ''));
-    setTagline(String(b.shortDescription ?? ''));
-    setDescription(String(b.description ?? ''));
+    setName(clampStr(String(b.name ?? ''), BOT_FIELD_MAX.name));
+    setTagline(clampStr(String(b.shortDescription ?? ''), BOT_FIELD_MAX.shortDescription));
+    setDescription(clampStr(String(b.description ?? ''), BOT_FIELD_MAX.description));
     setIncludeNameInKnowledge(b.includeNameInKnowledge === true);
     applySavedBotAvatarFields(b);
     setDirty(false);
@@ -547,8 +548,9 @@ export function ProfileSection() {
                         quiet
                         value={name}
                         placeholder="e.g. Support Agent"
+                        maxLength={BOT_FIELD_MAX.name}
                         onChange={(e) => {
-                          setName(e.target.value);
+                          setName(e.target.value.slice(0, BOT_FIELD_MAX.name));
                           markDirty();
                         }}
                         required
@@ -561,8 +563,9 @@ export function ProfileSection() {
                         quiet
                         value={tagline}
                         placeholder="Instant answers to your questions"
+                        maxLength={BOT_FIELD_MAX.shortDescription}
                         onChange={(e) => {
-                          setTagline(e.target.value);
+                          setTagline(e.target.value.slice(0, BOT_FIELD_MAX.shortDescription));
                           markDirty();
                         }}
                       />
@@ -621,8 +624,9 @@ export function ProfileSection() {
                           ws.workspaceEditorControlInput,
                           'min-h-[6.5rem] resize-y border-slate-200/90 py-2.5',
                         )}
+                        maxLength={BOT_FIELD_MAX.description}
                         onChange={(e) => {
-                          setDescription(e.target.value);
+                          setDescription(e.target.value.slice(0, BOT_FIELD_MAX.description));
                           markDirty();
                         }}
                       />

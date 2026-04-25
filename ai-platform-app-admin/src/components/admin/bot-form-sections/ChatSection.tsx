@@ -10,13 +10,14 @@ import {
   SettingsToggleRow,
 } from "@/components/admin/settings";
 import { Input } from "@/components/ui/Input";
-import type { ChatStatusIndicator, ChatTimePosition, LiveIndicatorStyle } from "@/models/Bot";
+import { BOT_FIELD_MAX } from "@/lib/botFieldLimits";
+import type { ChatStatusIndicator, LiveIndicatorStyle } from "@/models/Bot";
 
 import { useBotFormEditor } from "./BotFormEditorContext";
 import { TAB_CONTENT_CLASS, TAB_META } from "./botFormUiConstants";
 
 export function ChatSection() {
-  const { name, chatUI, setChatUI } = useBotFormEditor();
+  const { chatUI, setChatUI } = useBotFormEditor();
 
   return (
     <div className={TAB_CONTENT_CLASS}>
@@ -26,50 +27,9 @@ export function ChatSection() {
           />
           <SettingsSectionCard
             title="Input Tools"
-            description="Configure the input methods available in the chat composer."
+            description="Suggested questions and composer visibility. Attachments and voice are under Integrations & AI."
           >
             <div className="space-y-3">
-              <SettingsToggleRow
-                label="Allow file uploads in chat"
-                htmlFor="allow-file-upload"
-                helperText="Let users attach files in the composer."
-                control={
-                  <input
-                    id="allow-file-upload"
-                    type="checkbox"
-                    checked={chatUI.allowFileUpload === true}
-                    onChange={(e) => setChatUI((prev) => ({ ...prev, allowFileUpload: e.target.checked }))}
-                    className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500 dark:border-gray-600 dark:bg-gray-800"
-                  />
-                }
-              />
-              <SettingsToggleRow
-                label="Show mic button"
-                htmlFor="show-mic"
-                helperText="Voice input also requires Whisper configuration in Integrations & AI."
-                control={
-                  <input
-                    id="show-mic"
-                    type="checkbox"
-                    checked={chatUI.showMic === true}
-                    onChange={(e) => setChatUI((prev) => ({ ...prev, showMic: e.target.checked }))}
-                    className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500 dark:border-gray-600 dark:bg-gray-800"
-                  />
-                }
-              />
-              <SettingsToggleRow
-                label="Show emoji picker in composer"
-                htmlFor="show-emoji"
-                control={
-                  <input
-                    id="show-emoji"
-                    type="checkbox"
-                    checked={chatUI.showEmoji !== false}
-                    onChange={(e) => setChatUI((prev) => ({ ...prev, showEmoji: e.target.checked }))}
-                    className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500 dark:border-gray-600 dark:bg-gray-800"
-                  />
-                }
-              />
               <SettingsToggleRow
                 label="Show chat input with suggested questions"
                 htmlFor="show-composer-suggested"
@@ -89,8 +49,8 @@ export function ChatSection() {
           </SettingsSectionCard>
 
           <SettingsSectionCard
-            title="Message Features"
-            description="Control actions and metadata on chat messages."
+            title="Message features"
+            description="Copy on replies, feedback, and how visitor text and voice bubbles appear in the widget."
           >
             <div className="space-y-4">
               <div className="space-y-3">
@@ -108,98 +68,74 @@ export function ChatSection() {
                   }
                 />
                 <SettingsToggleRow
-                  label="Show sources"
-                  htmlFor="show-sources"
+                  label="Show thumbs up / down on replies"
+                  htmlFor="show-message-feedback"
+                  helperText="Sends anonymous feedback events to analytics (message id, conversation id, rating)."
                   control={
                     <input
-                      id="show-sources"
+                      id="show-message-feedback"
                       type="checkbox"
-                      checked={chatUI.showSources !== false}
-                      onChange={(e) => setChatUI((prev) => ({ ...prev, showSources: e.target.checked }))}
+                      checked={chatUI.showMessageFeedback !== false}
+                      onChange={(e) => setChatUI((prev) => ({ ...prev, showMessageFeedback: e.target.checked }))}
                       className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500 dark:border-gray-600 dark:bg-gray-800"
                     />
                   }
                 />
-                <SettingsToggleRow
-                  label="Show sender/assistant name"
-                  htmlFor="show-sender-name"
-                  control={
-                    <input
-                      id="show-sender-name"
-                      type="checkbox"
-                      checked={chatUI.showSenderName !== false}
-                      onChange={(e) => setChatUI((prev) => ({ ...prev, showSenderName: e.target.checked }))}
-                      className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500 dark:border-gray-600 dark:bg-gray-800"
-                    />
-                  }
-                />
-                <SettingsToggleRow
-                  label="Show message time"
-                  htmlFor="show-time"
-                  control={
-                    <input
-                      id="show-time"
-                      type="checkbox"
-                      checked={chatUI.showTime !== false}
-                      onChange={(e) => setChatUI((prev) => ({ ...prev, showTime: e.target.checked }))}
-                      className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500 dark:border-gray-600 dark:bg-gray-800"
-                    />
-                  }
-                />
-              </div>
-              {chatUI.showTime !== false ? (
-                <SettingsFieldRow label="Time position" htmlFor="time-position">
+                <SettingsFieldRow
+                  label="Visitor text message bubbles"
+                  htmlFor="admin-user-text-bubble-style"
+                  helperText="Typed user messages only. Brand color uses brand fill; default uses neutral thread styling."
+                >
                   <select
-                    id="time-position"
-                    value={chatUI.timePosition ?? "top"}
-                    onChange={(e) =>
-                      setChatUI((prev) => ({ ...prev, timePosition: e.target.value as ChatTimePosition }))
+                    id="admin-user-text-bubble-style"
+                    value={
+                      chatUI.userTextBubbleStyle === "default"
+                        ? "default"
+                        : chatUI.userTextBubbleStyle === "defaultDark"
+                          ? "defaultDark"
+                          : "primary"
                     }
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-400/40 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+                    onChange={(e) =>
+                      setChatUI((prev) => ({
+                        ...prev,
+                        userTextBubbleStyle: e.target.value as "primary" | "default" | "defaultDark",
+                      }))
+                    }
+                    className="w-full max-w-md rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-400/40 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
                   >
-                    <option value="top">Top (above message)</option>
-                    <option value="bottom">Bottom (assistant right, user left)</option>
+                    <option value="primary">Brand color</option>
+                    <option value="default">Default (neutral)</option>
+                    <option value="defaultDark">Default (dark)</option>
                   </select>
                 </SettingsFieldRow>
-              ) : (
                 <SettingsFieldRow
-                  label="Time position"
-                  htmlFor="time-position-disabled"
-                  disabled
-                  dependencyNote="Enable message time above to configure."
+                  label="Visitor voice message bubbles"
+                  htmlFor="admin-user-voice-bubble-style"
+                  helperText="Voice messages only. Brand color uses a brand-filled bubble; default is neutral with the standard waveform."
                 >
                   <select
-                    id="time-position-disabled"
-                    disabled
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-500"
+                    id="admin-user-voice-bubble-style"
+                    value={
+                      chatUI.userVoiceBubbleStyle === "default"
+                        ? "default"
+                        : chatUI.userVoiceBubbleStyle === "defaultDark"
+                          ? "defaultDark"
+                          : "primary"
+                    }
+                    onChange={(e) =>
+                      setChatUI((prev) => ({
+                        ...prev,
+                        userVoiceBubbleStyle: e.target.value as "primary" | "default" | "defaultDark",
+                      }))
+                    }
+                    className="w-full max-w-md rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-400/40 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
                   >
-                    <option>—</option>
+                    <option value="primary">Brand color</option>
+                    <option value="default">Default (neutral)</option>
+                    <option value="defaultDark">Default (dark)</option>
                   </select>
                 </SettingsFieldRow>
-              )}
-              {chatUI.showSenderName !== false ? (
-                <SettingsFieldRow
-                  label="Sender / assistant custom name"
-                  htmlFor="sender-name"
-                  helperText="Displayed above assistant messages when names are shown."
-                >
-                  <Input
-                    id="sender-name"
-                    value={chatUI.senderName ?? ""}
-                    onChange={(e) => setChatUI((prev) => ({ ...prev, senderName: e.target.value || undefined }))}
-                    placeholder={name ? `${name} - AI` : "Bot Name - AI"}
-                  />
-                </SettingsFieldRow>
-              ) : (
-                <SettingsFieldRow
-                  label="Sender / assistant custom name"
-                  htmlFor="sender-name-disabled"
-                  disabled
-                  dependencyNote="Enable showing sender/assistant name to configure this setting."
-                >
-                  <Input id="sender-name-disabled" value="" disabled placeholder="Custom name" className="opacity-60" />
-                </SettingsFieldRow>
-              )}
+              </div>
             </div>
           </SettingsSectionCard>
 
@@ -354,8 +290,12 @@ export function ChatSection() {
                       <Input
                         id="scroll-to-bottom-label-text"
                         value={chatUI.scrollToBottomLabel ?? ""}
+                        maxLength={BOT_FIELD_MAX.scrollToBottomLabel}
                         onChange={(e) =>
-                          setChatUI((prev) => ({ ...prev, scrollToBottomLabel: e.target.value }))
+                          setChatUI((prev) => ({
+                            ...prev,
+                            scrollToBottomLabel: e.target.value.slice(0, BOT_FIELD_MAX.scrollToBottomLabel),
+                          }))
                         }
                         placeholder="Scroll to latest"
                         className="w-full max-w-md"
@@ -367,7 +307,7 @@ export function ChatSection() {
                 <SettingsToggleRow
                   label="Message list scrollbar"
                   htmlFor="show-scrollbar"
-                  helperText="When on, a slim scrollbar uses your primary color. When off, the bar is hidden (still scrollable)."
+                  helperText="When on, a slim scrollbar is shown. When off, the bar is hidden (still scrollable)."
                   control={
                     <input
                       id="show-scrollbar"
@@ -378,6 +318,61 @@ export function ChatSection() {
                     />
                   }
                 />
+                <SettingsFieldRow
+                  label="Message list scrollbar"
+                  htmlFor="scroll-chrome-style"
+                  helperText="Thumb color when the transcript scrollbar is visible."
+                >
+                  <select
+                    id="scroll-chrome-style"
+                    value={(() => {
+                      const s = chatUI.scrollChromeStyle;
+                      if (s === 'default' || s === 'defaultDark' || s === 'primary') return s;
+                      if (s === 'gray') return 'defaultDark';
+                      return chatUI.scrollChromeUsesPrimary === false ? 'default' : 'primary';
+                    })()}
+                    onChange={(e) =>
+                      setChatUI((prev) => ({
+                        ...prev,
+                        scrollChromeStyle: e.target.value as 'default' | 'defaultDark' | 'primary',
+                      }))
+                    }
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-400/40 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+                  >
+                    <option value="default">Default</option>
+                    <option value="defaultDark">Default (dark)</option>
+                    <option value="primary">Brand color</option>
+                  </select>
+                </SettingsFieldRow>
+                <SettingsFieldRow
+                  label="Scroll to latest button"
+                  htmlFor="scroll-to-bottom-chrome-style"
+                  helperText="Floating button when the visitor scrolls up."
+                >
+                  <select
+                    id="scroll-to-bottom-chrome-style"
+                    value={(() => {
+                      const s = chatUI.scrollToBottomChromeStyle;
+                      if (s === 'default' || s === 'defaultDark' || s === 'primary') return s;
+                      if (s === 'gray') return 'defaultDark';
+                      const sb = chatUI.scrollChromeStyle;
+                      if (sb === 'default' || sb === 'defaultDark' || sb === 'primary') return sb;
+                      if (sb === 'gray') return 'defaultDark';
+                      return chatUI.scrollChromeUsesPrimary === false ? 'default' : 'primary';
+                    })()}
+                    onChange={(e) =>
+                      setChatUI((prev) => ({
+                        ...prev,
+                        scrollToBottomChromeStyle: e.target.value as 'default' | 'defaultDark' | 'primary',
+                      }))
+                    }
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-400/40 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+                  >
+                    <option value="default">Default</option>
+                    <option value="defaultDark">Default (dark)</option>
+                    <option value="primary">Brand color</option>
+                  </select>
+                </SettingsFieldRow>
                 <SettingsToggleRow
                   label="Expand chat in menu"
                   htmlFor="show-menu-expand"

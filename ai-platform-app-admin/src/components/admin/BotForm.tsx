@@ -12,6 +12,7 @@ import { useDebouncedDirtyNotify } from "@/hooks/useDebouncedDirtyNotify";
 import { useJsonSnapshot } from "@/hooks/useJsonSnapshot";
 import { useUser } from "@/hooks/useUser";
 import { apiFetch } from "@/lib/api";
+import { BOT_FIELD_MAX, clampStr } from "@/lib/botFieldLimits";
 import { ADMIN_API_BOTS, ADMIN_API_UPLOAD } from "@/lib/internal-operator-api";
 import { normalizeLeadCapture } from "@/lib/leadCapture";
 import { normalizeVisitorMultiChatMax } from "@/lib/visitorMultiChatMax";
@@ -108,10 +109,14 @@ export default function BotForm({
     });
   }, [maxAllowedOrigins]);
 
-  const [name, setName] = useState(initialBot?.name ?? "");
-  const [shortDescription, setShortDescription] = useState(initialBot?.shortDescription ?? "");
+  const [name, setName] = useState(() => clampStr(initialBot?.name ?? "", BOT_FIELD_MAX.name));
+  const [shortDescription, setShortDescription] = useState(() =>
+    clampStr(initialBot?.shortDescription ?? "", BOT_FIELD_MAX.shortDescription),
+  );
   const [includeNameInKnowledge, setIncludeNameInKnowledge] = useState(initialBot?.includeNameInKnowledge ?? false);
-  const [description, setDescription] = useState(initialBot?.description ?? "");
+  const [description, setDescription] = useState(() =>
+    clampStr(initialBot?.description ?? "", BOT_FIELD_MAX.description),
+  );
   const [isPublic, setIsPublic] = useState(initialBot?.isPublic ?? true);
   const [visibility, setVisibility] = useState<"public" | "private">(
     initialBot?.visibility === "private" ? "private" : "public",
@@ -152,7 +157,9 @@ export default function BotForm({
   );
   const [thingsToAvoid, setThingsToAvoid] = useState(initialBot?.personality?.thingsToAvoid ?? "");
   const [welcomeMessageEnabled, setWelcomeMessageEnabled] = useState(
-    Boolean((initialBot?.welcomeMessage ?? "").trim()),
+    initialBot?.welcomeMessageEnabled === false
+      ? false
+      : Boolean((initialBot?.welcomeMessage ?? "").trim()),
   );
   const [welcomeMessage, setWelcomeMessage] = useState(
     (initialBot?.welcomeMessage ?? "").trim() || "",
@@ -184,7 +191,9 @@ export default function BotForm({
       el.setSelectionRange(newPos, newPos);
     });
   }
-  const [knowledgeDescription, setKnowledgeDescription] = useState(initialBot?.knowledgeDescription ?? "");
+  const [knowledgeDescription, setKnowledgeDescription] = useState(() =>
+    clampStr(initialBot?.knowledgeDescription ?? "", BOT_FIELD_MAX.knowledgeDescription),
+  );
   const [includeNotesInKnowledge, setIncludeNotesInKnowledge] = useState(initialBot?.includeNotesInKnowledge ?? true);
   const [faqs, setFaqs] = useState<BotFaq[]>(initialBot?.faqs ?? []);
   const [faqAutoRefreshToken, setFaqAutoRefreshToken] = useState<number>(0);
@@ -231,15 +240,27 @@ export default function BotForm({
   const [leadCapture, setLeadCapture] = useState<BotLeadCaptureV2>(() =>
     normalizeLeadCapture(initialBot?.leadCapture),
   );
-  const [chatUI, setChatUI] = useState<BotChatUI>(
-    initialBot?.chatUI ?? {
-      primaryColor: "#14B8A6",
-      backgroundStyle: "light",
-      bubbleBorderRadius: 20,
-      launcherPosition: "bottom-right",
-      showBranding: true,
-    },
-  );
+  const [chatUI, setChatUI] = useState<BotChatUI>(() => {
+    const base =
+      initialBot?.chatUI ?? {
+        primaryColor: "#14B8A6",
+        backgroundStyle: "light",
+        bubbleBorderRadius: 20,
+        launcherPosition: "bottom-right",
+        showBranding: true,
+      };
+    return {
+      ...base,
+      brandingMessage: clampStr(
+        (base.brandingMessage ?? "").trim(),
+        BOT_FIELD_MAX.brandingMessage,
+      ),
+      privacyText: (() => {
+        const t = (base.privacyText ?? "").trim();
+        return t ? clampStr(t, BOT_FIELD_MAX.privacyText) : undefined;
+      })(),
+    };
+  });
 
   useEffect(() => {
     const source = initialBot?.leadCapture as Record<string, unknown> | undefined;
@@ -428,7 +449,8 @@ export default function BotForm({
       categories: customCategory.trim().length > 0 ? [customCategory.trim().toLowerCase()] : categories,
       imageUrl: finalImageUrl,
       avatarEmoji: avatarEmoji.trim() || undefined,
-      welcomeMessage: welcomeMessageEnabled ? (welcomeMessage.trim() || undefined) : undefined,
+      welcomeMessage: welcomeMessage.trim() || undefined,
+      welcomeMessageEnabled,
       knowledgeDescription: knowledgeDescription.trim() || undefined,
       faqs,
       exampleQuestions: exampleQuestions.map((q) => q.trim()).filter(Boolean).slice(0, EXAMPLE_QUESTIONS_MAX),
@@ -774,14 +796,18 @@ export default function BotForm({
   const dirty = useMemo(() => {
     if (!initialBot) return false;
     const initial = initialBot;
+    const initialWelcomeOn =
+      initial.welcomeMessageEnabled === false
+        ? false
+        : Boolean((initial.welcomeMessage ?? "").trim());
     return (
       (name || "") !== (initial.name || "") ||
       (shortDescription || "") !== (initial.shortDescription || "") ||
       includeNameInKnowledge !== (initial.includeNameInKnowledge ?? false) ||
       (description || "") !== (initial.description || "") ||
       includeNotesInKnowledge !== (initial.includeNotesInKnowledge ?? true) ||
-      welcomeMessageEnabled !== Boolean((initial.welcomeMessage ?? "").trim()) ||
-      (welcomeMessageEnabled && (welcomeMessage || "") !== (initial.welcomeMessage || "")) ||
+      welcomeMessageEnabled !== initialWelcomeOn ||
+      (welcomeMessage || "").trim() !== (initial.welcomeMessage ?? "").trim() ||
       (knowledgeDescription || "") !== (initial.knowledgeDescription || "") ||
       (behaviorText || "") !== ((initial.personality?.description ?? initial.personality?.systemPrompt) || "") ||
       (behaviorPreset || "default") !== (initial.personality?.behaviorPreset ?? "default") ||
@@ -876,7 +902,8 @@ export default function BotForm({
       avatarEmoji: avatarEmoji.trim() || undefined,
       tagline: shortDescription.trim() || undefined,
       description: description.trim() || undefined,
-      welcomeMessage: welcomeMessageEnabled ? welcomeMessage.trim() || undefined : undefined,
+      welcomeMessage: welcomeMessage.trim() || undefined,
+      welcomeMessageEnabled,
       suggestedQuestions: exampleQuestions.map((q) => q.trim()).filter(Boolean).slice(0, EXAMPLE_QUESTIONS_MAX),
       brandingMessage: chatUI.brandingMessage ?? DEFAULT_CHAT_UI.brandingMessage,
       privacyText:
@@ -1254,7 +1281,8 @@ export default function BotForm({
             id="knowledge-description"
             rows={12}
             value={knowledgeNotesDraft}
-            onChange={(e) => setKnowledgeNotesDraft(e.target.value)}
+            maxLength={BOT_FIELD_MAX.knowledgeDescription}
+            onChange={(e) => setKnowledgeNotesDraft(e.target.value.slice(0, BOT_FIELD_MAX.knowledgeDescription))}
             className="w-full min-h-[14rem] resize-y"
             placeholder="Describe the scope of this bot's knowledge for other admins…"
           />

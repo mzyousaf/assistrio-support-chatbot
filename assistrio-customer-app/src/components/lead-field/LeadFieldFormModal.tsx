@@ -10,6 +10,7 @@ import {
   type LeadFieldTypeOption,
 } from './types';
 import { validateLeadFieldForm, type LeadFieldFormErrors } from './validateLeadFieldForm';
+import { BOT_FIELD_MAX } from '@/lib/botFieldLimits';
 import { uniqueLeadFieldKey } from '@/lib/leadFieldKey';
 
 export type LeadFieldFormModalProps = {
@@ -77,7 +78,7 @@ export function LeadFieldFormModal({
   idPrefix = 'lead-field',
   labelAndTypeReadOnly = false,
   requiredReadOnly = false,
-  labelMaxLength = 80,
+  labelMaxLength = BOT_FIELD_MAX.leadFieldLabel,
   size = 'lg',
   className,
 }: LeadFieldFormModalProps) {
@@ -185,9 +186,15 @@ export function LeadFieldFormModal({
             htmlFor={`${idPrefix}-label`}
             required
             className="gap-1.5"
-            labelRowClassName="gap-1"
+            labelRowClassName="w-full min-w-0 gap-1"
             labelAddon={
-              <FieldLabelInfo content={text.labelHelper} ariaLabel={`About ${text.labelLabel}`} />
+              <>
+                <FieldLabelInfo content={text.labelHelper} ariaLabel={`About ${text.labelLabel}`} />
+                <span
+                  className="ml-auto shrink-0 text-xs text-slate-500 tabular-nums"
+                  aria-live="polite"
+                >{`${values.label.length}/${labelMaxLength}`}</span>
+              </>
             }
             error={errors.label}
           >
@@ -201,7 +208,8 @@ export function LeadFieldFormModal({
                 value={values.label}
                 maxLength={labelMaxLength}
                 onChange={(e) => {
-                  setValues((s) => ({ ...s, label: e.target.value }));
+                  const next = e.target.value.slice(0, labelMaxLength);
+                  setValues((s) => ({ ...s, label: next }));
                   if (errors.label) setErrors((er) => ({ ...er, label: undefined }));
                 }}
                 placeholder="e.g. Company name"

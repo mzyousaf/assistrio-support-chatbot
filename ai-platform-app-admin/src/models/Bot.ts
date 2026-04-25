@@ -112,6 +112,8 @@ export interface BotChatUI {
   shadowIntensity?: ChatShadowIntensity;
   /** When true, show a border around the chat panel using primary color (default true). */
   showChatBorder?: boolean;
+  /** Panel outline: neutral gray vs brand when border is shown (default `primary`). */
+  chatPanelBorderColor?: "default" | "primary";
   /** Chat panel border width in px (0–5). 0 = no visible border. Default 1. */
   chatPanelBorderWidth?: number;
   /** Launcher icon: default, bot avatar with background, or custom upload (default "default") */
@@ -148,12 +150,24 @@ export interface BotChatUI {
   scrollToBottomLabel?: string;
   /** Show scrollbar in message area (default true). When false, scrollbar is hidden but content still scrolls. */
   showScrollbar?: boolean;
+  /** Message list scrollbar thumb. */
+  scrollChromeStyle?: "default" | "defaultDark" | "primary";
+  /** Floating scroll-to-latest button (defaults to scrollbar style when omitted). */
+  scrollToBottomChromeStyle?: "default" | "defaultDark" | "primary";
+  /** @deprecated Use scrollChromeStyle. */
+  scrollChromeUsesPrimary?: boolean;
   /** When true, message input is a separate box (border-top + bg). When false, no border and no bg (default true). */
   composerAsSeparateBox?: boolean;
   /** Message input border width in px. 0 = default 1px; 0.5–6 = custom (min 0.5). Focus = width × 1.5. Default 1. */
   composerBorderWidth?: number;
-  /** When composerBorderWidth >= 0.5: "default" = gray border, "primary" = primary color. Default "primary". */
+  /** When composerBorderWidth >= 0.5: "default" = gray border, "primary" = brand color. Default "primary". */
   composerBorderColor?: "default" | "primary";
+  /** Send + voice (waveform) buttons: brand fill, neutral, or dark chip. */
+  composerControlStyle?: "brand" | "default" | "defaultDark";
+  /** @deprecated Use composerControlStyle. */
+  composerControlsUsePrimary?: boolean;
+  /** Live recording level meter in the composer. */
+  speechRecordingWaveStyle?: "brand" | "default" | "defaultDark";
   /** Show "Expand chat" option in header menu (default true) */
   showMenuExpand?: boolean;
   /** When false, hide the quick links menu in the chat header (default true). */
@@ -166,24 +180,30 @@ export interface BotChatUI {
   showComposerWithSuggestedQuestions?: boolean;
   /** Show bot avatar in chat header (default true) */
   showAvatarInHeader?: boolean;
-  /** Display name for assistant/sender (e.g. "Bot Name - AI"). Empty = use bot name + " - AI". */
+  /** @deprecated Stored on legacy bots; widget no longer shows in-thread. */
   senderName?: string;
-  /** Show sender/assistant name above messages (default true) */
+  /** @deprecated Stored on legacy bots; widget no longer shows in-thread. */
   showSenderName?: boolean;
-  /** Show message time in metadata (default true) */
+  /** @deprecated Stored on legacy bots; widget no longer shows in-thread. */
   showTime?: boolean;
   /** Show copy button on assistant messages (default true) */
   showCopyButton?: boolean;
-  /** Show sources on assistant messages (default true) */
+  /** Thumbs up/down on assistant replies (default true). */
+  showMessageFeedback?: boolean;
+  /** Visitor text bubbles: primary, neutral, or black (default primary). */
+  userTextBubbleStyle?: "primary" | "default" | "defaultDark";
+  /** Visitor voice bubbles: primary, neutral, or black (default primary). */
+  userVoiceBubbleStyle?: "primary" | "default" | "defaultDark";
+  /** When true, workspace preview may show citation sources; live embed does not. */
   showSources?: boolean;
   /** Where to show time: top (above message) or bottom (assistant=right, user=left) */
   timePosition?: ChatTimePosition;
-  /** Show emoji picker in composer (default true) */
-  showEmoji?: boolean;
   /** Allow file uploads in chat (Integration; consumes more GPT) */
   allowFileUpload?: boolean;
-  /** Show mic button; when true, Whisper API key required in Integrations */
+  /** Dictate / microphone control in the composer */
   showMic?: boolean;
+  /** Voice (waveform) control; legacy documents may omit (treated like showMic) */
+  showVoice?: boolean;
 }
 
 export interface BotAllowedOrigin {
@@ -220,6 +240,8 @@ export interface BotDocument {
   clientDraftId?: string;
   status?: "draft" | "published";
   welcomeMessage?: string;
+  /** When false, welcome text is stored but not shown in the widget. */
+  welcomeMessageEnabled?: boolean;
   leadCapture?: BotLeadCaptureV2;
   chatUI?: BotChatUI;
   description?: string;

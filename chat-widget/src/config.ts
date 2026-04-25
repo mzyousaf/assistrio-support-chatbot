@@ -145,6 +145,8 @@ export function normalizeEmbedConfig(input: Partial<EmbedChatConfig>): EmbedChat
     presentation: normalizePresentation(input.presentation) ?? "floating",
     containedInlineSize: input.containedInlineSize,
     showContainedLauncherPreview: input.showContainedLauncherPreview === true,
+    onContainedPanelExpandChange:
+      typeof input.onContainedPanelExpandChange === "function" ? input.onContainedPanelExpandChange : undefined,
     previewOverrides: input.previewOverrides,
     disableRemoteConfig:
       typeof input.disableRemoteConfig === "boolean" ? input.disableRemoteConfig : undefined,

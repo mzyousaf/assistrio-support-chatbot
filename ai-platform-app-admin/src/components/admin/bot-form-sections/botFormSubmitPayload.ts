@@ -15,6 +15,7 @@ export interface BotFormSubmitPayload {
   imageUrl?: string;
   avatarEmoji?: string;
   welcomeMessage?: string;
+  welcomeMessageEnabled?: boolean;
   knowledgeDescription?: string;
   faqs: BotFaq[];
   exampleQuestions?: string[];

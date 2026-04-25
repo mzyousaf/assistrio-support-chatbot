@@ -17,6 +17,8 @@ const VISITOR_EVENT_TYPES: VisitorEventType[] = [
   'website_register_succeeded',
   'widget_runtime_opened',
   'quota_viewed',
+  'assistant_message_feedback',
+  'widget_speech_completed',
 ];
 
 export interface TrackAnalyticsPayload {

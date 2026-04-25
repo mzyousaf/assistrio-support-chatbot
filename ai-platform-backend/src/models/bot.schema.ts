@@ -90,6 +90,9 @@ export class BotChatUI {
   shadowIntensity?: 'none' | 'low' | 'medium' | 'high';
   @Prop({ default: true })
   showChatBorder?: boolean;
+  /** Panel outline: neutral gray vs brand when border is shown (default `primary`). */
+  @Prop({ enum: ['default', 'primary'], default: 'primary' })
+  chatPanelBorderColor?: 'default' | 'primary';
   @Prop({ enum: ['default', 'bot-avatar', 'custom'], default: 'default' })
   launcherIcon?: 'default' | 'bot-avatar' | 'custom';
   @Prop({ default: '' })
@@ -109,6 +112,15 @@ export class BotChatUI {
   composerBorderWidth?: number;
   @Prop({ enum: ['default', 'primary'], default: 'primary' })
   composerBorderColor?: 'default' | 'primary';
+  /** Send + voice controls: brand fill, neutral, or dark chip (default matches legacy accent-on). */
+  @Prop({ enum: ['brand', 'default', 'defaultDark'], default: 'defaultDark' })
+  composerControlStyle?: 'brand' | 'default' | 'defaultDark';
+  /** @deprecated Use composerControlStyle. */
+  @Prop({ required: false })
+  composerControlsUsePrimary?: boolean;
+  /** Live recording level meter in composer. */
+  @Prop({ enum: ['brand', 'default', 'defaultDark'], default: 'default' })
+  speechRecordingWaveStyle?: 'brand' | 'default' | 'defaultDark';
   @Prop({ default: true })
   showBranding?: boolean;
   /** Editable text shown in footer when showBranding is true (e.g. "Powered by ...") */
@@ -141,6 +153,15 @@ export class BotChatUI {
   /** Show scrollbar in message list (default true). When false, scrollbar is hidden but content still scrolls. */
   @Prop({ default: true })
   showScrollbar?: boolean;
+  /** Message list scrollbar thumb. Legacy `gray` maps on read. */
+  @Prop({ enum: ['default', 'defaultDark', 'primary', 'gray'], default: 'default' })
+  scrollChromeStyle?: 'default' | 'defaultDark' | 'primary' | 'gray';
+  /** Floating scroll-to-latest button; when unset, matches `scrollChromeStyle`. */
+  @Prop({ enum: ['default', 'defaultDark', 'primary', 'gray'], required: false })
+  scrollToBottomChromeStyle?: 'default' | 'defaultDark' | 'primary' | 'gray';
+  /** @deprecated Use scrollChromeStyle. */
+  @Prop({ required: false })
+  scrollChromeUsesPrimary?: boolean;
   /** When true, message input is a separate box (border-top + bg). When false, no border and no bg (default true). */
   @Prop({ default: true })
   composerAsSeparateBox?: boolean;
@@ -171,33 +192,45 @@ export class BotChatUI {
   /** Show bot avatar in chat header (default true) */
   @Prop({ default: true })
   showAvatarInHeader?: boolean;
-  /** Display name for assistant/sender (e.g. "Bot Name - AI"). Empty = use bot name + " - AI". */
+  /** @deprecated Widget no longer shows sender line in-thread. */
   @Prop({ default: '' })
   senderName?: string;
-  /** Show sender/assistant name above messages (default true) */
+  /** @deprecated Widget no longer shows sender line in-thread. */
   @Prop({ default: true })
   showSenderName?: boolean;
-  /** Show message time in metadata (default true) */
+  /** @deprecated Widget no longer shows timestamps in-thread. */
   @Prop({ default: true })
   showTime?: boolean;
   /** Show copy button on assistant messages (default true) */
   @Prop({ default: true })
   showCopyButton?: boolean;
-  /** Show sources on assistant messages (default true) */
+  /** Thumbs up/down on assistant replies (default true). */
   @Prop({ default: true })
+  showMessageFeedback?: boolean;
+  /** Visitor text bubbles: primary, neutral, or black (default primary). */
+  @Prop({ enum: ['primary', 'default', 'defaultDark'], default: 'primary' })
+  userTextBubbleStyle?: 'primary' | 'default' | 'defaultDark';
+  /** Visitor voice bubbles: primary, neutral, or black (default primary). */
+  @Prop({ enum: ['primary', 'default', 'defaultDark'], default: 'primary' })
+  userVoiceBubbleStyle?: 'primary' | 'default' | 'defaultDark';
+  /**
+   * When true, workspace preview may show citation sources on replies.
+   * Live embed does not surface sources to visitors.
+   */
+  @Prop({ default: false })
   showSources?: boolean;
   /** Where to show time: "top" (above message) or "bottom" (assistant=right, user=left) */
   @Prop({ enum: ['top', 'bottom'], default: 'top' })
   timePosition?: ChatTimePosition;
-  /** Show emoji picker button in composer (default true) */
-  @Prop({ default: true })
-  showEmoji?: boolean;
-  /** Allow file uploads in chat (Integration; consumes more GPT) */
+  /** Allow file uploads in the widget composer (configured in customer AI & Advanced / admin Integrations & AI). */
   @Prop({ default: false })
   allowFileUpload?: boolean;
-  /** Show mic button; when true, Whisper API key or config required in Integrations */
+  /** Dictate / microphone control in the composer. */
   @Prop({ default: false })
   showMic?: boolean;
+  /** Voice (waveform) control in the composer. If omitted on legacy bots, treated like showMic. */
+  @Prop({ default: false })
+  showVoice?: boolean;
 }
 
 const BEHAVIOR_PRESET_VALUES = [
@@ -300,7 +333,7 @@ export class Bot {
   avatarSource?: 'upload' | 'url' | 'emoji' | 'none';
   @Prop()
   openaiApiKeyOverride?: string;
-  /** Whisper API key for voice input when chatUI.showMic is true (e.g. OpenAI key or Whisper endpoint key). */
+  /** Whisper API key when chatUI.showMic or chatUI.showVoice is true (e.g. OpenAI key or Whisper endpoint key). */
   @Prop()
   whisperApiKeyOverride?: string;
   @Prop()
@@ -332,6 +365,9 @@ export class Bot {
   status?: string;
   @Prop()
   welcomeMessage?: string;
+  /** When false, welcome text is kept but not shown in the widget or seeded into new threads. */
+  @Prop({ default: true })
+  welcomeMessageEnabled?: boolean;
   @Prop({ type: BotLeadCaptureV2, default: () => ({}) })
   leadCapture?: BotLeadCaptureV2;
   @Prop({ type: BotChatUI, default: () => ({}) })

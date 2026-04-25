@@ -1,4 +1,4 @@
-import { Body, Controller, HttpException, HttpStatus, Post, Req, Res } from '@nestjs/common';
+import { Controller, HttpException, HttpStatus, Post, Req, Res } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { Types } from 'mongoose';
@@ -21,9 +21,18 @@ import {
   resolveRuntimeEmbedOriginFromHeaders,
 } from '../bots/origin-validation.util';
 import { resolveWidgetEmbedRateLimitPerMinute } from '../models/bot.schema';
+import type { MessageAttachment, MessageSpeechInput } from '../models/message.schema';
 import { getRequestId } from '../lib/request-id.helper';
 import { ChatEngineService } from './chat-engine.service';
 import type { BotLike } from './chat-engine.types';
+import { normalizeSpeechInputFromBody } from './speech-input.normalize';
+import { WidgetSpeechService } from './widget-speech.service';
+import {
+  assertEmbedChatHasUserTurn,
+  parseEmbedChatMultipartRequest,
+  parseEmbedChatPayloadRecord,
+  uploadWidgetChatAttachments,
+} from './widget-embed-chat-multipart.util';
 
 @Controller('api/chat')
 export class ChatController {
@@ -32,6 +41,7 @@ export class ChatController {
     private readonly botsService: BotsService,
     private readonly chatEngineService: ChatEngineService,
     private readonly embedSessionService: EmbedSessionService,
+    private readonly widgetSpeechService: WidgetSpeechService,
   ) {}
 
   private assertBotOwnerPresent(bot: Record<string, unknown>): void {
@@ -127,6 +137,7 @@ export class ChatController {
     startNewConversation?: boolean;
     /** @deprecated Chat/session identity alias only. */
     visitorId?: string;
+    speechInput?: MessageSpeechInput;
   } | null {
     if (body == null || typeof body !== 'object') return null;
     const o = body as Record<string, unknown>;
@@ -139,6 +150,7 @@ export class ChatController {
     const visitorId = typeof o.visitorId === 'string' ? o.visitorId.trim() : '';
     const conversationId = typeof o.conversationId === 'string' ? o.conversationId.trim() : '';
     const startNewConversation = o.startNewConversation === true;
+    const speechInput = normalizeSpeechInputFromBody(o.speechInput);
     return {
       botId,
       message,
@@ -148,6 +160,7 @@ export class ChatController {
       ...(visitorId ? { visitorId } : {}),
       ...(conversationId ? { conversationId } : {}),
       ...(startNewConversation ? { startNewConversation: true } : {}),
+      ...(speechInput ? { speechInput } : {}),
     };
   }
 
@@ -177,11 +190,10 @@ export class ChatController {
 
   @Post('conversations/list')
   async listConversations(
-    @Body() body: unknown,
     @Req() req: FastifyRequest,
     @Res({ passthrough: true }) res: FastifyReply,
   ) {
-    const parsed = this.parseListBody(body);
+    const parsed = this.parseListBody((req as { body?: unknown }).body);
     if (!parsed) {
       throw new HttpException(
         { error: 'Invalid request body', errorCode: 'BAD_REQUEST' },
@@ -257,11 +269,10 @@ export class ChatController {
 
   @Post('conversations/messages')
   async conversationMessages(
-    @Body() body: unknown,
     @Req() req: FastifyRequest,
     @Res({ passthrough: true }) res: FastifyReply,
   ) {
-    const parsed = this.parseMessagesBody(body);
+    const parsed = this.parseMessagesBody((req as { body?: unknown }).body);
     if (!parsed) {
       throw new HttpException(
         { error: 'Invalid request body', errorCode: 'BAD_REQUEST' },
@@ -316,16 +327,44 @@ export class ChatController {
 
   @Post('message')
   async message(
-    @Body() body: unknown,
     @Req() req: FastifyRequest,
     @Res({ passthrough: true }) res: FastifyReply,
   ) {
-    const parsed = this.parseBody(body);
-    if (!parsed) {
-      throw new HttpException(
-        { error: 'Invalid request body', errorCode: 'BAD_REQUEST' },
-        HttpStatus.BAD_REQUEST,
-      );
+    let parsed: NonNullable<ReturnType<ChatController['parseBody']>> | null = null;
+    let uploadedAttachments: MessageAttachment[] = [];
+
+    if (typeof req.isMultipart === 'function' && req.isMultipart()) {
+      const { payloadRecord, rawFiles } = await parseEmbedChatMultipartRequest(req);
+      const payload = parseEmbedChatPayloadRecord(payloadRecord);
+      if (!payload) {
+        throw new HttpException(
+          { error: 'Invalid request body', errorCode: 'BAD_REQUEST' },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      parsed = {
+        botId: payload.botId,
+        message: payload.message,
+        ...(payload.accessKey ? { accessKey: payload.accessKey } : {}),
+        ...(payload.secretKey ? { secretKey: payload.secretKey } : {}),
+        ...(payload.chatVisitorId ? { chatVisitorId: payload.chatVisitorId } : {}),
+        ...(payload.visitorId ? { visitorId: payload.visitorId } : {}),
+        ...(payload.conversationId ? { conversationId: payload.conversationId } : {}),
+        ...(payload.startNewConversation ? { startNewConversation: true } : {}),
+        ...(payload.speechInput ? { speechInput: payload.speechInput } : {}),
+      };
+      if (rawFiles.length > 0) {
+        uploadedAttachments = await uploadWidgetChatAttachments(payload.botId, rawFiles);
+      }
+      assertEmbedChatHasUserTurn(parsed.message, parsed.speechInput, uploadedAttachments);
+    } else {
+      parsed = this.parseBody((req as { body?: unknown }).body);
+      if (!parsed) {
+        throw new HttpException(
+          { error: 'Invalid request body', errorCode: 'BAD_REQUEST' },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
     }
 
     const bot = await this.botsService.findOneByIdForExternalRuntime(parsed.botId);
@@ -353,6 +392,14 @@ export class ChatController {
     this.assertRuntimeEmbedOriginOrThrow(bot as Record<string, unknown>, req);
 
     const b = bot as Record<string, unknown>;
+    const chatUi = (b.chatUI ?? {}) as Record<string, unknown>;
+    if (uploadedAttachments.length > 0 && chatUi.allowFileUpload !== true) {
+      throw new HttpException(
+        { error: 'File uploads are disabled for this bot.', errorCode: 'FILE_UPLOAD_DISABLED' },
+        HttpStatus.FORBIDDEN,
+      );
+    }
+
     const botLike: BotLike = {
       _id: (b._id as { toString(): string }),
       name: (b.name as string) ?? '',
@@ -361,6 +408,8 @@ export class ChatController {
       category: (b.category as string) ?? '',
       openaiApiKeyOverride: (b.openaiApiKeyOverride as string) ?? undefined,
       welcomeMessage: (b.welcomeMessage as string) ?? '',
+      welcomeMessageEnabled:
+        (b.welcomeMessageEnabled as boolean | undefined) === false ? false : undefined,
       knowledgeDescription: (b.knowledgeDescription as string) ?? '',
       leadCapture: (b.leadCapture as BotLike['leadCapture']) ?? undefined,
       personality: (b.personality as BotLike['personality']) ?? undefined,
@@ -380,6 +429,8 @@ export class ChatController {
       debug: false,
       ...(parsed.conversationId ? { conversationId: parsed.conversationId } : {}),
       ...(parsed.startNewConversation ? { startNewConversation: true } : {}),
+      ...(parsed.speechInput ? { speechInput: parsed.speechInput } : {}),
+      ...(uploadedAttachments.length > 0 ? { attachments: uploadedAttachments } : {}),
     });
     if (!chatResult.ok) {
       if (chatResult.error === 'conversation_not_found') {
@@ -411,6 +462,13 @@ export class ChatController {
       conversationId: chatResult.conversationId,
       assistantMessage: chatResult.assistantMessage,
       sources: chatResult.sources,
+      ...(chatResult.userAttachments?.length ? { userAttachments: chatResult.userAttachments } : {}),
     };
+  }
+
+  /** Multipart: `file`, `botId`, `mode` (dictate|voice), `chatVisitorId`, optional keys/origin — same embed rules as POST message. */
+  @Post('speech')
+  async speech(@Req() req: FastifyRequest) {
+    return this.widgetSpeechService.handleRuntime(req);
   }
 }

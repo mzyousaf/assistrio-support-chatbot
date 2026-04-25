@@ -6,7 +6,7 @@ import { useBotWorkspace } from './BotWorkspaceContext';
 import { ws } from './workspace';
 import { cn } from '@/lib/utils';
 import { InlineLoader } from '../../components/PageLoader';
-import { DataPageLayout, PageIntroStrip, WorkspaceContentContainer } from '@/layout/workspace-layout';
+import { WorkspaceContentContainer } from '@/layout/workspace-layout';
 
 function formatInt(n: number): string {
   return new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(n);
@@ -44,24 +44,30 @@ export function InsightsSection() {
 
   if (loadState === 'loading') {
     return (
-      <WorkspaceContentContainer size="wide">
-        <PageIntroStrip
-          title="Insights"
-          description="Conversations, messages, and knowledge snapshot for this assistant."
-        />
-        <InlineLoader title="Loading activity…" />
+      <WorkspaceContentContainer size="full">
+        <div className="flex min-h-0 min-h-[calc(100svh-var(--nav-height)-1.5rem)] flex-1 flex-col">
+          <header className="shrink-0 border-b border-slate-200/70 bg-white px-4 py-4 sm:px-5">
+            <h1 className="m-0 text-xl font-semibold leading-tight tracking-tight text-slate-900 sm:text-2xl">Analytics</h1>
+          </header>
+          <div className="flex min-h-0 flex-1 items-center justify-center p-6">
+            <InlineLoader title="Loading activity…" />
+          </div>
+        </div>
       </WorkspaceContentContainer>
     );
   }
 
   if (loadState === 'error' || !data) {
     return (
-      <WorkspaceContentContainer size="wide">
-        <PageIntroStrip
-          title="Insights"
-          description="Conversations, messages, and knowledge snapshot for this assistant."
-        />
-        <div className={ws.errorBox}>{message || 'Could not load insights.'}</div>
+      <WorkspaceContentContainer size="full">
+        <div className="flex min-h-0 min-h-[calc(100svh-var(--nav-height)-1.5rem)] flex-1 flex-col">
+          <header className="shrink-0 border-b border-slate-200/70 bg-white px-4 py-4 sm:px-5">
+            <h1 className="m-0 text-xl font-semibold leading-tight tracking-tight text-slate-900 sm:text-2xl">Analytics</h1>
+          </header>
+          <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
+            <div className={ws.errorBox}>{message || 'Could not load insights.'}</div>
+          </div>
+        </div>
       </WorkspaceContentContainer>
     );
   }
@@ -73,11 +79,12 @@ export function InsightsSection() {
     metrics.conversationsWithCapturedLeads > 0;
 
   return (
-    <DataPageLayout
-      title="Insights"
-      description="All-time totals from real chats (embed and hosted) and knowledge on this assistant."
-      containerSize="wide"
-    >
+    <WorkspaceContentContainer size="full">
+      <div className="flex min-h-0 min-h-[calc(100svh-var(--nav-height)-1.5rem)] flex-1 flex-col overflow-hidden">
+        <header className="shrink-0 border-b border-slate-200/70 bg-white px-4 py-4 sm:px-5 md:px-8">
+          <h1 className="m-0 text-xl font-semibold leading-tight tracking-tight text-slate-900 sm:text-2xl">Analytics</h1>
+        </header>
+        <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6 md:p-8">
       <span
         className={cn(
           'mb-5 inline-block rounded-full px-[0.55rem] py-[0.2rem] text-xs font-semibold',
@@ -123,7 +130,7 @@ export function InsightsSection() {
           </p>
           <div className="flex flex-wrap gap-3">
             {[
-              [`/bots/${botId}/knowledge/documents`, 'Knowledge'],
+              [`/bots/${botId}/playground/knowledgebase/documents`, 'Knowledge'],
               [`/bots/${botId}/playground/deploy`, 'Deploy & Go Live'],
               [`/bots/${botId}/playground/chat`, 'Playground'],
             ].map(([to, label]) => (
@@ -134,6 +141,8 @@ export function InsightsSection() {
           </div>
         </div>
       )}
-    </DataPageLayout>
+        </div>
+      </div>
+    </WorkspaceContentContainer>
   );
 }

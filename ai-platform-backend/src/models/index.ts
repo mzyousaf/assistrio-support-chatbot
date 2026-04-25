@@ -23,7 +23,7 @@ export type {
 export { DocumentModel, DocumentSchema } from './document.schema';
 export { Conversation, ConversationSchema } from './conversation.schema';
 export type { CapturedLeadData, LeadCaptureMeta } from './conversation.schema';
-export { Message, MessageSchema } from './message.schema';
+export { Message, MessageAttachment, MessageSchema, MessageSpeechInput } from './message.schema';
 export type { MessageSource } from './message.schema';
 export { Visitor, VisitorSchema } from './visitor.schema';
 export type { VisitorKind } from './visitor.schema';

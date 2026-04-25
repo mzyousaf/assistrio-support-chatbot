@@ -10,11 +10,17 @@ import {
 import type { EmbedChatConfig } from '@assistrio/chat-widget';
 import {
   buildCustomerWidgetPreviewOverridesFromBot,
+  mergeAiIntegrationsDraftIntoPreviewOverrides,
   mergeAppearanceChatUiIntoPreviewOverrides,
   mergeBehaviorDraftIntoPreviewOverrides,
+  mergeChatsDraftIntoPreviewOverrides,
+  mergeLeadCaptureDraftIntoPreviewOverrides,
   mergeProfileDraftIntoPreviewOverrides,
+  type AiIntegrationsPreviewDraftSlice,
   type BehaviorPreviewDraftSlice,
+  type ChatsPreviewDraftSlice,
   type CustomerPreviewOverrides,
+  type LeadCapturePreviewDraft,
   type ProfilePreviewDraftSlice,
 } from '@/lib/buildCustomerWidgetPreviewOverrides';
 import { useBotWorkspace } from './BotWorkspaceContext';
@@ -42,17 +48,35 @@ type CustomerWidgetPreviewContextValue = {
   registerSurface: (reg: PreviewSurfaceRegistration) => () => void;
   /** Active portal target, or null if none qualify (host uses off-screen fallback). */
   getActiveSurfaceElement: () => HTMLElement | null;
+  /**
+   * Set by `ChatWidgetPreview` from `useWidgetPreviewShell`: true when the right-lane (or
+   * open drawer) inline preview is visible. When false, the host should use floating presentation.
+   */
+  inlineSlotWantsContained: boolean;
+  setInlineSlotWantsContained: (next: boolean) => void;
   /** Unsaved behavior-tab slice; cleared when leaving behavior page. */
   setBehaviorDraftSlice: (next: BehaviorPreviewDraftSlice | null) => void;
   /**
-   * Live Widget Appearance `chatUi` map while that editor is mounted; merged into preview `chatUI`.
+   * Live `chatUi` map from Widget Appearance or Chat Experience while that editor is mounted.
    * Set `null` on section unmount.
    */
   setAppearanceChatUiDraft: (next: Record<string, unknown> | null) => void;
   /** Live Profile editor snapshot while that section is mounted; merged into preview bot fields. */
   setProfileDraftSlice: (next: ProfilePreviewDraftSlice | null) => void;
-  /** Merged overrides for `EmbedWidgetRoot` (baseline bot + behavior + appearance + profile drafts). */
+  /** Live Capture Leads form payload while that section is mounted. */
+  setLeadCaptureDraftSlice: (next: LeadCapturePreviewDraft | null) => void;
+  /** Live AI & Advanced unsaved `personality` + `config` (+ optional composer toggles) while that section is mounted. */
+  setAiIntegrationsDraftSlice: (next: AiIntegrationsPreviewDraftSlice | null) => void;
+  /** Live Chat Experience “Chats” tab (visitor multi-conversation) while that section is mounted. */
+  setChatsDraftSlice: (next: ChatsPreviewDraftSlice | null) => void;
+  /** Merged overrides for `EmbedWidgetRoot` (baseline + section drafts: behavior, AI, leads, chat UI, profile). */
   previewOverrides: CustomerPreviewOverrides | null;
+  /**
+   * Contained widget inline “Expand chat” state (driven by `EmbedChatConfig.onContainedPanelExpandChange` from the
+   * portaled `EmbedWidgetRoot`). Used for preview portal `max-height` (collapsed vs expanded caps).
+   */
+  containedPanelExpanded: boolean;
+  setContainedPanelExpanded: (next: boolean) => void;
 };
 
 const CustomerWidgetPreviewContext = createContext<CustomerWidgetPreviewContextValue | null>(null);
@@ -93,6 +117,11 @@ export function CustomerWidgetPreviewProvider({ children }: { children: ReactNod
   const [behaviorDraft, setBehaviorDraftSlice] = useState<BehaviorPreviewDraftSlice | null>(null);
   const [appearanceChatUiDraft, setAppearanceChatUiDraft] = useState<Record<string, unknown> | null>(null);
   const [profileDraft, setProfileDraftSlice] = useState<ProfilePreviewDraftSlice | null>(null);
+  const [leadCaptureDraft, setLeadCaptureDraftSlice] = useState<LeadCapturePreviewDraft | null>(null);
+  const [aiIntegrationsDraft, setAiIntegrationsDraftSlice] = useState<AiIntegrationsPreviewDraftSlice | null>(null);
+  const [chatsDraft, setChatsDraftSlice] = useState<ChatsPreviewDraftSlice | null>(null);
+  const [inlineSlotWantsContained, setInlineSlotWantsContained] = useState(false);
+  const [containedPanelExpanded, setContainedPanelExpanded] = useState(false);
 
   const bump = useCallback(() => {
     setPreviewEpoch((n) => n + 1);
@@ -127,28 +156,45 @@ export function CustomerWidgetPreviewProvider({ children }: { children: ReactNod
   const previewOverrides = useMemo((): CustomerPreviewOverrides | null => {
     if (!baselineOverrides) return null;
     const withBehavior = mergeBehaviorDraftIntoPreviewOverrides(baselineOverrides, behaviorDraft);
-    const withAppearance = mergeAppearanceChatUiIntoPreviewOverrides(withBehavior, appearanceChatUiDraft);
-    return mergeProfileDraftIntoPreviewOverrides(withAppearance, profileDraft);
-  }, [baselineOverrides, behaviorDraft, appearanceChatUiDraft, profileDraft]);
+    const withAi = mergeAiIntegrationsDraftIntoPreviewOverrides(withBehavior, aiIntegrationsDraft);
+    const withLeads = mergeLeadCaptureDraftIntoPreviewOverrides(withAi, leadCaptureDraft);
+    const withAppearance = mergeAppearanceChatUiIntoPreviewOverrides(withLeads, appearanceChatUiDraft);
+    const withChats = mergeChatsDraftIntoPreviewOverrides(withAppearance, chatsDraft);
+    return mergeProfileDraftIntoPreviewOverrides(withChats, profileDraft);
+  }, [baselineOverrides, behaviorDraft, aiIntegrationsDraft, leadCaptureDraft, appearanceChatUiDraft, chatsDraft, profileDraft]);
 
   const value = useMemo(
     (): CustomerWidgetPreviewContextValue => ({
       previewEpoch,
       registerSurface,
       getActiveSurfaceElement,
+      inlineSlotWantsContained,
+      setInlineSlotWantsContained,
       setBehaviorDraftSlice,
       setAppearanceChatUiDraft,
       setProfileDraftSlice,
+      setLeadCaptureDraftSlice,
+      setAiIntegrationsDraftSlice,
+      setChatsDraftSlice,
       previewOverrides,
+      containedPanelExpanded,
+      setContainedPanelExpanded,
     }),
     [
       previewEpoch,
       registerSurface,
       getActiveSurfaceElement,
+      inlineSlotWantsContained,
+      setInlineSlotWantsContained,
       setBehaviorDraftSlice,
       setAppearanceChatUiDraft,
       setProfileDraftSlice,
+      setLeadCaptureDraftSlice,
+      setAiIntegrationsDraftSlice,
+      setChatsDraftSlice,
       previewOverrides,
+      containedPanelExpanded,
+      setContainedPanelExpanded,
     ],
   );
 

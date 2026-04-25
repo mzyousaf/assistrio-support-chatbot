@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useState, type FormEvent } from 'react';
 import {
+  Inbox,
   Info,
   Link2,
   Loader2,
@@ -13,7 +14,9 @@ import {
 import { patchCustomerBot } from '../../api/customerApi';
 import { Button, Card, CardBody, FieldRow, Input, Select, Switch, Tooltip } from '@/components/ui';
 import { cn } from '@/lib/utils';
+import { normalizeVisitorMultiChatMax } from '@/lib/visitorMultiChatMax';
 import { useBotWorkspace } from './BotWorkspaceContext';
+import { useCustomerWidgetPreview } from './CustomerWidgetPreviewContext';
 import { registerManualSaveGuard } from './workspaceManualSaveGuard';
 import { buildChatExperienceChatUiSavePayload, mergeChatUiFromBot } from './chatUiPayload';
 import { WorkspaceSectionHeader } from './WorkspaceSectionHeader';
@@ -23,20 +26,26 @@ import { ws } from './workspace';
 const PAGE_TITLE = 'Chat Experience';
 const CHAT_EXPERIENCE_SECTION_NAV_LABEL = 'Chat Experience';
 
-type ChatExperienceTabId = 'input-tools' | 'messages' | 'header' | 'controls' | 'quick-links';
+type ChatExperienceTabId = 'input-tools' | 'messages' | 'chats' | 'header' | 'controls' | 'quick-links';
 
 const CHAT_EXPERIENCE_TABS: { id: ChatExperienceTabId; label: string; hint: string; icon: LucideIcon }[] = [
   {
     id: 'input-tools',
-    label: 'Input tools',
-    hint: 'What visitors can use in the message input area.',
+    label: 'Input Tools',
+    hint: 'Suggested questions and how the composer behaves with them.',
     icon: Wrench,
   },
   {
     id: 'messages',
     label: 'Messages',
-    hint: 'Copy, sources, names, and timestamps on messages.',
+    hint: 'Copy, feedback, and how visitor message bubbles look.',
     icon: MessageSquare,
+  },
+  {
+    id: 'chats',
+    label: 'Multiple Conversations',
+    hint: 'Whether visitors can keep several saved threads in the embedded widget.',
+    icon: Inbox,
   },
   {
     id: 'header',
@@ -46,13 +55,13 @@ const CHAT_EXPERIENCE_TABS: { id: ChatExperienceTabId; label: string; hint: stri
   },
   {
     id: 'controls',
-    label: 'Controls',
-    hint: 'Scrolling, expanding the widget, and opening on load.',
+    label: 'Panel & Scrolling',
+    hint: 'When the panel opens, expand in menu, and how the message list scrolls.',
     icon: SlidersHorizontal,
   },
   {
     id: 'quick-links',
-    label: 'Quick links',
+    label: 'Quick Links',
     hint: 'Header menu links visitors can open alongside the chat.',
     icon: Link2,
   },
@@ -66,6 +75,30 @@ function getBool(ui: Record<string, unknown>, key: string, fallback: boolean): b
 function getStr(ui: Record<string, unknown>, key: string): string {
   const v = ui[key];
   return typeof v === 'string' ? v : '';
+}
+
+function getUserBubbleStyle(
+  ui: Record<string, unknown>,
+  key: 'userTextBubbleStyle' | 'userVoiceBubbleStyle',
+): 'primary' | 'default' | 'defaultDark' {
+  const v = ui[key];
+  if (v === 'default') return 'default';
+  if (v === 'defaultDark') return 'defaultDark';
+  return 'primary';
+}
+
+function getScrollbarChromeStyle(ui: Record<string, unknown>): 'default' | 'defaultDark' | 'primary' {
+  const v = ui.scrollChromeStyle;
+  if (v === 'default' || v === 'defaultDark' || v === 'primary') return v;
+  if (v === 'gray') return 'defaultDark';
+  return getBool(ui, 'scrollChromeUsesPrimary', true) === false ? 'default' : 'primary';
+}
+
+function getScrollToBottomChromeStyle(ui: Record<string, unknown>): 'default' | 'defaultDark' | 'primary' {
+  const v = ui.scrollToBottomChromeStyle;
+  if (v === 'default' || v === 'defaultDark' || v === 'primary') return v;
+  if (v === 'gray') return 'defaultDark';
+  return getScrollbarChromeStyle(ui);
 }
 
 type ToggleRowProps = {
@@ -113,10 +146,16 @@ function ToggleRow({ id, label, description, checked, onChange, tooltip }: Toggl
 const cardClass =
   'w-full min-w-0 overflow-visible border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)] ring-1 ring-slate-900/[0.035]';
 
+const CHAT_EXPERIENCE_PREVIEW_DEBOUNCE_MS = 150;
+
 export function ChatExperienceSection() {
   const subnavId = useId();
   const { bot, botId, softReload } = useBotWorkspace();
+  const { setAppearanceChatUiDraft, setChatsDraftSlice } = useCustomerWidgetPreview();
   const [chatUi, setChatUi] = useState<Record<string, unknown>>({});
+  const [visitorMultiChatEnabled, setVisitorMultiChatEnabled] = useState(false);
+  const [visitorMultiChatCapUnlimited, setVisitorMultiChatCapUnlimited] = useState(true);
+  const [visitorMultiChatMax, setVisitorMultiChatMax] = useState('5');
   const [activeTab, setActiveTab] = useState<ChatExperienceTabId>('input-tools');
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -125,6 +164,13 @@ export function ChatExperienceSection() {
   const hydrateFromBot = useCallback(() => {
     if (!bot) return;
     setChatUi(mergeChatUiFromBot(bot.chatUI));
+    const mEn = bot.visitorMultiChatEnabled === true;
+    const mMax = bot.visitorMultiChatMax;
+    setVisitorMultiChatEnabled(mEn);
+    setVisitorMultiChatCapUnlimited(!mEn || mMax == null);
+    setVisitorMultiChatMax(
+      typeof mMax === 'number' && Number.isFinite(mMax) ? String(Math.max(2, Math.floor(mMax))) : '5',
+    );
     setDirty(false);
     setSaveError(null);
   }, [bot]);
@@ -137,10 +183,54 @@ export function ChatExperienceSection() {
     return registerManualSaveGuard('chat-experience', () => dirty, hydrateFromBot);
   }, [dirty, hydrateFromBot]);
 
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      setAppearanceChatUiDraft({ ...chatUi });
+    }, CHAT_EXPERIENCE_PREVIEW_DEBOUNCE_MS);
+    return () => window.clearTimeout(id);
+  }, [chatUi, setAppearanceChatUiDraft]);
+
+  useEffect(() => {
+    return () => setAppearanceChatUiDraft(null);
+  }, [setAppearanceChatUiDraft]);
+
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      const max = visitorMultiChatEnabled
+        ? visitorMultiChatCapUnlimited
+          ? null
+          : normalizeVisitorMultiChatMax(visitorMultiChatMax) ?? 5
+        : null;
+      setChatsDraftSlice({
+        visitorMultiChatEnabled,
+        visitorMultiChatMax: max,
+      });
+    }, CHAT_EXPERIENCE_PREVIEW_DEBOUNCE_MS);
+    return () => window.clearTimeout(id);
+  }, [
+    visitorMultiChatCapUnlimited,
+    visitorMultiChatEnabled,
+    visitorMultiChatMax,
+    setChatsDraftSlice,
+  ]);
+
+  useEffect(() => {
+    return () => setChatsDraftSlice(null);
+  }, [setChatsDraftSlice]);
+
   const markDirty = useCallback(() => {
     setDirty(true);
     setSaveError(null);
   }, []);
+
+  const onVisitorMultiChatEnabledChange = useCallback(
+    (v: boolean) => {
+      setVisitorMultiChatEnabled(v);
+      if (v) setVisitorMultiChatCapUnlimited(true);
+      markDirty();
+    },
+    [markDirty],
+  );
 
   const patch = useCallback(
     (key: string, value: unknown) => {
@@ -156,8 +246,15 @@ export function ChatExperienceSection() {
       if (!bot || !botId || saving || !dirty) return;
       setSaving(true);
       setSaveError(null);
+      const parsedCap = visitorMultiChatEnabled
+        ? visitorMultiChatCapUnlimited
+          ? null
+          : normalizeVisitorMultiChatMax(visitorMultiChatMax) ?? 5
+        : null;
       const res = await patchCustomerBot(botId, {
         chatUI: buildChatExperienceChatUiSavePayload(bot.chatUI, chatUi),
+        visitorMultiChatEnabled,
+        visitorMultiChatMax: parsedCap,
       });
       setSaving(false);
       if (!res.ok) {
@@ -167,18 +264,23 @@ export function ChatExperienceSection() {
       setDirty(false);
       await softReload();
     },
-    [bot, botId, chatUi, dirty, softReload, saving],
+    [
+      bot,
+      botId,
+      chatUi,
+      dirty,
+      softReload,
+      saving,
+      visitorMultiChatCapUnlimited,
+      visitorMultiChatEnabled,
+      visitorMultiChatMax,
+    ],
   );
 
   if (!bot || !botId) return null;
 
-  const botName = String(bot.name ?? '').trim();
-  const senderPlaceholder = botName ? `${botName} - AI` : 'Bot name - AI';
-
   const showScrollBlock = getBool(chatUi, 'showScrollToBottom', true);
   const showScrollLabelToggle = getBool(chatUi, 'showScrollToBottomLabel', true);
-  const showTime = getBool(chatUi, 'showTime', true);
-  const showSenderName = getBool(chatUi, 'showSenderName', true);
   const statusRaw = chatUi.statusIndicator;
   const statusIndicator: 'none' | 'live' | 'active' =
     statusRaw === 'none' || statusRaw === 'live' || statusRaw === 'active' ? statusRaw : 'none';
@@ -291,35 +393,14 @@ export function ChatExperienceSection() {
                     <section className={ws.workspaceEditorCardSection} aria-labelledby="chat-input-tools-h">
                       <WorkspaceSectionHeader
                         id="chat-input-tools-h"
-                        title="Input tools"
-                        description="What visitors can use in the message input area."
+                        title="Input Tools"
+                        description="Suggested questions flow. File uploads and voice live under AI & Advanced."
                       />
                       <div className="mt-4 space-y-0">
                         <ToggleRow
-                          id="chat-allow-file"
-                          label="Allow file uploads"
-                          description="Let visitors attach files in the composer."
-                          checked={getBool(chatUi, 'allowFileUpload', false)}
-                          onChange={(v) => patch('allowFileUpload', v)}
-                        />
-                        <ToggleRow
-                          id="chat-show-mic"
-                          label="Show microphone"
-                          description="Voice input requires an API key in AI & Responses when available."
-                          checked={getBool(chatUi, 'showMic', false)}
-                          onChange={(v) => patch('showMic', v)}
-                        />
-                        <ToggleRow
-                          id="chat-show-emoji"
-                          label="Show emoji picker"
-                          description="Adds emoji insertion to the message input."
-                          checked={getBool(chatUi, 'showEmoji', true)}
-                          onChange={(v) => patch('showEmoji', v)}
-                        />
-                        <ToggleRow
                           id="chat-composer-suggested"
                           label="Show composer with suggested questions"
-                          description="When on, the input stays visible with suggested prompts. When off, visitors pick a suggestion first, then chat."
+                          description="When on, the input stays visible with suggested prompts. When off, visitors pick a suggestion first, then chat. Attachments and voice are configured under AI & Advanced."
                           checked={getBool(chatUi, 'showComposerWithSuggestedQuestions', false)}
                           onChange={(v) => patch('showComposerWithSuggestedQuestions', v)}
                         />
@@ -343,7 +424,7 @@ export function ChatExperienceSection() {
                       <WorkspaceSectionHeader
                         id="chat-messages-h"
                         title="Messages"
-                        description="Copy, sources, names, and timestamps on messages."
+                        description="Assistant copy and feedback, plus visitor text and voice bubble styling."
                       />
                       <div className="mt-4 space-y-0">
                         <ToggleRow
@@ -354,62 +435,200 @@ export function ChatExperienceSection() {
                           onChange={(v) => patch('showCopyButton', v)}
                         />
                         <ToggleRow
-                          id="chat-show-sources"
-                          label="Show sources"
-                          description="Shows citations or references when the reply uses retrieved context."
-                          checked={getBool(chatUi, 'showSources', true)}
-                          onChange={(v) => patch('showSources', v)}
+                          id="chat-show-message-feedback"
+                          label="Show thumbs up / down on replies"
+                          description="Collects helpful vs not helpful signals (stored with analytics for review)."
+                          checked={getBool(chatUi, 'showMessageFeedback', true)}
+                          onChange={(v) => patch('showMessageFeedback', v)}
                         />
-                        <ToggleRow
-                          id="chat-show-sender-name"
-                          label="Show assistant name"
-                          description="Displays a name label on assistant messages in the thread."
-                          checked={showSenderName}
-                          onChange={(v) => patch('showSenderName', v)}
-                        />
-                        {showSenderName ? (
-                          <div className="border-b border-slate-100 py-3.5">
-                            <FieldRow
-                              label="Custom assistant name"
-                              htmlFor="chat-sender-name"
-                              helperText={`Shown above assistant messages. Leave blank to use “${senderPlaceholder}”.`}
-                              className="min-w-0 gap-1.5"
-                            >
-                              <Input
-                                id="chat-sender-name"
-                                quiet
-                                value={getStr(chatUi, 'senderName')}
-                                onChange={(e) => patch('senderName', e.target.value)}
-                                placeholder={senderPlaceholder}
-                                autoComplete="off"
-                              />
-                            </FieldRow>
-                          </div>
-                        ) : null}
-                        <ToggleRow
-                          id="chat-show-time"
-                          label="Show message time"
-                          checked={showTime}
-                          onChange={(v) => patch('showTime', v)}
-                        />
-                        {showTime ? (
-                          <div className="py-3.5">
-                            <FieldRow
-                              label="Time position"
-                              htmlFor="chat-time-position"
-                              className="min-w-0 gap-1.5"
-                              helperText="Where the timestamp appears relative to each message."
-                            >
-                              <Select
-                                id="chat-time-position"
-                                quiet
-                                value={chatUi.timePosition === 'bottom' ? 'bottom' : 'top'}
-                                onChange={(e) => patch('timePosition', e.target.value)}
+                        <div className="rounded-lg border border-blue-200/90 bg-blue-50/90 px-3.5 py-3 text-sm text-slate-800 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.6)]">
+                          <p className="font-semibold text-blue-900">Preview mode only</p>
+                          <p className="mt-1 text-[13px] leading-relaxed text-blue-950/85">
+                            The option below applies to the in-dashboard chat preview. Your live embedded widget does not
+                            show citation sources to visitors.
+                          </p>
+                          <div className="mt-3 flex flex-wrap items-start justify-between gap-3 border-t border-blue-200/80 pt-3">
+                            <div className="min-w-0 flex-1">
+                              <span
+                                id="chat-show-sources-preview-label"
+                                className={ws.workspaceEditorControlLabel}
                               >
-                                <option value="top">Above message</option>
-                                <option value="bottom">Below (assistant right, user left)</option>
-                              </Select>
-                            </FieldRow>
+                                Show sources on assistant replies
+                              </span>
+                              <p className={cn(ws.workspaceEditorControlHint, 'mt-1')}>
+                                Lists knowledge citations under bot answers in the preview only.
+                              </p>
+                            </div>
+                            <Switch
+                              id="chat-show-sources-preview"
+                              checked={getBool(chatUi, 'showSources', false)}
+                              onCheckedChange={(v) => patch('showSources', v)}
+                              aria-labelledby="chat-show-sources-preview-label"
+                              className="mt-0.5 shrink-0"
+                            />
+                          </div>
+                        </div>
+                        <div className="border-b border-slate-100 py-3.5 last:border-b-0">
+                          <FieldRow
+                            label="Visitor text messages"
+                            htmlFor="chat-user-text-bubble-style"
+                            className="min-w-0 gap-1.5"
+                            helperText="Applies only to typed text messages. Brand color fills with your brand color; default uses neutral thread styling."
+                          >
+                            <Select
+                              id="chat-user-text-bubble-style"
+                              quiet
+                              value={getUserBubbleStyle(chatUi, 'userTextBubbleStyle')}
+                              onChange={(e) =>
+                                patch(
+                                  'userTextBubbleStyle',
+                                  e.target.value as 'primary' | 'default' | 'defaultDark',
+                                )
+                              }
+                            >
+                              <option value="primary">Brand color</option>
+                              <option value="default">Default (neutral)</option>
+                              <option value="defaultDark">Default (dark)</option>
+                            </Select>
+                          </FieldRow>
+                        </div>
+                        <div className="border-b border-slate-100 py-3.5 last:border-b-0">
+                          <FieldRow
+                            label="Visitor voice messages"
+                            htmlFor="chat-user-voice-bubble-style"
+                            className="min-w-0 gap-1.5"
+                            helperText="Applies only to voice notes. Brand color uses a brand-filled bubble around the player; default uses a neutral bubble and standard waveform."
+                          >
+                            <Select
+                              id="chat-user-voice-bubble-style"
+                              quiet
+                              value={getUserBubbleStyle(chatUi, 'userVoiceBubbleStyle')}
+                              onChange={(e) =>
+                                patch(
+                                  'userVoiceBubbleStyle',
+                                  e.target.value as 'primary' | 'default' | 'defaultDark',
+                                )
+                              }
+                            >
+                              <option value="primary">Brand color</option>
+                              <option value="default">Default (neutral)</option>
+                              <option value="defaultDark">Default (dark)</option>
+                            </Select>
+                          </FieldRow>
+                        </div>
+                      </div>
+                    </section>
+                  </CardBody>
+                </Card>
+              </div>
+            ) : null}
+
+            {activeTab === 'chats' ? (
+              <div
+                id={`${subnavId}-chats-panel`}
+                role="tabpanel"
+                aria-labelledby={`${subnavId}-chats-tab`}
+                className={ws.workspaceEditorCardGap}
+              >
+                <Card className={cardClass}>
+                  <CardBody className="w-full min-w-0 px-5 py-5 sm:px-6 sm:py-6">
+                    <section className={ws.workspaceEditorCardSection} aria-labelledby="chat-chats-h">
+                      <WorkspaceSectionHeader
+                        id="chat-chats-h"
+                        title="Multiple Conversations"
+                        description="How anonymous visitors use saved threads in the embedded widget (runtime embed)."
+                      />
+                      <div className="mt-4 space-y-0">
+                        <ToggleRow
+                          id="chat-visitor-multi-enabled"
+                          label="Allow multiple saved conversations per visitor"
+                          description="When off, visitors continue in their latest thread; older threads are read-only from Recent chats."
+                          checked={visitorMultiChatEnabled}
+                          onChange={onVisitorMultiChatEnabledChange}
+                        />
+                        <div className="rounded-lg border border-sky-200/90 bg-sky-50/90 px-3.5 py-3 text-[13px] leading-relaxed text-sky-950 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.6)]">
+                          <p className="font-semibold text-sky-900">How it works in the widget</p>
+                          <ul className="mt-2 list-disc space-y-1.5 pl-4 text-sky-950/90">
+                            <li>
+                              <span className="font-medium">Off (single active thread):</span> visitors always continue in
+                              their <em>latest</em> conversation. Older threads appear under “View recent chats” as{' '}
+                              <strong>read-only</strong>.
+                            </li>
+                            <li>
+                              <span className="font-medium">On (multiple saved threads):</span> visitors can open recent
+                              threads and <strong>reply</strong> in any of them. “Start a new chat” and “End chat” only
+                              appear while they are under the saved-conversation limit (unlimited = always available).
+                            </li>
+                          </ul>
+                        </div>
+                        {visitorMultiChatEnabled ? (
+                          <div className="border-b border-slate-100 py-3.5 last:border-b-0">
+                            <div className="min-w-0 flex-1">
+                              <span className={ws.workspaceEditorControlLabel}>Saved conversations per visitor</span>
+                              <p className={cn(ws.workspaceEditorControlHint, 'mt-1')}>
+                                Unlimited lets visitors keep any number of threads. With a limit, they cannot start a new
+                                thread once they reach the cap (they can still open existing threads).
+                              </p>
+                              <div className="mt-4 flex flex-col gap-3">
+                                <label className="flex cursor-pointer items-start gap-2.5">
+                                  <input
+                                    type="radio"
+                                    name="visitor-multi-chat-cap"
+                                    className="mt-1 border-slate-300 text-[var(--color-primary)]"
+                                    checked={visitorMultiChatCapUnlimited}
+                                    onChange={() => {
+                                      setVisitorMultiChatCapUnlimited(true);
+                                      markDirty();
+                                    }}
+                                  />
+                                  <span>
+                                    <span className="block text-sm font-medium text-slate-900">Unlimited</span>
+                                    <span className="mt-0.5 block text-xs text-slate-600">
+                                      No maximum number of saved conversation threads per visitor.
+                                    </span>
+                                  </span>
+                                </label>
+                                <label className="flex cursor-pointer items-start gap-2.5">
+                                  <input
+                                    type="radio"
+                                    name="visitor-multi-chat-cap"
+                                    className="mt-1 border-slate-300 text-[var(--color-primary)]"
+                                    checked={!visitorMultiChatCapUnlimited}
+                                    onChange={() => {
+                                      setVisitorMultiChatCapUnlimited(false);
+                                      markDirty();
+                                    }}
+                                  />
+                                  <span>
+                                    <span className="block text-sm font-medium text-slate-900">Set a maximum</span>
+                                    <span className="mt-0.5 block text-xs text-slate-600">
+                                      Cap how many concurrent saved threads each visitor may have. Minimum 2—the current
+                                      chat counts as one.
+                                    </span>
+                                  </span>
+                                </label>
+                                {!visitorMultiChatCapUnlimited ? (
+                                  <div className="flex flex-wrap items-center gap-2 pl-7">
+                                    <span className="text-sm text-slate-600">Up to</span>
+                                    <Input
+                                      id="visitor-multi-chat-max"
+                                      type="number"
+                                      min={2}
+                                      step={1}
+                                      quiet
+                                      className="w-24"
+                                      value={visitorMultiChatMax}
+                                      onChange={(e) => {
+                                        setVisitorMultiChatMax(e.target.value);
+                                        markDirty();
+                                      }}
+                                      aria-label="Maximum saved conversations per visitor"
+                                    />
+                                    <span className="text-sm text-slate-600">saved conversations</span>
+                                  </div>
+                                ) : null}
+                              </div>
+                            </div>
                           </div>
                         ) : null}
                       </div>
@@ -521,11 +740,11 @@ export function ChatExperienceSection() {
               >
                 <Card className={cardClass}>
                   <CardBody className="w-full min-w-0 px-5 py-5 sm:px-6 sm:py-6">
-                    <section className={ws.workspaceEditorCardSection} aria-labelledby="chat-controls-h">
+                    <section className={ws.workspaceEditorCardSection} aria-labelledby="chat-panel-scrolling-h">
                       <WorkspaceSectionHeader
-                        id="chat-controls-h"
-                        title="Controls"
-                        description="Scrolling, expanding the widget, and opening on load."
+                        id="chat-panel-scrolling-h"
+                        title="Panel & Scrolling"
+                        description="When the panel opens, expand in menu, and how the message list scrolls."
                       />
                       <div className="mt-4 space-y-0">
                         <ToggleRow
@@ -572,6 +791,54 @@ export function ChatExperienceSection() {
                           checked={getBool(chatUi, 'showScrollbar', true)}
                           onChange={(v) => patch('showScrollbar', v)}
                         />
+                        <div className="border-b border-slate-100 py-3.5">
+                          <FieldRow
+                            label="Message list scrollbar"
+                            htmlFor="chat-scrollbar-chrome-style"
+                            className="min-w-0 gap-1.5"
+                            helperText="Thumb color for the transcript scrollbar when it is visible."
+                          >
+                            <Select
+                              id="chat-scrollbar-chrome-style"
+                              quiet
+                              value={getScrollbarChromeStyle(chatUi)}
+                              onChange={(e) =>
+                                patch(
+                                  'scrollChromeStyle',
+                                  e.target.value as 'default' | 'defaultDark' | 'primary',
+                                )
+                              }
+                            >
+                              <option value="default">Default</option>
+                              <option value="defaultDark">Default (dark)</option>
+                              <option value="primary">Brand color</option>
+                            </Select>
+                          </FieldRow>
+                        </div>
+                        <div className="border-b border-slate-100 py-3.5">
+                          <FieldRow
+                            label="Scroll to latest button"
+                            htmlFor="chat-scroll-to-bottom-chrome-style"
+                            className="min-w-0 gap-1.5"
+                            helperText="Fill color for the floating control when the visitor scrolls up."
+                          >
+                            <Select
+                              id="chat-scroll-to-bottom-chrome-style"
+                              quiet
+                              value={getScrollToBottomChromeStyle(chatUi)}
+                              onChange={(e) =>
+                                patch(
+                                  'scrollToBottomChromeStyle',
+                                  e.target.value as 'default' | 'defaultDark' | 'primary',
+                                )
+                              }
+                            >
+                              <option value="default">Default</option>
+                              <option value="defaultDark">Default (dark)</option>
+                              <option value="primary">Brand color</option>
+                            </Select>
+                          </FieldRow>
+                        </div>
                         <ToggleRow
                           id="chat-menu-expand"
                           label="Show “Expand chat” in menu"

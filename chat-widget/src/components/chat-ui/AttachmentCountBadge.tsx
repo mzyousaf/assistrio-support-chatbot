@@ -1,0 +1,72 @@
+import React from "react";
+import { Paperclip } from "lucide-react";
+import { cx } from "./utils";
+
+export interface AttachmentCountBadgeProps {
+  count: number;
+  dark?: boolean;
+  /** Primary-filled user bubble (white/near-white glyph). */
+  onAccent?: boolean;
+  /** Inside bordered control (e.g. composer attach button): no extra chip border. */
+  embedded?: boolean;
+  /** When set, renders a button (e.g. open attachments screen). */
+  onClick?: () => void;
+  className?: string;
+}
+
+/**
+ * Paperclip (attachment) icon with file count (composer + sent message rows).
+ */
+export function AttachmentCountBadge({
+  count,
+  dark = true,
+  onAccent = false,
+  embedded = false,
+  onClick,
+  className,
+}: AttachmentCountBadgeProps) {
+  if (count < 1) return null;
+  const label = count === 1 ? "1 attachment" : `${count} attachments`;
+  const body = (
+    <>
+      <Paperclip className={cx("shrink-0 opacity-90", embedded ? "h-[17px] w-[17px]" : "h-3.5 w-3.5")} strokeWidth={2} aria-hidden />
+      <span>{count}</span>
+    </>
+  );
+  const shellClass = cx(
+    "inline-flex shrink-0 items-center gap-1 text-[11px] font-semibold tabular-nums leading-none",
+    embedded
+      ? "gap-0.5 px-0 py-0 text-current"
+      : cx(
+          "rounded-full border px-1.5 py-0.5",
+          onAccent
+            ? "border-white/35 bg-white/15 text-white"
+            : dark
+              ? "border-gray-500/60 bg-gray-800/90 text-gray-200"
+              : "border-gray-200 bg-gray-50 text-gray-700",
+        ),
+    onClick && !embedded && "cursor-pointer transition-opacity hover:opacity-90",
+    className,
+  );
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className={cx(shellClass, "focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1", dark ? "focus-visible:ring-offset-gray-900" : "focus-visible:ring-offset-white")}
+        title={label}
+        aria-label={label}
+      >
+        {body}
+      </button>
+    );
+  }
+  return (
+    <span
+      className={shellClass}
+      {...(embedded ? { "aria-hidden": true as const } : { title: label, "aria-label": label })}
+    >
+      {body}
+    </span>
+  );
+}

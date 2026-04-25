@@ -276,7 +276,7 @@ export function ChatHeader({
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           {title ? (
-            <h2 className={cx("text-sm font-semibold truncate", dark ? "text-gray-100" : "text-gray-900")}>
+            <h2 className={cx("text-sm font-medium tracking-tight truncate", dark ? "text-gray-200" : "text-gray-800")}>
               {title}
             </h2>
           ) : null}
@@ -370,6 +370,7 @@ export function ChatHeader({
               aria-label={sessionMenuLabel}
               aria-expanded={sessionOpen}
               aria-haspopup="true"
+              title={sessionMenuLabel}
             >
               <MoreVertical className="w-5 h-5" strokeWidth={2} aria-hidden />
             </button>
@@ -449,7 +450,13 @@ export function ChatHeader({
         ) : null}
 
         {legacyMenuOnly ? (
-          <button type="button" onClick={() => onMenu?.()} className={menuBtnClass} aria-label={menuLabel}>
+          <button
+            type="button"
+            onClick={() => onMenu?.()}
+            className={menuBtnClass}
+            aria-label={menuLabel}
+            title={menuLabel}
+          >
             <MenuIcon />
           </button>
         ) : null}
@@ -463,6 +470,7 @@ export function ChatHeader({
               dark ? "text-gray-400 hover:bg-gray-800 hover:text-gray-200" : "text-gray-500 hover:bg-gray-200 hover:text-gray-800"
             )}
             aria-label={closeLabel}
+            title={closeLabel}
           >
             <CloseIcon />
           </button>

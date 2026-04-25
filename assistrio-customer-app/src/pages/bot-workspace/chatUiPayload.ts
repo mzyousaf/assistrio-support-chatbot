@@ -1,9 +1,6 @@
+import { BOT_FIELD_MAX, clampStr } from '@/lib/botFieldLimits';
 import { normalizePrimaryColor } from '@/lib/primaryColorNormalize';
 import { normalizeQuickLinkIcon } from '@/lib/quickLinkIconNormalize';
-import {
-  CHAT_UI_BRANDING_MESSAGE_MAX_LENGTH,
-  CHAT_UI_PRIVACY_TEXT_MAX_LENGTH,
-} from './chatUiLimits';
 
 /** Default chat UI baseline (aligned with admin bot form / Mongoose defaults). */
 export const DEFAULT_CHAT_UI: Record<string, unknown> = {
@@ -13,6 +10,7 @@ export const DEFAULT_CHAT_UI: Record<string, unknown> = {
   launcherPosition: 'bottom-right',
   shadowIntensity: 'medium',
   showChatBorder: true,
+  chatPanelBorderColor: 'primary',
   chatPanelBorderWidth: 1,
   launcherIcon: 'default',
   launcherAvatarRingWidth: 18,
@@ -29,30 +27,53 @@ export const DEFAULT_CHAT_UI: Record<string, unknown> = {
   showScrollToBottomLabel: true,
   scrollToBottomLabel: '',
   showScrollbar: true,
+  scrollChromeStyle: 'default',
   composerAsSeparateBox: true,
   composerBorderWidth: 1,
   composerBorderColor: 'primary',
+  composerControlStyle: 'defaultDark',
+  speechRecordingWaveStyle: 'default',
   showMenuExpand: true,
   showMenuQuickLinks: true,
   menuQuickLinks: [],
   showComposerWithSuggestedQuestions: false,
   showAvatarInHeader: true,
-  senderName: '',
-  showSenderName: true,
-  showTime: true,
-  timePosition: 'top',
   showCopyButton: true,
-  showSources: true,
-  showEmoji: true,
+  showMessageFeedback: true,
+  showSources: false,
+  userTextBubbleStyle: 'primary',
+  userVoiceBubbleStyle: 'primary',
   allowFileUpload: false,
   showMic: false,
+  showVoice: false,
   brandingMessage: '',
   privacyText: '',
 };
 
 export function mergeChatUiFromBot(raw: unknown): Record<string, unknown> {
   const cur = raw && typeof raw === 'object' ? { ...(raw as Record<string, unknown>) } : {};
-  return { ...DEFAULT_CHAT_UI, ...cur };
+  const merged = { ...DEFAULT_CHAT_UI, ...cur };
+  if (!Object.prototype.hasOwnProperty.call(cur, 'showVoice')) {
+    merged.showVoice = merged.showMic === true;
+  }
+  const scs = merged.scrollChromeStyle;
+  if (scs === 'gray') {
+    merged.scrollChromeStyle = 'defaultDark';
+  } else if (scs !== 'default' && scs !== 'defaultDark' && scs !== 'primary') {
+    merged.scrollChromeStyle = merged.scrollChromeUsesPrimary === false ? 'default' : 'primary';
+  }
+  const stc = merged.scrollToBottomChromeStyle;
+  if (stc === 'gray') {
+    merged.scrollToBottomChromeStyle = 'defaultDark';
+  } else if (stc !== 'default' && stc !== 'defaultDark' && stc !== 'primary') {
+    merged.scrollToBottomChromeStyle = merged.scrollChromeStyle;
+  }
+  const out = { ...merged } as Record<string, unknown>;
+  out.brandingMessage = clampStr(String(out.brandingMessage ?? '').trim(), BOT_FIELD_MAX.brandingMessage);
+  const ptx = String(out.privacyText ?? '').trim();
+  out.privacyText = ptx ? clampStr(ptx, BOT_FIELD_MAX.privacyText) : '';
+  out.scrollToBottomLabel = clampStr(String(out.scrollToBottomLabel ?? '').trim(), BOT_FIELD_MAX.scrollToBottomLabel);
+  return out;
 }
 
 export function sanitizeMenuQuickLinksForPayload(raw: unknown): Array<{ text: string; route: string; icon?: string }> | undefined {
@@ -78,6 +99,32 @@ export function sanitizeMenuQuickLinksForPayload(raw: unknown): Array<{ text: st
 
 type ChatUiLike = Record<string, unknown>;
 
+function normalizeComposerControlStyleForPayload(chatUI: ChatUiLike): 'brand' | 'default' | 'defaultDark' {
+  const s = chatUI.composerControlStyle;
+  if (s === 'brand' || s === 'default' || s === 'defaultDark') return s;
+  return chatUI.composerControlsUsePrimary === false ? 'default' : 'defaultDark';
+}
+
+function normalizeSpeechRecordingWaveStyleForPayload(chatUI: ChatUiLike): 'brand' | 'default' | 'defaultDark' {
+  const s = chatUI.speechRecordingWaveStyle;
+  if (s === 'brand' || s === 'default' || s === 'defaultDark') return s;
+  return 'default';
+}
+
+function normalizeScrollChromeStyleForPayload(chatUI: ChatUiLike): 'default' | 'defaultDark' | 'primary' {
+  const s = chatUI.scrollChromeStyle;
+  if (s === 'default' || s === 'defaultDark' || s === 'primary') return s;
+  if (s === 'gray') return 'defaultDark';
+  return chatUI.scrollChromeUsesPrimary === false ? 'default' : 'primary';
+}
+
+function normalizeScrollToBottomChromeStyleForPayload(chatUI: ChatUiLike): 'default' | 'defaultDark' | 'primary' {
+  const s = chatUI.scrollToBottomChromeStyle;
+  if (s === 'default' || s === 'defaultDark' || s === 'primary') return s;
+  if (s === 'gray') return 'defaultDark';
+  return normalizeScrollChromeStyleForPayload(chatUI);
+}
+
 /** Normalized chat UI for PATCH (same rules as admin `buildChatUiPayload`). */
 export function buildChatUiPayload(chatUI: ChatUiLike): ChatUiLike {
   const menuQuickLinksMenuIcon = normalizeQuickLinkIcon(chatUI.menuQuickLinksMenuIcon);
@@ -88,6 +135,7 @@ export function buildChatUiPayload(chatUI: ChatUiLike): ChatUiLike {
     launcherPosition: chatUI.launcherPosition || DEFAULT_CHAT_UI.launcherPosition,
     shadowIntensity: chatUI.shadowIntensity ?? DEFAULT_CHAT_UI.shadowIntensity,
     showChatBorder: chatUI.showChatBorder ?? DEFAULT_CHAT_UI.showChatBorder,
+    chatPanelBorderColor: chatUI.chatPanelBorderColor === 'default' ? 'default' : 'primary',
     chatPanelBorderWidth:
       typeof chatUI.chatPanelBorderWidth === 'number' &&
       chatUI.chatPanelBorderWidth >= 0 &&
@@ -106,23 +154,27 @@ export function buildChatUiPayload(chatUI: ChatUiLike): ChatUiLike {
     chatOpenAnimation: chatUI.chatOpenAnimation ?? DEFAULT_CHAT_UI.chatOpenAnimation,
     openChatOnLoad: chatUI.openChatOnLoad ?? DEFAULT_CHAT_UI.openChatOnLoad,
     showBranding: chatUI.showBranding ?? DEFAULT_CHAT_UI.showBranding,
-    brandingMessage:
-      typeof chatUI.brandingMessage === 'string'
-        ? chatUI.brandingMessage.slice(0, CHAT_UI_BRANDING_MESSAGE_MAX_LENGTH)
-        : DEFAULT_CHAT_UI.brandingMessage,
+    brandingMessage: clampStr(
+      typeof chatUI.brandingMessage === 'string' ? String(chatUI.brandingMessage).trim() : '',
+      BOT_FIELD_MAX.brandingMessage,
+    ),
     showPrivacyText: chatUI.showPrivacyText ?? DEFAULT_CHAT_UI.showPrivacyText,
-    privacyText:
-      typeof chatUI.privacyText === 'string'
-        ? chatUI.privacyText.trim().slice(0, CHAT_UI_PRIVACY_TEXT_MAX_LENGTH) || undefined
-        : undefined,
+    privacyText: (() => {
+      const t = typeof chatUI.privacyText === 'string' ? chatUI.privacyText.trim() : '';
+      return t ? clampStr(t, BOT_FIELD_MAX.privacyText) : undefined;
+    })(),
     liveIndicatorStyle: chatUI.liveIndicatorStyle ?? DEFAULT_CHAT_UI.liveIndicatorStyle,
     statusIndicator: chatUI.statusIndicator ?? DEFAULT_CHAT_UI.statusIndicator,
     statusDotStyle: chatUI.statusDotStyle ?? DEFAULT_CHAT_UI.statusDotStyle,
     showScrollToBottom: chatUI.showScrollToBottom ?? DEFAULT_CHAT_UI.showScrollToBottom,
     showScrollToBottomLabel: chatUI.showScrollToBottomLabel ?? DEFAULT_CHAT_UI.showScrollToBottomLabel,
-    scrollToBottomLabel:
+    scrollToBottomLabel: clampStr(
       typeof chatUI.scrollToBottomLabel === 'string' ? chatUI.scrollToBottomLabel.trim() : '',
+      BOT_FIELD_MAX.scrollToBottomLabel,
+    ),
     showScrollbar: chatUI.showScrollbar ?? DEFAULT_CHAT_UI.showScrollbar,
+    scrollChromeStyle: normalizeScrollChromeStyleForPayload(chatUI),
+    scrollToBottomChromeStyle: normalizeScrollToBottomChromeStyleForPayload(chatUI),
     composerAsSeparateBox: chatUI.composerAsSeparateBox ?? DEFAULT_CHAT_UI.composerAsSeparateBox,
     composerBorderWidth:
       typeof chatUI.composerBorderWidth === 'number' &&
@@ -136,6 +188,8 @@ export function buildChatUiPayload(chatUI: ChatUiLike): ChatUiLike {
           ? 0
           : DEFAULT_CHAT_UI.composerBorderWidth,
     composerBorderColor: chatUI.composerBorderColor ?? DEFAULT_CHAT_UI.composerBorderColor,
+    composerControlStyle: normalizeComposerControlStyleForPayload(chatUI),
+    speechRecordingWaveStyle: normalizeSpeechRecordingWaveStyleForPayload(chatUI),
     showMenuExpand: chatUI.showMenuExpand ?? DEFAULT_CHAT_UI.showMenuExpand,
     showMenuQuickLinks: chatUI.showMenuQuickLinks ?? DEFAULT_CHAT_UI.showMenuQuickLinks,
     menuQuickLinks: chatUI.menuQuickLinks && Array.isArray(chatUI.menuQuickLinks) && chatUI.menuQuickLinks.length
@@ -144,15 +198,24 @@ export function buildChatUiPayload(chatUI: ChatUiLike): ChatUiLike {
     ...(menuQuickLinksMenuIcon ? { menuQuickLinksMenuIcon } : {}),
     showComposerWithSuggestedQuestions: chatUI.showComposerWithSuggestedQuestions ?? false,
     showAvatarInHeader: chatUI.showAvatarInHeader ?? DEFAULT_CHAT_UI.showAvatarInHeader,
-    senderName: chatUI.senderName ?? DEFAULT_CHAT_UI.senderName,
-    showSenderName: chatUI.showSenderName ?? DEFAULT_CHAT_UI.showSenderName,
-    showTime: chatUI.showTime ?? DEFAULT_CHAT_UI.showTime,
-    timePosition: chatUI.timePosition ?? DEFAULT_CHAT_UI.timePosition,
     showCopyButton: chatUI.showCopyButton ?? DEFAULT_CHAT_UI.showCopyButton,
-    showSources: chatUI.showSources ?? DEFAULT_CHAT_UI.showSources,
-    showEmoji: chatUI.showEmoji ?? DEFAULT_CHAT_UI.showEmoji,
+    showMessageFeedback: chatUI.showMessageFeedback ?? DEFAULT_CHAT_UI.showMessageFeedback,
+    showSources: chatUI.showSources === true,
+    userTextBubbleStyle:
+      chatUI.userTextBubbleStyle === 'default'
+        ? 'default'
+        : chatUI.userTextBubbleStyle === 'defaultDark'
+          ? 'defaultDark'
+          : 'primary',
+    userVoiceBubbleStyle:
+      chatUI.userVoiceBubbleStyle === 'default'
+        ? 'default'
+        : chatUI.userVoiceBubbleStyle === 'defaultDark'
+          ? 'defaultDark'
+          : 'primary',
     allowFileUpload: chatUI.allowFileUpload ?? DEFAULT_CHAT_UI.allowFileUpload,
     showMic: chatUI.showMic ?? DEFAULT_CHAT_UI.showMic,
+    showVoice: chatUI.showVoice ?? DEFAULT_CHAT_UI.showVoice,
   };
 }
 
@@ -167,13 +230,14 @@ export function buildCustomerChatUiPayload(ui: Record<string, unknown>): Record<
 
 /**
  * Keys edited from Widget Appearance (branding & theme, launcher & animation, composer styling).
- * Chat Experience owns behavior/toggles in {@link CHAT_EXPERIENCE_CHAT_UI_KEYS}.
+ * Chat Experience owns behavior/toggles in {@link CHAT_EXPERIENCE_CHAT_UI_KEYS}; AI & Advanced owns {@link AI_ADVANCED_CHAT_UI_KEYS}.
  */
 export const WIDGET_APPEARANCE_CHAT_UI_KEYS = [
   'primaryColor',
   'backgroundStyle',
   'shadowIntensity',
   'showChatBorder',
+  'chatPanelBorderColor',
   'chatPanelBorderWidth',
   'bubbleBorderRadius',
   'showBranding',
@@ -190,23 +254,26 @@ export const WIDGET_APPEARANCE_CHAT_UI_KEYS = [
   'composerAsSeparateBox',
   'composerBorderWidth',
   'composerBorderColor',
+  'composerControlStyle',
+  'speechRecordingWaveStyle',
 ] as const;
 
 /**
- * Keys edited from Chat Experience (tabs: input tools, messages, header, controls, quick links).
+ * Keys edited from AI & Advanced (customer): attachments and voice/dictate in the composer.
+ */
+export const AI_ADVANCED_CHAT_UI_KEYS = ['allowFileUpload', 'showMic', 'showVoice'] as const;
+
+/**
+ * Keys edited from Chat Experience (tabs: Input Tools, Messages, Multiple Conversations, Header, Panel & Scrolling, Quick Links).
  * All other `chatUI` keys are owned by Widget Appearance (see {@link WIDGET_APPEARANCE_CHAT_UI_KEYS}).
  */
 export const CHAT_EXPERIENCE_CHAT_UI_KEYS = [
-  'allowFileUpload',
-  'showMic',
-  'showEmoji',
   'showComposerWithSuggestedQuestions',
   'showCopyButton',
+  'showMessageFeedback',
   'showSources',
-  'showSenderName',
-  'senderName',
-  'showTime',
-  'timePosition',
+  'userTextBubbleStyle',
+  'userVoiceBubbleStyle',
   'showAvatarInHeader',
   'statusIndicator',
   'liveIndicatorStyle',
@@ -215,6 +282,8 @@ export const CHAT_EXPERIENCE_CHAT_UI_KEYS = [
   'showScrollToBottomLabel',
   'scrollToBottomLabel',
   'showScrollbar',
+  'scrollChromeStyle',
+  'scrollToBottomChromeStyle',
   'showMenuExpand',
   'openChatOnLoad',
   'showMenuQuickLinks',
@@ -235,6 +304,23 @@ export function buildChatExperienceChatUiSavePayload(
   for (const key of CHAT_EXPERIENCE_CHAT_UI_KEYS) {
     if (Object.prototype.hasOwnProperty.call(localChatUi, key)) {
       merged[key] = localChatUi[key];
+    }
+  }
+  return buildCustomerChatUiPayload(merged);
+}
+
+/**
+ * Merge `chatUI` with AI & Advanced-owned fields (attachments, mic/voice).
+ */
+export function buildAiAdvancedChatUiSavePayload(
+  botChatUi: unknown,
+  patch: Record<string, unknown>,
+): Record<string, unknown> {
+  const base = mergeChatUiFromBot(botChatUi);
+  const merged: Record<string, unknown> = { ...base };
+  for (const key of AI_ADVANCED_CHAT_UI_KEYS) {
+    if (Object.prototype.hasOwnProperty.call(patch, key)) {
+      merged[key] = patch[key];
     }
   }
   return buildCustomerChatUiPayload(merged);

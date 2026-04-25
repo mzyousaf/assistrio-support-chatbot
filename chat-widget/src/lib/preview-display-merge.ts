@@ -93,6 +93,18 @@ export function mergePreviewInitResponse(
     );
 
   const bot = base.bot ?? {};
+  const welcomeEnabled = hasOwnOverride(overrides, "welcomeMessageEnabled")
+    ? overrides.welcomeMessageEnabled !== false
+    : bot.welcomeMessageEnabled !== false;
+  const welcomeText = hasOwnOverride(overrides, "welcomeMessage")
+    ? typeof overrides.welcomeMessage === "string"
+      ? overrides.welcomeMessage.trim() || undefined
+      : undefined
+    : typeof bot.welcomeMessage === "string"
+      ? bot.welcomeMessage.trim() || undefined
+      : undefined;
+  const showWelcome = welcomeEnabled && Boolean(welcomeText);
+
   const visitorMultiFromOverrides =
     overrides.visitorMultiChatEnabled !== undefined
       ? {
@@ -125,7 +137,8 @@ export function mergePreviewInitResponse(
       avatarEmoji: pickOptionalStringField(overrides, "avatarEmoji", bot.avatarEmoji) as typeof bot.avatarEmoji,
       tagline: pickOptionalStringField(overrides, "tagline", bot.tagline) as typeof bot.tagline,
       description: pickOptionalStringField(overrides, "description", bot.description) as typeof bot.description,
-      welcomeMessage: toNonEmptyString(overrides.welcomeMessage) ?? bot.welcomeMessage,
+      welcomeMessage: showWelcome ? welcomeText : undefined,
+      welcomeMessageEnabled: welcomeEnabled,
       suggestedQuestions,
       exampleQuestions: suggestedQuestions,
     },

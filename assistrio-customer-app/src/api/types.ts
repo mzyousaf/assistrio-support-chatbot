@@ -110,6 +110,8 @@ export type CustomerBotDetail = {
   categories?: string[];
   knowledgeDescription?: string;
   welcomeMessage?: string;
+  /** When false, welcome text is kept but not shown in the widget. */
+  welcomeMessageEnabled?: boolean;
   status: string;
   isPublic?: boolean;
   visibility?: string;

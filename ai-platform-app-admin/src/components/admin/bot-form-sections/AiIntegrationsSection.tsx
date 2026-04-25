@@ -7,6 +7,7 @@ import {
   SettingsFieldRow,
   SettingsEmptyState,
   SettingsDependencyAlert,
+  SettingsToggleRow,
 } from "@/components/admin/settings";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -31,7 +32,12 @@ export function AiIntegrationsSection() {
     whisperApiKeyOverride,
     setWhisperApiKeyOverride,
     chatUI,
+    setChatUI,
   } = useBotFormEditor();
+
+  const showVoiceEffective =
+    typeof chatUI.showVoice === "boolean" ? chatUI.showVoice : chatUI.showMic === true;
+  const speechInputEnabled = chatUI.showMic === true || showVoiceEffective;
 
   return (
     <div className={TAB_CONTENT_CLASS}>
@@ -154,24 +160,76 @@ export function AiIntegrationsSection() {
       </SettingsSectionCard>
 
       <SettingsSectionCard
+        title="Chat composer"
+        description="File attachments, microphone (dictate), and voice control in the widget input."
+      >
+        <div className="space-y-3">
+          <SettingsToggleRow
+            label="Allow file uploads in chat"
+            htmlFor="allow-file-upload"
+            helperText="Visitors can attach files from the + control in the composer."
+            control={
+              <input
+                id="allow-file-upload"
+                type="checkbox"
+                checked={chatUI.allowFileUpload === true}
+                onChange={(e) => setChatUI((prev) => ({ ...prev, allowFileUpload: e.target.checked }))}
+                className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500 dark:border-gray-600 dark:bg-gray-800"
+              />
+            }
+          />
+          <SettingsToggleRow
+            label="Show microphone (dictate)"
+            htmlFor="show-mic"
+            helperText="Dictate control beside the message field. Requires Whisper below when using speech-to-text."
+            control={
+              <input
+                id="show-mic"
+                type="checkbox"
+                checked={chatUI.showMic === true}
+                onChange={(e) => setChatUI((prev) => ({ ...prev, showMic: e.target.checked }))}
+                className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500 dark:border-gray-600 dark:bg-gray-800"
+              />
+            }
+          />
+          <SettingsToggleRow
+            label="Show voice input"
+            htmlFor="show-voice"
+            helperText="Voice (waveform) control next to send. Can be enabled independently of the microphone."
+            control={
+              <input
+                id="show-voice"
+                type="checkbox"
+                checked={showVoiceEffective}
+                onChange={(e) => setChatUI((prev) => ({ ...prev, showVoice: e.target.checked }))}
+                className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500 dark:border-gray-600 dark:bg-gray-800"
+              />
+            }
+          />
+        </div>
+      </SettingsSectionCard>
+
+      <SettingsSectionCard
         title="Voice Configuration"
-        description="Whisper API key for voice-to-text when the mic is enabled in Chat Experience."
+        description="Whisper API key for speech-to-text when microphone or voice input is enabled above."
       >
         <div className="space-y-4">
           <SettingsFieldRow
             label="Whisper API key"
             htmlFor="whisper-api-key"
             helperText="Use your OpenAI API key or an endpoint-specific key. Leave blank to use the main OpenAI key."
-            disabled={chatUI.showMic !== true}
+            disabled={!speechInputEnabled}
             dependencyNote={
-              chatUI.showMic !== true ? "Enable the microphone in Chat Experience to configure this setting." : undefined
+              !speechInputEnabled
+                ? "Enable microphone and/or voice input in Chat composer above to configure this setting."
+                : undefined
             }
           >
             <Input
               id="whisper-api-key"
               type="password"
               value={whisperApiKeyOverride}
-              disabled={chatUI.showMic !== true}
+              disabled={!speechInputEnabled}
               onChange={(e) => setWhisperApiKeyOverride(e.target.value)}
               placeholder="sk-... or leave blank to use main OpenAI key"
               autoComplete="off"

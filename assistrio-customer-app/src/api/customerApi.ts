@@ -41,6 +41,34 @@ export function getCustomerBotInsights(id: string) {
   );
 }
 
+/** GET /api/customer/bots/:id/conversations */
+export function getCustomerBotConversations(
+  id: string,
+  params?: { limit?: number; before?: string | null },
+) {
+  const q = new URLSearchParams();
+  if (params?.limit != null) q.set('limit', String(params.limit));
+  if (params?.before) q.set('before', params.before);
+  const qs = q.toString();
+  return customerFetch<{
+    conversations: Array<{
+      id: string;
+      lastActivityAt: string;
+      chatVisitorId: string;
+      userPreview: string;
+      assistantPreview: string;
+    }>;
+    nextCursor: string | null;
+  }>(`${P}/bots/${encodeURIComponent(id)}/conversations${qs ? `?${qs}` : ''}`);
+}
+
+/** GET /api/customer/bots/:id/conversations/:conversationId/messages */
+export function getCustomerBotConversationMessages(botId: string, conversationId: string) {
+  return customerFetch<{ ok: true; messages: Array<{ role: string; content: string; createdAt: string }> }>(
+    `${P}/bots/${encodeURIComponent(botId)}/conversations/${encodeURIComponent(conversationId)}/messages`,
+  );
+}
+
 export function postCustomerBotDraft(body: { clientDraftId: string }) {
   return customerFetch<CreateDraftResponse>(`${P}/bots/draft`, {
     method: 'POST',

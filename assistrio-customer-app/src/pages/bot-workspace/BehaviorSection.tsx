@@ -18,6 +18,7 @@ import { WELCOME_KEYWORD_PILLS, WelcomeMessageKeywordPreview } from './welcomeMe
 import { WorkspaceSectionHeader } from './WorkspaceSectionHeader';
 import { ws } from './workspace';
 import { Button, Card, CardBody, FieldRow, Input, Label, Modal, Select, Switch, Textarea } from '@/components/ui';
+import { BOT_FIELD_MAX } from '@/lib/botFieldLimits';
 import { cn } from '@/lib/utils';
 
 const PAGE_TITLE = 'Agent behavior';
@@ -334,8 +335,9 @@ export function BehaviorSection() {
                           quiet
                           disabled={!customCategoryMode}
                           value={customCategoryText}
+                          maxLength={BOT_FIELD_MAX.categoryText}
                           placeholder="e.g. real estate, internal IT"
-                          onChange={(e) => setCustomCategoryText(e.target.value)}
+                          onChange={(e) => setCustomCategoryText(e.target.value.slice(0, BOT_FIELD_MAX.categoryText))}
                         />
                       </FieldRow>
                     </section>

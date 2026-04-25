@@ -1,6 +1,44 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Types } from 'mongoose';
 
+/** Visitor-uploaded file sent with a user message (widget composer). */
+@Schema({ _id: false })
+export class MessageAttachment {
+  @Prop({ required: true })
+  name: string;
+
+  @Prop({ required: true })
+  mimeType: string;
+
+  /** Public URL after S3 upload. */
+  @Prop({ required: true })
+  url: string;
+
+  @Prop()
+  size?: number;
+}
+
+/** User message speech metadata (dictate vs voice message); transcript from Whisper. */
+@Schema({ _id: false })
+export class MessageSpeechInput {
+  @Prop({ required: true, enum: ['dictate', 'voice'] })
+  mode: 'dictate' | 'voice';
+
+  /** Whisper transcript (required for voice UX; optional echo for dictate). */
+  @Prop()
+  transcript?: string;
+
+  /** Public URL after S3 upload (voice messages). */
+  @Prop()
+  audioUrl?: string;
+
+  @Prop()
+  mimeType?: string;
+
+  @Prop()
+  durationMs?: number;
+}
+
 /** Stored source reference for RAG-backed assistant messages */
 export interface MessageSource {
   chunkId?: string;
@@ -45,6 +83,15 @@ export class Message {
   /** RAG sources for assistant messages (chunk/doc references and previews). */
   @Prop({ type: [{ chunkId: String, docId: String, docTitle: String, preview: String, score: Number }], default: undefined })
   sources?: MessageSource[];
+  /** How the user produced this message (composer dictate / voice); for analytics and support. */
+  @Prop({ type: MessageSpeechInput, required: false })
+  speechInput?: MessageSpeechInput;
+  /** Files attached from the embedded widget (when allowFileUpload is on). */
+  @Prop({
+    type: [{ name: String, mimeType: String, url: String, size: Number }],
+    required: false,
+  })
+  attachments?: MessageAttachment[];
   @Prop({ default: Date.now })
   createdAt: Date;
 }

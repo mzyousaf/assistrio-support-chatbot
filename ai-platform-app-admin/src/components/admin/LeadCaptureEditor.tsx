@@ -13,6 +13,7 @@ import {
 } from "@/components/admin/settings";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { BOT_FIELD_MAX, LEAD_CAPTURE_FIELDS_MAX } from "@/lib/botFieldLimits";
 import { defaultLeadCaptureBehavior, uniqueLeadFieldKeyFromLabel } from "@/lib/leadCapture";
 import type { BotLeadCaptureV2, BotLeadField, LeadAskStrategy, LeadFieldType } from "@/models/Bot";
 
@@ -69,6 +70,7 @@ export default function LeadCaptureEditor({
   const formBuilderDisabled = !enabled && showFieldsWhenDisabled;
 
   const openAdd = () => {
+    if (fields.length >= LEAD_CAPTURE_FIELDS_MAX) return;
     setDraft({ label: "", key: "", type: "text", required: true, disabled: false });
     setEditingIndex(null);
     setSheetOpen(true);
@@ -76,7 +78,10 @@ export default function LeadCaptureEditor({
 
   const openEdit = (index: number) => {
     const f = fields[index];
-    const label = sanitizeLabelInput(f.label).replace(/\s+/g, " ").trim();
+    const label = sanitizeLabelInput(f.label)
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, BOT_FIELD_MAX.leadFieldLabel);
     setDraft({
       ...f,
       label,
@@ -93,7 +98,7 @@ export default function LeadCaptureEditor({
   };
 
   const handleLabelChange = (raw: string) => {
-    const label = sanitizeLabelInput(raw);
+    const label = sanitizeLabelInput(raw).slice(0, BOT_FIELD_MAX.leadFieldLabel);
     setDraft((prev) => ({
       ...prev,
       label,
@@ -116,6 +121,7 @@ export default function LeadCaptureEditor({
       next[editingIndex] = nextField;
       setFields(next);
     } else {
+      if (fields.length >= LEAD_CAPTURE_FIELDS_MAX) return;
       setFields([...fields, nextField]);
     }
     closeSheet();
@@ -150,6 +156,7 @@ export default function LeadCaptureEditor({
   };
 
   const activeFieldCount = fields.filter((f) => !f.disabled).length;
+  const atFieldLimit = fields.length >= LEAD_CAPTURE_FIELDS_MAX;
 
   const isValid = draft.label.replace(/\s+/g, " ").trim().length > 0;
 
@@ -228,10 +235,10 @@ export default function LeadCaptureEditor({
             title="Form fields"
             summary={
               fields.length === 0
-                ? null
+                ? `Max ${LEAD_CAPTURE_FIELDS_MAX}`
                 : activeFieldCount === fields.length
-                  ? `${fields.length} field${fields.length !== 1 ? "s" : ""} collecting`
-                  : `${activeFieldCount} collecting · ${fields.length} total`
+                  ? `${fields.length}/${LEAD_CAPTURE_FIELDS_MAX} field${fields.length !== 1 ? "s" : ""} collecting`
+                  : `${activeFieldCount} collecting · ${fields.length}/${LEAD_CAPTURE_FIELDS_MAX} total`
             }
             action={
               <div className="flex flex-wrap items-center justify-end gap-2">
@@ -250,7 +257,7 @@ export default function LeadCaptureEditor({
                   type="button"
                   variant="secondary"
                   size="sm"
-                  disabled={formBuilderDisabled}
+                  disabled={formBuilderDisabled || atFieldLimit}
                   onClick={openAdd}
                 >
                   Add field
@@ -277,7 +284,7 @@ export default function LeadCaptureEditor({
                     type="button"
                     variant="secondary"
                     size="sm"
-                    disabled={formBuilderDisabled}
+                    disabled={formBuilderDisabled || atFieldLimit}
                     onClick={openAdd}
                   >
                     Add field
@@ -427,9 +434,18 @@ export default function LeadCaptureEditor({
       >
         <div className="space-y-5">
           <div>
-            <label className="mb-1.5 block text-xs font-medium text-gray-600 dark:text-gray-400">Label</label>
+            <div className="mb-1.5 flex w-full items-center justify-between gap-2">
+              <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Label</label>
+              <span
+                className="text-[11px] font-normal text-gray-500 tabular-nums dark:text-gray-400"
+                aria-live="polite"
+              >
+                {draft.label.length}/{BOT_FIELD_MAX.leadFieldLabel}
+              </span>
+            </div>
             <Input
               value={draft.label}
+              maxLength={BOT_FIELD_MAX.leadFieldLabel}
               onChange={(e) => handleLabelChange(e.target.value)}
               placeholder="e.g. Name"
               className="w-full"

@@ -27,6 +27,7 @@ export function buildCustomerWidgetPreviewOverridesFromBot(bot: CustomerBotDetai
       : undefined;
 
   const wm = typeof bot.welcomeMessage === 'string' ? bot.welcomeMessage.trim() : '';
+  const welcomeOn = bot.welcomeMessageEnabled !== false && Boolean(wm);
   const personality = isRecord(bot.personality) ? { ...bot.personality } : undefined;
   const config = isRecord(bot.config) ? { ...bot.config } : undefined;
 
@@ -39,7 +40,8 @@ export function buildCustomerWidgetPreviewOverridesFromBot(bot: CustomerBotDetai
         ? bot.shortDescription.trim()
         : undefined,
     description: typeof bot.description === 'string' && bot.description.trim() ? bot.description.trim() : undefined,
-    welcomeMessage: wm || undefined,
+    welcomeMessage: welcomeOn ? wm || undefined : undefined,
+    welcomeMessageEnabled: bot.welcomeMessageEnabled !== false,
     suggestedQuestions: suggested,
     chatUI: isRecord(bot.chatUI) ? (bot.chatUI as CustomerPreviewOverrides['chatUI']) : undefined,
     leadCapture: bot.leadCapture,
@@ -66,6 +68,7 @@ function shallowMergePersonality(
 /** Live behavior-tab fields merged onto `buildCustomerWidgetPreviewOverridesFromBot`. */
 export type BehaviorPreviewDraftSlice = {
   welcomeMessage?: string;
+  welcomeMessageEnabled?: boolean;
   suggestedQuestions: string[];
   personalityPatch: Record<string, unknown>;
 };
@@ -104,6 +107,24 @@ export function mergeAppearanceChatUiIntoPreviewOverrides(
   };
 }
 
+/** Live “Chats” tab (visitor multi-conversation) while Chat Experience is mounted. */
+export type ChatsPreviewDraftSlice = {
+  visitorMultiChatEnabled: boolean;
+  visitorMultiChatMax: number | null;
+};
+
+export function mergeChatsDraftIntoPreviewOverrides(
+  baseline: CustomerPreviewOverrides,
+  draft: ChatsPreviewDraftSlice | null,
+): CustomerPreviewOverrides {
+  if (!draft) return baseline;
+  return {
+    ...baseline,
+    visitorMultiChatEnabled: draft.visitorMultiChatEnabled,
+    visitorMultiChatMax: draft.visitorMultiChatEnabled ? draft.visitorMultiChatMax : null,
+  };
+}
+
 /** Live Profile editor fields (debounced into preview; cleared on section unmount). */
 export type ProfilePreviewDraftSlice = {
   botName: string;
@@ -137,10 +158,62 @@ export function mergeBehaviorDraftIntoPreviewOverrides(
     .map((q) => String(q).trim())
     .filter(Boolean)
     .slice(0, EXAMPLE_CAP);
-  return {
+  const out: CustomerPreviewOverrides = {
     ...baseline,
     welcomeMessage: draft.welcomeMessage?.trim() ? draft.welcomeMessage.trim() : undefined,
     suggestedQuestions: sq.length ? sq : undefined,
     personality: shallowMergePersonality(baseline.personality, draft.personalityPatch),
   };
+  if (typeof draft.welcomeMessageEnabled === 'boolean') {
+    out.welcomeMessageEnabled = draft.welcomeMessageEnabled;
+  }
+  return out;
+}
+
+/** Live lead-capture form state while Capture Leads is mounted (see preview chat payload merge on backend). */
+export type LeadCapturePreviewDraft = {
+  enabled: boolean;
+  fields: { key: string; label: string; type: string; required: boolean; disabled?: boolean; aliases?: string[] }[];
+  askStrategy: 'soft' | 'balanced' | 'direct';
+  captureMode: 'chat' | 'form' | 'hybrid';
+  politeMode: boolean;
+};
+
+export function mergeLeadCaptureDraftIntoPreviewOverrides(
+  baseline: CustomerPreviewOverrides,
+  draft: LeadCapturePreviewDraft | null,
+): CustomerPreviewOverrides {
+  if (draft == null) return baseline;
+  return { ...baseline, leadCapture: draft };
+}
+
+/** Matches unsaved `personality` + `config` + optional composer toggles from the AI & Advanced section. */
+export type AiIntegrationsPreviewDraftSlice = {
+  personality: Record<string, unknown>;
+  config: Record<string, unknown>;
+  /** Live composer toggles from AI & Advanced while that section is mounted. */
+  chatUiAdvanced?: { allowFileUpload: boolean; showMic: boolean; showVoice: boolean };
+};
+
+export function mergeAiIntegrationsDraftIntoPreviewOverrides(
+  baseline: CustomerPreviewOverrides,
+  draft: AiIntegrationsPreviewDraftSlice | null,
+): CustomerPreviewOverrides {
+  if (!draft) return baseline;
+  const out: CustomerPreviewOverrides = {
+    ...baseline,
+    personality: mergePlainRecordsLocal(
+      isRecord(baseline.personality) ? baseline.personality : {},
+      draft.personality,
+    ),
+    config: mergePlainRecordsLocal(
+      isRecord(baseline.config) ? baseline.config : {},
+      draft.config,
+    ),
+  };
+  if (draft.chatUiAdvanced) {
+    const prev = isRecord(baseline.chatUI) ? baseline.chatUI : {};
+    out.chatUI = mergePlainRecordsLocal(prev, draft.chatUiAdvanced as Record<string, unknown>) as CustomerPreviewOverrides['chatUI'];
+  }
+  return out;
 }

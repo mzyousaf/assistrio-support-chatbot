@@ -5,6 +5,7 @@ import { validateAndInitWidget } from "./api";
 import { normalizeEmbedConfig } from "./config";
 import { mergeWidgetStrings } from "./lib/widgetStrings";
 import { resolveWidgetDisplayModel } from "./lib/resolveWidgetDisplayModel";
+import { PANEL_COLLAPSED_HEIGHT_PX, PANEL_COLLAPSED_WIDTH_PX } from "./lib/embedPanelConstraints";
 import type { EmbedChatConfig, WidgetInitResponse } from "./types";
 
 type Phase = "loading" | "error" | "ready";
@@ -23,6 +24,7 @@ function initKeyFromRawConfig(raw: Partial<EmbedChatConfig> | undefined): string
   delete rest.presentation;
   delete rest.containedInlineSize;
   delete rest.showContainedLauncherPreview;
+  delete rest.onContainedPanelExpandChange;
   /** Stable key order: avoid spurious init when object insertion order differs between renders. */
   const sorted: Record<string, unknown> = {};
   for (const k of Object.keys(rest).sort()) {
@@ -158,12 +160,12 @@ export function EmbedWidgetRoot({ rawConfig }: EmbedWidgetRootProps) {
     typeof config.containedInlineSize?.collapsedWidth === "number" &&
     Number.isFinite(config.containedInlineSize.collapsedWidth)
       ? Math.round(config.containedInlineSize.collapsedWidth)
-      : 400;
+      : PANEL_COLLAPSED_WIDTH_PX;
   const containedCollapsedH =
     typeof config.containedInlineSize?.collapsedHeight === "number" &&
     Number.isFinite(config.containedInlineSize.collapsedHeight)
       ? Math.round(config.containedInlineSize.collapsedHeight)
-      : 700;
+      : PANEL_COLLAPSED_HEIGHT_PX;
 
   if (phase === "loading") {
     if (contained) {
@@ -266,6 +268,7 @@ export function EmbedWidgetRoot({ rawConfig }: EmbedWidgetRootProps) {
       inlinePanelExpandedWidth={config.containedInlineSize?.expandedWidth}
       inlinePanelExpandedHeight={config.containedInlineSize?.expandedHeight}
       showContainedLauncherPreview={contained && config.showContainedLauncherPreview === true}
+      onContainedPanelExpandChange={config.onContainedPanelExpandChange}
     />
   );
 }

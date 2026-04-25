@@ -16,6 +16,7 @@ import {
 } from "@/components/admin/settings";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { BOT_FIELD_MAX } from "@/lib/botFieldLimits";
 import {
   BUBBLE_RADIUS_MAX,
   BUBBLE_RADIUS_MIN,
@@ -208,28 +209,49 @@ return (
               <span className="text-sm text-gray-600 dark:text-gray-400">Show border around chat panel</span>
             </div>
             {chatUI.showChatBorder !== false ? (
-              <div className="flex flex-wrap items-center gap-2 pl-6">
-                <label htmlFor="chat-panel-border-width" className="text-sm text-gray-600 dark:text-gray-400">
-                  Width (px)
-                </label>
-                <Input
-                  id="chat-panel-border-width"
-                  type="number"
-                  min={0}
-                  max={5}
-                  value={chatUI.chatPanelBorderWidth ?? 1}
-                  onChange={(e) => {
-                    const n = parseInt(e.target.value, 10);
-                    if (!Number.isNaN(n)) {
+              <div className="flex flex-col gap-3 pl-6">
+                <div className="flex flex-wrap items-center gap-2">
+                  <label htmlFor="chat-panel-border-width" className="text-sm text-gray-600 dark:text-gray-400">
+                    Width (px)
+                  </label>
+                  <Input
+                    id="chat-panel-border-width"
+                    type="number"
+                    min={0}
+                    max={5}
+                    value={chatUI.chatPanelBorderWidth ?? 1}
+                    onChange={(e) => {
+                      const n = parseInt(e.target.value, 10);
+                      if (!Number.isNaN(n)) {
+                        setChatUI((prev) => ({
+                          ...prev,
+                          chatPanelBorderWidth: Math.max(0, Math.min(5, n)),
+                        }));
+                      }
+                    }}
+                    className="w-20"
+                  />
+                  <span className="text-xs text-gray-500 dark:text-gray-500">0–5, default 1</span>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label htmlFor="chat-panel-border-color" className="text-sm text-gray-600 dark:text-gray-400">
+                    Border color
+                  </label>
+                  <select
+                    id="chat-panel-border-color"
+                    value={chatUI.chatPanelBorderColor === "default" ? "default" : "primary"}
+                    onChange={(e) =>
                       setChatUI((prev) => ({
                         ...prev,
-                        chatPanelBorderWidth: Math.max(0, Math.min(5, n)),
-                      }));
+                        chatPanelBorderColor: e.target.value as "default" | "primary",
+                      }))
                     }
-                  }}
-                  className="w-20"
-                />
-                <span className="text-xs text-gray-500 dark:text-gray-500">0–5, default 1</span>
+                    className="w-full max-w-xs rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-400/40 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+                  >
+                    <option value="default">Default (neutral)</option>
+                    <option value="primary">Brand color</option>
+                  </select>
+                </div>
               </div>
             ) : null}
           </div>
@@ -632,6 +654,62 @@ return (
       description="Border width and color for the message input box. Only applies when the input is shown as a separate box (Chat Experience → Composer Layout)."
     >
       <div className="space-y-4">
+        <SettingsFieldRow
+          label="Send & voice buttons"
+          htmlFor="composer-control-style"
+          helperText="Brand color fills with your brand hex; Default matches the neutral mic; Default (dark) uses a dark chip with light icons."
+        >
+          <select
+            id="composer-control-style"
+            value={
+              chatUI.composerControlStyle === "brand" ||
+                chatUI.composerControlStyle === "default" ||
+                chatUI.composerControlStyle === "defaultDark"
+                ? chatUI.composerControlStyle
+                : chatUI.composerControlsUsePrimary === false
+                  ? "default"
+                  : "defaultDark"
+            }
+            onChange={(e) =>
+              setChatUI((prev) => ({
+                ...prev,
+                composerControlStyle: e.target.value as "brand" | "default" | "defaultDark",
+              }))
+            }
+            className="w-full max-w-md rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-400/40 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+          >
+            <option value="brand">Brand color</option>
+            <option value="default">Default (neutral)</option>
+            <option value="defaultDark">Default (dark)</option>
+          </select>
+        </SettingsFieldRow>
+        <SettingsFieldRow
+          label="Voice recording waveform"
+          htmlFor="speech-recording-wave-style"
+          helperText="Live level meter colors while recording dictation or a voice note."
+        >
+          <select
+            id="speech-recording-wave-style"
+            value={
+              chatUI.speechRecordingWaveStyle === "brand" ||
+                chatUI.speechRecordingWaveStyle === "default" ||
+                chatUI.speechRecordingWaveStyle === "defaultDark"
+                ? chatUI.speechRecordingWaveStyle
+                : "default"
+            }
+            onChange={(e) =>
+              setChatUI((prev) => ({
+                ...prev,
+                speechRecordingWaveStyle: e.target.value as "brand" | "default" | "defaultDark",
+              }))
+            }
+            className="w-full max-w-md rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-400/40 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+          >
+            <option value="brand">Brand color</option>
+            <option value="default">Default</option>
+            <option value="defaultDark">Default (dark)</option>
+          </select>
+        </SettingsFieldRow>
         {chatUI.composerAsSeparateBox !== false ? (
           <SettingsGrid>
             <SettingsFieldRow
@@ -674,7 +752,7 @@ return (
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-400/40 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
               >
                 <option value="default">Default (gray)</option>
-                <option value="primary">Primary color</option>
+                <option value="primary">Brand color</option>
               </select>
             </SettingsFieldRow>
           </SettingsGrid>
@@ -754,16 +832,23 @@ return (
           <SettingsFieldRow
             label="Branding message"
             htmlFor="branding-message"
-            helperText='Editable text shown in chat footer (e.g. "Powered by…").'
+            helperText={`Editable text shown in chat footer (e.g. "Powered by…"). Max ${BOT_FIELD_MAX.brandingMessage} characters.`}
           >
-            <Input
-              id="branding-message"
-              value={chatUI.brandingMessage ?? ""}
-              onChange={(e) =>
-                setChatUI((prev) => ({ ...prev, brandingMessage: e.target.value || undefined }))
-              }
-              placeholder="e.g. Powered by Assistrio"
-            />
+            <div className="flex w-full flex-col gap-1">
+              <Input
+                id="branding-message"
+                value={chatUI.brandingMessage ?? ""}
+                maxLength={BOT_FIELD_MAX.brandingMessage}
+                onChange={(e) => {
+                  const v = e.target.value.slice(0, BOT_FIELD_MAX.brandingMessage);
+                  setChatUI((prev) => ({ ...prev, brandingMessage: v || undefined }));
+                }}
+                placeholder="e.g. Powered by Assistrio"
+              />
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                {(chatUI.brandingMessage ?? "").length}/{BOT_FIELD_MAX.brandingMessage}
+              </p>
+            </div>
           </SettingsFieldRow>
         ) : (
           <SettingsFieldRow
@@ -795,16 +880,23 @@ return (
           <SettingsFieldRow
             label="Privacy / footer line"
             htmlFor="privacy-footer-text"
-            helperText="Optional second line (e.g. privacy notice). Shown only when this toggle is on and text is not empty."
+            helperText={`Optional second line (e.g. privacy notice). Shown only when this toggle is on and text is not empty. Max ${BOT_FIELD_MAX.privacyText} characters.`}
           >
-            <Input
-              id="privacy-footer-text"
-              value={chatUI.privacyText ?? ""}
-              onChange={(e) =>
-                setChatUI((prev) => ({ ...prev, privacyText: e.target.value || undefined }))
-              }
-              placeholder="Your conversations are private and secure."
-            />
+            <div className="flex w-full flex-col gap-1">
+              <Input
+                id="privacy-footer-text"
+                value={chatUI.privacyText ?? ""}
+                maxLength={BOT_FIELD_MAX.privacyText}
+                onChange={(e) => {
+                  const v = e.target.value.slice(0, BOT_FIELD_MAX.privacyText);
+                  setChatUI((prev) => ({ ...prev, privacyText: v || undefined }));
+                }}
+                placeholder="Your conversations are private and secure."
+              />
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                {(chatUI.privacyText ?? "").length}/{BOT_FIELD_MAX.privacyText}
+              </p>
+            </div>
           </SettingsFieldRow>
         ) : (
           <SettingsFieldRow

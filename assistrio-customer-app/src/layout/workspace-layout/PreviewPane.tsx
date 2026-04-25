@@ -17,7 +17,8 @@ export type PreviewPaneProps = {
 };
 
 /**
- * Right-lane preview shell: divider, stage background, heading, scrollable surface for injected preview content.
+ * Right-lane preview shell: divider, stage background, heading, and a flex surface for the preview body.
+ * Default is `overflow-y-hidden` so embedded previews (e.g. widget) size to the column without a pane scrollbar. Pass `overflow-y-auto` in `bodyClassName` when a scrollable body is required.
  */
 export function PreviewPane({
   title,
@@ -56,12 +57,15 @@ export function PreviewPane({
       </header>
       <div
         className={cn(
-          'preview-surface flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4 sm:px-5 sm:pb-5 sm:pt-4',
-          bodyClassName,
+          'preview-surface flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-hidden',
+          bodyClassName ?? 'px-4 py-4 sm:px-5 sm:pb-5 sm:pt-4',
         )}
         data-preview-pane-body
       >
-        <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col" data-preview-surface>
+        <div
+          className="flex min-h-0 h-full w-full min-w-0 max-h-full flex-1 flex-col"
+          data-preview-surface
+        >
           {children}
         </div>
       </div>

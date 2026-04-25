@@ -1,4 +1,4 @@
-import { Body, Controller, HttpException, HttpStatus, Post, Req } from '@nestjs/common';
+import { Controller, HttpException, HttpStatus, Post, Req } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
 import { FastifyRequest } from 'fastify';
@@ -13,6 +13,15 @@ import { WorkspacesService } from '../workspaces/workspaces.service';
 import { normalizeVisitorMultiChatMax } from '../bots/visitor-multi-chat.util';
 import { resolveEmbedChatVisitorIdFromBody } from '../bots/widget-embed-identity.util';
 import { isPreviewRequestOriginAllowed } from '../bots/preview-origin.util';
+import { isWelcomeMessageActive } from '../bots/welcome-message-display.util';
+import { normalizeSpeechInputFromBody } from './speech-input.normalize';
+import { WidgetSpeechService } from './widget-speech.service';
+import {
+  assertEmbedChatHasUserTurn,
+  parseEmbedChatMultipartRequest,
+  uploadWidgetChatAttachments,
+} from './widget-embed-chat-multipart.util';
+import type { MessageAttachment, MessageSpeechInput } from '../models/message.schema';
 
 type PreviewOverrides = {
   botName?: string;
@@ -21,6 +30,7 @@ type PreviewOverrides = {
   tagline?: string;
   description?: string;
   welcomeMessage?: string;
+  welcomeMessageEnabled?: boolean;
   suggestedQuestions?: string[];
   brandingMessage?: string;
   privacyText?: string;
@@ -93,6 +103,7 @@ function parsePreviewOverrides(input: unknown): PreviewOverrides | undefined {
     ...(toNonEmptyString(input.welcomeMessage)
       ? { welcomeMessage: toNonEmptyString(input.welcomeMessage) }
       : {}),
+    ...(typeof input.welcomeMessageEnabled === 'boolean' ? { welcomeMessageEnabled: input.welcomeMessageEnabled } : {}),
     ...(Array.isArray(input.suggestedQuestions)
       ? {
           suggestedQuestions: input.suggestedQuestions
@@ -145,6 +156,7 @@ function parseInitBody(
 
 function parseChatBody(
   body: unknown,
+  opts?: { allowEmptyMessage?: boolean },
 ): {
   botId: string;
   message: string;
@@ -156,21 +168,25 @@ function parseChatBody(
   previewOverrides?: PreviewOverrides;
   conversationId?: string;
   startNewConversation?: boolean;
+  speechInput?: MessageSpeechInput;
 } | null {
   if (!isPlainRecord(body)) return null;
   const parsed = parseInitBody(body);
   if (!parsed) return null;
-  const message = toNonEmptyString((body as PreviewChatBody).message);
-  if (!message) return null;
+  const messageField = (body as PreviewChatBody).message;
+  const messageRaw = typeof messageField === 'string' ? messageField.trim() : '';
+  if (!messageRaw && !opts?.allowEmptyMessage) return null;
   const visitorId = toNonEmptyString((body as PreviewChatBody).visitorId);
   const conversationId = toNonEmptyString((body as Record<string, unknown>).conversationId);
   const startNewConversation = (body as Record<string, unknown>).startNewConversation === true;
+  const speechInput = normalizeSpeechInputFromBody((body as Record<string, unknown>).speechInput);
   return {
     ...parsed,
-    message,
+    message: messageRaw,
     ...(visitorId ? { visitorId } : {}),
     ...(conversationId ? { conversationId } : {}),
     ...(startNewConversation ? { startNewConversation: true } : {}),
+    ...(speechInput ? { speechInput } : {}),
   };
 }
 
@@ -193,6 +209,7 @@ export class WidgetPreviewController {
     private readonly visitorsService: VisitorsService,
     private readonly chatEngineService: ChatEngineService,
     private readonly workspacesService: WorkspacesService,
+    private readonly widgetSpeechService: WidgetSpeechService,
   ) {}
 
   private assertPreviewOriginAllowed(request: FastifyRequest): void {
@@ -270,6 +287,7 @@ export class WidgetPreviewController {
       tagline?: string;
       description?: string;
       welcomeMessage?: string;
+      welcomeMessageEnabled?: boolean;
       suggestedQuestions: string[];
       exampleQuestions: string[];
     };
@@ -311,6 +329,22 @@ export class WidgetPreviewController {
       (bot as { visitorMultiChatMax?: unknown }).visitorMultiChatMax,
     );
 
+    const baseWelcomeText = toNonEmptyString(bot.welcomeMessage);
+    const baseWelcomeOn = (bot as { welcomeMessageEnabled?: boolean }).welcomeMessageEnabled !== false;
+    const o = previewOverrides;
+    const overrideWelcomeText =
+      o && 'welcomeMessage' in o ? toNonEmptyString(o.welcomeMessage) : undefined;
+    const overrideWelcomeOn =
+      o && typeof o.welcomeMessageEnabled === 'boolean' ? o.welcomeMessageEnabled : undefined;
+    const mergedWelcomeText =
+      overrideWelcomeText !== undefined ? overrideWelcomeText : baseWelcomeText;
+    const mergedWelcomeOn =
+      overrideWelcomeOn !== undefined ? overrideWelcomeOn !== false : baseWelcomeOn;
+    const showWelcome = isWelcomeMessageActive({
+      welcomeMessage: mergedWelcomeText,
+      welcomeMessageEnabled: mergedWelcomeOn,
+    });
+
     return {
       status: 'ok',
       bot: {
@@ -324,9 +358,8 @@ export class WidgetPreviewController {
           toNonEmptyString(previewOverrides?.tagline) ?? toNonEmptyString(bot.shortDescription),
         description:
           toNonEmptyString(previewOverrides?.description) ?? toNonEmptyString(bot.description),
-        welcomeMessage:
-          toNonEmptyString(previewOverrides?.welcomeMessage) ??
-          toNonEmptyString(bot.welcomeMessage),
+        welcomeMessage: showWelcome ? mergedWelcomeText : undefined,
+        welcomeMessageEnabled: mergedWelcomeOn,
         suggestedQuestions,
         exampleQuestions: suggestedQuestions,
       },
@@ -363,6 +396,15 @@ export class WidgetPreviewController {
           ) as BotLike['config'])
         : (previewOverrides?.config ?? (bot.config as BotLike['config']));
 
+    const mergedWelcomeText =
+      previewOverrides && 'welcomeMessage' in previewOverrides
+        ? toNonEmptyString(previewOverrides.welcomeMessage) ?? ''
+        : (toNonEmptyString(bot.welcomeMessage) ?? '');
+    const mergedWelcomeOn =
+      previewOverrides && typeof previewOverrides.welcomeMessageEnabled === 'boolean'
+        ? previewOverrides.welcomeMessageEnabled
+        : (bot as { welcomeMessageEnabled?: boolean }).welcomeMessageEnabled !== false;
+
     return {
       _id: (bot._id as { toString(): string }),
       name: toNonEmptyString(previewOverrides?.botName) ?? String(bot.name ?? ''),
@@ -372,9 +414,8 @@ export class WidgetPreviewController {
         toNonEmptyString(previewOverrides?.description) ?? (toNonEmptyString(bot.description) ?? ''),
       category: toNonEmptyString(bot.category) ?? '',
       openaiApiKeyOverride: toNonEmptyString(bot.openaiApiKeyOverride),
-      welcomeMessage:
-        toNonEmptyString(previewOverrides?.welcomeMessage) ??
-        (toNonEmptyString(bot.welcomeMessage) ?? ''),
+      welcomeMessage: mergedWelcomeText,
+      welcomeMessageEnabled: mergedWelcomeOn,
       knowledgeDescription: toNonEmptyString(bot.knowledgeDescription) ?? '',
       leadCapture: mergedLeadCapture,
       personality: mergedPersonality,
@@ -387,9 +428,9 @@ export class WidgetPreviewController {
   }
 
   @Post('init')
-  async init(@Body() body: unknown, @Req() request: FastifyRequest) {
+  async init(@Req() request: FastifyRequest) {
     this.assertPreviewOriginAllowed(request);
-    const parsed = parseInitBody(body);
+    const parsed = parseInitBody((request as { body?: unknown }).body);
     if (!parsed) {
       throw new HttpException(
         { error: 'Invalid request body', status: 'error', errorCode: 'BAD_REQUEST' },
@@ -426,19 +467,50 @@ export class WidgetPreviewController {
   }
 
   @Post('chat')
-  async chat(@Body() body: unknown, @Req() request: FastifyRequest) {
+  async chat(@Req() request: FastifyRequest) {
     this.assertPreviewOriginAllowed(request);
-    const parsed = parseChatBody(body);
-    if (!parsed) {
-      throw new HttpException(
-        { error: 'Invalid request body', errorCode: 'BAD_REQUEST' },
-        HttpStatus.BAD_REQUEST,
-      );
+    let parsed: NonNullable<ReturnType<typeof parseChatBody>> | null = null;
+    let uploadedAttachments: MessageAttachment[] = [];
+
+    if (typeof request.isMultipart === 'function' && request.isMultipart()) {
+      const { payloadRecord, rawFiles } = await parseEmbedChatMultipartRequest(request);
+      parsed = parseChatBody(payloadRecord, { allowEmptyMessage: true });
+      if (!parsed) {
+        throw new HttpException(
+          { error: 'Invalid request body', errorCode: 'BAD_REQUEST' },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      if (rawFiles.length > 0) {
+        uploadedAttachments = await uploadWidgetChatAttachments(parsed.botId, rawFiles);
+      }
+      assertEmbedChatHasUserTurn(parsed.message, parsed.speechInput, uploadedAttachments);
+    } else {
+      parsed = parseChatBody((request as { body?: unknown }).body);
+      if (!parsed) {
+        throw new HttpException(
+          { error: 'Invalid request body', errorCode: 'BAD_REQUEST' },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
     }
 
     const bot = await this.botsService.findOneByIdForExternalRuntime(parsed.botId);
     if (!bot) {
       throw new HttpException({ error: 'Bot not found', errorCode: 'BOT_NOT_FOUND' }, HttpStatus.NOT_FOUND);
+    }
+
+    const mergedChatUiForUpload: Record<string, unknown> = {
+      ...((bot as { chatUI?: Record<string, unknown> }).chatUI ?? {}),
+      ...(typeof parsed.previewOverrides?.chatUI === 'object' && parsed.previewOverrides.chatUI
+        ? (parsed.previewOverrides.chatUI as Record<string, unknown>)
+        : {}),
+    };
+    if (uploadedAttachments.length > 0 && mergedChatUiForUpload.allowFileUpload !== true) {
+      throw new HttpException(
+        { error: 'File uploads are disabled for this bot.', errorCode: 'FILE_UPLOAD_DISABLED' },
+        HttpStatus.FORBIDDEN,
+      );
     }
 
     const ownerUserId = await this.verifyPreviewOwnerOrThrow(request, bot as Record<string, unknown>, parsed.authToken);
@@ -481,6 +553,8 @@ export class WidgetPreviewController {
       ephemeral: true,
       ...(parsed.conversationId ? { conversationId: parsed.conversationId } : {}),
       ...(parsed.startNewConversation ? { startNewConversation: true } : {}),
+      ...(parsed.speechInput ? { speechInput: parsed.speechInput } : {}),
+      ...(uploadedAttachments.length > 0 ? { attachments: uploadedAttachments } : {}),
     });
     if (!result.ok) {
       throw new HttpException(result, HttpStatus.BAD_REQUEST);
@@ -495,6 +569,19 @@ export class WidgetPreviewController {
       conversationId: result.conversationId,
       assistantMessage: result.assistantMessage,
       sources: result.sources,
+      ...(result.userAttachments?.length ? { userAttachments: result.userAttachments } : {}),
     };
+  }
+
+  @Post('speech')
+  async speech(@Req() request: FastifyRequest) {
+    this.assertPreviewOriginAllowed(request);
+    const parsed = await this.widgetSpeechService.parseMultipart(request);
+    const bot = await this.botsService.findOneByIdForExternalRuntime(parsed.botId);
+    if (!bot) {
+      throw new HttpException({ error: 'Bot not found', errorCode: 'BOT_NOT_FOUND' }, HttpStatus.NOT_FOUND);
+    }
+    await this.verifyPreviewOwnerOrThrow(request, bot as Record<string, unknown>, parsed.authToken);
+    return this.widgetSpeechService.handlePreview(bot as Record<string, unknown>, parsed);
   }
 }

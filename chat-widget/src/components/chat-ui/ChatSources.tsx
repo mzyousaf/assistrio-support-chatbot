@@ -120,7 +120,7 @@ function SourcesModal({
         aria-labelledby={titleId}
         className={cx(
           "relative w-full sm:max-w-lg sm:max-h-[min(85vh,560px)] max-h-[90vh] flex flex-col rounded-t-2xl sm:rounded-2xl border shadow-2xl outline-none",
-          dark ? "bg-gray-900 border-gray-600/90 text-gray-100" : "bg-white border-gray-200 text-gray-900"
+          dark ? "bg-gray-900 border-gray-600/90 text-gray-200" : "bg-white border-gray-200 text-gray-800"
         )}
         onClick={(e) => e.stopPropagation()}
       >
@@ -132,7 +132,7 @@ function SourcesModal({
         >
           <div className="flex items-center gap-2 min-w-0">
             <DocumentIcon className="h-5 w-5 flex-shrink-0 opacity-80" />
-            <h2 id={titleId} className="text-sm font-semibold truncate">
+            <h2 id={titleId} className="text-sm font-medium tracking-tight truncate">
               {label}
             </h2>
             <span

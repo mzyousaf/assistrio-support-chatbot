@@ -21,6 +21,12 @@ export type {
   WidgetStrings,
 } from "./types";
 
+export {
+  PANEL_COLLAPSED_HEIGHT_PX,
+  PANEL_COLLAPSED_WIDTH_PX,
+  PANEL_EXPANDED_HEIGHT_MAX_PX,
+  PANEL_EXPANDED_WIDTH_PX,
+} from "./lib/embedPanelConstraints";
 export { resolveWidgetDisplayModel } from "./lib/resolveWidgetDisplayModel";
 export { mergeWidgetStrings, DEFAULT_WIDGET_STRINGS_EN } from "./lib/widgetStrings";
 export type { WidgetLocale } from "./lib/widgetStrings";

@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useId, useMemo, useState, type FormEvent } from 'react';
-import { Loader2, Lock, RefreshCw, Save } from 'lucide-react';
+import { Info, Loader2, Lock, RefreshCw, Save } from 'lucide-react';
 import { patchCustomerBot } from '../../api/customerApi';
 import type { CustomerBotDetail } from '../../api/types';
 import { Button, Card, CardBody, FieldRow, Range, SearchableSelect, Switch, Tooltip } from '@/components/ui';
+import { buildAiAdvancedChatUiSavePayload, mergeChatUiFromBot } from './chatUiPayload';
 import { cn } from '@/lib/utils';
 import { useBotWorkspace } from './BotWorkspaceContext';
+import { useCustomerWidgetPreview } from './CustomerWidgetPreviewContext';
 import { registerManualSaveGuard } from './workspaceManualSaveGuard';
 import {
   clampCreativity,
@@ -26,8 +28,8 @@ import {
 import { WorkspaceSectionHeader } from './WorkspaceSectionHeader';
 import { ws } from './workspace';
 
-const PAGE_TITLE = 'AI & Responses';
-const SECTION_NAV_LABEL = 'AI & Responses';
+const PAGE_TITLE = 'AI & Advanced';
+const SECTION_NAV_LABEL = 'AI & Advanced';
 
 function rangeDetailTooltip(lines: readonly string[]) {
   return (
@@ -58,6 +60,8 @@ function formatLastTrainedAt(iso: string | null | undefined): string | null {
 const cardClass =
   'w-full min-w-0 overflow-visible border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)] ring-1 ring-slate-900/[0.035]';
 
+const AI_INTEGRATIONS_PREVIEW_DEBOUNCE_MS = 150;
+
 /**
  * Server replaces the whole `personality` subdocument on PATCH. Re-hydrate all fields
  * `normalizePersonalityInput` persists so Behavior data is not cleared when only
@@ -81,6 +85,7 @@ export function AiIntegrationsSection() {
   const creativityId = useId();
   const lengthId = useId();
   const { bot, botId, softReload } = useBotWorkspace();
+  const { setAiIntegrationsDraftSlice } = useCustomerWidgetPreview();
 
   const [language, setLanguage] = useState('auto');
   const [creativity, setCreativity] = useState(0.5);
@@ -89,11 +94,15 @@ export function AiIntegrationsSection() {
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [allowFileUpload, setAllowFileUpload] = useState(false);
+  const [showMic, setShowMic] = useState(false);
+  const [showVoice, setShowVoice] = useState(false);
 
   const hydrateFromBot = useCallback(() => {
     if (!bot) return;
     const p = bot.personality;
     const c = bot.config ?? {};
+    const ui = mergeChatUiFromBot(bot.chatUI);
 
     setLanguage(normalizeLanguageSelectValue(p?.language));
 
@@ -109,6 +118,10 @@ export function AiIntegrationsSection() {
         : snapMaxTokens(512);
     setMaxTokens(m);
 
+    setAllowFileUpload(ui.allowFileUpload === true);
+    setShowMic(ui.showMic === true);
+    setShowVoice(ui.showVoice === true);
+
     setDirty(false);
     setSaveError(null);
   }, [bot]);
@@ -120,6 +133,30 @@ export function AiIntegrationsSection() {
   useEffect(() => {
     return registerManualSaveGuard('ai-integrations', () => dirty, hydrateFromBot);
   }, [dirty, hydrateFromBot]);
+
+  useEffect(() => {
+    if (!bot) {
+      setAiIntegrationsDraftSlice(null);
+      return;
+    }
+    const id = window.setTimeout(() => {
+      const mt = snapMaxTokens(maxTokens);
+      setAiIntegrationsDraftSlice({
+        personality: buildPersonalityPatchForAi(bot, language),
+        config: {
+          temperature: clampCreativity(creativity),
+          maxTokens: mt,
+          responseLength: maxTokensToResponseLength(mt),
+        },
+        chatUiAdvanced: { allowFileUpload, showMic, showVoice },
+      });
+    }, AI_INTEGRATIONS_PREVIEW_DEBOUNCE_MS);
+    return () => window.clearTimeout(id);
+  }, [bot, language, creativity, maxTokens, allowFileUpload, showMic, showVoice, setAiIntegrationsDraftSlice]);
+
+  useEffect(() => {
+    return () => setAiIntegrationsDraftSlice(null);
+  }, [setAiIntegrationsDraftSlice]);
 
   const markDirty = useCallback(() => {
     setDirty(true);
@@ -149,6 +186,7 @@ export function AiIntegrationsSection() {
           maxTokens: mt,
           responseLength: maxTokensToResponseLength(mt),
         },
+        chatUI: buildAiAdvancedChatUiSavePayload(bot.chatUI, { allowFileUpload, showMic, showVoice }),
       });
       setSaving(false);
       if (!res.ok) {
@@ -158,7 +196,7 @@ export function AiIntegrationsSection() {
       setDirty(false);
       await softReload();
     },
-    [bot, botId, creativity, dirty, language, maxTokens, softReload, saving],
+    [bot, botId, creativity, dirty, language, maxTokens, allowFileUpload, showMic, showVoice, softReload, saving],
   );
 
   if (!bot || !botId) return null;
@@ -168,11 +206,11 @@ export function AiIntegrationsSection() {
   const lastTrainedLine = formatLastTrainedAt(lastTrainedIso);
 
   return (
-    <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col" data-ai-responses-editor>
+    <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col" data-ai-advanced-editor>
       <form
         className="flex min-h-0 w-full flex-1 flex-col"
         onSubmit={(e) => void onSubmit(e)}
-        aria-label="AI and response settings"
+        aria-label="AI and advanced settings"
       >
         <div className="w-full min-w-0 flex-1 pb-10">
           <header className={ws.workspaceEditorPageHeader}>
@@ -180,7 +218,7 @@ export function AiIntegrationsSection() {
               <div className={ws.workspaceEditorHeadingStack}>
                 <h1 className={ws.workspaceEditorH1}>{PAGE_TITLE}</h1>
                 <p className={ws.workspaceEditorLead}>
-                  Choose response language and fine-tune how the assistant answers.
+                  Response language, model tuning, and composer attachments / voice input for the widget.
                 </p>
               </div>
             </div>
@@ -195,17 +233,17 @@ export function AiIntegrationsSection() {
                   'h-9 w-full gap-1.5 px-4 shadow-sm sm:w-auto sm:min-w-[9.5rem]',
                 )}
                 aria-busy={saving || undefined}
-                aria-label={saving ? 'Saving response settings' : `Save ${SECTION_NAV_LABEL}`}
+                aria-label={saving ? 'Saving AI and advanced settings' : `Save ${SECTION_NAV_LABEL}`}
               >
                 {saving ? (
                   <>
                     <Loader2 size={15} strokeWidth={2} className="animate-spin opacity-90" aria-hidden />
-                    Saving...
+                    Saving AI & Advanced…
                   </>
                 ) : (
                   <>
                     <Save size={15} strokeWidth={2} aria-hidden />
-                    Save response settings
+                    Save AI & Advanced
                   </>
                 )}
               </Button>
@@ -355,6 +393,113 @@ export function AiIntegrationsSection() {
                           );
                         })}
                       </div>
+                    </div>
+                  </div>
+                </section>
+              </CardBody>
+            </Card>
+
+            <Card className={cardClass}>
+              <CardBody className="w-full min-w-0 px-5 py-5 sm:px-6 sm:py-6">
+                <section className={ws.workspaceEditorCardSection} aria-labelledby="ai-composer-input">
+                  <WorkspaceSectionHeader
+                    id="ai-composer-input"
+                    title="Chat composer"
+                    description="File attachments, microphone (dictate), and voice control in the widget composer."
+                  />
+                  <div className="mt-4 space-y-0">
+                    <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 py-3.5">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span id="ai-allow-file-label" className={ws.workspaceEditorControlLabel}>
+                            Allow file uploads
+                          </span>
+                          <Tooltip content="Visitors can attach files from the + control in the composer.">
+                            <button
+                              type="button"
+                              className="inline-flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary)]"
+                              aria-label="About file uploads"
+                            >
+                              <Info size={14} strokeWidth={1.75} aria-hidden />
+                            </button>
+                          </Tooltip>
+                        </div>
+                        <p className={cn(ws.workspaceEditorControlHint, 'mt-1')}>
+                          Let visitors attach files in the widget composer.
+                        </p>
+                      </div>
+                      <Switch
+                        id="ai-allow-file"
+                        checked={allowFileUpload}
+                        onCheckedChange={(v) => {
+                          setAllowFileUpload(v);
+                          markDirty();
+                        }}
+                        aria-labelledby="ai-allow-file-label"
+                        className="mt-0.5 shrink-0"
+                      />
+                    </div>
+                    <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 py-3.5">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span id="ai-show-mic-label" className={ws.workspaceEditorControlLabel}>
+                            Microphone (dictate)
+                          </span>
+                          <Tooltip content="Shows the mic control for speech-to-text when your workspace supports Whisper.">
+                            <button
+                              type="button"
+                              className="inline-flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary)]"
+                              aria-label="About microphone"
+                            >
+                              <Info size={14} strokeWidth={1.75} aria-hidden />
+                            </button>
+                          </Tooltip>
+                        </div>
+                        <p className={cn(ws.workspaceEditorControlHint, 'mt-1')}>
+                          Dictate control beside the message field.
+                        </p>
+                      </div>
+                      <Switch
+                        id="ai-show-mic"
+                        checked={showMic}
+                        onCheckedChange={(v) => {
+                          setShowMic(v);
+                          markDirty();
+                        }}
+                        aria-labelledby="ai-show-mic-label"
+                        className="mt-0.5 shrink-0"
+                      />
+                    </div>
+                    <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 py-3.5 last:border-b-0">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span id="ai-show-voice-label" className={ws.workspaceEditorControlLabel}>
+                            Voice input
+                          </span>
+                          <Tooltip content="Shows the voice (waveform) control. Often used with the same speech pipeline as the microphone.">
+                            <button
+                              type="button"
+                              className="inline-flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary)]"
+                              aria-label="About voice input"
+                            >
+                              <Info size={14} strokeWidth={1.75} aria-hidden />
+                            </button>
+                          </Tooltip>
+                        </div>
+                        <p className={cn(ws.workspaceEditorControlHint, 'mt-1')}>
+                          Separate voice control next to the send button.
+                        </p>
+                      </div>
+                      <Switch
+                        id="ai-show-voice"
+                        checked={showVoice}
+                        onCheckedChange={(v) => {
+                          setShowVoice(v);
+                          markDirty();
+                        }}
+                        aria-labelledby="ai-show-voice-label"
+                        className="mt-0.5 shrink-0"
+                      />
                     </div>
                   </div>
                 </section>

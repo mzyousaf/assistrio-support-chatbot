@@ -109,6 +109,11 @@ export type WidgetPreviewContainerProps = {
   previewMountId?: string;
   previewTitle?: string;
   previewDescription?: string;
+  /**
+   * Optional class for `PreviewPane` scroll body (e.g. tighter padding for widget preview).
+   * When omitted, default preview padding is used.
+   */
+  previewBodyClassName?: string;
   className?: string;
 };
 
@@ -124,6 +129,7 @@ export function WidgetPreviewContainer({
   previewMountId,
   previewTitle = 'Preview',
   previewDescription,
+  previewBodyClassName,
   className,
 }: WidgetPreviewContainerProps) {
   const tier = useWidgetPreviewBreakpoint();
@@ -297,6 +303,7 @@ export function WidgetPreviewContainer({
       <PreviewPane
         title={previewTitle}
         description={previewDescription}
+        bodyClassName={previewBodyClassName}
         headerTrailing={
           useLargeCollapsibleGrid && !inlineCollapsed ? (
             <PreviewCollapseHeaderButton onCollapse={toggleLargeInline} />
@@ -423,6 +430,7 @@ export function WidgetPreviewContainer({
               <PreviewPane
                 title={previewTitle}
                 description={previewDescription}
+                bodyClassName={previewBodyClassName}
                 headerTrailing={
                   <PreviewCollapseHeaderButton onCollapse={closeFloating} />
                 }

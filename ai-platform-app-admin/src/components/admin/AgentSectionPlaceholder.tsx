@@ -22,7 +22,9 @@ export function AgentSectionPlaceholder({
         <Sparkles className="h-3.5 w-3.5" aria-hidden />
         Soon
       </div>
-      <h2 className="mt-4 text-xl font-semibold tracking-tight text-slate-900 dark:text-white">{title}</h2>
+      <h2 className="mt-4 text-xl font-semibold leading-tight tracking-tight text-slate-900 sm:text-2xl dark:text-white">
+        {title}
+      </h2>
       <p className="mt-2 max-w-xl text-sm leading-relaxed text-slate-600 dark:text-slate-400">{description}</p>
       {ctaHref && ctaLabel ? (
         <Link

@@ -1,8 +1,19 @@
+import { BOT_FIELD_MAX, clampStr } from "@/lib/botFieldLimits";
 import { normalizeQuickLinkIcon } from "@/lib/quickLinkIconNormalize";
 import type { BotChatUI } from "@/models/Bot";
 
 /** Default chat UI baseline (aligned with BotForm). */
-export const DEFAULT_CHAT_UI: Required<Omit<BotChatUI, "menuQuickLinks" | "launcherAvatarUrl" | "menuQuickLinksMenuIcon">> & {
+export const DEFAULT_CHAT_UI: Required<
+  Omit<
+    BotChatUI,
+    | "menuQuickLinks"
+    | "launcherAvatarUrl"
+    | "menuQuickLinksMenuIcon"
+    | "composerControlsUsePrimary"
+    | "scrollChromeUsesPrimary"
+    | "scrollToBottomChromeStyle"
+  >
+> & {
   menuQuickLinks: BotChatUI["menuQuickLinks"];
   launcherAvatarUrl?: string;
 } = {
@@ -12,6 +23,7 @@ export const DEFAULT_CHAT_UI: Required<Omit<BotChatUI, "menuQuickLinks" | "launc
   launcherPosition: "bottom-right",
   shadowIntensity: "medium",
   showChatBorder: true,
+  chatPanelBorderColor: "primary",
   chatPanelBorderWidth: 1,
   launcherIcon: "default",
   launcherAvatarRingWidth: 18,
@@ -28,23 +40,29 @@ export const DEFAULT_CHAT_UI: Required<Omit<BotChatUI, "menuQuickLinks" | "launc
   showScrollToBottomLabel: true,
   scrollToBottomLabel: "",
   showScrollbar: true,
+  scrollChromeStyle: "default",
   composerAsSeparateBox: true,
   composerBorderWidth: 1,
   composerBorderColor: "primary",
+  composerControlStyle: "defaultDark",
+  speechRecordingWaveStyle: "default",
   showMenuExpand: true,
   showMenuQuickLinks: true,
   menuQuickLinks: [],
   showComposerWithSuggestedQuestions: false,
   showAvatarInHeader: true,
   senderName: "",
-  showSenderName: true,
-  showTime: true,
+  showSenderName: false,
+  showTime: false,
   timePosition: "top",
   showCopyButton: true,
-  showSources: true,
-  showEmoji: true,
+  showMessageFeedback: true,
+  userTextBubbleStyle: "primary",
+  userVoiceBubbleStyle: "primary",
+  showSources: false,
   allowFileUpload: false,
   showMic: false,
+  showVoice: false,
   brandingMessage: "",
   privacyText: "",
 };
@@ -131,17 +149,40 @@ export function buildChatUiPayload(chatUI: BotChatUI): BotChatUI {
     chatOpenAnimation: chatUI.chatOpenAnimation ?? DEFAULT_CHAT_UI.chatOpenAnimation,
     openChatOnLoad: chatUI.openChatOnLoad ?? DEFAULT_CHAT_UI.openChatOnLoad,
     showBranding: chatUI.showBranding ?? DEFAULT_CHAT_UI.showBranding,
-    brandingMessage: chatUI.brandingMessage ?? DEFAULT_CHAT_UI.brandingMessage,
+    brandingMessage: clampStr(
+      (chatUI.brandingMessage ?? DEFAULT_CHAT_UI.brandingMessage) || "",
+      BOT_FIELD_MAX.brandingMessage,
+    ),
     showPrivacyText: chatUI.showPrivacyText ?? DEFAULT_CHAT_UI.showPrivacyText,
-    privacyText: chatUI.privacyText?.trim() || undefined,
+    privacyText: (() => {
+      const t = chatUI.privacyText?.trim();
+      return t ? clampStr(t, BOT_FIELD_MAX.privacyText) : undefined;
+    })(),
     liveIndicatorStyle: chatUI.liveIndicatorStyle ?? DEFAULT_CHAT_UI.liveIndicatorStyle,
     statusIndicator: chatUI.statusIndicator ?? DEFAULT_CHAT_UI.statusIndicator,
     statusDotStyle: chatUI.statusDotStyle ?? DEFAULT_CHAT_UI.statusDotStyle,
     showScrollToBottom: chatUI.showScrollToBottom ?? DEFAULT_CHAT_UI.showScrollToBottom,
     showScrollToBottomLabel: chatUI.showScrollToBottomLabel ?? DEFAULT_CHAT_UI.showScrollToBottomLabel,
-    scrollToBottomLabel:
+    scrollToBottomLabel: clampStr(
       typeof chatUI.scrollToBottomLabel === "string" ? chatUI.scrollToBottomLabel.trim() : "",
+      BOT_FIELD_MAX.scrollToBottomLabel,
+    ),
     showScrollbar: chatUI.showScrollbar ?? DEFAULT_CHAT_UI.showScrollbar,
+    scrollChromeStyle: (() => {
+      const s = chatUI.scrollChromeStyle;
+      if (s === "default" || s === "defaultDark" || s === "primary") return s;
+      if (s === "gray") return "defaultDark";
+      return chatUI.scrollChromeUsesPrimary === false ? "default" : "primary";
+    })(),
+    scrollToBottomChromeStyle: (() => {
+      const s = chatUI.scrollToBottomChromeStyle;
+      if (s === "default" || s === "defaultDark" || s === "primary") return s;
+      if (s === "gray") return "defaultDark";
+      const sb = chatUI.scrollChromeStyle;
+      if (sb === "default" || sb === "defaultDark" || sb === "primary") return sb;
+      if (sb === "gray") return "defaultDark";
+      return chatUI.scrollChromeUsesPrimary === false ? "default" : "primary";
+    })(),
     composerAsSeparateBox: chatUI.composerAsSeparateBox ?? DEFAULT_CHAT_UI.composerAsSeparateBox,
     composerBorderWidth:
       typeof chatUI.composerBorderWidth === "number" && chatUI.composerBorderWidth >= 0 && chatUI.composerBorderWidth <= 6
@@ -153,20 +194,53 @@ export function buildChatUiPayload(chatUI: BotChatUI): BotChatUI {
           ? 0
           : DEFAULT_CHAT_UI.composerBorderWidth,
     composerBorderColor: chatUI.composerBorderColor ?? DEFAULT_CHAT_UI.composerBorderColor,
+    composerControlStyle:
+      chatUI.composerControlStyle === "brand" ||
+        chatUI.composerControlStyle === "default" ||
+        chatUI.composerControlStyle === "defaultDark"
+        ? chatUI.composerControlStyle
+        : chatUI.composerControlsUsePrimary === false
+          ? "default"
+          : "defaultDark",
+    speechRecordingWaveStyle:
+      chatUI.speechRecordingWaveStyle === "brand" ||
+        chatUI.speechRecordingWaveStyle === "default" ||
+        chatUI.speechRecordingWaveStyle === "defaultDark"
+        ? chatUI.speechRecordingWaveStyle
+        : "default",
     showMenuExpand: chatUI.showMenuExpand ?? DEFAULT_CHAT_UI.showMenuExpand,
     showMenuQuickLinks: chatUI.showMenuQuickLinks ?? DEFAULT_CHAT_UI.showMenuQuickLinks,
     menuQuickLinks: chatUI.menuQuickLinks?.length ? chatUI.menuQuickLinks : undefined,
     ...(menuQuickLinksMenuIcon ? { menuQuickLinksMenuIcon } : {}),
     showComposerWithSuggestedQuestions: chatUI.showComposerWithSuggestedQuestions ?? false,
     showAvatarInHeader: chatUI.showAvatarInHeader ?? DEFAULT_CHAT_UI.showAvatarInHeader,
-    senderName: chatUI.senderName ?? DEFAULT_CHAT_UI.senderName,
+    senderName: clampStr(
+      (chatUI.senderName ?? DEFAULT_CHAT_UI.senderName) || "",
+      BOT_FIELD_MAX.senderName,
+    ),
     showSenderName: chatUI.showSenderName ?? DEFAULT_CHAT_UI.showSenderName,
     showTime: chatUI.showTime ?? DEFAULT_CHAT_UI.showTime,
     timePosition: chatUI.timePosition ?? DEFAULT_CHAT_UI.timePosition,
     showCopyButton: chatUI.showCopyButton ?? DEFAULT_CHAT_UI.showCopyButton,
-    showSources: chatUI.showSources ?? DEFAULT_CHAT_UI.showSources,
-    showEmoji: chatUI.showEmoji ?? DEFAULT_CHAT_UI.showEmoji,
+    showMessageFeedback: chatUI.showMessageFeedback ?? DEFAULT_CHAT_UI.showMessageFeedback,
+    userTextBubbleStyle:
+      chatUI.userTextBubbleStyle === "default"
+        ? "default"
+        : chatUI.userTextBubbleStyle === "defaultDark"
+          ? "defaultDark"
+          : "primary",
+    userVoiceBubbleStyle:
+      chatUI.userVoiceBubbleStyle === "default"
+        ? "default"
+        : chatUI.userVoiceBubbleStyle === "defaultDark"
+          ? "defaultDark"
+          : "primary",
+    showSources: chatUI.showSources === true,
     allowFileUpload: chatUI.allowFileUpload ?? DEFAULT_CHAT_UI.allowFileUpload,
     showMic: chatUI.showMic ?? DEFAULT_CHAT_UI.showMic,
+    showVoice:
+      typeof chatUI.showVoice === "boolean"
+        ? chatUI.showVoice
+        : (chatUI.showMic ?? DEFAULT_CHAT_UI.showMic),
   };
 }

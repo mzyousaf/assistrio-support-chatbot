@@ -3,6 +3,7 @@ import type { LeadFieldType } from '../../models/bot.schema';
 import type { AllowedOrigin } from '../../bots/origin-validation.util';
 import { normalizeUserAllowedOriginInput } from '../../bots/origin-validation.util';
 import { normalizeVisitorMultiChatMax } from '../../bots/visitor-multi-chat.util';
+import { BOT_FIELD_MAX, clampStr, LEAD_CAPTURE_FIELDS_MAX } from './bot-field-limits';
 import { normalizeQuickLinkIcon } from './quick-link-icon-ids';
 
 const LEAD_TYPES: LeadFieldType[] = ['text', 'email', 'phone', 'number', 'url'];
@@ -34,9 +35,10 @@ function normalizeFields(input: unknown): BotLeadField[] {
   const used = new Set<string>();
   const out: BotLeadField[] = [];
   for (const field of input) {
+    if (out.length >= LEAD_CAPTURE_FIELDS_MAX) break;
     if (!field || typeof field !== 'object') continue;
     const o = field as Record<string, unknown>;
-    const labelRaw = typeof o.label === 'string' ? o.label.trim() : '';
+    const labelRaw = clampStr(typeof o.label === 'string' ? o.label.trim() : '', BOT_FIELD_MAX.leadFieldLabel);
     const keyRaw = typeof o.key === 'string' ? o.key.trim() : '';
     if (!labelRaw && !keyRaw) continue;
     const typeRaw = typeof o.type === 'string' ? o.type : 'text';
@@ -96,7 +98,9 @@ function normalizeExampleQuestions(input: unknown): string[] {
   if (!Array.isArray(input)) return [];
   return input
     .slice(0, EXAMPLE_QUESTIONS_MAX)
-    .map((item: unknown) => (typeof item === 'string' ? item.trim() : ''))
+    .map((item: unknown) =>
+      typeof item === 'string' ? clampStr(item.trim(), BOT_FIELD_MAX.exampleQuestion) : '',
+    )
     .filter(Boolean);
 }
 
@@ -120,6 +124,7 @@ const WORKSPACE_PATCH_RECOGNIZED_KEYS = new Set([
   'avatarSource',
   'knowledgeDescription',
   'welcomeMessage',
+  'welcomeMessageEnabled',
   'faqs',
   'exampleQuestions',
   'leadCapture',
@@ -173,13 +178,45 @@ function normalizeMenuQuickLinks(input: unknown): Array<{ text: string; route: s
     .map((item: unknown) => {
       const o = item && typeof item === 'object' ? (item as Record<string, unknown>) : null;
       if (!o) return null;
-      const text = typeof o.text === 'string' ? o.text.trim() : '';
-      const route = typeof o.route === 'string' ? o.route.trim() : '';
+      const text = clampStr(typeof o.text === 'string' ? o.text.trim() : '', BOT_FIELD_MAX.menuQuickLinkText);
+      const route = clampStr(typeof o.route === 'string' ? o.route.trim() : '', BOT_FIELD_MAX.menuQuickLinkRoute);
       if (!text || !route) return null;
       const icon = normalizeQuickLinkIcon(o.icon);
       return icon ? { text, route, icon } : { text, route };
     })
     .filter((x): x is { text: string; route: string; icon?: string } => x != null);
+}
+
+function normalizeUserBubbleStyleInput(v: unknown): 'primary' | 'default' | 'defaultDark' {
+  if (v === 'default') return 'default';
+  if (v === 'defaultDark') return 'defaultDark';
+  return 'primary';
+}
+
+function normalizeComposerControlStyleInput(input: Record<string, unknown>): 'brand' | 'default' | 'defaultDark' {
+  const s = input.composerControlStyle;
+  if (s === 'brand' || s === 'default' || s === 'defaultDark') return s;
+  return input.composerControlsUsePrimary === false ? 'default' : 'defaultDark';
+}
+
+function normalizeSpeechRecordingWaveStyleInput(input: Record<string, unknown>): 'brand' | 'default' | 'defaultDark' {
+  const s = input.speechRecordingWaveStyle;
+  if (s === 'brand' || s === 'default' || s === 'defaultDark') return s;
+  return 'default';
+}
+
+function normalizeScrollChromeStyleInput(input: Record<string, unknown>): 'default' | 'defaultDark' | 'primary' {
+  const s = input.scrollChromeStyle;
+  if (s === 'default' || s === 'defaultDark' || s === 'primary') return s;
+  if (s === 'gray') return 'defaultDark';
+  return input.scrollChromeUsesPrimary === false ? 'default' : 'primary';
+}
+
+function normalizeScrollToBottomChromeStyleInput(input: Record<string, unknown>): 'default' | 'defaultDark' | 'primary' {
+  const s = input.scrollToBottomChromeStyle;
+  if (s === 'default' || s === 'defaultDark' || s === 'primary') return s;
+  if (s === 'gray') return 'defaultDark';
+  return normalizeScrollChromeStyleInput(input);
 }
 
 /** Shared chatUI normalizer (full object) for finalize-draft and PATCH when `chatUI` is present. */
@@ -213,6 +250,7 @@ export function buildNormalizedChatUI(chatUIInput: Record<string, unknown>): Bot
         ? (chatUIInput.shadowIntensity as BotChatUI['shadowIntensity'])
         : 'medium',
     showChatBorder: chatUIInput.showChatBorder !== false,
+    chatPanelBorderColor: chatUIInput.chatPanelBorderColor === 'default' ? 'default' : 'primary',
     launcherIcon:
       chatUIInput.launcherIcon === 'bot-avatar' || chatUIInput.launcherIcon === 'custom' ? chatUIInput.launcherIcon : 'default',
     launcherAvatarUrl:
@@ -239,17 +277,27 @@ export function buildNormalizedChatUI(chatUIInput: Record<string, unknown>): Bot
           : 'slide-up-fade',
     openChatOnLoad: chatUIInput.openChatOnLoad !== false,
     showBranding: chatUIInput.showBranding !== false,
-    brandingMessage: typeof chatUIInput.brandingMessage === 'string' ? chatUIInput.brandingMessage.trim() : '',
+    brandingMessage: clampStr(
+      typeof chatUIInput.brandingMessage === 'string' ? chatUIInput.brandingMessage.trim() : '',
+      BOT_FIELD_MAX.brandingMessage,
+    ),
     showPrivacyText: chatUIInput.showPrivacyText !== false,
-    privacyText: typeof chatUIInput.privacyText === 'string' ? chatUIInput.privacyText.trim() : '',
+    privacyText: clampStr(
+      typeof chatUIInput.privacyText === 'string' ? chatUIInput.privacyText.trim() : '',
+      BOT_FIELD_MAX.privacyText,
+    ),
     liveIndicatorStyle: chatUIInput.liveIndicatorStyle === 'dot-only' ? 'dot-only' : 'label',
     statusIndicator: chatUIInput.statusIndicator === 'live' || chatUIInput.statusIndicator === 'active' ? chatUIInput.statusIndicator as BotChatUI['statusIndicator'] : 'none',
     statusDotStyle: chatUIInput.statusDotStyle === 'static' ? 'static' : 'blinking',
     showScrollToBottom: chatUIInput.showScrollToBottom !== false,
     showScrollToBottomLabel: chatUIInput.showScrollToBottomLabel !== false,
-    scrollToBottomLabel:
+    scrollToBottomLabel: clampStr(
       typeof chatUIInput.scrollToBottomLabel === 'string' ? chatUIInput.scrollToBottomLabel.trim() : '',
+      BOT_FIELD_MAX.scrollToBottomLabel,
+    ),
     showScrollbar: chatUIInput.showScrollbar !== false,
+    scrollChromeStyle: normalizeScrollChromeStyleInput(chatUIInput),
+    scrollToBottomChromeStyle: normalizeScrollToBottomChromeStyleInput(chatUIInput),
     composerAsSeparateBox: chatUIInput.composerAsSeparateBox !== false,
     composerBorderWidth:
       typeof chatUIInput.composerBorderWidth === 'number' &&
@@ -263,29 +311,45 @@ export function buildNormalizedChatUI(chatUIInput: Record<string, unknown>): Bot
           ? 0
           : 1,
     composerBorderColor: chatUIInput.composerBorderColor === 'default' ? 'default' : 'primary',
+    composerControlStyle: normalizeComposerControlStyleInput(chatUIInput),
+    speechRecordingWaveStyle: normalizeSpeechRecordingWaveStyleInput(chatUIInput),
     showMenuExpand: chatUIInput.showMenuExpand !== false,
     showMenuQuickLinks: chatUIInput.showMenuQuickLinks !== false,
     menuQuickLinks: normalizeMenuQuickLinks(chatUIInput.menuQuickLinks),
     ...(menuQuickLinksMenuIcon ? { menuQuickLinksMenuIcon } : {}),
     showComposerWithSuggestedQuestions: chatUIInput.showComposerWithSuggestedQuestions === true,
     showAvatarInHeader: chatUIInput.showAvatarInHeader !== false,
-    senderName: typeof chatUIInput.senderName === 'string' ? chatUIInput.senderName.trim() : '',
+    senderName: clampStr(
+      typeof chatUIInput.senderName === 'string' ? chatUIInput.senderName.trim() : '',
+      BOT_FIELD_MAX.senderName,
+    ),
     showSenderName: chatUIInput.showSenderName !== false,
     showTime: chatUIInput.showTime !== false,
     showCopyButton: chatUIInput.showCopyButton !== false,
-    showSources: chatUIInput.showSources !== false,
+    showMessageFeedback: chatUIInput.showMessageFeedback !== false,
+    userTextBubbleStyle: normalizeUserBubbleStyleInput(chatUIInput.userTextBubbleStyle),
+    userVoiceBubbleStyle: normalizeUserBubbleStyleInput(chatUIInput.userVoiceBubbleStyle),
+    showSources: chatUIInput.showSources === true,
     timePosition: timePos,
-    showEmoji: chatUIInput.showEmoji !== false,
     allowFileUpload: chatUIInput.allowFileUpload === true,
     showMic: chatUIInput.showMic === true,
+    showVoice: Object.prototype.hasOwnProperty.call(chatUIInput, "showVoice")
+      ? chatUIInput.showVoice === true
+      : chatUIInput.showMic === true,
   };
 }
 
 export function normalizePersonalityInput(personalityInput: Record<string, unknown>): BotPersonality {
   const personality: BotPersonality = {};
-  if (typeof personalityInput.name === 'string' && personalityInput.name.trim()) personality.name = personalityInput.name.trim();
-  if (typeof personalityInput.description === 'string' && personalityInput.description.trim()) personality.description = personalityInput.description.trim();
-  if (typeof personalityInput.systemPrompt === 'string' && personalityInput.systemPrompt.trim()) personality.systemPrompt = personalityInput.systemPrompt.trim();
+  if (typeof personalityInput.name === 'string' && personalityInput.name.trim()) {
+    personality.name = clampStr(personalityInput.name.trim(), BOT_FIELD_MAX.personalityName);
+  }
+  if (typeof personalityInput.description === 'string' && personalityInput.description.trim()) {
+    personality.description = clampStr(personalityInput.description.trim(), BOT_FIELD_MAX.personalityDescription);
+  }
+  if (typeof personalityInput.systemPrompt === 'string' && personalityInput.systemPrompt.trim()) {
+    personality.systemPrompt = clampStr(personalityInput.systemPrompt.trim(), BOT_FIELD_MAX.personalitySystemPrompt);
+  }
   const presetVal = String(personalityInput.behaviorPreset ?? '').trim();
   if (BEHAVIOR_PRESETS.has(presetVal)) personality.behaviorPreset = presetVal;
   const toneStr = String(personalityInput.tone ?? '');
@@ -298,8 +362,12 @@ export function normalizePersonalityInput(personalityInput: Record<string, unkno
   ) {
     personality.tone = personalityInput.tone as BotPersonality['tone'];
   }
-  if (typeof personalityInput.language === 'string' && personalityInput.language.trim()) personality.language = personalityInput.language.trim();
-  if (typeof personalityInput.thingsToAvoid === 'string' && personalityInput.thingsToAvoid.trim()) personality.thingsToAvoid = personalityInput.thingsToAvoid.trim();
+  if (typeof personalityInput.language === 'string' && personalityInput.language.trim()) {
+    personality.language = clampStr(personalityInput.language.trim(), BOT_FIELD_MAX.personalityLanguage);
+  }
+  if (typeof personalityInput.thingsToAvoid === 'string' && personalityInput.thingsToAvoid.trim()) {
+    personality.thingsToAvoid = clampStr(personalityInput.thingsToAvoid.trim(), BOT_FIELD_MAX.thingsToAvoid);
+  }
   return personality;
 }
 
@@ -322,6 +390,7 @@ export interface NormalizedBotPayload {
   faqs: Array<{ question: string; answer: string; active?: boolean }>;
   exampleQuestions?: string[];
   welcomeMessage?: string;
+  welcomeMessageEnabled?: boolean;
   leadCapture?: BotLeadCaptureV2;
   chatUI?: BotChatUI;
   personality?: BotPersonality;
@@ -347,16 +416,23 @@ export interface NormalizedBotPayload {
 
 export function normalizeBotPayload(input: Record<string, unknown>): NormalizedBotPayload {
   const allowedOrigins = normalizeAllowedOriginsFromPayload(input);
-  const name = String(input.name ?? '').trim();
-  const shortDescription = String(input.shortDescription ?? '').trim();
-  const description = String(input.description ?? '').trim();
+  const name = clampStr(String(input.name ?? '').trim(), BOT_FIELD_MAX.name);
+  const shortDescription = clampStr(String(input.shortDescription ?? '').trim(), BOT_FIELD_MAX.shortDescription);
+  const description = clampStr(String(input.description ?? '').trim(), BOT_FIELD_MAX.description);
   const categories = Array.isArray(input.categories)
-    ? (input.categories as unknown[]).map((e) => String(e).trim()).filter(Boolean) as string[]
+    ? (input.categories as unknown[])
+        .map((e) => clampStr(String(e).trim(), BOT_FIELD_MAX.categoryText))
+        .filter(Boolean) as string[]
     : [];
   const imageUrl = String(input.imageUrl ?? '').trim();
   const avatarEmoji = String(input.avatarEmoji ?? '').trim();
-  const knowledgeDescription = String(input.knowledgeDescription ?? '').trim();
-  const welcomeMessage = String(input.welcomeMessage ?? '').trim();
+  const knowledgeDescription = clampStr(
+    String(input.knowledgeDescription ?? '').trim(),
+    BOT_FIELD_MAX.knowledgeDescription,
+  );
+  const welcomeMessage = clampStr(String(input.welcomeMessage ?? '').trim(), BOT_FIELD_MAX.welcomeMessage);
+  const welcomeMessageEnabled =
+    typeof input.welcomeMessageEnabled === 'boolean' ? input.welcomeMessageEnabled : undefined;
   const openaiApiKeyOverride = String(input.openaiApiKeyOverride ?? '').trim();
   const whisperApiKeyOverride = String(input.whisperApiKeyOverride ?? '').trim();
   const limitOverrideMessages =
@@ -381,7 +457,7 @@ export function normalizeBotPayload(input: Record<string, unknown>): NormalizedB
     input.messageLimitUpgradeMessage == null
       ? null
       : typeof input.messageLimitUpgradeMessage === 'string'
-        ? input.messageLimitUpgradeMessage.trim() || null
+        ? clampStr(input.messageLimitUpgradeMessage.trim(), BOT_FIELD_MAX.messageLimitUpgradeMessage) || null
         : undefined;
   const isPublic = input.isPublic !== false;
   const status = input.status === 'draft' || input.status === 'published' ? input.status : undefined;
@@ -424,6 +500,7 @@ export function normalizeBotPayload(input: Record<string, unknown>): NormalizedB
     faqs,
     exampleQuestions: exampleQuestions.length > 0 ? exampleQuestions : undefined,
     welcomeMessage: welcomeMessage || undefined,
+    ...(welcomeMessageEnabled !== undefined ? { welcomeMessageEnabled } : {}),
     leadCapture,
     chatUI,
     personality: personalityOut,
@@ -460,6 +537,7 @@ export type WorkspaceBotPatchNormalized = {
   avatarSource?: 'upload' | 'url' | 'emoji' | 'none';
   knowledgeDescription?: string;
   welcomeMessage?: string;
+  welcomeMessageEnabled?: boolean;
   faqs?: Array<{ question: string; answer: string; active?: boolean }>;
   exampleQuestions?: string[];
   leadCapture?: BotLeadCaptureV2;
@@ -492,19 +570,21 @@ export function normalizeWorkspaceBotPatch(input: Record<string, unknown>): Work
   const out: WorkspaceBotPatchNormalized = { touched };
 
   if (touched.has('name')) {
-    out.name = String(input.name ?? '').trim();
+    out.name = clampStr(String(input.name ?? '').trim(), BOT_FIELD_MAX.name);
   }
   if (touched.has('shortDescription')) {
-    const s = String(input.shortDescription ?? '').trim();
+    const s = clampStr(String(input.shortDescription ?? '').trim(), BOT_FIELD_MAX.shortDescription);
     out.shortDescription = s || undefined;
   }
   if (touched.has('description')) {
-    const s = String(input.description ?? '').trim();
+    const s = clampStr(String(input.description ?? '').trim(), BOT_FIELD_MAX.description);
     out.description = s || undefined;
   }
   if (touched.has('categories')) {
     out.categories = Array.isArray(input.categories)
-      ? (input.categories as unknown[]).map((e) => String(e).trim()).filter(Boolean) as string[]
+      ? (input.categories as unknown[])
+          .map((e) => clampStr(String(e).trim(), BOT_FIELD_MAX.categoryText))
+          .filter(Boolean) as string[]
       : [];
   }
   if (touched.has('imageUrl')) {
@@ -522,12 +602,16 @@ export function normalizeWorkspaceBotPatch(input: Record<string, unknown>): Work
     }
   }
   if (touched.has('knowledgeDescription')) {
-    const s = String(input.knowledgeDescription ?? '').trim();
+    const s = clampStr(String(input.knowledgeDescription ?? '').trim(), BOT_FIELD_MAX.knowledgeDescription);
     out.knowledgeDescription = s || undefined;
   }
   if (touched.has('welcomeMessage')) {
-    const s = String(input.welcomeMessage ?? '').trim();
+    const s = clampStr(String(input.welcomeMessage ?? '').trim(), BOT_FIELD_MAX.welcomeMessage);
     out.welcomeMessage = s || undefined;
+  }
+  if (touched.has('welcomeMessageEnabled')) {
+    out.welcomeMessageEnabled =
+      typeof input.welcomeMessageEnabled === 'boolean' ? input.welcomeMessageEnabled : false;
   }
   if (touched.has('faqs')) {
     out.faqs = normalizeFaqs(input.faqs);
@@ -586,7 +670,7 @@ export function normalizeWorkspaceBotPatch(input: Record<string, unknown>): Work
       input.messageLimitUpgradeMessage == null
         ? null
         : typeof input.messageLimitUpgradeMessage === 'string'
-          ? input.messageLimitUpgradeMessage.trim() || null
+          ? clampStr(input.messageLimitUpgradeMessage.trim(), BOT_FIELD_MAX.messageLimitUpgradeMessage) || null
           : undefined;
   }
   if (touched.has('isPublic')) {

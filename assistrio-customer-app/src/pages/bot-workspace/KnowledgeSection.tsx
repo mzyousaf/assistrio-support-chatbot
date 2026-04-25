@@ -375,8 +375,16 @@ export function KnowledgeBaseSection() {
 
   const activeTab = useMemo<KnowledgeTabId>(() => {
     const p = pathname.replace(/\/$/, '');
-    if (p.endsWith('/knowledge/documents') || p.endsWith('/knowledge/files')) return 'documents';
-    if (p.endsWith('/knowledge/faqs') || p.endsWith('/knowledge/qa')) return 'faqs';
+    if (
+      p.endsWith('/playground/knowledgebase/documents') ||
+      p.endsWith('/knowledge/documents') ||
+      p.endsWith('/knowledge/files')
+    ) {
+      return 'documents';
+    }
+    if (p.endsWith('/playground/knowledgebase/faqs') || p.endsWith('/knowledge/faqs') || p.endsWith('/knowledge/qa')) {
+      return 'faqs';
+    }
     return 'notes';
   }, [pathname]);
 

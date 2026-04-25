@@ -12,8 +12,12 @@ function BotWorkspaceShell() {
 
   if (loadState === 'loading') {
     return (
-      <WorkspaceContentContainer>
-        <InlineLoader title="Loading assistant…" />
+      <WorkspaceContentContainer size="full">
+        <div className="flex min-h-0 min-h-[calc(100svh-var(--nav-height)-1.5rem)] flex-1 flex-col">
+          <div className="flex min-h-0 flex-1 items-center justify-center p-6">
+            <InlineLoader title="Loading assistant…" />
+          </div>
+        </div>
       </WorkspaceContentContainer>
     );
   }
@@ -36,8 +40,15 @@ function BotWorkspaceShell() {
   return (
     <>
       <WorkspaceBeforeUnload />
+      {/*
+        Single flex child so the active route (Playground w/ fixed height, or Insights full-bleed)
+        always gets a consistent min-h-0 flex column — fixes layout when switching e.g. conversations → profile.
+      */}
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <Outlet />
+      </div>
+      {/* After route tree: playground preview surface lives in `PlaygroundLayout` (stable mount). */}
       <CustomerWidgetPreviewHost />
-      <Outlet />
     </>
   );
 }

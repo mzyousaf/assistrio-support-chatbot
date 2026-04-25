@@ -2,6 +2,8 @@
  * Widget CSS for third-party sites. Build: npm run build:css → dist/assistrio-chat.css
  */
 
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap");
+
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 @custom-variant dark (&:where(.dark, .dark *));
@@ -15,7 +17,8 @@
 @source "../*.tsx";
 
 @theme inline {
-  --font-mono: ui-monospace, "SFMono-Regular", monospace;
+  --font-sans: "Inter", sans-serif;
+  --font-mono: "Inter", sans-serif;
 
   --color-gray-200: #e5e7eb;
   --color-gray-300: #d1d5db;
@@ -45,7 +48,7 @@
 }
 
 .chat-message-content strong {
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .chat-ui-messages-scroll {
@@ -76,6 +79,99 @@
   -ms-overflow-style: none;
 }
 
+/**
+ * Full-screen sub-views (history, attachments, voice detail): slide in from the right like a mobile drawer.
+ */
+@keyframes assistrio-chrome-panel-in {
+  from {
+    opacity: 0.88;
+    transform: translate3d(100%, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.assistrio-chrome-panel-enter {
+  /* Slower, softer drawer — “low” speed feel */
+  animation: assistrio-chrome-panel-in 0.7s cubic-bezier(0.25, 0.46, 0.45, 0.97) both;
+  will-change: transform, opacity;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .assistrio-chrome-panel-enter {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/** Red recording stop control — pulse “heartbeat” while capturing. */
+@keyframes composer-stop-heartbeat {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgb(239 68 68 / 0.45);
+  }
+  20% {
+    transform: scale(1.07);
+    box-shadow: 0 0 0 8px rgb(239 68 68 / 0);
+  }
+  40% {
+    transform: scale(1);
+  }
+  55% {
+    transform: scale(1.05);
+    box-shadow: 0 0 0 4px rgb(239 68 68 / 0.2);
+  }
+  70% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgb(239 68 68 / 0);
+  }
+}
+
+.composer-stop-heartbeat {
+  animation: composer-stop-heartbeat 1.35s ease-in-out infinite;
+}
+
+/** Filled/strong stop — legacy; new UI uses `composer-stop-heartbeat--light` on a soft chip. */
+@keyframes composer-stop-heartbeat-light {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgb(244 63 94 / 0.18);
+  }
+  20% {
+    transform: scale(1.04);
+    box-shadow: 0 0 0 5px rgb(244 63 94 / 0);
+  }
+  40% {
+    transform: scale(1);
+  }
+  55% {
+    transform: scale(1.03);
+    box-shadow: 0 0 0 2px rgb(244 63 94 / 0.12);
+  }
+  70% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgb(244 63 94 / 0);
+  }
+}
+
+.composer-stop-heartbeat--light {
+  animation: composer-stop-heartbeat-light 1.35s ease-in-out infinite;
+  box-shadow: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .composer-stop-heartbeat,
+  .composer-stop-heartbeat--light {
+    animation: none;
+    box-shadow: none;
+  }
+}
+
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
 }
@@ -89,6 +185,8 @@
   scrollbar-width: none !important;
   -ms-overflow-style: none !important;
   scrollbar-color: transparent transparent !important;
+  /* Avoid reserving gutter so the list doesn’t report an extra px and show a track in some engines. */
+  scrollbar-gutter: auto;
 }
 
 .chat-ui-messages-scroll-hidden::-webkit-scrollbar {
@@ -100,9 +198,52 @@
 
 .chat-bubble-content,
 .chat-composer-textarea {
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif,
-    "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Segoe UI Symbol";
+  font-family: "Inter", sans-serif !important;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/**
+ * Composer textarea: overflow scroll (required for multiline) but no visible scrollbar.
+ * `textarea.chat-composer-textarea` wins over host rules on generic `textarea` scrollbar styles.
+ */
+.assistrio-chat-widget textarea.chat-composer-textarea,
+.chat-composer-textarea {
+  overflow-y: auto !important;
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+  scrollbar-color: transparent transparent !important;
+  scrollbar-gutter: auto;
+}
+
+.assistrio-chat-widget textarea.chat-composer-textarea::-webkit-scrollbar,
+.chat-composer-textarea::-webkit-scrollbar {
+  width: 0 !important;
+  height: 0 !important;
+  display: none !important;
+  background: transparent !important;
+}
+
+/**
+ * Entire panel + embed: Inter only. Host pages and Tailwind preflight often set ui-sans-serif /
+ * system-ui on html/button/code — inherit + explicit overrides keep the widget consistent.
+ */
+.assistrio-chat-widget {
+  font-family: "Inter", sans-serif !important;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-weight: 400;
+  letter-spacing: -0.011em;
+}
+
+.assistrio-chat-widget *,
+.assistrio-chat-widget *::before,
+.assistrio-chat-widget *::after {
+  font-family: inherit !important;
+}
+
+.assistrio-chat-widget :where(code, kbd, samp, pre) {
+  font-family: "Inter", sans-serif !important;
 }
 
 .chat-bubble-content {
@@ -140,20 +281,6 @@
   vertical-align: top;
   overflow-wrap: anywhere;
   word-break: break-word;
-}
-
-.chat-emoji-picker-cdn {
-  max-height: 360px;
-}
-
-.chat-emoji-picker-cdn emoji-picker {
-  width: 100%;
-  height: 100%;
-  min-height: 320px;
-  --emoji-size: 1rem;
-  --category-emoji-size: 1rem;
-  --emoji-padding: 0.25rem;
-  --num-columns: 10;
 }
 
 .chat-composer-input-wrapper--custom:focus-within {
@@ -248,4 +375,43 @@
     animation: none;
     opacity: 0;
   }
+}
+
+/* Composer stop while recording: icon height stretches up, then eases back down (scaleY only). */
+@keyframes assistrio-composer-stop-icon {
+  0%,
+  100% {
+    transform: scaleY(0.72);
+  }
+  50% {
+    transform: scaleY(1.14);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .assistrio-composer-stop-icon--animate {
+    transform-origin: center;
+    animation: assistrio-composer-stop-icon 1.1s ease-in-out infinite;
+  }
+}
+
+/* Voice message WaveSurfer: sharp edge between played (progress clip) and unplayed. */
+.assistrio-voice-wavesurfer[data-wavesurfer-theme="dark"] .assistrio-ws-mount > div::part(progress) {
+  border-right: 2px solid rgb(56 189 248 / 0.55);
+  box-sizing: border-box;
+}
+
+.assistrio-voice-wavesurfer[data-wavesurfer-theme="light"] .assistrio-ws-mount > div::part(progress) {
+  border-right: 2px solid rgb(51 65 85 / 0.45);
+  box-sizing: border-box;
+}
+
+.assistrio-voice-wavesurfer[data-wavesurfer-theme="accent"] .assistrio-ws-mount > div::part(progress) {
+  border-right: 2px solid rgb(255 255 255 / 0.45);
+  box-sizing: border-box;
+}
+
+.assistrio-voice-wavesurfer[data-wavesurfer-theme="accent-light"] .assistrio-ws-mount > div::part(progress) {
+  border-right: 2px solid rgb(15 23 42 / 0.45);
+  box-sizing: border-box;
 }

@@ -34,7 +34,7 @@ export function PageLoader({ title = 'Loading…' }: Props) {
 export function InlineLoader({ title = 'Loading…' }: Props) {
   return (
     <div
-      className="flex flex-1 flex-col items-center justify-center py-20"
+      className="flex flex-1 flex-col items-center justify-center py-0"
       role="status"
       aria-live="polite"
     >

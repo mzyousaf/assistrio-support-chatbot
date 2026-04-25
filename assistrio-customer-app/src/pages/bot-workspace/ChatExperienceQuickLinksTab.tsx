@@ -4,6 +4,7 @@ import { Button, Card, CardBody, FieldRow, Input, Modal, Switch } from '@/compon
 import { cn } from '@/lib/utils';
 import { getQuickLinkIcon, getMenuQuickLinksButtonIcon } from '@/lib/quickLinkIcons';
 import { normalizeQuickLinkIcon } from '@/lib/quickLinkIconNormalize';
+import { BOT_FIELD_MAX, clampStr } from '@/lib/botFieldLimits';
 import { isValidQuickLinkUrl } from '@/lib/quickLinkUrlValidation';
 import { WorkspaceSectionHeader } from './WorkspaceSectionHeader';
 import { QuickLinkIconPicker } from './QuickLinkIconPicker';
@@ -73,7 +74,7 @@ function QuickLinksLockedOverlay({ children }: { children: ReactNode }) {
             >
               <Lock className="h-4 w-4" strokeWidth={2} />
             </div>
-            <p className="m-0 text-sm font-semibold leading-snug text-slate-900">Quick links menu is off</p>
+            <p className="m-0 text-sm font-semibold leading-snug text-slate-900">Quick Links menu is off</p>
             <div className={cn(ws.workspaceEditorControlHint, 'mt-1.5 text-pretty')}>{children}</div>
           </div>
         </div>
@@ -113,8 +114,8 @@ export function ChatExperienceQuickLinksTab({ chatUi, patch, cardClass }: Props)
   const openEdit = useCallback(
     (index: number) => {
       const link = menuQuickLinks[index];
-      setDraftText(link?.text ?? '');
-      setDraftUrl(link?.route ?? '');
+      setDraftText(clampStr(link?.text ?? '', BOT_FIELD_MAX.menuQuickLinkText));
+      setDraftUrl(clampStr(link?.route ?? '', BOT_FIELD_MAX.menuQuickLinkRoute));
       setDraftIcon(normalizeQuickLinkIcon(link?.icon));
       setFieldErrors({});
       setLinkModal({ mode: 'edit', index });
@@ -127,8 +128,8 @@ export function ChatExperienceQuickLinksTab({ chatUi, patch, cardClass }: Props)
   }, [linkModal, resetDraft]);
 
   const saveLink = useCallback(() => {
-    const text = draftText.trim();
-    const route = draftUrl.trim();
+    const text = clampStr(draftText.trim(), BOT_FIELD_MAX.menuQuickLinkText);
+    const route = clampStr(draftUrl.trim(), BOT_FIELD_MAX.menuQuickLinkRoute);
     const err: { text?: string; url?: string } = {};
     if (!text) err.text = 'Required';
     if (!route) err.url = 'Enter a URL or path.';
@@ -174,7 +175,7 @@ export function ChatExperienceQuickLinksTab({ chatUi, patch, cardClass }: Props)
           <section className={ws.workspaceEditorCardSection} aria-labelledby="chat-quick-links-h">
             <WorkspaceSectionHeader
               id="chat-quick-links-h"
-              title="Quick links"
+              title="Quick Links"
               description="A header control that opens your list of links."
             />
             <div className="mt-4 space-y-0">
@@ -224,7 +225,7 @@ export function ChatExperienceQuickLinksTab({ chatUi, patch, cardClass }: Props)
                     <div className="border-b border-slate-200/80 px-3 py-3 sm:px-4 sm:py-3.5">
                       <WorkspaceSectionHeader
                         id="chat-quick-links-list-heading"
-                        title="Quick links"
+                        title="Quick Links"
                         titleAddon={
                           <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-xs font-medium tabular-nums text-slate-500">
                             {menuQuickLinks.length}/{MAX_QUICK_LINKS}
@@ -335,7 +336,7 @@ export function ChatExperienceQuickLinksTab({ chatUi, patch, cardClass }: Props)
         open={linkModal !== null}
         onClose={() => setLinkModal(null)}
         title={linkModal?.mode === 'edit' ? 'Edit link' : 'Add link'}
-        description="Text, URL, and icon for the header menu."
+        description="Label, URL, and icon for the header menu."
         size="lg"
         footer={
           <>
@@ -350,17 +351,25 @@ export function ChatExperienceQuickLinksTab({ chatUi, patch, cardClass }: Props)
       >
         <div className="space-y-4">
           <FieldRow
-            label="Text"
-            htmlFor={`${baseId}-ql-text`}
+            label="Label"
+            htmlFor={`${baseId}-ql-label`}
             required
             error={fieldErrors.text}
             className="min-w-0 gap-1.5"
+            labelRowClassName="w-full min-w-0 justify-between gap-2"
+            labelAddon={
+              <span
+                className="shrink-0 text-xs text-slate-500 tabular-nums"
+                aria-live="polite"
+              >{`${draftText.length}/${BOT_FIELD_MAX.menuQuickLinkText}`}</span>
+            }
           >
             <Input
-              id={`${baseId}-ql-text`}
+              id={`${baseId}-ql-label`}
               quiet
               value={draftText}
-              onChange={(e) => setDraftText(e.target.value)}
+              maxLength={BOT_FIELD_MAX.menuQuickLinkText}
+              onChange={(e) => setDraftText(e.target.value.slice(0, BOT_FIELD_MAX.menuQuickLinkText))}
               placeholder="e.g. Contact"
               autoComplete="off"
               aria-invalid={Boolean(fieldErrors.text)}
@@ -378,7 +387,8 @@ export function ChatExperienceQuickLinksTab({ chatUi, patch, cardClass }: Props)
               id={`${baseId}-ql-url`}
               quiet
               value={draftUrl}
-              onChange={(e) => setDraftUrl(e.target.value)}
+              maxLength={BOT_FIELD_MAX.menuQuickLinkRoute}
+              onChange={(e) => setDraftUrl(e.target.value.slice(0, BOT_FIELD_MAX.menuQuickLinkRoute))}
               placeholder="https://example.com or /path"
               autoComplete="off"
               inputMode="url"

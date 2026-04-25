@@ -6,6 +6,7 @@ import type { ChatProps } from "./Chat";
 import type { ChatLauncherBubbleProps } from "./ChatLauncherBubble";
 import { normalizeChatOpenAnimation } from "../../lib/chatOpenAnimationNormalize";
 import type { ChatLauncherWhenOpen, ChatOpenAnimation } from "../../models/botChatUI";
+import { chatPanelOutlineStyle } from "./chatPanelChrome";
 import { chatShadowIntensityClass } from "./chatShadowStyles";
 
 export interface ChatWithLauncherProps extends Omit<ChatProps, "onClose"> {
@@ -36,11 +37,18 @@ export interface ChatWithLauncherProps extends Omit<ChatProps, "onClose"> {
   dialogAriaLabel?: string;
 }
 
-const panelPositionClasses = {
-  "bottom-right": "bottom-20 right-4",
-  "bottom-left": "bottom-20 left-4",
-  "top-right": "top-20 right-4",
-  "top-left": "top-20 left-4",
+/** Matches `ChatLauncherBubble` default when `size` is omitted. */
+const DEFAULT_LAUNCHER_DIAMETER_PX = 48;
+/** Tailwind `bottom-4` / `top-4` / `left-4` / `right-4` (1rem). */
+const LAUNCHER_EDGE_INSET_PX = 16;
+/** Space between the launcher and the chat panel when open (avoids overlap at max launcher size). */
+const PANEL_ABOVE_LAUNCHER_GAP_PX = 12;
+
+const panelHorizontalClasses = {
+  "bottom-right": "right-4",
+  "bottom-left": "left-4",
+  "top-right": "right-4",
+  "top-left": "left-4",
 } as const;
 
 /**
@@ -64,8 +72,8 @@ export function ChatWithLauncher({
   dialogAriaLabel = "Chat",
   accentColor = "#6366f1",
   dark = true,
-  width = 380,
-  height = 560,
+  width = 404,
+  height = 730,
   onClose,
   ...chatProps
 }: ChatWithLauncherProps) {
@@ -75,6 +83,7 @@ export function ChatWithLauncher({
 
   const {
     showChatBorder = true,
+    chatPanelBorderColor = "primary",
     chatPanelBorderWidth = 1,
     shadowIntensity = "medium",
     style: chatStyle,
@@ -126,6 +135,18 @@ export function ChatWithLauncher({
     onClose?.();
   };
 
+  const effectiveLauncherDiameterPx =
+    typeof launcherSize === "number" && Number.isFinite(launcherSize) && launcherSize > 0
+      ? launcherSize
+      : DEFAULT_LAUNCHER_DIAMETER_PX;
+  /** Panel anchor from viewport edge so it sits above/below the launcher for any size (e.g. 96px). */
+  const panelEdgeInsetPx =
+    LAUNCHER_EDGE_INSET_PX + effectiveLauncherDiameterPx + PANEL_ABOVE_LAUNCHER_GAP_PX;
+  const panelVerticalStyle: React.CSSProperties =
+    launcherPosition === "bottom-right" || launcherPosition === "bottom-left"
+      ? { bottom: panelEdgeInsetPx, top: "auto" }
+      : { top: panelEdgeInsetPx, bottom: "auto" };
+
   const anim: ChatOpenAnimation = normalizeChatOpenAnimation(panelOpenAnimation);
   const expandOrigin =
     launcherPosition === "bottom-left" ? "bottom left" : "bottom right";
@@ -176,17 +197,22 @@ export function ChatWithLauncher({
           className={cx(
             "fixed z-[9998] flex flex-col overflow-hidden rounded-2xl",
             chatShadowIntensityClass(shadowIntensity),
-            panelPositionClasses[launcherPosition],
+            panelHorizontalClasses[launcherPosition],
             dark ? "dark bg-gray-900" : "bg-white",
             chatClassName,
           )}
           style={{
             width: typeof width === "number" ? `${width}px` : width,
             height: typeof height === "number" ? `${height}px` : height,
+            ...panelVerticalStyle,
             ...panelMotionStyle,
-            ...(showChatBorder && accentColor && chatPanelBorderWidth > 0
-              ? { border: `${chatPanelBorderWidth}px solid ${accentColor}99` }
-              : {}),
+            ...chatPanelOutlineStyle(
+              showChatBorder,
+              chatPanelBorderWidth,
+              chatPanelBorderColor,
+              accentColor,
+              Boolean(dark),
+            ),
             ...chatStyle,
           }}
           role="dialog"

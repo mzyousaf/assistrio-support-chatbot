@@ -22,6 +22,18 @@ export type ChatLauncherWhenOpen = "close" | "chevron-down" | "same";
 export type ChatShadowIntensity = "none" | "low" | "medium" | "high";
 export type ChatOpenAnimation = "slide-up-fade" | "fade" | "expand";
 
+/** Visitor message bubbles: brand fill, neutral gray, or black (preview/live styling). */
+export type UserBubbleStyle = "primary" | "default" | "defaultDark";
+
+/** Send and voice (waveform) control styling in the composer. */
+export type ComposerControlStyle = "brand" | "default" | "defaultDark";
+
+/** Live level meter while recording voice / dictate. */
+export type SpeechRecordingWaveStyle = "brand" | "default" | "defaultDark";
+
+/** Scrollbar thumb + scroll-to-latest control: neutrals or brand accent. */
+export type ScrollChromeStyle = "default" | "defaultDark" | "primary";
+
 export interface BotChatUI {
   primaryColor?: string;
   backgroundStyle?: ChatBackgroundStyle;
@@ -29,6 +41,8 @@ export interface BotChatUI {
   launcherPosition?: ChatLauncherPosition;
   shadowIntensity?: ChatShadowIntensity;
   showChatBorder?: boolean;
+  /** Panel outline color when border is shown: neutral or brand (default `primary`). */
+  chatPanelBorderColor?: "default" | "primary";
   /** Chat panel border width in px (0–5). Default 1. */
   chatPanelBorderWidth?: number;
   launcherIcon?: ChatLauncherIcon;
@@ -57,9 +71,28 @@ export interface BotChatUI {
   /** Custom label; empty uses default “Scroll to latest” */
   scrollToBottomLabel?: string;
   showScrollbar?: boolean;
+  /** Message list scrollbar thumb (default `default`). */
+  scrollChromeStyle?: ScrollChromeStyle;
+  /** Floating “scroll to latest” button fill (default: same as {@link scrollChromeStyle} when omitted). */
+  scrollToBottomChromeStyle?: ScrollChromeStyle;
+  /**
+   * @deprecated Use `scrollChromeStyle`. `false` → `default`, omitted/`true` → `primary`.
+   */
+  scrollChromeUsesPrimary?: boolean;
   composerAsSeparateBox?: boolean;
   composerBorderWidth?: number;
   composerBorderColor?: "default" | "primary";
+  /**
+   * Send + voice (waveform) button look: brand fill, neutral, or dark chip.
+   * When set, overrides {@link composerControlsUsePrimary}.
+   */
+  composerControlStyle?: ComposerControlStyle;
+  /**
+   * @deprecated Use `composerControlStyle`. `false` → `default`, omitted/`true` → `defaultDark`.
+   */
+  composerControlsUsePrimary?: boolean;
+  /** Bar colors in the live recording level meter (composer). */
+  speechRecordingWaveStyle?: SpeechRecordingWaveStyle;
   showMenuExpand?: boolean;
   /** When false, hide the quick links header control even if links are configured (default true). */
   showMenuQuickLinks?: boolean;
@@ -68,13 +101,28 @@ export interface BotChatUI {
   menuQuickLinks?: ChatMenuQuickLink[];
   showComposerWithSuggestedQuestions?: boolean;
   showAvatarInHeader?: boolean;
+  /** @deprecated Stored on legacy bots; widget no longer shows name/time/sources in-thread. */
   senderName?: string;
+  /** @deprecated Stored on legacy bots; widget no longer shows name/time/sources in-thread. */
   showSenderName?: boolean;
+  /** @deprecated Stored on legacy bots; widget no longer shows name/time/sources in-thread. */
   showTime?: boolean;
   showCopyButton?: boolean;
+  /**
+   * When true, workspace **preview** may show citation sources on assistant replies.
+   * Live embedded chat does not surface sources to visitors.
+   */
   showSources?: boolean;
   timePosition?: ChatTimePosition;
-  showEmoji?: boolean;
+  /** Thumbs up/down on assistant replies (default true). */
+  showMessageFeedback?: boolean;
+  /** Typed visitor messages only. Voice ignores this. */
+  userTextBubbleStyle?: UserBubbleStyle;
+  /** Voice visitor messages only. Text ignores this. */
+  userVoiceBubbleStyle?: UserBubbleStyle;
   allowFileUpload?: boolean;
+  /** Dictate / microphone control. */
   showMic?: boolean;
+  /** Voice (waveform) control; legacy bots may omit and mirror `showMic`. */
+  showVoice?: boolean;
 }

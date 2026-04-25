@@ -1,10 +1,22 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ScrollChromeStyle, UserBubbleStyle } from "../../models/botChatUI";
 import type { ChatUIMessage, ChatUISource } from "./types";
 import { ChatBubble } from "./ChatBubble";
 import { cx } from "./utils";
 
 const SCROLL_THRESHOLD = 80;
 const DEFAULT_SCROLL_TO_BOTTOM_TEXT = "Scroll to latest";
+
+function resolveScrollChromeColor(
+  dark: boolean | undefined,
+  style: ScrollChromeStyle | undefined,
+  accentColor: string | undefined,
+): string {
+  const s = style ?? "default";
+  if (s === "primary") return (accentColor?.trim() || "#6366f1");
+  if (s === "defaultDark") return dark ? "#1f2937" : "#374151";
+  return dark ? "#4b5563" : "#6b7280";
+}
 
 export interface ChatMessagesProps {
   /** Dark theme (default true) */
@@ -39,6 +51,14 @@ export interface ChatMessagesProps {
   showScrollToBottom?: boolean;
   /** Show scrollbar in message list (default true). When false, scrollbar is hidden but content still scrolls. */
   showScrollbar?: boolean;
+  /** Message list scrollbar thumb style (default `default`). */
+  scrollChromeStyle?: ScrollChromeStyle;
+  /** Floating scroll-to-latest button; when omitted, matches `scrollChromeStyle`. */
+  scrollToBottomChromeStyle?: ScrollChromeStyle;
+  /** Typed user messages only. */
+  userTextBubbleStyle?: UserBubbleStyle;
+  /** Voice user messages only. */
+  userVoiceBubbleStyle?: UserBubbleStyle;
   emptyState?: React.ReactNode;
   onSourceClick?: (source: ChatUISource) => void;
   /** Suggested questions shown as first message when there are no messages */
@@ -54,23 +74,40 @@ export interface ChatMessagesProps {
   messageSendFailedLabel?: string;
   retrySendLabel?: string;
   onRetryMessage?: (messageId: string) => void;
+  showMessageFeedback?: boolean;
+  onMessageFeedback?: (messageId: string, rating: "up" | "down") => void;
+  feedbackHelpfulLabel?: string;
+  feedbackNotHelpfulLabel?: string;
+  voiceShowTranscriptLabel?: string;
+  voiceHideTranscriptLabel?: string;
+  /** Full-screen voice + transcript (long transcript “see more”). */
+  onOpenVoiceMessageDetail?: (messageId: string) => void;
+  /** User taps attachment count to open full-screen list (embed). */
+  onOpenMessageAttachments?: (messageId: string) => void;
   className?: string;
+  /**
+   * `"auto"` (default): message area scrolls when content overflows.
+   * `"hidden"`: no vertical scroll in the list (e.g. admin embed preview — clip overflow; height comes from the host).
+   */
+  messageListOverflow?: "auto" | "hidden";
 }
 
 function ConversationSkeleton({
   dark = true,
   compact = false,
   bubbleBorderRadius = 20,
+  userTextBubbleStyle = "primary",
 }: {
   dark?: boolean;
   compact?: boolean;
   bubbleBorderRadius?: number;
+  userTextBubbleStyle?: UserBubbleStyle;
 }) {
   const radiusPx = Math.max(0, Math.min(32, bubbleBorderRadius));
   const pad = compact ? "gap-2 p-3" : "gap-2.5 p-3.5";
   const metaGap = compact ? "gap-2" : "gap-2.5";
   const blockGap = compact ? "gap-1.5" : "gap-2";
-  const stackGap = compact ? "gap-5" : "gap-6";
+  const stackGap = "gap-[calc(0.25rem*5)]";
 
   const MetaRow = ({ align }: { align: "start" | "end" }) => (
     <div
@@ -109,18 +146,22 @@ function ConversationSkeleton({
         ? dark
           ? "border border-gray-700/50 bg-gray-800/55 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)]"
           : "border border-gray-200/95 bg-gray-50 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.7)]"
-        : dark
-          ? "border border-gray-600/35 bg-gray-700/45 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.05)]"
-          : "border border-gray-300/80 bg-gray-100 shadow-sm";
+        : userTextBubbleStyle === "defaultDark"
+          ? "border border-gray-600/80 bg-black"
+          : dark
+            ? "border border-gray-500/40 bg-gray-600/78"
+            : "border border-gray-200/85 bg-gray-100";
 
     const lineTone =
       variant === "assistant"
         ? dark
           ? "bg-white/[0.07]"
           : "bg-gray-400/30"
-        : dark
-          ? "bg-white/[0.1]"
-          : "bg-gray-400/38";
+        : userTextBubbleStyle === "defaultDark"
+          ? "bg-white/[0.14]"
+          : dark
+            ? "bg-white/[0.12]"
+            : "bg-gray-400/28";
 
     return (
       <div
@@ -210,6 +251,10 @@ export function ChatMessages({
   showScrollToBottomLabel = true,
   showScrollToBottom = true,
   showScrollbar = true,
+  scrollChromeStyle = "default",
+  scrollToBottomChromeStyle: scrollToBottomChromeStyleProp,
+  userTextBubbleStyle = "primary",
+  userVoiceBubbleStyle = "primary",
   emptyState,
   onSourceClick,
   suggestedQuestions,
@@ -220,13 +265,33 @@ export function ChatMessages({
   messageSendFailedLabel,
   retrySendLabel,
   onRetryMessage,
+  showMessageFeedback = false,
+  onMessageFeedback,
+  feedbackHelpfulLabel,
+  feedbackNotHelpfulLabel,
+  voiceShowTranscriptLabel,
+  voiceHideTranscriptLabel,
+  onOpenVoiceMessageDetail,
+  onOpenMessageAttachments,
   className,
+  messageListOverflow = "auto",
 }: ChatMessagesProps) {
   const endRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const userHasScrolledRef = useRef(false);
   const prevScrollHeightRef = useRef(0);
+  const anchoredUserSendIdRef = useRef<string | null>(null);
   const [scrollButtonVisible, setScrollButtonVisible] = useState(false);
+
+  const scrollBarChromeColor = useMemo(
+    () => resolveScrollChromeColor(dark, scrollChromeStyle, accentColor),
+    [accentColor, dark, scrollChromeStyle],
+  );
+  const scrollToBottomChromeColor = useMemo(
+    () =>
+      resolveScrollChromeColor(dark, scrollToBottomChromeStyleProp ?? scrollChromeStyle, accentColor),
+    [accentColor, dark, scrollChromeStyle, scrollToBottomChromeStyleProp],
+  );
 
   const visibleMessages = messages.filter(
     (m) => m.role !== "system" && !(m.role === "assistant" && m.status === "sending")
@@ -246,18 +311,10 @@ export function ChatMessages({
     setScrollButtonVisible(false);
   }, []);
 
-  useEffect(() => {
-    const list = listRef.current;
-    if (!list) return;
-    const prevHeight = prevScrollHeightRef.current;
-    const nowHeight = list.scrollHeight;
-    const isNearBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 120;
-    const newContentAdded = nowHeight > prevHeight;
-    prevScrollHeightRef.current = nowHeight;
-    if (newContentAdded && (isNearBottom || !userHasScrolledRef.current)) {
-      endRef.current?.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [messages, isSending]);
+  const showTypingIndicator =
+    visibleMessages.length > 0 &&
+    isSending &&
+    !messages.some((m) => m.role === "assistant" && m.status === "streaming");
 
   const handleScroll = useCallback(() => {
     const list = listRef.current;
@@ -268,23 +325,60 @@ export function ChatMessages({
     setScrollButtonVisible(!isAtBottom);
   }, []);
 
+  const assistantStreaming = messages.some((m) => m.role === "assistant" && m.status === "streaming");
+
+  useEffect(() => {
+    if (messageListOverflow === "hidden") return;
+    const list = listRef.current;
+
+    const users = visibleMessages.filter((m) => m.role === "user");
+    const lastUser = users[users.length - 1];
+    if (lastUser?.status === "sending" && anchoredUserSendIdRef.current !== lastUser.id) {
+      anchoredUserSendIdRef.current = lastUser.id;
+      const el = list?.querySelector(`[data-message-id="${lastUser.id}"]`);
+      requestAnimationFrame(() => {
+        el?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+      return;
+    }
+
+    if (assistantStreaming) {
+      if (!userHasScrolledRef.current) {
+        endRef.current?.scrollIntoView({ behavior: "smooth" });
+      }
+      if (list) prevScrollHeightRef.current = list.scrollHeight;
+      return;
+    }
+
+    if (!list) return;
+    const prevHeight = prevScrollHeightRef.current;
+    const nowHeight = list.scrollHeight;
+    const isNearBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 120;
+    const newContentAdded = nowHeight > prevHeight;
+    prevScrollHeightRef.current = nowHeight;
+    if (newContentAdded && (isNearBottom || !userHasScrolledRef.current)) {
+      endRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [assistantStreaming, visibleMessages, messages, isSending, messageListOverflow]);
+
   return (
     <div className="flex-1 min-h-0 flex flex-col relative">
       <div
         ref={listRef}
-        onScroll={handleScroll}
+        onScroll={messageListOverflow === "hidden" ? undefined : handleScroll}
         data-assistrio-msg-scroll={showScrollbar ? "visible" : "hidden"}
         className={cx(
-          "relative flex-1 overflow-y-auto overscroll-contain min-h-0 flex flex-col items-stretch",
+          "relative flex-1 max-h-full min-h-0 flex flex-col items-stretch",
+          messageListOverflow === "hidden" ? "overflow-y-hidden" : "overflow-y-auto overscroll-contain",
           conversationLoading && "overflow-hidden",
           showScrollbar ? "chat-ui-messages-scroll" : "chat-ui-messages-scroll-hidden",
-          !conversationLoading && (compact ? "p-2 space-y-3" : "p-4 space-y-4"),
+          !conversationLoading && (compact ? "p-2 gap-[calc(0.25rem*5)]" : "p-4 gap-[calc(0.25rem*5)]"),
           className
         )}
         style={{
-          ["--chat-accent" as string]: accentColor,
+          ["--chat-accent" as string]: scrollBarChromeColor,
           ...(showScrollbar
-            ? { scrollbarColor: `${accentColor} transparent` as const }
+            ? { scrollbarColor: `${scrollBarChromeColor} transparent` as const }
             : { scrollbarColor: "transparent transparent" as const }),
         } as React.CSSProperties}
         role="log"
@@ -299,14 +393,21 @@ export function ChatMessages({
               compact ? "p-2" : "p-4",
             )}
           >
-            <ConversationSkeleton dark={dark} compact={compact} bubbleBorderRadius={bubbleBorderRadius} />
+            <ConversationSkeleton
+              dark={dark}
+              compact={compact}
+              bubbleBorderRadius={bubbleBorderRadius}
+              userTextBubbleStyle={userTextBubbleStyle}
+            />
           </div>
         ) : null}
         {!conversationLoading && visibleMessages.length === 0 && !showSuggestedBlock ? (
           !isSending ? (
             <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
               {emptyState ?? (
-                <p className={cx("text-sm", dark ? "text-gray-400" : "text-gray-500")}>Ask me anything…</p>
+                <p className={cx("text-sm font-normal tracking-tight", dark ? "text-gray-400" : "text-gray-500")}>
+                  Ask me anything…
+                </p>
               )}
             </div>
           ) : null
@@ -314,10 +415,11 @@ export function ChatMessages({
         {!conversationLoading && visibleMessages.length > 0
           ? visibleMessages.map((msg) => {
             const isWelcomeMessage = typeof msg.id === "string" && msg.id.startsWith("welcome_");
-            const showCopyForMessage = showCopyButton && !isWelcomeMessage;
-            const hasSourcesOrCopy =
-              (showSources && msg.sources && msg.sources.length > 0) ||
-              (msg.role === "assistant" && showCopyForMessage && !!msg.content);
+            const showCopyForMessage =
+              showCopyButton &&
+              !isWelcomeMessage &&
+              !(msg.role === "assistant" && msg.status === "streaming");
+            const hasSourcesOrCopy = Boolean(showSources && msg.sources && msg.sources.length > 0);
             return (
               <div
                 key={msg.id}
@@ -336,6 +438,8 @@ export function ChatMessages({
                     dark={dark}
                     message={msg}
                     accentColor={accentColor}
+                    userTextBubbleStyle={userTextBubbleStyle}
+                    userVoiceBubbleStyle={userVoiceBubbleStyle}
                     showMetadata={showMetadata}
                     senderName={senderName}
                     showSenderName={showSenderName}
@@ -343,7 +447,7 @@ export function ChatMessages({
                     timePosition={timePosition}
                     bubbleBorderRadius={bubbleBorderRadius}
                     showCopyButton={showCopyForMessage}
-                    renderCopyInBubble={!hasSourcesOrCopy}
+                    renderCopyInBubble={msg.role !== "assistant" && !hasSourcesOrCopy}
                     allowMarkdown={allowMarkdown}
                     copyLabel={copyLabel}
                     copiedLabel={copiedLabel}
@@ -353,6 +457,22 @@ export function ChatMessages({
                     messageSendFailedLabel={messageSendFailedLabel}
                     retrySendLabel={retrySendLabel}
                     onRetrySend={msg.role === "user" ? onRetryMessage : undefined}
+                    showMessageFeedback={showMessageFeedback && msg.role === "assistant"}
+                    onMessageFeedback={
+                      msg.role === "assistant" && onMessageFeedback
+                        ? (rating) => onMessageFeedback(msg.id, rating)
+                        : undefined
+                    }
+                    feedbackHelpfulLabel={feedbackHelpfulLabel}
+                    feedbackNotHelpfulLabel={feedbackNotHelpfulLabel}
+                    voiceShowTranscriptLabel={voiceShowTranscriptLabel}
+                    voiceHideTranscriptLabel={voiceHideTranscriptLabel}
+                    onOpenVoiceMessageDetail={onOpenVoiceMessageDetail}
+                    onOpenAttachments={
+                      msg.role === "user" && (msg.attachments?.length ?? 0) > 0 && onOpenMessageAttachments
+                        ? onOpenMessageAttachments
+                        : undefined
+                    }
                   />
                 </div>
               </div>
@@ -386,19 +506,31 @@ export function ChatMessages({
             </div>
           </div>
         ) : null}
-        {visibleMessages.length > 0 && isSending ? (
+        {showTypingIndicator ? (
           <div className="flex justify-start items-center" role="status" aria-live="polite" aria-atomic="true">
             <span className="sr-only">{typingStatusLabel}</span>
             <div
               className={cx(
-                "rounded-2xl px-4 py-3 flex items-center gap-1 border",
-                dark ? "bg-gray-700/80 border-gray-600" : "bg-gray-200 border-gray-300",
+                "chat-bubble-surface rounded-2xl px-3 py-2.5 flex items-center gap-1 border",
+                dark ? "bg-gray-600/70 border-gray-500/55" : "bg-gray-50/95 border-gray-200/90",
               )}
               aria-hidden
             >
-              <span className={cx("w-2 h-2 rounded-full animate-bounce [animation-delay:-0.3s]", dark ? "bg-gray-400" : "bg-gray-500")} />
-              <span className={cx("w-2 h-2 rounded-full animate-bounce [animation-delay:-0.15s]", dark ? "bg-gray-400" : "bg-gray-500")} />
-              <span className={cx("w-2 h-2 rounded-full animate-bounce", dark ? "bg-gray-400" : "bg-gray-500")} />
+              <span
+                className={cx(
+                  "w-2 h-2 rounded-full animate-bounce [animation-delay:-0.3s]",
+                  dark ? "bg-gray-400/95" : "bg-gray-500/90",
+                )}
+              />
+              <span
+                className={cx(
+                  "w-2 h-2 rounded-full animate-bounce [animation-delay:-0.15s]",
+                  dark ? "bg-gray-400/95" : "bg-gray-500/90",
+                )}
+              />
+              <span
+                className={cx("w-2 h-2 rounded-full animate-bounce", dark ? "bg-gray-400/95" : "bg-gray-500/90")}
+              />
             </div>
           </div>
         ) : null}
@@ -413,7 +545,7 @@ export function ChatMessages({
             showScrollToBottomLabel ? "gap-1.5 px-3 py-2" : "p-2.5",
             dark ? "focus:ring-offset-gray-900" : "focus:ring-offset-white"
           )}
-          style={{ backgroundColor: accentColor }}
+          style={{ backgroundColor: scrollToBottomChromeColor }}
           aria-label={(scrollToBottomLabel?.trim() || DEFAULT_SCROLL_TO_BOTTOM_TEXT)}
         >
           <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>

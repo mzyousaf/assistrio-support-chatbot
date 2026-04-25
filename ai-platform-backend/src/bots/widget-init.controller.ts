@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { VisitorsService } from '../visitors/visitors.service';
+import { isWelcomeMessageActive } from './welcome-message-display.util';
 import { BotsService } from './bots.service';
 import { validateRuntimeBotAccess } from './runtime-bot-access.util';
 import { toRuntimeCredentialErrorCode } from './runtime-error-codes.util';
@@ -197,7 +198,12 @@ export class WidgetInitController {
         avatarEmoji: typeof row.avatarEmoji === 'string' ? row.avatarEmoji : undefined,
         tagline: typeof row.shortDescription === 'string' ? row.shortDescription : undefined,
         description: typeof row.description === 'string' ? row.description : undefined,
-        welcomeMessage: typeof row.welcomeMessage === 'string' ? row.welcomeMessage : undefined,
+        welcomeMessage: isWelcomeMessageActive(row as { welcomeMessage?: string; welcomeMessageEnabled?: boolean })
+          ? typeof row.welcomeMessage === 'string'
+            ? row.welcomeMessage
+            : undefined
+          : undefined,
+        welcomeMessageEnabled: (row as { welcomeMessageEnabled?: boolean }).welcomeMessageEnabled !== false,
         suggestedQuestions: Array.isArray(row.exampleQuestions) ? row.exampleQuestions : [],
         exampleQuestions: Array.isArray(row.exampleQuestions) ? row.exampleQuestions : [],
       },

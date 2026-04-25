@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 
 import AdminShell from "@/components/admin/AdminShell";
 import { AgentSectionPlaceholder } from "@/components/admin/AgentSectionPlaceholder";
+import { InsightsConversationsView } from "@/components/admin/agent-workspace/InsightsConversationsView";
 import {
   getAgentSectionTitle,
   getAgentPlaceholderCopy,
@@ -54,6 +55,20 @@ export function AgentWorkspaceInsightsView({ routeSlug }: Props) {
         <div className="flex min-h-0 flex-1 flex-col bg-[#f4fbfb] dark:bg-gray-950">
           <EditBotWorkspaceLayout>
             <AgentWorkspaceMainSkeleton />
+          </EditBotWorkspaceLayout>
+        </div>
+      </AdminShell>
+    );
+  }
+
+  if (slug === "insights/conversations") {
+    return (
+      <AdminShell title={sectionTitle} agentTitle={botName} fullWidth showTitleRow={false}>
+        <div className="flex min-h-0 min-h-[calc(100dvh-7rem)] w-full max-w-none flex-1 flex-col bg-[#f4fbfb] -mx-4 sm:-mx-5 lg:-mx-7 dark:bg-gray-950">
+          <EditBotWorkspaceLayout>
+            <div className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col">
+              <InsightsConversationsView />
+            </div>
           </EditBotWorkspaceLayout>
         </div>
       </AdminShell>

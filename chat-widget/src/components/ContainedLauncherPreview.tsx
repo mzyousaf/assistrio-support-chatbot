@@ -1,26 +1,24 @@
 import { useMemo, type CSSProperties } from "react";
 
+import { containedLauncherPreviewBottomOutsetPx } from "../lib/embedPanelConstraints";
 import { launcherBubbleFromChatUI } from "../lib/launcherBubbleFromChatUI";
 import { normalizeLauncherIcon } from "../lib/launcherIconNormalize";
 import type { BotChatUI } from "../models/botChatUI";
 
-/**
- * Slightly outside the stage box (sibling inner panel clips chat only). Negative inset mimics a
- * floating launcher hugging the panel edge; inline CSS avoids missing Tailwind utilities in embed CSS.
- */
-const OVERLAY_STYLE: CSSProperties = {
+const BASE_OVERLAY: Pick<CSSProperties, "position" | "left" | "top" | "right" | "bottom" | "zIndex" | "pointerEvents"> = {
   position: "absolute",
   left: "auto",
   top: "auto",
-  right: "0px",
-  bottom: "-50px",
-  zIndex: 30,
+  zIndex: 200,
   pointerEvents: "none",
 };
 
 /**
  * Decorative launcher bubble for `presentation: "contained"` when the real floating launcher is off.
- * Rendered on the **outer** contained stage (`overflow-visible`); inner panel clips `Chat` only.
+ * Anchored to the card’s bottom-right; sits **under** the panel. Hosts should reserve bottom space
+ * (e.g. padding) so `overflow: auto` preview columns do not clip the hang. Bottom outsets are
+ * defined in `containedLauncherPreviewBottomOutsetPx` and subtracted in `computeContainedPanelBox`
+ * as `reservedBottomPx` so the panel shrinks as the launcher grows.
  */
 export function ContainedLauncherPreview({
   chatUI,
@@ -39,12 +37,19 @@ export function ContainedLauncherPreview({
   );
   const icon = normalizeLauncherIcon(chatUI?.launcherIcon);
   const size = bubble.size ?? 48;
-  const diameter = Math.min(72, Math.max(40, Math.round(size * 0.85)));
+  /** Match real launcher clamp (min 32px) so small `launcherSize` previews accurately. */
+  const diameter = Math.min(72, Math.max(24, Math.round(size * 0.85)));
+  const bottomOutsetPx = containedLauncherPreviewBottomOutsetPx(bubble.size);
+  const overlayStyle: CSSProperties = {
+    ...BASE_OVERLAY,
+    right: 0,
+    bottom: `-${bottomOutsetPx}px`,
+  };
   const backgroundColor = icon === "default" || icon === "custom" ? primaryColor : "#0f172a";
 
   return (
     <div
-      style={OVERLAY_STYLE}
+      style={overlayStyle}
       className="assistrio-contained-launcher-preview"
       data-contained-launcher-preview
       aria-hidden

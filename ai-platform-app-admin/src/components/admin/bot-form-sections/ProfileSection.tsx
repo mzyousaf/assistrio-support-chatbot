@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
 
+import { BOT_FIELD_MAX } from "@/lib/botFieldLimits";
 import { useBotFormEditor } from "./BotFormEditorContext";
 import { TAB_CONTENT_CLASS, TAB_META } from "./botFormUiConstants";
 import { BrokenImagePlaceholder, isSafeImagePreviewSrc } from "./imagePreviewUtils";
@@ -58,16 +59,20 @@ export function ProfileSection() {
             label="Bot name"
             htmlFor="bot-name"
             required
-            helperText="Display name used in listings, chat header, and across the platform."
+            helperText={`Display name used in listings, chat header, and across the platform. Max ${BOT_FIELD_MAX.name} characters.`}
           >
             <div className="flex flex-col gap-2 w-full">
               <Input
                 id="bot-name"
                 required
                 value={name}
-                onChange={(event) => setName(event.target.value)}
+                maxLength={BOT_FIELD_MAX.name}
+                onChange={(event) => setName(event.target.value.slice(0, BOT_FIELD_MAX.name))}
                 className="w-full"
               />
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                {name.length}/{BOT_FIELD_MAX.name}
+              </p>
               <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 cursor-pointer">
                 <input
                   type="checkbox"
@@ -86,31 +91,43 @@ export function ProfileSection() {
           <SettingsFieldRow
             label="Tagline"
             htmlFor="bot-tagline"
-            helperText="Short headline shown in listings and chat header."
+            helperText={`Short headline shown in listings and chat header. Max ${BOT_FIELD_MAX.shortDescription} characters.`}
           >
-            <Input
-              id="bot-tagline"
-              type="text"
-              value={shortDescription}
-              onChange={(event) => setShortDescription(event.target.value)}
-              placeholder="e.g. Your 24/7 support assistant"
-              className="w-full"
-            />
+            <div className="flex w-full flex-col gap-1">
+              <Input
+                id="bot-tagline"
+                type="text"
+                value={shortDescription}
+                maxLength={BOT_FIELD_MAX.shortDescription}
+                onChange={(event) => setShortDescription(event.target.value.slice(0, BOT_FIELD_MAX.shortDescription))}
+                placeholder="e.g. Your 24/7 support assistant"
+                className="w-full"
+              />
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                {shortDescription.length}/{BOT_FIELD_MAX.shortDescription}
+              </p>
+            </div>
           </SettingsFieldRow>
           <div className={SETTINGS_GRID_FULL}>
             <SettingsFieldRow
               label="Description"
               htmlFor="bot-description"
               required
-              helperText="Main public description shown to users."
+              helperText={`Main public description shown to users. Max ${BOT_FIELD_MAX.description} characters.`}
             >
-              <Textarea
-                id="bot-description"
-                rows={4}
-                value={description}
-                onChange={(event) => setDescription(event.target.value)}
-                className="w-full min-h-[6rem] resize-y"
-              />
+              <div className="flex w-full flex-col gap-1">
+                <Textarea
+                  id="bot-description"
+                  rows={4}
+                  value={description}
+                  maxLength={BOT_FIELD_MAX.description}
+                  onChange={(event) => setDescription(event.target.value.slice(0, BOT_FIELD_MAX.description))}
+                  className="w-full min-h-[6rem] resize-y"
+                />
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  {description.length}/{BOT_FIELD_MAX.description}
+                </p>
+              </div>
             </SettingsFieldRow>
           </div>
         </SettingsGrid>

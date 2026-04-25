@@ -1,13 +1,28 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { RefObject } from "react";
-import { History } from "lucide-react";
+import { History, X } from "lucide-react";
 import { cx } from "./utils";
-import type { ChatShadowIntensity } from "../../models/botChatUI";
-import type { ChatUIMessage, ChatUISource } from "./types";
+import type {
+  ChatShadowIntensity,
+  ComposerControlStyle,
+  ScrollChromeStyle,
+  SpeechRecordingWaveStyle,
+  UserBubbleStyle,
+} from "../../models/botChatUI";
+import type { ChatSpeechInputMeta, ChatUIMessage, ChatUISource } from "./types";
+import { useMediaRecorderCapture } from "../../lib/useMediaRecorderCapture";
+import { chatPanelOutlineStyle } from "./chatPanelChrome";
 import { chatShadowIntensityClass } from "./chatShadowStyles";
 import { ChatHeader } from "./ChatHeader";
 import { ChatMessages } from "./ChatMessages";
 import { ChatComposer } from "./ChatComposer";
+import { ChatAttachmentsScreen } from "./ChatAttachmentsScreen";
+import { ChatVoiceMessageDetailScreen } from "./ChatVoiceMessageDetailScreen";
+import {
+  pickWidgetChatFiles,
+  WIDGET_CHAT_ACCEPT,
+  WIDGET_CHAT_ATTACHMENT_MAX_FILES,
+} from "../../lib/widgetChatAttachments";
 
 function formatRecentWhen(iso: string): string {
   const d = new Date(iso);
@@ -20,7 +35,7 @@ function formatRecentWhen(iso: string): string {
 }
 
 const HistoryBackIcon = () => (
-  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
     <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
   </svg>
 );
@@ -38,6 +53,8 @@ export interface ChatProps {
   bubbleBorderRadius?: number;
   /** When true, show a border around the chat panel using accent color (default true). */
   showChatBorder?: boolean;
+  /** Neutral vs brand tint for the panel outline (default `primary`). */
+  chatPanelBorderColor?: "default" | "primary";
   /** Border width in px when showChatBorder (0–5, default 1). 0 = no border. */
   chatPanelBorderWidth?: number;
   /** Drop shadow for the chat panel (default medium). Use "none" when an outer wrapper supplies shadow. */
@@ -69,12 +86,25 @@ export interface ChatProps {
   scrollToBottomLabel?: string;
   /** Show scrollbar in message area (default true). When false, scrollbar is hidden. */
   showScrollbar?: boolean;
+  /** Message list scrollbar thumb style (default `default`). */
+  scrollChromeStyle?: ScrollChromeStyle;
+  /** Floating scroll-to-latest button; when omitted, matches `scrollChromeStyle`. */
+  scrollToBottomChromeStyle?: ScrollChromeStyle;
+  /**
+   * `"auto"` (default): message list scrolls when content overflows.
+   * `"hidden"`: no scroll in the message list (e.g. embed preview; content may be clipped).
+   */
+  messageListOverflow?: "auto" | "hidden";
   /** When true, message input is a separate box (border-top + bg). When false, no border and no bg (default true). */
   composerAsSeparateBox?: boolean;
   /** Message input border width in px. 0 = default 1px; 0.5–6 = custom. Focus = width × 1.5. Default 1. */
   composerBorderWidth?: number;
-  /** When width >= 0.5: "default" = gray, "primary" = accent. Default "primary". */
+  /** When width >= 0.5: "default" = gray, "primary" = brand accent border. Default "primary". */
   composerBorderColor?: "default" | "primary";
+  /** Send + voice (waveform) control styling. */
+  composerControlStyle?: ComposerControlStyle;
+  /** Recording level meter bar colors in the composer. */
+  speechRecordingWaveStyle?: SpeechRecordingWaveStyle;
   onMenu?: () => void;
   /** Show "Expand chat" in menu dropdown */
   showMenuExpand?: boolean;
@@ -131,9 +161,27 @@ export interface ChatProps {
   allowMarkdown?: boolean;
   emptyState?: React.ReactNode;
   onSourceClick?: (source: ChatUISource) => void;
+  showMessageFeedback?: boolean;
+  onMessageFeedback?: (messageId: string, rating: "up" | "down") => void;
+  /** Typed user messages only. */
+  userTextBubbleStyle?: UserBubbleStyle;
+  /** Voice user messages only. */
+  userVoiceBubbleStyle?: UserBubbleStyle;
 
   // Composer
-  onSend: (message: string) => void;
+  onSend: (message: string, speechInput?: ChatSpeechInputMeta, files?: File[]) => void;
+  /** When set, mic/voice run browser capture and POST audio via this hook (embed). */
+  postSpeechAudio?: (args: {
+    blob: Blob;
+    mode: "dictate" | "voice";
+    durationMs: number;
+  }) => Promise<{ transcript: string; audioUrl?: string; mimeType?: string; durationMs?: number }>;
+  /** After a successful /speech response (for product analytics). */
+  onSpeechAnalytics?: (payload: {
+    mode: "dictate" | "voice";
+    transcriptLength: number;
+    hasAudioUrl: boolean;
+  }) => void;
   /** Focus target when the chat panel opens (floating embed). */
   composerTextAreaRef?: RefObject<HTMLTextAreaElement | null>;
   composerPlaceholder?: string;
@@ -142,10 +190,11 @@ export interface ChatProps {
   /** Max rows for composer textarea (default 8) */
   maxComposerRows?: number;
   showAttach?: boolean;
-  showEmoji?: boolean;
   showMic?: boolean;
+  /** Voice (waveform) control; when omitted, matches `showMic` for legacy configs. */
+  showVoice?: boolean;
   onAttach?: () => void;
-  onEmoji?: () => void;
+  /** Optional legacy hook when `postSpeechAudio` is not used. */
   onMic?: () => void;
 
   // Optional suggested questions (shown when no messages)
@@ -199,6 +248,23 @@ export interface ChatProps {
     messageSendFailed?: string;
     retrySend?: string;
     typingStatusLabel?: string;
+    feedbackHelpful?: string;
+    feedbackNotHelpful?: string;
+    /** Shown in the user bubble when a voice message has no transcript (still sends audio). */
+    voiceMessageFallback?: string;
+    voiceShowTranscript?: string;
+    voiceHideTranscript?: string;
+    /** Full-screen title for the voice + transcript view. */
+    voiceMessageDetailTitle?: string;
+    attachmentsTitle?: string;
+    uploadAttachments?: string;
+    removeAttachment?: string;
+    /** Shown when Upload is disabled at the per-message file cap. */
+    attachmentUploadLimitReached?: string;
+    /** Shown in blue when dictation hits the 2 min cap (default short “Auto-stopped — …” line). */
+    speechDictationMaxNotice?: string;
+    /** Shown in blue when a voice message hits the 1 min cap. */
+    speechVoiceMaxNotice?: string;
   }>;
 
   className?: string;
@@ -212,6 +278,7 @@ export function Chat({
   accentColor = "#6366f1",
   bubbleBorderRadius = 20,
   showChatBorder = true,
+  chatPanelBorderColor = "primary",
   chatPanelBorderWidth = 1,
   shadowIntensity = "medium",
   showHeader = true,
@@ -229,9 +296,14 @@ export function Chat({
   showScrollToBottomLabel = true,
   scrollToBottomLabel,
   showScrollbar = true,
+  scrollChromeStyle = "default",
+  scrollToBottomChromeStyle,
+  messageListOverflow = "auto",
   composerAsSeparateBox = true,
   composerBorderWidth = 1,
   composerBorderColor = "primary",
+  composerControlStyle = "defaultDark",
+  speechRecordingWaveStyle = "default",
   onMenu,
   showMenuExpand,
   onMenuExpand,
@@ -266,6 +338,10 @@ export function Chat({
   allowMarkdown = false,
   emptyState,
   onSourceClick,
+  showMessageFeedback = false,
+  onMessageFeedback,
+  userTextBubbleStyle = "primary",
+  userVoiceBubbleStyle = "primary",
   onSend,
   onRetryMessage,
   composerTextAreaRef,
@@ -273,11 +349,12 @@ export function Chat({
   inputMaxLength,
   maxComposerRows,
   showAttach = true,
-  showEmoji = true,
   showMic = true,
+  showVoice,
   onAttach,
-  onEmoji,
   onMic,
+  postSpeechAudio,
+  onSpeechAnalytics,
   suggestedQuestions,
   showSuggestedChips = true,
   showComposerWithSuggestedQuestions = false,
@@ -290,27 +367,294 @@ export function Chat({
   className,
   style,
 }: ChatProps) {
+  const effectiveShowVoice = showVoice ?? showMic;
   const [input, setInput] = useState("");
+  const [pendingFiles, setPendingFiles] = useState<Array<{ id: string; file: File }>>([]);
+  const [attachNotice, setAttachNotice] = useState<string | null>(null);
+  const [speechLimitNotice, setSpeechLimitNotice] = useState<string | null>(null);
+  const attachInputRef = useRef<HTMLInputElement>(null);
   const [historyViewOpen, setHistoryViewOpen] = useState(false);
+  const [attachmentsScreen, setAttachmentsScreen] = useState<
+    null | { mode: "composer" } | { mode: "message"; messageId: string } | { mode: "voiceTranscript"; messageId: string }
+  >(null);
   const effectiveStatus = statusIndicator ?? (showLive ? "live" : "none");
+  const voiceAttachRef = useRef<ChatSpeechInputMeta | null>(null);
+  const {
+    state: captureState,
+    start: startCapture,
+    stop: stopCapture,
+    cancel: cancelCapture,
+    resetStopped: resetCaptureStopped,
+    waveformLevels: speechWaveformLevels,
+    waveformLive: speechWaveformLive,
+  } = useMediaRecorderCapture();
+  const [speechMode, setSpeechMode] = useState<null | "dictate" | "voice">(null);
+  const [speechBusy, setSpeechBusy] = useState(false);
+  /** Prevents a second stop (e.g. max-duration timer + manual stop) from calling `cancelSpeech` when `stop()` returns null. */
+  const recordingFlushInFlightRef = useRef(false);
+  /** Drives the two-row "voice message preview" UI in the composer (after recording stops, before send). */
+  const [pendingVoiceMessagePreview, setPendingVoiceMessagePreview] = useState<ChatSpeechInputMeta | null>(null);
+  const voiceMessageBubbleText = strings.voiceMessageFallback?.trim() || "Voice message";
+  const noticeDictationMax =
+    strings.speechDictationMaxNotice?.trim() ??
+    "Auto-stopped — dictation max 2 min.";
+  const noticeVoiceMax =
+    strings.speechVoiceMaxNotice?.trim() ??
+    "Auto-stopped — voice max duration is 1 minute.";
+  const voiceRecStartRef = useRef<number | null>(null);
+  const [voiceRecTick, setVoiceRecTick] = useState(0);
+  /** Set only by max-duration timeout so we can show the blue notice. */
+  const autoSpeechLimitRef = useRef<"dictate" | "voice" | null>(null);
+  /** Whisper segment(s) from dictate completions before the next send — persisted as `speechInput` on the user message. */
+  const dictateTranscriptSegmentsRef = useRef<string[]>([]);
+
+  const endSpeechUi = useCallback(() => {
+    voiceRecStartRef.current = null;
+    setSpeechMode(null);
+    setSpeechBusy(false);
+    resetCaptureStopped();
+  }, [resetCaptureStopped]);
+
+  const cancelSpeech = useCallback(() => {
+    cancelCapture();
+    endSpeechUi();
+  }, [cancelCapture, endSpeechUi]);
+
+  const speechCaptureActive =
+    Boolean(postSpeechAudio) &&
+    !composerReadOnly &&
+    speechMode != null &&
+    (captureState === "recording" || speechBusy);
+
+  const beginSpeech = useCallback(
+    async (mode: "dictate" | "voice") => {
+      if (!postSpeechAudio || composerReadOnly || conversationLoading || isSending) return;
+      voiceAttachRef.current = null;
+      setPendingVoiceMessagePreview(null);
+      setSpeechLimitNotice(null);
+      if (mode === "voice") {
+        dictateTranscriptSegmentsRef.current = [];
+      }
+      setSpeechMode(mode);
+      const ok = await startCapture();
+      if (!ok) setSpeechMode(null);
+      else {
+        voiceRecStartRef.current = Date.now();
+        setVoiceRecTick((n) => n + 1);
+      }
+    },
+    [postSpeechAudio, composerReadOnly, conversationLoading, isSending, startCapture],
+  );
+
+  const flushSpeechStop = useCallback(async () => {
+    if (!postSpeechAudio || !speechMode) return;
+    if (recordingFlushInFlightRef.current) return;
+    recordingFlushInFlightRef.current = true;
+    try {
+      const fromAuto = autoSpeechLimitRef.current;
+      if (fromAuto) autoSpeechLimitRef.current = null;
+      if (fromAuto === "voice" && speechMode === "voice") {
+        setSpeechLimitNotice(noticeVoiceMax);
+      }
+      const pack = stopCapture();
+      if (!pack) {
+        endSpeechUi();
+        return;
+      }
+      setSpeechBusy(true);
+      try {
+        const r = await postSpeechAudio({
+          blob: pack.blob,
+          mode: speechMode,
+          durationMs: pack.durationMs,
+        });
+        onSpeechAnalytics?.({
+          mode: speechMode,
+          transcriptLength: r.transcript.length,
+          hasAudioUrl: Boolean(r.audioUrl),
+        });
+        const line = r.transcript.trim();
+        if (speechMode === "dictate") {
+          if (line) {
+            dictateTranscriptSegmentsRef.current.push(line);
+            setInput((prev) => {
+              const gap = prev && !prev.endsWith(" ") ? " " : "";
+              return `${prev}${gap}${line}`;
+            });
+          }
+        } else if (line || r.audioUrl) {
+          const voiceAttach: ChatSpeechInputMeta = {
+            mode: "voice",
+            transcript: r.transcript,
+            audioUrl: r.audioUrl,
+            mimeType: r.mimeType,
+            durationMs: r.durationMs ?? pack.durationMs,
+          };
+          voiceAttachRef.current = voiceAttach;
+          setPendingVoiceMessagePreview(voiceAttach);
+          setInput(line || voiceMessageBubbleText);
+        }
+      } finally {
+        setSpeechBusy(false);
+        endSpeechUi();
+      }
+    } finally {
+      recordingFlushInFlightRef.current = false;
+    }
+  }, [
+    postSpeechAudio,
+    speechMode,
+    stopCapture,
+    endSpeechUi,
+    onSpeechAnalytics,
+    voiceMessageBubbleText,
+    noticeVoiceMax,
+  ]);
+
+  /** Dictate only: stop capture, transcribe, and append to the text field. */
+  const flushSpeechSend = useCallback(async () => {
+    if (!postSpeechAudio || speechMode !== "dictate") return;
+    if (recordingFlushInFlightRef.current) return;
+    recordingFlushInFlightRef.current = true;
+    try {
+      const fromAuto = autoSpeechLimitRef.current;
+      if (fromAuto) autoSpeechLimitRef.current = null;
+      if (fromAuto === "dictate" && speechMode === "dictate") {
+        setSpeechLimitNotice(noticeDictationMax);
+      }
+      const pack = stopCapture();
+      if (!pack) {
+        endSpeechUi();
+        return;
+      }
+      setSpeechBusy(true);
+      try {
+        const r = await postSpeechAudio({
+          blob: pack.blob,
+          mode: "dictate",
+          durationMs: pack.durationMs,
+        });
+        onSpeechAnalytics?.({
+          mode: "dictate",
+          transcriptLength: r.transcript.length,
+          hasAudioUrl: Boolean(r.audioUrl),
+        });
+        const line = r.transcript.trim();
+        if (line) {
+          dictateTranscriptSegmentsRef.current.push(line);
+          setInput((prev) => {
+            const gap = prev && !prev.endsWith(" ") ? " " : "";
+            return `${prev}${gap}${line}`;
+          });
+        }
+      } finally {
+        setSpeechBusy(false);
+        endSpeechUi();
+      }
+    } finally {
+      recordingFlushInFlightRef.current = false;
+    }
+  }, [postSpeechAudio, speechMode, stopCapture, endSpeechUi, onSpeechAnalytics, noticeDictationMax]);
+
+  /** Max recording length: dictate 2 min, voice note 1 min (then we stop and run the same path as the Stop control). */
+  const SPEECH_MAX_RECORD_MS: Record<"dictate" | "voice", number> = {
+    dictate: 2 * 60 * 1_000,
+    voice: 60 * 1_000,
+  };
+  useEffect(() => {
+    if (captureState !== "recording" || !postSpeechAudio) return;
+    if (speechMode !== "dictate" && speechMode !== "voice") return;
+    const ms = SPEECH_MAX_RECORD_MS[speechMode];
+    const t = window.setTimeout(() => {
+      autoSpeechLimitRef.current = speechMode;
+      if (speechMode === "dictate") void flushSpeechSend();
+      else void flushSpeechStop();
+    }, ms);
+    return () => window.clearTimeout(t);
+  }, [speechMode, captureState, postSpeechAudio, flushSpeechSend, flushSpeechStop]);
+
+  useEffect(() => {
+    if (captureState !== "recording" || (speechMode !== "voice" && speechMode !== "dictate")) return;
+    const id = setInterval(() => setVoiceRecTick((x) => x + 1), 500);
+    return () => clearInterval(id);
+  }, [captureState, speechMode]);
+
+  const speechRecordingElapsedMs = useMemo(() => {
+    if (
+      voiceRecStartRef.current == null ||
+      captureState !== "recording" ||
+      (speechMode !== "voice" && speechMode !== "dictate")
+    ) {
+      return 0;
+    }
+    return Date.now() - voiceRecStartRef.current;
+  }, [captureState, speechMode, voiceRecTick]);
+
+  const discardVoiceMessagePreview = useCallback(() => {
+    voiceAttachRef.current = null;
+    setPendingVoiceMessagePreview(null);
+    setInput("");
+  }, []);
 
   const handleSend = useCallback(() => {
-    if (composerReadOnly || conversationLoading) return;
+    if (composerReadOnly || conversationLoading || isSending) return;
     const text = input.trim();
-    if (!text) return;
-    onSend(text);
+    const attach = voiceAttachRef.current;
+    const files = pendingFiles.map((p) => p.file);
+    const hasVoice = attach?.mode === "voice" && Boolean(attach.audioUrl?.trim());
+    if (!text && files.length === 0 && !hasVoice) return;
+    voiceAttachRef.current = null;
+    setPendingVoiceMessagePreview(null);
+    setPendingFiles([]);
+    setAttachNotice(null);
+    const displayText = text || (hasVoice ? voiceMessageBubbleText : "");
+    const dictateSegments = dictateTranscriptSegmentsRef.current;
+    const dictateTranscript =
+      dictateSegments.length > 0 ? dictateSegments.join("\n\n") : "";
+    dictateTranscriptSegmentsRef.current = [];
+    const dictateInput: ChatSpeechInputMeta | undefined =
+      dictateTranscript.trim().length > 0
+        ? { mode: "dictate", transcript: dictateTranscript.trim() }
+        : undefined;
+    if (attach?.mode === "voice" && hasVoice) {
+      onSend(displayText, attach, files.length ? files : undefined);
+    } else if (dictateInput) {
+      onSend(displayText, dictateInput, files.length ? files : undefined);
+    } else {
+      onSend(displayText, undefined, files.length ? files : undefined);
+    }
     setInput("");
-  }, [input, onSend, composerReadOnly, conversationLoading]);
+  }, [
+    input,
+    pendingFiles,
+    onSend,
+    composerReadOnly,
+    conversationLoading,
+    isSending,
+    voiceMessageBubbleText,
+  ]);
+
+  const handleComposerAttach = useCallback(() => {
+    onAttach?.();
+    setHistoryViewOpen(false);
+    if (showAttach) attachInputRef.current?.click();
+  }, [onAttach, showAttach]);
+
+  const openComposerAttachmentsScreen = useCallback(() => {
+    setHistoryViewOpen(false);
+    setAttachmentsScreen({ mode: "composer" });
+  }, []);
 
   const handleSuggested = useCallback(
     (text: string) => {
-      if (composerReadOnly || conversationLoading) return;
+      if (composerReadOnly || conversationLoading || isSending) return;
       onSuggestedQuestion?.(text);
+      dictateTranscriptSegmentsRef.current = [];
       setInput(text);
       onSend(text);
       setInput("");
     },
-    [onSuggestedQuestion, onSend, composerReadOnly, conversationLoading]
+    [onSuggestedQuestion, onSend, composerReadOnly, conversationLoading, isSending]
   );
 
   const s = {
@@ -341,11 +685,52 @@ export function Chat({
     messageSendFailed: "Couldn’t send",
     retrySend: "Retry",
     typingStatusLabel: "Assistant is typing",
+    feedbackHelpful: "Helpful",
+    feedbackNotHelpful: "Not helpful",
+    voiceMessageFallback: "Voice message",
+    voiceShowTranscript: "Show transcript",
+    voiceHideTranscript: "Hide transcript",
+    voiceMessageDetailTitle: "Voice message",
+    attachmentsTitle: "Attachments",
+    uploadAttachments: "Upload",
+    removeAttachment: "Remove",
+    attachmentUploadLimitReached: `Maximum ${WIDGET_CHAT_ATTACHMENT_MAX_FILES} files per message`,
+    speechDictationMaxNotice: "Auto-stopped — dictation max 2 min.",
+    speechVoiceMaxNotice: "Auto-stopped — voice max duration is 1 minute.",
     ...strings,
   };
 
+  useEffect(() => {
+    if (attachmentsScreen?.mode === "composer" && pendingFiles.length === 0) {
+      setAttachmentsScreen(null);
+    }
+  }, [attachmentsScreen?.mode, pendingFiles.length]);
+
+  useEffect(() => {
+    if (attachmentsScreen?.mode !== "message") return;
+    const m = messages.find((x) => x.id === attachmentsScreen.messageId);
+    if (!m?.attachments?.length) setAttachmentsScreen(null);
+  }, [attachmentsScreen, messages]);
+
+  useEffect(() => {
+    if (attachmentsScreen?.mode !== "voiceTranscript") return;
+    const m = messages.find((x) => x.id === attachmentsScreen.messageId);
+    if (!m || m.speechInput?.mode !== "voice") setAttachmentsScreen(null);
+  }, [attachmentsScreen, messages]);
+
+  const openMessageAttachments = useCallback((messageId: string) => {
+    setHistoryViewOpen(false);
+    setAttachmentsScreen({ mode: "message", messageId });
+  }, []);
+
+  const openVoiceMessageDetail = useCallback((messageId: string) => {
+    setHistoryViewOpen(false);
+    setAttachmentsScreen({ mode: "voiceTranscript", messageId });
+  }, []);
+
   const historyEnabled = sessionHistoryEnabled ?? showSessionMenu;
   const hasUserMessage = messages.some((m) => m.role === "user");
+  const showAttachmentsChrome = attachmentsScreen != null;
   const showOnlyQuickQuestions =
     !conversationLoading &&
     !historyViewOpen &&
@@ -370,28 +755,82 @@ export function Chat({
 
   const showHistoryChrome = Boolean(historyEnabled && historyViewOpen);
 
+  const attachmentsPanel =
+    attachmentsScreen?.mode === "composer" ? (
+      <ChatAttachmentsScreen
+        mode="composer"
+        dark={dark}
+        accentColor={accentColor}
+        title={s.attachmentsTitle}
+        backLabel={s.back}
+        uploadLabel={s.uploadAttachments}
+        removeLabel={s.removeAttachment}
+        composerItems={pendingFiles}
+        onBack={() => setAttachmentsScreen(null)}
+        onRemove={(id) => setPendingFiles((p) => p.filter((x) => x.id !== id))}
+        onUploadMore={() => {
+          if (pendingFiles.length >= WIDGET_CHAT_ATTACHMENT_MAX_FILES) return;
+          attachInputRef.current?.click();
+        }}
+        uploadDisabled={pendingFiles.length >= WIDGET_CHAT_ATTACHMENT_MAX_FILES}
+        uploadDisabledTitle={s.attachmentUploadLimitReached}
+      />
+    ) : attachmentsScreen?.mode === "message" ? (
+      (() => {
+        const m = messages.find((x) => x.id === attachmentsScreen.messageId);
+        if (!m?.attachments?.length) return null;
+        return (
+          <ChatAttachmentsScreen
+            mode="message"
+            dark={dark}
+            accentColor={accentColor}
+            title={s.attachmentsTitle}
+            backLabel={s.back}
+            messageAttachments={m.attachments}
+            onBack={() => setAttachmentsScreen(null)}
+          />
+        );
+      })()
+    ) : attachmentsScreen?.mode === "voiceTranscript" ? (
+      (() => {
+        const m = messages.find((x) => x.id === attachmentsScreen.messageId);
+        if (!m?.speechInput || m.speechInput.mode !== "voice") return null;
+        return (
+          <ChatVoiceMessageDetailScreen
+            dark={dark}
+            accentColor={accentColor}
+            userVoiceBubbleStyle={userVoiceBubbleStyle}
+            bubbleBorderRadius={bubbleBorderRadius}
+            messageId={m.id}
+            title={s.voiceMessageDetailTitle}
+            backLabel={s.back}
+            speech={m.speechInput}
+            onBack={() => setAttachmentsScreen(null)}
+          />
+        );
+      })()
+    ) : null;
+
   return (
     <div
       className={cx(
         "assistrio-chat-widget flex flex-col overflow-hidden rounded-2xl",
         chatShadowIntensityClass(shadowIntensity),
         dark
-          ? "dark bg-gray-900 text-gray-100"
-          : "bg-white text-gray-900",
+          ? "dark bg-gray-900 text-gray-200"
+          : "bg-white text-gray-800",
         className
       )}
       style={{
         width: typeof width === "number" ? `${width}px` : width,
         height: typeof height === "number" ? `${height}px` : height,
-        ...(showChatBorder && accentColor && chatPanelBorderWidth > 0
-          ? { border: `${chatPanelBorderWidth}px solid ${accentColor}99` }
-          : {}),
+        ...chatPanelOutlineStyle(showChatBorder, chatPanelBorderWidth, chatPanelBorderColor, accentColor, Boolean(dark)),
         ...style,
       }}
       role="region"
       aria-label={s.chatDialogLabel}
     >
-      {showHeader && !showHistoryChrome ? (
+      {showHeader && !showHistoryChrome && !showAttachmentsChrome ? (
         <ChatHeader
           dark={dark}
           showAvatar={showAvatarInHeader}
@@ -419,7 +858,10 @@ export function Chat({
           onSessionEndChat={onSessionEndChat}
           sessionEndChatDisabled={!hasUserMessage}
           sessionStartNewDisabled={sessionStartNewDisabled}
-          onSessionOpenHistory={() => setHistoryViewOpen(true)}
+          onSessionOpenHistory={() => {
+            setAttachmentsScreen(null);
+            setHistoryViewOpen(true);
+          }}
           onClose={onClose}
           backLabel={s.back}
           closeLabel={s.close}
@@ -433,69 +875,77 @@ export function Chat({
           activeLabel={s.active ?? "Active"}
         />
       ) : null}
-      {showHeader && showHistoryChrome ? (
-        <header
-          className={cx(
-            "relative flex-shrink-0 border-b px-4 py-3",
-            dark ? "border-gray-700 bg-gray-900/50" : "border-gray-200 bg-gray-50",
-          )}
-          aria-label={s.chatHistory}
-        >
-          <button
-            type="button"
-            onClick={() => setHistoryViewOpen(false)}
-            className={cx(
-              "absolute left-2 top-1/2 z-10 -translate-y-1/2 rounded-lg p-2 transition-colors",
-              dark ? "text-gray-400 hover:bg-gray-800 hover:text-gray-200" : "text-gray-500 hover:bg-gray-200 hover:text-gray-800",
-            )}
-            aria-label={s.back}
-          >
-            <HistoryBackIcon />
-          </button>
-          <div className="mx-auto flex min-w-0 max-w-full flex-col items-center gap-0.5 px-11 text-center">
-            <div className="flex min-w-0 max-w-full items-center justify-center gap-2.5">
-              <div
-                className="flex h-8 w-8 max-h-[32px] max-w-[32px] flex-shrink-0 items-center justify-center rounded-full shadow-sm"
-                style={{ backgroundColor: accentColor }}
-                aria-hidden
-              >
-                <History className="h-[20px] w-[20px] text-white" strokeWidth={2} />
-              </div>
-              <h2
-                className={cx(
-                  "min-w-0 max-w-full truncate text-sm font-semibold",
-                  dark ? "text-gray-100" : "text-gray-900",
-                )}
-              >
-                {s.chatHistory}
-              </h2>
-            </div>
-          </div>
-          {onClose ? (
-            <button
-              type="button"
-              onClick={onClose}
+      {showAttachmentsChrome ? (
+        <div className="assistrio-chrome-panel-enter flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          {attachmentsPanel}
+        </div>
+      ) : showHistoryChrome && historyEnabled ? (
+        <div className="assistrio-chrome-panel-enter flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          {showHeader ? (
+            <header
               className={cx(
-                "absolute right-2 top-1/2 z-10 -translate-y-1/2 rounded-lg p-2 transition-colors",
-                dark ? "text-gray-400 hover:bg-gray-800 hover:text-gray-200" : "text-gray-500 hover:bg-gray-200 hover:text-gray-800",
+                "relative flex-shrink-0 border-b px-4 py-3",
+                dark ? "border-gray-700 bg-gray-900/50" : "border-gray-200 bg-gray-50",
               )}
-              aria-label={s.close}
+              aria-label={s.chatHistory}
             >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          ) : (
-            <span className="pointer-events-none absolute right-2 top-1/2 h-9 w-9 -translate-y-1/2" aria-hidden />
-          )}
-        </header>
-      ) : null}
-      {showHistoryChrome ? (
-        <div
-          className={cx(
-            "flex min-h-0 flex-1 flex-col overflow-y-auto px-3 py-2",
+              <button
+                type="button"
+                onClick={() => setHistoryViewOpen(false)}
+                className={cx(
+                  "absolute left-2 top-1/2 z-10 flex h-[30px] w-[30px] -translate-y-1/2 items-center justify-center rounded-lg transition-colors",
+                  dark ? "text-gray-400 hover:bg-gray-800 hover:text-gray-200" : "text-gray-500 hover:bg-gray-200 hover:text-gray-800",
+                )}
+                aria-label={s.back}
+                title={s.back}
+              >
+                <HistoryBackIcon />
+              </button>
+              <div className="mx-auto flex min-w-0 max-w-full flex-col items-center gap-0.5 px-10 text-center">
+                <div className="flex min-w-0 max-w-full items-center justify-center gap-2.5">
+                  <div
+                    className="flex h-[30px] w-[30px] flex-shrink-0 items-center justify-center rounded-full shadow-sm"
+                    style={{ backgroundColor: accentColor }}
+                    aria-hidden
+                  >
+                    <History className="h-[18px] w-[18px] text-white" strokeWidth={2} />
+                  </div>
+                  <h2
+                    className={cx(
+                      "min-w-0 max-w-full truncate text-sm font-medium tracking-tight",
+                      dark ? "text-gray-200" : "text-gray-800",
+                    )}
+                  >
+                    {s.chatHistory}
+                  </h2>
+                </div>
+              </div>
+              {onClose ? (
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className={cx(
+                    "absolute right-2 top-1/2 z-10 flex h-[30px] w-[30px] -translate-y-1/2 items-center justify-center rounded-lg transition-colors",
+                    dark ? "text-gray-400 hover:bg-gray-800 hover:text-gray-200" : "text-gray-500 hover:bg-gray-200 hover:text-gray-800",
+                  )}
+                  aria-label={s.close}
+                  title={s.close}
+                >
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              ) : (
+                <span className="pointer-events-none absolute right-2 top-1/2 h-[30px] w-[30px] -translate-y-1/2" aria-hidden />
+              )}
+            </header>
+          ) : null}
+          <div
+            className={cx(
+            "flex min-h-0 flex-1 flex-col px-3 py-2",
+            messageListOverflow === "hidden" ? "overflow-y-hidden" : "overflow-y-auto",
             dark ? "bg-gray-900" : "bg-white",
-            showScrollbar ? "" : "[scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+            showScrollbar || messageListOverflow === "hidden" ? "" : "[scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
           )}
           role={!sessionRecentChats || sessionRecentChats.length === 0 ? undefined : "list"}
           aria-label={s.recentChats}
@@ -522,7 +972,7 @@ export function Chat({
                   handleHistoryStartNew();
                 }}
                 className={cx(
-                  "rounded-xl px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-opacity focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
+                  "rounded-xl px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-opacity focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
                   dark ? "focus-visible:ring-offset-gray-900" : "focus-visible:ring-offset-white",
                   sessionStartNewDisabled
                     ? "cursor-not-allowed opacity-50"
@@ -552,8 +1002,8 @@ export function Chat({
                   >
                     <span
                       className={cx(
-                        "block text-sm font-medium line-clamp-2",
-                        dark ? "text-gray-100" : "text-gray-900",
+                        "block text-sm font-normal line-clamp-2",
+                        dark ? "text-gray-200" : "text-gray-800",
                       )}
                     >
                       {c.preview || "Chat"}
@@ -571,6 +1021,7 @@ export function Chat({
               ))}
             </ul>
           )}
+        </div>
         </div>
       ) : (
         <>
@@ -596,6 +1047,9 @@ export function Chat({
             showScrollToBottomLabel={showScrollToBottomLabel}
             showScrollToBottom={showScrollToBottom}
             showScrollbar={showScrollbar}
+            scrollChromeStyle={scrollChromeStyle}
+            scrollToBottomChromeStyle={scrollToBottomChromeStyle}
+            messageListOverflow={messageListOverflow}
             emptyState={emptyState}
             onSourceClick={onSourceClick}
             suggestedQuestions={
@@ -607,6 +1061,16 @@ export function Chat({
             messageSendFailedLabel={s.messageSendFailed}
             retrySendLabel={s.retrySend}
             onRetryMessage={onRetryMessage}
+            showMessageFeedback={showMessageFeedback}
+            onMessageFeedback={onMessageFeedback}
+            userTextBubbleStyle={userTextBubbleStyle}
+            userVoiceBubbleStyle={userVoiceBubbleStyle}
+            feedbackHelpfulLabel={s.feedbackHelpful}
+            feedbackNotHelpfulLabel={s.feedbackNotHelpful}
+            voiceShowTranscriptLabel={s.voiceShowTranscript}
+            voiceHideTranscriptLabel={s.voiceHideTranscript}
+            onOpenVoiceMessageDetail={openVoiceMessageDetail}
+            onOpenMessageAttachments={openMessageAttachments}
           />
           {!showOnlyQuickQuestions ? (
             <>
@@ -633,8 +1097,8 @@ export function Chat({
                       type="button"
                       onClick={onBackToWritableChat}
                       className={cx(
-                        "self-start rounded-lg px-3 py-1.5 text-xs font-semibold transition-opacity",
-                        dark ? "bg-gray-700 text-gray-100 hover:bg-gray-600" : "bg-white text-gray-900 shadow-sm hover:bg-gray-50 border border-gray-200",
+                        "self-start rounded-lg px-3 py-1.5 text-xs font-medium transition-opacity",
+                        dark ? "bg-gray-700 text-gray-200 hover:bg-gray-600" : "bg-white text-gray-800 shadow-sm hover:bg-gray-50 border border-gray-200",
                       )}
                     >
                       {s.backToLatestChat}
@@ -642,26 +1106,123 @@ export function Chat({
                   ) : null}
                 </div>
               ) : null}
+              {attachNotice && showAttach ? (
+                <div
+                  role="alert"
+                  className={cx(
+                    "flex flex-shrink-0 items-center gap-3 border-t px-3 py-2 text-xs leading-snug",
+                    dark ? "border-amber-900/40 bg-amber-950/35 text-amber-100/95" : "border-amber-200 bg-amber-50 text-amber-900",
+                  )}
+                >
+                  <span className="min-w-0 flex-1">{attachNotice}</span>
+                  <button
+                    type="button"
+                    onClick={() => setAttachNotice(null)}
+                    className={cx(
+                      "shrink-0 rounded-md p-1 transition-colors focus:outline-none focus-visible:ring-2",
+                      dark
+                        ? "text-amber-200/90 hover:bg-amber-900/50 focus-visible:ring-amber-500/50"
+                        : "text-amber-900/80 hover:bg-amber-200/50 focus-visible:ring-amber-600/50",
+                    )}
+                    aria-label={s.close}
+                    title={s.close}
+                  >
+                    <X className="h-4 w-4" strokeWidth={2} aria-hidden />
+                  </button>
+                </div>
+              ) : null}
+              {postSpeechAudio && speechLimitNotice ? (
+                <div
+                  role="status"
+                  className={cx(
+                    "flex flex-shrink-0 items-center gap-3 border-t px-3 py-2 text-xs leading-snug",
+                    dark ? "border-blue-900/50 bg-blue-950/40 text-blue-200" : "border-blue-200/90 bg-blue-50 text-blue-800",
+                  )}
+                >
+                  <span className="min-w-0 flex-1">{speechLimitNotice}</span>
+                  <button
+                    type="button"
+                    onClick={() => setSpeechLimitNotice(null)}
+                    className={cx(
+                      "shrink-0 rounded-md p-1 transition-colors focus:outline-none focus-visible:ring-2",
+                      dark
+                        ? "text-blue-200/90 hover:bg-blue-900/50 focus-visible:ring-blue-500/50"
+                        : "text-blue-800/80 hover:bg-blue-200/50 focus-visible:ring-blue-600/50",
+                    )}
+                    aria-label={s.close}
+                    title={s.close}
+                  >
+                    <X className="h-4 w-4" strokeWidth={2} aria-hidden />
+                  </button>
+                </div>
+              ) : null}
+              <input
+                ref={attachInputRef}
+                type="file"
+                multiple
+                className="hidden"
+                accept={WIDGET_CHAT_ACCEPT}
+                aria-hidden
+                onChange={(e) => {
+                  const list = e.target.files;
+                  if (!list?.length) return;
+                  setHistoryViewOpen(false);
+                  const genId = () => `pf_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+                  const { added, errors } = pickWidgetChatFiles(list, pendingFiles.length, genId);
+                  if (errors.length) setAttachNotice([...new Set(errors)].join(" "));
+                  else setAttachNotice(null);
+                  if (added.length) setPendingFiles((prev) => [...prev, ...added]);
+                  e.target.value = "";
+                }}
+              />
               <ChatComposer
               dark={dark}
               value={input}
               onChange={setInput}
               onSend={handleSend}
-              disabled={isSending || composerReadOnly || conversationLoading}
+              inputDisabled={composerReadOnly}
+              sendDisabled={isSending || composerReadOnly || conversationLoading}
               placeholder={composerPlaceholder ?? s.placeholder}
               sendLabel={s.send}
               accentColor={accentColor}
               inputMaxLength={inputMaxLength}
               maxComposerRows={maxComposerRows}
               showAttach={showAttach}
-              showEmoji={showEmoji}
               showMic={showMic}
+              showVoice={effectiveShowVoice}
               asSeparateBox={composerAsSeparateBox}
               composerBorderWidth={composerBorderWidth}
               composerBorderColor={composerBorderColor}
-              onAttach={onAttach}
-              onEmoji={onEmoji}
+              composerControlStyle={composerControlStyle}
+              speechRecordingWaveStyle={speechRecordingWaveStyle}
+              pendingAttachments={pendingFiles.map(({ id, file }) => ({ id, label: file.name }))}
+              onRemovePendingAttachment={(id) => setPendingFiles((p) => p.filter((x) => x.id !== id))}
+              showPendingAttachmentChips={false}
+              onAttach={handleComposerAttach}
+              onOpenPendingAttachments={openComposerAttachmentsScreen}
               onMic={onMic}
+              onBeginSpeech={postSpeechAudio ? beginSpeech : undefined}
+              speechCaptureActive={speechCaptureActive}
+              speechCaptureMode={speechMode}
+              speechCaptureProcessing={speechBusy}
+              speechWaveformLevels={
+                speechWaveformLive && captureState === "recording" && !speechBusy
+                  ? speechWaveformLevels
+                  : undefined
+              }
+              onSpeechCaptureCancel={postSpeechAudio ? cancelSpeech : undefined}
+              onSpeechCaptureStop={postSpeechAudio ? () => void flushSpeechStop() : undefined}
+              onSpeechCaptureSend={
+                postSpeechAudio
+                  ? () => {
+                      if (speechMode === "dictate") void flushSpeechSend();
+                      else if (speechMode === "voice") void flushSpeechStop();
+                    }
+                  : undefined
+              }
+              voiceMessagePreview={pendingVoiceMessagePreview}
+              onVoiceMessagePreviewDiscard={discardVoiceMessagePreview}
+              speechRecordingElapsedMs={speechRecordingElapsedMs}
               textAreaRef={composerTextAreaRef}
               className={compact ? "p-2" : undefined}
             />
@@ -671,6 +1232,7 @@ export function Chat({
       )}
       {showFooter &&
       !showHistoryChrome &&
+      !showAttachmentsChrome &&
       ((brandingMessage ?? "").trim() || (privacyText ?? "").trim()) ? (
         <footer
           className={cx(

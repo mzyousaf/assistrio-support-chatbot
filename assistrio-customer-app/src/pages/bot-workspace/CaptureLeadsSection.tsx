@@ -27,6 +27,7 @@ import {
   type LeadFieldFormValues,
 } from '@/components/lead-field';
 import { Button, Card, CardBody, Checkbox, FieldRow, Modal, Select, Switch, Tooltip } from '@/components/ui';
+import { BOT_FIELD_MAX } from '@/lib/botFieldLimits';
 import { cn } from '@/lib/utils';
 
 const PAGE_TITLE = 'Leads Capture';
@@ -626,6 +627,7 @@ export function CaptureLeadsSection() {
         idPrefix="capture-lead-field"
         labelAndTypeReadOnly={leadFieldModalLocks.labelAndTypeReadOnly}
         requiredReadOnly={leadFieldModalLocks.requiredReadOnly}
+        labelMaxLength={BOT_FIELD_MAX.leadFieldLabel}
       />
 
       <Modal

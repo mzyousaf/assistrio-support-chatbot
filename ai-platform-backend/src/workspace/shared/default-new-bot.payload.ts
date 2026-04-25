@@ -91,14 +91,10 @@ export const DEFAULT_NEW_BOT_PAYLOAD = {
   chatExperience: {
     allowFileUploads: false,
     showMicButton: false,
-    showEmojiPicker: true,
+    showVoiceButton: false,
     showSuggestedQuestions: true,
     showCopyButton: true,
-    showSources: true,
-    showSenderName: true,
-    /** Empty = widget uses bot name + " - AI" for the sender label */
-    assistantName: '',
-    showMessageTime: true,
+    showMessageFeedback: true,
     timePosition: 'bottom',
     showAvatarInHeader: true,
     statusIndicator: 'live',
@@ -177,6 +173,7 @@ export type DefaultBotCreatePayload = {
   categories: string[];
   imageUrl: string;
   welcomeMessage: string;
+  welcomeMessageEnabled: boolean;
   leadCapture: {
     enabled: boolean;
     fields: Array<{ key: string; label: string; type: string; required: boolean }>;
@@ -225,6 +222,7 @@ export function getDefaultBotCreatePayload(
     category: b.categories[0],
     imageUrl: g.avatarUrl,
     welcomeMessage: b.welcomeMessage,
+    welcomeMessageEnabled: true,
     leadCapture: {
       enabled: b.leadCapture.enabled,
       fields: b.leadCapture.fields.map((f) => ({
@@ -253,14 +251,11 @@ export function getDefaultBotCreatePayload(
       liveIndicatorStyle: (ce.indicatorStyle === 'dot-only' ? 'dot-only' : 'label') as 'label' | 'dot-only',
       statusDotStyle: (ce.dotStyle === 'blinking' ? 'blinking' : 'static') as 'blinking' | 'static',
       showComposerWithSuggestedQuestions: ce.showSuggestedQuestions,
-      senderName: ce.assistantName,
-      showSenderName: ce.showSenderName,
-      showTime: ce.showMessageTime,
       showCopyButton: ce.showCopyButton,
-      showSources: ce.showSources,
-      showEmoji: ce.showEmojiPicker,
+      showMessageFeedback: ce.showMessageFeedback,
       allowFileUpload: ce.allowFileUploads,
       showMic: ce.showMicButton,
+      showVoice: ce.showVoiceButton,
       showMenuExpand: ce.expandChat,
     },
     exampleQuestions: b.suggestedQuestions.slice(),

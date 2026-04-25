@@ -17,7 +17,6 @@ export type PublicBotListChatUI = {
   showPrivacyText?: boolean;
   showSources?: boolean;
   showCopyButton?: boolean;
-  showEmoji?: boolean;
   showMenuQuickLinks?: boolean;
   /** Same image as widget launcher when set — useful as avatar fallback. */
   launcherAvatarUrl?: string;

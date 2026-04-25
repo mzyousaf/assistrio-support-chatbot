@@ -8,6 +8,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { BOT_FIELD_MAX, clampStr } from '@/lib/botFieldLimits';
 import { useCustomerWidgetPreview } from './CustomerWidgetPreviewContext';
 import { patchCustomerBot } from '../../api/customerApi';
 import {
@@ -91,20 +92,26 @@ export function BehaviorWorkspaceProvider({ children }: { children: ReactNode })
     const parsed = parseCategoriesFromBot(cats);
     setSelectedCategories(parsed.selectedPredefined);
     setCustomCategoryMode(parsed.customMode);
-    setCustomCategoryText(parsed.customText);
+    setCustomCategoryText(clampStr(parsed.customText, BOT_FIELD_MAX.categoryText));
 
     const p = bot.personality;
     const pr = String(p?.behaviorPreset ?? 'default');
     setBehaviorPreset(BEHAVIOR_PRESETS.some((x) => x.value === pr) ? pr : 'default');
     const t = String(p?.tone ?? 'friendly');
     setTone(VALID_TONE_VALUES.has(t) ? t : 'friendly');
-    setPersonalityDescription(typeof p?.description === 'string' ? p.description : '');
-    setThingsToAvoid(typeof p?.thingsToAvoid === 'string' ? p.thingsToAvoid : '');
+    setPersonalityDescription(
+      clampStr(typeof p?.description === 'string' ? p.description : '', BOT_FIELD_MAX.personalityDescription),
+    );
+    setThingsToAvoid(
+      clampStr(typeof p?.thingsToAvoid === 'string' ? p.thingsToAvoid : '', BOT_FIELD_MAX.thingsToAvoid),
+    );
 
-    const wm = typeof bot.welcomeMessage === 'string' ? bot.welcomeMessage : '';
+    const wm = clampStr(typeof bot.welcomeMessage === 'string' ? bot.welcomeMessage : '', BOT_FIELD_MAX.welcomeMessage);
     setWelcomeMessage(wm);
     welcomeStashRef.current = wm;
-    setWelcomeMessageEnabledState(wm.trim().length > 0);
+    setWelcomeMessageEnabledState(
+      bot.welcomeMessageEnabled === false ? false : Boolean(wm.trim()),
+    );
     setExampleQuestions(
       Array.isArray(bot.exampleQuestions)
         ? bot.exampleQuestions
@@ -136,10 +143,11 @@ export function BehaviorWorkspaceProvider({ children }: { children: ReactNode })
         : '');
     const personalityPatch: Record<string, unknown> = {
       behaviorPreset,
-      description: personalityDescription.trim() || undefined,
-      thingsToAvoid: thingsToAvoid.trim() || undefined,
+      description: clampStr(personalityDescription.trim(), BOT_FIELD_MAX.personalityDescription) || undefined,
+      thingsToAvoid: clampStr(thingsToAvoid.trim(), BOT_FIELD_MAX.thingsToAvoid) || undefined,
       tone,
-      systemPrompt: combinedSystemPrompt.trim() || undefined,
+      systemPrompt:
+        clampStr(combinedSystemPrompt.trim(), BOT_FIELD_MAX.personalitySystemPrompt) || undefined,
     };
     const suggested = exampleQuestions
       .map((q) => String(q).trim().slice(0, EXAMPLE_QUESTION_MAX_CHARS))
@@ -148,7 +156,8 @@ export function BehaviorWorkspaceProvider({ children }: { children: ReactNode })
 
     const t = window.setTimeout(() => {
       setBehaviorDraftSlice({
-        welcomeMessage: welcomeMessageEnabled ? welcomeMessage.trim() || undefined : undefined,
+        welcomeMessage: clampStr(welcomeMessage.trim(), BOT_FIELD_MAX.welcomeMessage) || undefined,
+        welcomeMessageEnabled,
         suggestedQuestions: suggested,
         personalityPatch,
       });
@@ -231,7 +240,7 @@ export function BehaviorWorkspaceProvider({ children }: { children: ReactNode })
 
   const save = useCallback(async () => {
     if (!bot || !botId || saving) return;
-    const desc = personalityDescription.trim();
+    const desc = clampStr(personalityDescription.trim(), BOT_FIELD_MAX.personalityDescription);
     if (!desc) {
       setSaveError('Instructions are required to define how your agent behaves.');
       setActiveSubnav('personality');
@@ -240,7 +249,7 @@ export function BehaviorWorkspaceProvider({ children }: { children: ReactNode })
 
     let categoriesPayload: string[] = [];
     if (customCategoryMode) {
-      const c = customCategoryText.trim().toLowerCase();
+      const c = clampStr(customCategoryText.trim().toLowerCase(), BOT_FIELD_MAX.categoryText);
       if (!c) {
         setSaveError('Enter a custom category, or switch back to predefined categories.');
         setActiveSubnav('personality');
@@ -270,13 +279,15 @@ export function BehaviorWorkspaceProvider({ children }: { children: ReactNode })
       behaviorPreset,
       tone,
       description: desc,
-      systemPrompt: combinedSystemPrompt.trim(),
+      systemPrompt: clampStr(combinedSystemPrompt.trim(), BOT_FIELD_MAX.personalitySystemPrompt) || undefined,
     };
-    const nameTrimmed = typeof raw.name === 'string' ? raw.name.trim() : '';
+    const nameTrimmed =
+      typeof raw.name === 'string' ? clampStr(raw.name.trim(), BOT_FIELD_MAX.personalityName) : '';
     if (nameTrimmed) personalityPayload.name = nameTrimmed;
-    const langTrimmed = typeof raw.language === 'string' ? raw.language.trim() : '';
+    const langTrimmed =
+      typeof raw.language === 'string' ? clampStr(raw.language.trim(), BOT_FIELD_MAX.personalityLanguage) : '';
     if (langTrimmed) personalityPayload.language = langTrimmed;
-    const tta = thingsToAvoid.trim();
+    const tta = clampStr(thingsToAvoid.trim(), BOT_FIELD_MAX.thingsToAvoid);
     if (tta) personalityPayload.thingsToAvoid = tta;
 
     const exampleTrimmed = exampleQuestions
@@ -287,10 +298,10 @@ export function BehaviorWorkspaceProvider({ children }: { children: ReactNode })
     setSaving(true);
     setSaveError(null);
 
-    const welcomeStored = welcomeMessageEnabled && welcomeMessage.trim() ? welcomeMessage.trim() : '';
     const res = await patchCustomerBot(botId, {
       categories: categoriesPayload,
-      welcomeMessage: welcomeStored,
+      welcomeMessage: clampStr(welcomeMessage.trim(), BOT_FIELD_MAX.welcomeMessage),
+      welcomeMessageEnabled,
       exampleQuestions: exampleTrimmed,
       personality: personalityPayload,
     });

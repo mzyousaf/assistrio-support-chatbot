@@ -5,6 +5,7 @@ import { prevStepPath } from '../../onboarding/onboardingState';
 
 import { styles } from './onboardingStep';
 import { Button, Input, Textarea } from '@/components/ui';
+import { BOT_FIELD_MAX, clampStr } from '@/lib/botFieldLimits';
 
 const STEP = 'agent-profile';
 
@@ -18,10 +19,12 @@ export function OnboardingAgentProfileStep() {
 
   useEffect(() => {
     if (!bot) return;
-    setName(String(bot.name ?? ''));
+    setName(clampStr(String(bot.name ?? ''), BOT_FIELD_MAX.name));
     const cats = Array.isArray(bot.categories) ? bot.categories : [];
-    setCategory(cats[0] ? String(cats[0]) : String(bot.category ?? ''));
-    setShortDescription(String(bot.shortDescription ?? ''));
+    setCategory(
+      clampStr(cats[0] ? String(cats[0]) : String(bot.category ?? ''), BOT_FIELD_MAX.categoryText),
+    );
+    setShortDescription(clampStr(String(bot.shortDescription ?? ''), BOT_FIELD_MAX.shortDescription));
   }, [bot?.id, bot]);
 
   async function onContinue(e: React.FormEvent) {
@@ -71,7 +74,14 @@ export function OnboardingAgentProfileStep() {
       <label className={styles.label} htmlFor="onb-profile-name">
         Agent name *
       </label>
-      <Input id="onb-profile-name" quiet value={name} onChange={(e) => setName(e.target.value)} autoComplete="off" />
+      <Input
+        id="onb-profile-name"
+        quiet
+        value={name}
+        maxLength={BOT_FIELD_MAX.name}
+        onChange={(e) => setName(e.target.value.slice(0, BOT_FIELD_MAX.name))}
+        autoComplete="off"
+      />
       <label className={styles.label} htmlFor="onb-profile-category">
         Category / use case *
       </label>
@@ -79,7 +89,8 @@ export function OnboardingAgentProfileStep() {
         id="onb-profile-category"
         quiet
         value={category}
-        onChange={(e) => setCategory(e.target.value)}
+        maxLength={BOT_FIELD_MAX.categoryText}
+        onChange={(e) => setCategory(e.target.value.slice(0, BOT_FIELD_MAX.categoryText))}
         placeholder="e.g. Customer support, Sales, Internal HR"
       />
       <label className={styles.label} htmlFor="onb-profile-short-desc">
@@ -90,7 +101,8 @@ export function OnboardingAgentProfileStep() {
         quiet
         rows={3}
         value={shortDescription}
-        onChange={(e) => setShortDescription(e.target.value)}
+        maxLength={BOT_FIELD_MAX.shortDescription}
+        onChange={(e) => setShortDescription(e.target.value.slice(0, BOT_FIELD_MAX.shortDescription))}
         placeholder="One or two sentences about what this assistant does."
       />
       <div className={styles.actions}>

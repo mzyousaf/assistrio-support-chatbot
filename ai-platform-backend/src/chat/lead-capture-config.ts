@@ -3,6 +3,8 @@
  * Backward-compatible with legacy requiredFields/optionalFields and with BotLeadCaptureV2.
  */
 
+import { LEAD_CAPTURE_FIELDS_MAX } from '../workspace/shared/bot-field-limits';
+
 export type AskStrategy = 'soft' | 'balanced' | 'direct';
 export type CaptureMode = 'chat' | 'form' | 'hybrid';
 
@@ -71,6 +73,7 @@ export function normalizeLeadCaptureConfig(input: LeadCaptureInput | undefined):
   const used = new Set<string>();
 
   for (const f of rawFields) {
+    if (out.fields.length >= LEAD_CAPTURE_FIELDS_MAX) break;
     if (!f || typeof f !== 'object') continue;
     const keyRaw =
       (f.key || f.label || '')

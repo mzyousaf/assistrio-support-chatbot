@@ -1,3 +1,5 @@
+import { isWelcomeMessageActive } from './welcome-message-display.util';
+
 export interface PublicKnowledgeBasePreviewItemResponse {
   title: string;
   sourceType: string;
@@ -35,7 +37,6 @@ export interface PublicBotListItemResponse {
     timePosition?: 'top' | 'bottom';
     showSources?: boolean;
     showCopyButton?: boolean;
-    showEmoji?: boolean;
     showMenuQuickLinks?: boolean;
     launcherAvatarUrl?: string;
   };
@@ -200,7 +201,11 @@ export function shapePublicBotDetail(raw: unknown): PublicBotDetailResponse | nu
     category: optionalNonEmpty(row.category),
     avatarEmoji: nonEmpty(row.avatarEmoji) || '💬',
     imageUrl: nonEmpty(row.imageUrl),
-    welcomeMessage: optionalNonEmpty(row.welcomeMessage),
+    welcomeMessage: isWelcomeMessageActive(
+      row as { welcomeMessage?: string; welcomeMessageEnabled?: boolean },
+    )
+      ? optionalNonEmpty(row.welcomeMessage)
+      : undefined,
     chatUI: row.chatUI,
     faqs: toFaqArray(row.faqs),
     exampleQuestions: toStringArray(row.exampleQuestions),

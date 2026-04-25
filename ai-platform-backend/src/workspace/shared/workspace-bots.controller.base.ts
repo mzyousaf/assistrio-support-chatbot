@@ -423,6 +423,7 @@ export abstract class WorkspaceBotsControllerBase {
         openaiApiKeyOverride: b.openaiApiKeyOverride ?? '',
         whisperApiKeyOverride: b.whisperApiKeyOverride ?? '',
         welcomeMessage: b.welcomeMessage ?? '',
+        welcomeMessageEnabled: (b as { welcomeMessageEnabled?: boolean }).welcomeMessageEnabled !== false,
         knowledgeDescription: (b.knowledgeDescription as string) ?? '',
         status: b.status === 'published' ? 'published' : 'draft',
         isPublic: Boolean(b.isPublic),

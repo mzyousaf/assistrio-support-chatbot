@@ -66,6 +66,18 @@ function getNum(ui: Record<string, unknown>, key: string, fallback: number): num
   return typeof v === 'number' && Number.isFinite(v) ? v : fallback;
 }
 
+function getComposerControlStyle(ui: Record<string, unknown>): 'brand' | 'default' | 'defaultDark' {
+  const s = ui.composerControlStyle;
+  if (s === 'brand' || s === 'default' || s === 'defaultDark') return s;
+  return getBool(ui, 'composerControlsUsePrimary', true) ? 'defaultDark' : 'default';
+}
+
+function getSpeechRecordingWaveStyle(ui: Record<string, unknown>): 'brand' | 'default' | 'defaultDark' {
+  const s = ui.speechRecordingWaveStyle;
+  if (s === 'brand' || s === 'default' || s === 'defaultDark') return s;
+  return 'default';
+}
+
 function clamp(n: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, n));
 }
@@ -311,7 +323,7 @@ export function WidgetAppearanceSection() {
                       <div className="mt-4 space-y-4">
                         <div className="w-full min-w-0">
                           <FieldRow
-                            label="Primary color"
+                            label="Brand color"
                             htmlFor="appearance-primary-hex"
                             className="min-w-0 gap-1.5"
                             helperText="Accent for buttons, links, and highlights. Pick a swatch or enter hex (#RRGGBB or #RGB). Only hex characters are accepted; invalid colors use the default teal when you leave the field or save."
@@ -320,7 +332,7 @@ export function WidgetAppearanceSection() {
                               <input
                                 id="appearance-primary-swatch"
                                 type="color"
-                                aria-label="Primary color picker"
+                                aria-label="Brand color picker"
                                 value={colorPickerValue}
                                 onChange={(e) => patch('primaryColor', normalizePrimaryColor(e.target.value))}
                                 className="h-9 w-9 shrink-0 cursor-pointer rounded border border-slate-200 bg-transparent p-0 dark:border-slate-600"
@@ -422,6 +434,26 @@ export function WidgetAppearanceSection() {
                         />
                         {getBool(chatUi, 'showChatBorder', true) ? (
                           <div className={cn(ws.workspaceEditorFieldPairGrid)}>
+                            <div className="min-w-0 sm:col-span-2">
+                              <FieldRow
+                                label="Panel border color"
+                                htmlFor="appearance-panel-border-color"
+                                className="min-w-0 gap-1.5"
+                                helperText="Neutral gray outline or a soft tint of your brand color."
+                              >
+                                <Select
+                                  id="appearance-panel-border-color"
+                                  quiet
+                                  value={chatUi.chatPanelBorderColor === 'default' ? 'default' : 'primary'}
+                                  onChange={(e) =>
+                                    patch('chatPanelBorderColor', e.target.value as 'default' | 'primary')
+                                  }
+                                >
+                                  <option value="default">Default (neutral)</option>
+                                  <option value="primary">Brand color</option>
+                                </Select>
+                              </FieldRow>
+                            </div>
                             <div className="min-w-0">
                               <Range
                                 id="appearance-panel-border-w"
@@ -820,6 +852,54 @@ export function WidgetAppearanceSection() {
                           checked={composerSeparate}
                           onChange={(v) => patch('composerAsSeparateBox', v)}
                         />
+                        <div className="border-b border-slate-100 py-3.5 last:border-b-0">
+                          <FieldRow
+                            label="Send & voice buttons"
+                            htmlFor="appearance-composer-control-style"
+                            className="min-w-0 gap-1.5"
+                            helperText="How Send and the voice (waveform) control are filled: your brand color, Default (neutral) like the mic, or Default (dark) with a dark chip and light icons."
+                          >
+                            <Select
+                              id="appearance-composer-control-style"
+                              quiet
+                              value={getComposerControlStyle(chatUi)}
+                              onChange={(e) =>
+                                patch(
+                                  'composerControlStyle',
+                                  e.target.value as 'brand' | 'default' | 'defaultDark',
+                                )
+                              }
+                            >
+                              <option value="brand">Brand color</option>
+                              <option value="default">Default (neutral)</option>
+                              <option value="defaultDark">Default (dark)</option>
+                            </Select>
+                          </FieldRow>
+                        </div>
+                        <div className="border-b border-slate-100 py-3.5 last:border-b-0">
+                          <FieldRow
+                            label="Voice recording waveform"
+                            htmlFor="appearance-speech-recording-wave"
+                            className="min-w-0 gap-1.5"
+                            helperText="Colors for the live level meter while recording a voice note or dictation."
+                          >
+                            <Select
+                              id="appearance-speech-recording-wave"
+                              quiet
+                              value={getSpeechRecordingWaveStyle(chatUi)}
+                              onChange={(e) =>
+                                patch(
+                                  'speechRecordingWaveStyle',
+                                  e.target.value as 'brand' | 'default' | 'defaultDark',
+                                )
+                              }
+                            >
+                              <option value="brand">Brand color</option>
+                              <option value="default">Default</option>
+                              <option value="defaultDark">Default (dark)</option>
+                            </Select>
+                          </FieldRow>
+                        </div>
                       </div>
                       {!composerSeparate ? (
                         <p className={cn(ws.workspaceEditorControlHint, 'mt-4 rounded-md border border-slate-100 bg-slate-50/80 px-3 py-2.5')}>
@@ -858,7 +938,7 @@ export function WidgetAppearanceSection() {
                                 label="Border color"
                                 htmlFor="appearance-composer-border-color"
                                 className="min-w-0 gap-1.5"
-                                helperText="Use neutral gray or tie the outline to your primary brand color."
+                                helperText="Use neutral gray or tie the outline to your brand color."
                               >
                                 <Select
                                   id="appearance-composer-border-color"
@@ -867,7 +947,7 @@ export function WidgetAppearanceSection() {
                                   onChange={(e) => patch('composerBorderColor', e.target.value)}
                                 >
                                   <option value="default">Default (neutral)</option>
-                                  <option value="primary">Primary color</option>
+                                  <option value="primary">Brand color</option>
                                 </Select>
                               </FieldRow>
                             </div>

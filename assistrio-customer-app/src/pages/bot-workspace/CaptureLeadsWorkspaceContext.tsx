@@ -11,7 +11,9 @@ import { patchCustomerBot } from '../../api/customerApi';
 import { uniqueLeadFieldKey } from '@/lib/leadFieldKey';
 import { LEAD_FIELDS_MAX } from './behaviorConstants';
 import { useBotWorkspace } from './BotWorkspaceContext';
+import { useCustomerWidgetPreview } from './CustomerWidgetPreviewContext';
 import { registerManualSaveGuard } from './workspaceManualSaveGuard';
+import type { LeadCapturePreviewDraft } from '@/lib/buildCustomerWidgetPreviewOverrides';
 
 export type LeadFieldDraft = {
   key: string;
@@ -117,8 +119,11 @@ type CaptureLeadsWorkspaceValue = {
 
 const CaptureLeadsWorkspaceContext = createContext<CaptureLeadsWorkspaceValue | null>(null);
 
+const LEAD_CAPTURE_PREVIEW_DEBOUNCE_MS = 150;
+
 export function CaptureLeadsWorkspaceProvider({ children }: { children: ReactNode }) {
   const { bot, botId, softReload } = useBotWorkspace();
+  const { setLeadCaptureDraftSlice } = useCustomerWidgetPreview();
 
   const [leadEnabled, setLeadEnabled] = useState(false);
   const [leadFields, setLeadFields] = useState<LeadFieldDraft[]>([]);
@@ -151,6 +156,38 @@ export function CaptureLeadsWorkspaceProvider({ children }: { children: ReactNod
   useEffect(() => {
     return registerManualSaveGuard('capture-leads', () => dirty, hydrateFromBot);
   }, [dirty, hydrateFromBot]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const payload: LeadCapturePreviewDraft = {
+        enabled: leadEnabled,
+        fields: leadFields.map((f) => ({
+          key: f.key,
+          label: f.label,
+          type: f.type,
+          required: f.required !== false,
+          ...(f.disabled ? { disabled: true } : {}),
+          ...(Array.isArray(f.aliases) && f.aliases.length ? { aliases: f.aliases } : {}),
+        })),
+        askStrategy: leadAskStrategy,
+        captureMode: leadCaptureMode,
+        politeMode: leadPoliteMode,
+      };
+      setLeadCaptureDraftSlice(payload);
+    }, LEAD_CAPTURE_PREVIEW_DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [
+    leadEnabled,
+    leadFields,
+    leadAskStrategy,
+    leadCaptureMode,
+    leadPoliteMode,
+    setLeadCaptureDraftSlice,
+  ]);
+
+  useEffect(() => {
+    return () => setLeadCaptureDraftSlice(null);
+  }, [setLeadCaptureDraftSlice]);
 
   const markDirty = useCallback(() => {
     setDirty(true);

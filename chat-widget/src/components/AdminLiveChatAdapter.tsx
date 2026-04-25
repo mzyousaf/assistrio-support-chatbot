@@ -4,16 +4,29 @@ import { Bot } from "lucide-react";
 import { usePreferredColorScheme } from "../hooks/usePreferredColorScheme";
 import { Chat, ChatWithLauncher } from "./chat-ui";
 import type { ChatUIMessage, ChatUISource } from "./chat-ui";
+import type { ChatSpeechInputMeta } from "./chat-ui/types";
 import { mapSources } from "./chat-ui";
 import { ContainedLauncherPreview } from "./ContainedLauncherPreview";
 import { cx } from "./chat-ui/utils";
+import { useChatPanelBox } from "../hooks/useChatPanelLayout";
+import {
+  PANEL_COLLAPSED_HEIGHT_PX,
+  PANEL_COLLAPSED_WIDTH_PX,
+  PANEL_EXPANDED_WIDTH_PX,
+} from "../lib/embedPanelConstraints";
+import { containedLauncherPreviewBottomOutsetPx } from "../lib/embedPanelConstraints";
 import { launcherBubbleFromChatUI } from "../lib/launcherBubbleFromChatUI";
 import { apiFetch } from "../lib/apiFetch";
 import { fetchWithNetworkRetry } from "../lib/fetchWithRetry";
 import { runtimeEmbedPost } from "../lib/runtimeEmbedPost";
+import { runtimeEmbedMultipartPost } from "../lib/runtimeEmbedMultipartPost";
+import { runtimeEmbedSpeechPost } from "../lib/runtimeEmbedSpeechPost";
+import { speechEndpointFromChatUrl } from "../lib/speechEndpoint";
+import { streamAssistantReply } from "../lib/streamAssistantReply";
 import { mergeWidgetStrings, type WidgetStrings } from "../lib/widgetStrings";
 import { resolveWelcomeMessage } from "../lib/welcomeMessage";
-import type { BotChatUI } from "../models/botChatUI";
+import { resolveComposerControlStyle, resolveSpeechRecordingWaveStyle } from "../lib/resolveComposerChatUiStyles";
+import type { BotChatUI, ScrollChromeStyle, UserBubbleStyle } from "../models/botChatUI";
 import type { WidgetPreviewOverrides } from "../types";
 
 function generateId(): string {
@@ -24,8 +37,48 @@ function isoNow(): string {
   return new Date().toISOString();
 }
 
+/** Wipes preview multichat sessionStorage for this bot+visitor so a full page reload does not restore prior threads. */
+function clearPreviewThreadSessionStorage(botId: string, previewVisitorStorageKey: string): void {
+  if (typeof window === "undefined" || !window.sessionStorage) return;
+  try {
+    const msgPrefix = `assistrio_preview_msgs:${botId}:${previewVisitorStorageKey}:`;
+    const recentKey = `assistrio_preview_recent:${botId}:${previewVisitorStorageKey}`;
+    window.sessionStorage.removeItem(recentKey);
+    const toRemove: string[] = [];
+    for (let i = 0; i < window.sessionStorage.length; i += 1) {
+      const k = window.sessionStorage.key(i);
+      if (k && k.startsWith(msgPrefix)) toRemove.push(k);
+    }
+    for (const k of toRemove) {
+      window.sessionStorage.removeItem(k);
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+function mapUserBubbleStyle(raw: string | undefined): UserBubbleStyle {
+  if (raw === "default") return "default";
+  if (raw === "defaultDark") return "defaultDark";
+  return "primary";
+}
+
+function resolveScrollChromeStyle(chatUI: BotChatUI | undefined | null): ScrollChromeStyle {
+  const s = chatUI?.scrollChromeStyle;
+  if (s === "default" || s === "defaultDark" || s === "primary") return s;
+  /** @deprecated stored value */
+  if (s === "gray") return "defaultDark";
+  return chatUI?.scrollChromeUsesPrimary === false ? "default" : "primary";
+}
+
+function resolveScrollToBottomChromeStyle(chatUI: BotChatUI | undefined | null): ScrollChromeStyle {
+  const s = chatUI?.scrollToBottomChromeStyle;
+  if (s === "default" || s === "defaultDark" || s === "primary") return s;
+  if (s === "gray") return "defaultDark";
+  return resolveScrollChromeStyle(chatUI);
+}
+
 const SUBTITLE_MAX_LENGTH = 80;
-const DEFAULT_SENDER_NAME_SUFFIX = " - AI";
 
 interface SuperAdminChatDebug {
   finalAnswerPipeline?: "unified";
@@ -47,6 +100,7 @@ interface SuperAdminChatResponse {
   error?: string;
   errorCode?: string;
   debug?: SuperAdminChatDebug;
+  userAttachments?: Array<{ name: string; mimeType: string; url: string; size?: number }>;
 }
 
 function getRuntimeErrorMessage(
@@ -129,7 +183,7 @@ export interface AdminLiveChatAdapterProps {
   widgetStrings?: WidgetStrings;
   className?: string;
   style?: React.CSSProperties;
-  /** Non-floating inline panel sizes (defaults 400×700 collapsed, 560×75vh expanded). */
+  /** Non-floating inline panel sizes (defaults 404×730 collapsed, 560×~85vh expanded, clamped). */
   inlinePanelCollapsedWidth?: number;
   inlinePanelCollapsedHeight?: number;
   inlinePanelExpandedWidth?: number;
@@ -139,6 +193,7 @@ export interface AdminLiveChatAdapterProps {
    * (requires `EmbedChatConfig.showContainedLauncherPreview` from the host).
    */
   showContainedLauncherPreview?: boolean;
+  onContainedPanelExpandChange?: (expanded: boolean) => void;
 }
 
 const DEFAULT_PRIMARY = "#14B8A6";
@@ -217,6 +272,7 @@ export function AdminLiveChatAdapter({
   inlinePanelExpandedWidth,
   inlinePanelExpandedHeight,
   showContainedLauncherPreview = false,
+  onContainedPanelExpandChange,
 }: AdminLiveChatAdapterProps) {
   void expandHref;
   void debug;
@@ -233,8 +289,10 @@ export function AdminLiveChatAdapter({
   const endpoint = apiBaseUrl
     ? `${apiBaseUrl.replace(/\/+$/, "")}${chatPath}`
     : chatPath;
+  const speechEndpointUrl = useMemo(() => speechEndpointFromChatUrl(endpoint), [endpoint]);
   const conversationIdRef = useRef<string | null>(null);
   const pendingStartNewRef = useRef(false);
+  const containedStageRef = useRef<HTMLDivElement | null>(null);
   /** One-time restore of latest thread on runtime load (always for runtime so single-thread embeds load history). */
   const didAutoRestoreConversationRef = useRef(false);
   /** Active conversation id for UI (writable vs read-only in single-thread mode). */
@@ -355,15 +413,11 @@ export function AdminLiveChatAdapter({
 
   useEffect(() => {
     if (mode === "preview") {
-      if (visitorMultiChatEnabled) {
-        setRecentChats(readPreviewRecent());
-      } else {
-        setRecentChats([]);
-      }
+      // Preview: do not restore assistrio_preview_* from sessionStorage on load; identity reset effect clears it.
       return;
     }
     void refreshRuntimeRecent();
-  }, [visitorMultiChatEnabled, mode, readPreviewRecent, refreshRuntimeRecent]);
+  }, [visitorMultiChatEnabled, mode, refreshRuntimeRecent]);
 
   useEffect(() => {
     didAutoRestoreConversationRef.current = false;
@@ -371,8 +425,16 @@ export function AdminLiveChatAdapter({
     setIncludeWelcomeInMessages(mode !== "runtime");
     setRuntimeListLoading(mode === "runtime");
     setMessagesLoading(false);
-    setMessages(mode === "runtime" ? [] : []);
-  }, [botId, chatVisitorId, mode]);
+    if (mode === "preview") {
+      clearPreviewThreadSessionStorage(botId, previewVisitorStorageKey);
+      setRecentChats([]);
+      conversationIdRef.current = null;
+      pendingStartNewRef.current = true;
+      setMessages(welcomeMsg ? [welcomeMsg] : []);
+    } else {
+      setMessages([]);
+    }
+  }, [botId, chatVisitorId, mode, welcomeMsg, previewVisitorStorageKey]);
 
   /** No saved threads: show welcome in widget after list has loaded. */
   useEffect(() => {
@@ -461,7 +523,13 @@ export function AdminLiveChatAdapter({
         const res = await runtimeEmbedPost(msgUrl, bodyWithoutKeys, { accessKey, secretKey });
         const data = (await res.json().catch(() => ({}))) as {
           ok?: boolean;
-          messages?: Array<{ role: string; content: string; createdAt: string }>;
+          messages?: Array<{
+            role: string;
+            content: string;
+            createdAt: string;
+            speechInput?: ChatSpeechInputMeta;
+            attachments?: Array<{ name: string; mimeType: string; url: string; size?: number }>;
+          }>;
         };
         if (!res.ok || !Array.isArray(data.messages)) {
           setIncludeWelcomeInMessages(true);
@@ -476,6 +544,29 @@ export function AdminLiveChatAdapter({
             content: String(m.content ?? ""),
             createdAt: m.createdAt || isoNow(),
             status: "sent",
+            ...(m.speechInput?.mode === "voice" || m.speechInput?.mode === "dictate"
+              ? {
+                  speechInput: {
+                    mode: m.speechInput.mode,
+                    ...(m.speechInput.transcript ? { transcript: m.speechInput.transcript } : {}),
+                    ...(m.speechInput.audioUrl ? { audioUrl: m.speechInput.audioUrl } : {}),
+                    ...(m.speechInput.mimeType ? { mimeType: m.speechInput.mimeType } : {}),
+                    ...(m.speechInput.durationMs != null ? { durationMs: m.speechInput.durationMs } : {}),
+                  },
+                }
+              : {}),
+            ...(Array.isArray(m.attachments) && m.attachments.length > 0
+              ? {
+                  attachments: m.attachments
+                    .map((a) => ({
+                      name: String(a.name ?? ""),
+                      mimeType: String(a.mimeType ?? "application/octet-stream"),
+                      url: String(a.url ?? ""),
+                      ...(typeof a.size === "number" && Number.isFinite(a.size) ? { size: a.size } : {}),
+                    }))
+                    .filter((a) => a.name && a.url),
+                }
+              : {}),
           }));
         if (mapped.length === 0) {
           setIncludeWelcomeInMessages(true);
@@ -559,49 +650,107 @@ export function AdminLiveChatAdapter({
 
   const ws = mergeWidgetStrings(widgetStrings);
 
+  const speechClientEnabled = useMemo(() => {
+    if (!(apiBaseUrl ?? "").trim()) return false;
+    const mic = chatUI?.showMic === true;
+    const voice = typeof chatUI?.showVoice === "boolean" ? chatUI.showVoice === true : mic;
+    return mic || voice;
+  }, [apiBaseUrl, chatUI?.showMic, chatUI?.showVoice]);
+
   const executeSend = useCallback(
-    async (value: string, userMessageId: string) => {
+    async (value: string, userMessageId: string, speechInput?: ChatSpeechInputMeta, files?: File[]) => {
       try {
         const startNew = pendingStartNewRef.current;
+        const speechPayload =
+          speechInput == null
+            ? {}
+            : {
+                speechInput: {
+                  mode: speechInput.mode,
+                  ...(speechInput.transcript ? { transcript: speechInput.transcript } : {}),
+                  ...(speechInput.audioUrl ? { audioUrl: speechInput.audioUrl } : {}),
+                  ...(speechInput.mimeType ? { mimeType: speechInput.mimeType } : {}),
+                  ...(speechInput.durationMs != null ? { durationMs: speechInput.durationMs } : {}),
+                },
+              };
+        const fileList = files?.length ? files : [];
+        const bodyPayload = {
+          botId,
+          message: value,
+          ...(startNew ? { startNewConversation: true as const } : {}),
+          ...(!startNew && conversationIdRef.current ? { conversationId: conversationIdRef.current } : {}),
+          ...(accessKey ? { accessKey } : {}),
+          ...(secretKey ? { secretKey } : {}),
+          ...(chatVisitorId ? { chatVisitorId } : {}),
+          ...(authToken ? { authToken } : {}),
+          ...(previewOverrides ? { previewOverrides } : {}),
+          ...speechPayload,
+        };
+        const bodyWithoutKeys = {
+          botId,
+          message: value,
+          ...(startNew ? { startNewConversation: true as const } : {}),
+          ...(!startNew && conversationIdRef.current ? { conversationId: conversationIdRef.current } : {}),
+          ...(runtimeEmbedOrigin ? { embedOrigin: runtimeEmbedOrigin } : {}),
+          ...(chatVisitorId ? { chatVisitorId } : {}),
+          ...speechPayload,
+        };
+        const buildMultipart = (payload: Record<string, unknown>, includeKeys: boolean): FormData => {
+          const fd = new FormData();
+          fd.append("payload", JSON.stringify(payload));
+          for (const f of fileList) fd.append("file", f, f.name);
+          if (includeKeys) {
+            if (accessKey) fd.append("accessKey", accessKey);
+            if (secretKey) fd.append("secretKey", secretKey);
+          }
+          return fd;
+        };
         let res: Response;
         if (mode === "preview") {
-          const bodyPayload = {
-            botId,
-            message: value,
-            ...(startNew ? { startNewConversation: true as const } : {}),
-            ...(!startNew && conversationIdRef.current ? { conversationId: conversationIdRef.current } : {}),
-            ...(accessKey ? { accessKey } : {}),
-            ...(secretKey ? { secretKey } : {}),
-            ...(chatVisitorId ? { chatVisitorId } : {}),
-            ...(authToken ? { authToken } : {}),
-            ...(previewOverrides ? { previewOverrides } : {}),
-          };
+          if (fileList.length > 0) {
+            res = await fetchWithNetworkRetry(
+              () =>
+                apiBaseUrl
+                  ? fetch(endpoint, {
+                      method: "POST",
+                      body: buildMultipart(bodyPayload as Record<string, unknown>, true),
+                      credentials: "include",
+                    })
+                  : runtimeEmbedMultipartPost(endpoint, (ik) => buildMultipart(bodyPayload as Record<string, unknown>, ik), {
+                      accessKey,
+                      secretKey,
+                    }),
+              { retries: 2, delayMs: 400 },
+            );
+          } else {
+            res = await fetchWithNetworkRetry(
+              () =>
+                apiBaseUrl
+                  ? fetch(endpoint, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      credentials: "include",
+                      body: JSON.stringify(bodyPayload),
+                    })
+                  : apiFetch(endpoint, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      credentials: "include",
+                      body: JSON.stringify(bodyPayload),
+                    }),
+              { retries: 2, delayMs: 400 },
+            );
+          }
+        } else if (fileList.length > 0) {
           res = await fetchWithNetworkRetry(
             () =>
-              apiBaseUrl
-                ? fetch(endpoint, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    credentials: "include",
-                    body: JSON.stringify(bodyPayload),
-                  })
-                : apiFetch(endpoint, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    credentials: "include",
-                    body: JSON.stringify(bodyPayload),
-                  }),
+              runtimeEmbedMultipartPost(endpoint, (ik) => buildMultipart(bodyWithoutKeys as Record<string, unknown>, ik), {
+                accessKey,
+                secretKey,
+              }),
             { retries: 2, delayMs: 400 },
           );
         } else {
-          const bodyWithoutKeys = {
-            botId,
-            message: value,
-            ...(startNew ? { startNewConversation: true as const } : {}),
-            ...(!startNew && conversationIdRef.current ? { conversationId: conversationIdRef.current } : {}),
-            ...(runtimeEmbedOrigin ? { embedOrigin: runtimeEmbedOrigin } : {}),
-            ...(chatVisitorId ? { chatVisitorId } : {}),
-          };
           res = await fetchWithNetworkRetry(
             () => runtimeEmbedPost(endpoint, bodyWithoutKeys, { accessKey, secretKey }),
             { retries: 2, delayMs: 400 },
@@ -627,7 +776,7 @@ export function AdminLiveChatAdapter({
             const rows = readPreviewRecent();
             const entry: RecentRow = {
               id: data.conversationId,
-              preview: value.slice(0, 80),
+              preview: (value.trim() || fileList[0]?.name || "Attachment").slice(0, 80),
               lastActivityAt: isoNow(),
             };
             const next = [entry, ...rows.filter((x) => x.id !== entry.id)].slice(0, 25);
@@ -640,20 +789,69 @@ export function AdminLiveChatAdapter({
           void refreshRuntimeRecent();
         }
 
-        const assistantMsg: ChatUIMessage = {
-          id: generateId(),
-          role: "assistant",
-          content: typeof content === "string" ? content : "No response.",
-          createdAt: isoNow(),
-          sources: mapSources(data.sources),
-          status: res.ok ? "sent" : "error",
-        };
+        const sources = mapSources(data.sources);
+        const serverAttachments =
+          Array.isArray(data.userAttachments) && data.userAttachments.length > 0
+            ? data.userAttachments
+                .map((a) => ({
+                  name: typeof a.name === "string" ? a.name : "",
+                  mimeType: typeof a.mimeType === "string" ? a.mimeType : "application/octet-stream",
+                  url: typeof a.url === "string" ? a.url : "",
+                  ...(typeof a.size === "number" && Number.isFinite(a.size) ? { size: a.size } : {}),
+                }))
+                .filter((a) => a.name && a.url)
+            : [];
+
+        if (!res.ok) {
+          const assistantErrId = generateId();
+          const errText = typeof content === "string" ? content : "No response.";
+          setMessages((prev) => {
+            const withUser = prev.map((m) =>
+              m.id === userMessageId ? { ...m, status: "error" as const } : m,
+            );
+            return [
+              ...withUser,
+              {
+                id: assistantErrId,
+                role: "assistant" as const,
+                content: "",
+                createdAt: isoNow(),
+                sources,
+                status: "streaming" as const,
+              },
+            ];
+          });
+          await streamAssistantReply(assistantErrId, errText, setMessages, { finalStatus: "error" });
+          return;
+        }
+
+        const assistantId = generateId();
+        const fullContent = typeof content === "string" ? content : "No response.";
+
         setMessages((prev) => {
           const withUser = prev.map((m) =>
-            m.id === userMessageId ? { ...m, status: res.ok ? ("sent" as const) : ("error" as const) } : m,
+            m.id === userMessageId
+              ? {
+                  ...m,
+                  status: "sent" as const,
+                  ...(serverAttachments.length > 0 ? { attachments: serverAttachments } : {}),
+                }
+              : m,
           );
-          return [...withUser, assistantMsg];
+          return [
+            ...withUser,
+            {
+              id: assistantId,
+              role: "assistant" as const,
+              content: "",
+              createdAt: isoNow(),
+              sources,
+              status: "streaming" as const,
+            },
+          ];
         });
+
+        await streamAssistantReply(assistantId, fullContent, setMessages);
       } catch {
         setMessages((prev) =>
           prev.map((m) => (m.id === userMessageId ? { ...m, status: "error" as const } : m)),
@@ -681,46 +879,199 @@ export function AdminLiveChatAdapter({
     ],
   );
 
+  const postSpeechAudio = useCallback(
+    async (args: { blob: Blob; mode: "dictate" | "voice"; durationMs: number }) => {
+      const buildForm = (includeKeys: boolean): FormData => {
+        const fd = new FormData();
+        fd.append("file", args.blob, "recording.webm");
+        fd.append("botId", botId);
+        fd.append("mode", args.mode);
+        fd.append("durationMs", String(args.durationMs));
+        if (chatVisitorId) fd.append("chatVisitorId", chatVisitorId);
+        if (mode === "preview" && authToken) fd.append("authToken", authToken);
+        if (includeKeys) {
+          if (accessKey) fd.append("accessKey", accessKey);
+          if (secretKey) fd.append("secretKey", secretKey);
+        }
+        return fd;
+      };
+
+      const res =
+        mode === "preview"
+          ? await fetchWithNetworkRetry(
+              () =>
+                apiBaseUrl
+                  ? fetch(speechEndpointUrl, {
+                      method: "POST",
+                      body: buildForm(true),
+                      credentials: "include",
+                    })
+                  : apiFetch(speechEndpointUrl, {
+                      method: "POST",
+                      body: buildForm(true),
+                      credentials: "include",
+                    }),
+              { retries: 2, delayMs: 400 },
+            )
+          : await fetchWithNetworkRetry(
+              () => runtimeEmbedSpeechPost(speechEndpointUrl, buildForm, { accessKey, secretKey }),
+              { retries: 2, delayMs: 400 },
+            );
+
+      const data = (await res.json().catch(() => ({}))) as {
+        transcript?: string;
+        audioUrl?: string;
+        mimeType?: string;
+        durationMs?: number;
+        error?: string;
+      };
+      if (!res.ok) {
+        throw new Error(typeof data.error === "string" ? data.error : "Speech request failed");
+      }
+      const transcript = typeof data.transcript === "string" ? data.transcript : "";
+      return {
+        transcript,
+        audioUrl: typeof data.audioUrl === "string" ? data.audioUrl : undefined,
+        mimeType: typeof data.mimeType === "string" ? data.mimeType : undefined,
+        durationMs: typeof data.durationMs === "number" ? data.durationMs : args.durationMs,
+      };
+    },
+    [mode, botId, chatVisitorId, accessKey, secretKey, authToken, apiBaseUrl, speechEndpointUrl],
+  );
+
+  const onSpeechAnalytics = useCallback(
+    (payload: { mode: "dictate" | "voice"; transcriptLength: number; hasAudioUrl: boolean }) => {
+      const visitorId = (chatVisitorId ?? "").trim();
+      if (!visitorId || !apiBaseUrl) return;
+      const base = apiBaseUrl.replace(/\/+$/, "");
+      try {
+        void fetch(`${base}/api/analytics/track`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            visitorId,
+            type: "widget_speech_completed",
+            botId,
+            metadata: payload,
+          }),
+        });
+      } catch {
+        // ignore
+      }
+    },
+    [apiBaseUrl, botId, chatVisitorId],
+  );
+
+  const handleMessageFeedback = useCallback(
+    async (messageId: string, rating: "up" | "down") => {
+      let shouldTrack = false;
+      setMessages((prev) => {
+        const cur = prev.find((m) => m.id === messageId && m.role === "assistant");
+        if (cur?.feedbackRating === rating) return prev;
+        shouldTrack = true;
+        return prev.map((m) =>
+          m.id === messageId && m.role === "assistant" ? { ...m, feedbackRating: rating } : m,
+        );
+      });
+      const visitorId = (chatVisitorId ?? "").trim();
+      if (!shouldTrack || !visitorId || !apiBaseUrl) return;
+      const conversationId = conversationIdRef.current ?? "";
+      const base = apiBaseUrl.replace(/\/+$/, "");
+      try {
+        await fetch(`${base}/api/analytics/track`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            visitorId,
+            type: "assistant_message_feedback",
+            botId,
+            metadata: {
+              messageId,
+              ...(conversationId ? { conversationId } : {}),
+              rating,
+            },
+          }),
+        });
+      } catch {
+        // ignore
+      }
+    },
+    [apiBaseUrl, botId, chatVisitorId],
+  );
+
   const onSend = useCallback(
-    async (text: string) => {
-      const value = text.trim();
-      if (!value || isSending) return;
+    async (text: string, speechInput?: ChatSpeechInputMeta, files?: File[]) => {
+      let value = text.trim();
+      if (!value && speechInput?.mode === "voice" && speechInput.audioUrl) {
+        value = "Voice message";
+      }
+      const fileArr = files?.length ? files : [];
+      if ((!value && fileArr.length === 0) || isSending) return;
       if (composerReadOnlyRuntime) return;
 
       const userMessageId = generateId();
+      const optimisticAttachments =
+        fileArr.length > 0
+          ? fileArr.map((f) => ({
+              name: f.name,
+              mimeType: f.type || "application/octet-stream",
+              url: URL.createObjectURL(f),
+              size: f.size,
+            }))
+          : undefined;
       const userMsg: ChatUIMessage = {
         id: userMessageId,
         role: "user",
         content: value,
         createdAt: isoNow(),
         status: "sending",
+        ...(optimisticAttachments ? { attachments: optimisticAttachments } : {}),
+        ...(speechInput?.mode === "voice" && speechInput.audioUrl
+          ? {
+              speechInput: {
+                mode: "voice" as const,
+                ...(speechInput.transcript ? { transcript: speechInput.transcript } : {}),
+                audioUrl: speechInput.audioUrl,
+                ...(speechInput.mimeType ? { mimeType: speechInput.mimeType } : {}),
+                ...(speechInput.durationMs != null ? { durationMs: speechInput.durationMs } : {}),
+              },
+            }
+          : speechInput?.mode === "dictate" && (speechInput.transcript ?? "").trim()
+            ? {
+                speechInput: {
+                  mode: "dictate" as const,
+                  transcript: (speechInput.transcript ?? "").trim(),
+                },
+              }
+            : {}),
       };
       setMessages((prev) => [...prev, userMsg]);
       setIsSending(true);
-      await executeSend(value, userMessageId);
+      await executeSend(value, userMessageId, speechInput, fileArr.length ? fileArr : undefined);
     },
     [isSending, composerReadOnlyRuntime, executeSend],
   );
 
   const handleRetryMessage = useCallback(
     (messageId: string) => {
-      let payload = "";
+      const found = messages.find((m) => m.id === messageId);
+      if (!found || found.role !== "user" || found.status !== "error") return;
+      if (found.attachments?.length) return;
+      const trimmed = found.content.trim();
+      if (!trimmed) return;
       setMessages((prev) => {
         const idx = prev.findIndex((m) => m.id === messageId);
         if (idx < 0) return prev;
-        const msg = prev[idx];
-        if (msg.role !== "user" || msg.status !== "error") return prev;
-        payload = msg.content;
         return prev.slice(0, idx + 1).map((m, i) =>
           i === idx ? { ...m, status: "sending" as const } : m,
         );
       });
-      const trimmed = payload.trim();
-      if (!trimmed) return;
       setIsSending(true);
       void executeSend(trimmed, messageId);
     },
-    [executeSend],
+    [executeSend, messages],
   );
 
   const brandingLine = (chatUI?.brandingMessage ?? "").trim();
@@ -758,6 +1109,51 @@ export function AdminLiveChatAdapter({
 
   const menuExpanded = useFloatingLauncher ? floatingPanelExpanded : expanded;
 
+  useEffect(() => {
+    if (useFloatingLauncher) {
+      onContainedPanelExpandChange?.(false);
+      return;
+    }
+    onContainedPanelExpandChange?.(menuExpanded);
+  }, [useFloatingLauncher, menuExpanded, onContainedPanelExpandChange]);
+
+  const containedSizeOpts = useMemo(
+    () => ({
+      collapsedWidth: inlinePanelCollapsedWidth ?? PANEL_COLLAPSED_WIDTH_PX,
+      collapsedHeight: inlinePanelCollapsedHeight ?? PANEL_COLLAPSED_HEIGHT_PX,
+      expandedWidth: inlinePanelExpandedWidth ?? PANEL_EXPANDED_WIDTH_PX,
+      expandedHeight: inlinePanelExpandedHeight ?? "75vh",
+      reservedBottomPx: showContainedLauncherPreview
+        ? containedLauncherPreviewBottomOutsetPx(launcherBubble.size)
+        : 0,
+    }),
+    [
+      inlinePanelCollapsedWidth,
+      inlinePanelCollapsedHeight,
+      inlinePanelExpandedWidth,
+      inlinePanelExpandedHeight,
+      showContainedLauncherPreview,
+      launcherBubble.size,
+    ],
+  );
+
+  const { box: panelBox, canExpand: panelCanExpand } = useChatPanelBox(
+    useFloatingLauncher,
+    menuExpanded,
+    launcherBubble.size,
+    containedStageRef,
+    containedSizeOpts,
+  );
+
+  useEffect(() => {
+    if (panelCanExpand) return;
+    if (useFloatingLauncher) {
+      setFloatingPanelExpanded(false);
+    } else {
+      setExpanded(false);
+    }
+  }, [panelCanExpand, useFloatingLauncher]);
+
   const chatShared = {
     width: "100%" as const,
     height: "100%" as const,
@@ -765,6 +1161,7 @@ export function AdminLiveChatAdapter({
     accentColor: primaryColor,
     bubbleBorderRadius,
     showChatBorder: chatUI?.showChatBorder !== false,
+    chatPanelBorderColor: chatUI?.chatPanelBorderColor === "default" ? "default" as const : "primary" as const,
     chatPanelBorderWidth: chatPanelBorderWidthFromChatUI(chatUI),
     shadowIntensity:
       chatUI?.shadowIntensity === "none" ||
@@ -785,15 +1182,22 @@ export function AdminLiveChatAdapter({
     showScrollToBottomLabel: chatUI?.showScrollToBottomLabel !== false,
     scrollToBottomLabel: (chatUI?.scrollToBottomLabel ?? "").trim() || undefined,
     showScrollbar: chatUI?.showScrollbar !== false,
+    scrollChromeStyle: resolveScrollChromeStyle(chatUI),
+    scrollToBottomChromeStyle: resolveScrollToBottomChromeStyle(chatUI),
+    userTextBubbleStyle: mapUserBubbleStyle(chatUI?.userTextBubbleStyle),
+    userVoiceBubbleStyle: mapUserBubbleStyle(chatUI?.userVoiceBubbleStyle),
+    messageListOverflow: "auto" as const,
     composerAsSeparateBox: chatUI?.composerAsSeparateBox !== false,
     composerBorderWidth: composerBorderWidthFromChatUI(chatUI),
     composerBorderColor: chatUI?.composerBorderColor === "default" ? "default" as const : "primary" as const,
+    composerControlStyle: resolveComposerControlStyle(chatUI),
+    speechRecordingWaveStyle: resolveSpeechRecordingWaveStyle(chatUI),
     showSuggestedChips: Boolean(suggestedQuestions?.length),
     suggestedQuestions,
     showComposerWithSuggestedQuestions: chatUI?.showComposerWithSuggestedQuestions === true,
     onBack: onBack ?? (() => { }),
     onMenu,
-    showMenuExpand: chatUI?.showMenuExpand !== false,
+    showMenuExpand: chatUI?.showMenuExpand !== false && panelCanExpand,
     onMenuExpand: useFloatingLauncher
       ? () => setFloatingPanelExpanded((e) => !e)
       : () => setExpanded((e) => !e),
@@ -831,16 +1235,15 @@ export function AdminLiveChatAdapter({
     conversationLoading,
     onSend,
     onRetryMessage: handleRetryMessage,
-    showMetadata: true,
-    senderName:
-      (chatUI?.senderName ?? "").trim()
-        ? (chatUI?.senderName ?? "").trim()
-        : `${botName}${DEFAULT_SENDER_NAME_SUFFIX}`,
-    showSenderName: chatUI?.showSenderName !== false,
-    showTime: chatUI?.showTime !== false,
+    showMetadata: false,
+    senderName: "",
+    showSenderName: false,
+    showTime: false,
     timePosition: chatUI?.timePosition === "bottom" ? "bottom" as const : "top" as const,
     showCopyButton: chatUI?.showCopyButton !== false,
-    showSources: chatUI?.showSources !== false,
+    showSources: mode === "preview" && chatUI?.showSources === true,
+    showMessageFeedback: chatUI?.showMessageFeedback !== false,
+    onMessageFeedback: handleMessageFeedback,
     allowMarkdown: true,
     strings: {
       title: botName,
@@ -861,19 +1264,20 @@ export function AdminLiveChatAdapter({
       messageSendFailed: ws.messageSendFailed,
       retrySend: ws.retrySend,
       typingStatusLabel: ws.someoneTyping,
+      feedbackHelpful: "Helpful",
+      feedbackNotHelpful: "Not helpful",
     },
     showAttach: chatUI?.allowFileUpload === true,
-    showEmoji: chatUI?.showEmoji !== false,
     showMic: chatUI?.showMic === true,
-    onAttach: () => { },
-    onEmoji: () => { },
+    showVoice:
+      typeof chatUI?.showVoice === "boolean"
+        ? chatUI.showVoice === true
+        : chatUI?.showMic === true,
+    onAttach: undefined,
     onMic: () => { },
+    postSpeechAudio: speechClientEnabled ? postSpeechAudio : undefined,
+    onSpeechAnalytics: speechClientEnabled ? onSpeechAnalytics : undefined,
   };
-
-  const inlineCollapsedW = inlinePanelCollapsedWidth ?? 400;
-  const inlineCollapsedH = inlinePanelCollapsedHeight ?? 700;
-  const inlineExpandedW = inlinePanelExpandedWidth ?? 560;
-  const inlineExpandedH = inlinePanelExpandedHeight ?? "75vh";
 
   if (useFloatingLauncher) {
     return (
@@ -888,8 +1292,8 @@ export function AdminLiveChatAdapter({
         launcherAvatarRingWidth={launcherBubble.avatarRingWidth}
         launcherWhenOpen={launcherBubble.launcherWhenOpen}
         panelOpenAnimation={chatUI?.chatOpenAnimation ?? "slide-up-fade"}
-        width={floatingPanelExpanded ? 560 : 400}
-        height={floatingPanelExpanded ? "75vh" : 700}
+        width={panelBox.width}
+        height={panelBox.height}
         accentColor={primaryColor}
         dark={dark}
         onClose={onClose}
@@ -902,23 +1306,20 @@ export function AdminLiveChatAdapter({
 
   return (
     <div
-      className={cx("assistrio-chat-widget relative overflow-visible", className)}
+      ref={containedStageRef}
+      className={cx("assistrio-chat-widget relative max-h-full min-h-0 min-w-0 max-w-full overflow-visible", className)}
       style={{
-        width: expanded ? inlineExpandedW : inlineCollapsedW,
-        height: expanded ? inlineExpandedH : inlineCollapsedH,
+        width: panelBox.width,
+        height: panelBox.height,
+        minHeight: 0,
+        maxWidth: "100%",
+        maxHeight: "100%",
+        boxSizing: "border-box",
         transition: "width 0.3s ease-out, height 0.3s ease-out",
         ...style,
       }}
     >
-      {showContainedLauncherPreview ? (
-        <ContainedLauncherPreview
-          chatUI={chatUI}
-          avatarUrl={avatarUrl}
-          avatarEmoji={avatarEmoji}
-          primaryColor={primaryColor}
-        />
-      ) : null}
-      <div className="flex h-full w-full min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl">
+      <div className="relative z-0 flex h-full w-full min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl">
         <Chat
           {...chatShared}
           showMenuExpand={chatUI?.showMenuExpand !== false}
@@ -930,6 +1331,14 @@ export function AdminLiveChatAdapter({
           }}
         />
       </div>
+      {showContainedLauncherPreview ? (
+        <ContainedLauncherPreview
+          chatUI={chatUI}
+          avatarUrl={avatarUrl}
+          avatarEmoji={avatarEmoji}
+          primaryColor={primaryColor}
+        />
+      ) : null}
     </div>
   );
 }

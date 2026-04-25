@@ -17,6 +17,7 @@ export function preserveUneditedBotFields(bot: CustomerBotDetail): Record<string
     faqs: Array.isArray(bot.faqs) ? bot.faqs : [],
     exampleQuestions: Array.isArray(bot.exampleQuestions) ? bot.exampleQuestions : [],
     welcomeMessage: bot.welcomeMessage ?? '',
+    welcomeMessageEnabled: bot.welcomeMessageEnabled !== false,
     knowledgeDescription: bot.knowledgeDescription ?? '',
     categories: Array.isArray(bot.categories)
       ? bot.categories

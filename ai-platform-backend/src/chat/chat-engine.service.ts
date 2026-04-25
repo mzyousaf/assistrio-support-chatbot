@@ -38,7 +38,10 @@ import { SUMMARY_MIN_MESSAGES, SUMMARY_UPDATE_INTERVAL } from './conversation-su
 import { chatLog } from './chat-logger';
 import { SummaryJobService } from './summary-job.service';
 import { withRetry, withTimeout, AI_CALL_TIMEOUTS } from '../lib/ai-call.helper';
+import { isWelcomeMessageActive } from '../bots/welcome-message-display.util';
 import { normalizeVisitorMultiChatMax } from '../bots/visitor-multi-chat.util';
+import type { MessageAttachment, MessageSpeechInput } from '../models/message.schema';
+import { userMessageTextForLlm } from './user-message-text-for-llm';
 
 function rankedItemToEvidenceItem(item: RankedKnowledgeItem): ChatContextEvidenceItem {
   const url =
@@ -264,7 +267,14 @@ export class ChatEngineService {
     conversation: Conversation & { _id: Types.ObjectId };
     isNewConversation: boolean;
     thread: {
-      messages: Array<{ role: string; content: string; createdAt: Date; sources?: unknown }>;
+      messages: Array<{
+        role: string;
+        content: string;
+        createdAt: Date;
+        sources?: unknown;
+        speechInput?: MessageSpeechInput;
+        attachments?: MessageAttachment[];
+      }>;
       conv: {
         _id: Types.ObjectId;
         capturedLeadData?: CapturedLeadData;
@@ -286,7 +296,7 @@ export class ChatEngineService {
       this.ephemeralPreviewThreads.set(key, thread);
       isNewConversation = true;
       const rawWelcome = typeof bot.welcomeMessage === 'string' ? bot.welcomeMessage.trim() : '';
-      if (rawWelcome) {
+      if (rawWelcome && isWelcomeMessageActive(bot)) {
         const welcomeText = resolveWelcomeMessage(rawWelcome, {
           name: bot.name,
           shortDescription: bot.shortDescription,
@@ -331,7 +341,7 @@ export class ChatEngineService {
         lastActivityAt: now,
       });
       const rawWelcome = typeof bot.welcomeMessage === 'string' ? bot.welcomeMessage.trim() : '';
-      if (rawWelcome) {
+      if (rawWelcome && isWelcomeMessageActive(bot)) {
         const welcomeText = resolveWelcomeMessage(rawWelcome, {
           name: bot.name,
           shortDescription: bot.shortDescription,
@@ -420,7 +430,10 @@ export class ChatEngineService {
       conversationId: inputConversationId,
       startNewConversation: inputStartNew,
       ephemeral: inputEphemeral,
+      speechInput: inputSpeechInput,
+      attachments: inputAttachments = [],
     } = input;
+    const messageForLlm = userMessageTextForLlm(message, inputSpeechInput, inputAttachments);
     const requestId = inputRequestId ?? `chat-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
     const startTime = Date.now();
     const endpoint = mode === 'user' ? 'user' : mode;
@@ -458,7 +471,14 @@ export class ChatEngineService {
     let isNewConversation = false;
     let ephemeralThread:
       | {
-          messages: Array<{ role: string; content: string; createdAt: Date; sources?: unknown }>;
+          messages: Array<{
+            role: string;
+            content: string;
+            createdAt: Date;
+            sources?: unknown;
+            speechInput?: MessageSpeechInput;
+            attachments?: MessageAttachment[];
+          }>;
           conv: {
             _id: Types.ObjectId;
             capturedLeadData?: CapturedLeadData;
@@ -493,15 +513,26 @@ export class ChatEngineService {
         .find({ conversationId: conversation._id })
         .sort({ createdAt: -1 })
         .limit(2)
-        .select({ role: 1, content: 1, createdAt: 1 })
+        .select({ role: 1, content: 1, createdAt: 1, speechInput: 1 })
         .lean();
       if (lastTwo.length === 2) {
-        const [newest, second] = lastTwo as Array<{ role: string; content?: string; createdAt: Date }>;
-        const norm = normalizeMessageForDedupe(message);
+        const [newest, second] = lastTwo as Array<{
+          role: string;
+          content?: string;
+          createdAt: Date;
+          speechInput?: MessageSpeechInput;
+        }>;
+        const norm = normalizeMessageForDedupe(messageForLlm);
         if (
           newest.role === 'assistant' &&
           second.role === 'user' &&
-          normalizeMessageForDedupe(String(second.content || '')) === norm &&
+          normalizeMessageForDedupe(
+            userMessageTextForLlm(
+              String(second.content || ''),
+              second.speechInput,
+              (second as { attachments?: MessageAttachment[] }).attachments,
+            ),
+          ) === norm &&
           now.getTime() - new Date(second.createdAt).getTime() < DEDUPE_WINDOW_MS
         ) {
           chatLog({
@@ -526,11 +557,17 @@ export class ChatEngineService {
       if (arr.length >= 2) {
         const newest = arr[arr.length - 1];
         const second = arr[arr.length - 2];
-        const norm = normalizeMessageForDedupe(message);
+        const norm = normalizeMessageForDedupe(messageForLlm);
         if (
           newest.role === 'assistant' &&
           second.role === 'user' &&
-          normalizeMessageForDedupe(String(second.content || '')) === norm &&
+          normalizeMessageForDedupe(
+            userMessageTextForLlm(
+              String(second.content || ''),
+              second.speechInput as MessageSpeechInput | undefined,
+              (second as { attachments?: MessageAttachment[] }).attachments,
+            ),
+          ) === norm &&
           now.getTime() - new Date(second.createdAt).getTime() < DEDUPE_WINDOW_MS
         ) {
           chatLog({
@@ -559,6 +596,8 @@ export class ChatEngineService {
         chatVisitorId,
         role: 'user',
         content: message,
+        ...(inputSpeechInput ? { speechInput: inputSpeechInput } : {}),
+        ...(inputAttachments?.length ? { attachments: inputAttachments } : {}),
         createdAt: now,
       });
       await this.conversationModel.updateOne(
@@ -570,6 +609,8 @@ export class ChatEngineService {
         role: 'user',
         content: message,
         createdAt: now,
+        ...(inputSpeechInput ? { speechInput: inputSpeechInput } : {}),
+        ...(inputAttachments?.length ? { attachments: inputAttachments } : {}),
       });
     }
 
@@ -578,20 +619,26 @@ export class ChatEngineService {
           role: m.role,
           content: m.content,
           createdAt: m.createdAt,
+          speechInput: m.speechInput as MessageSpeechInput | undefined,
+          attachments: m.attachments,
         }))
       : await this.messageModel
           .find({ conversationId: conversation._id })
           .sort({ createdAt: 1 })
-          .select({ role: 1, content: 1, createdAt: 1 })
+          .select({ role: 1, content: 1, createdAt: 1, speechInput: 1, attachments: 1 })
           .lean();
     const allMessagesForContext = allMessages.map((m) => ({
       role: m.role as 'user' | 'assistant' | 'system',
-      content: String(m.content || ''),
+      content: userMessageTextForLlm(
+        String(m.content || ''),
+        (m as { speechInput?: MessageSpeechInput }).speechInput,
+        (m as { attachments?: MessageAttachment[] }).attachments,
+      ),
     }));
     const convSummary = (conversation as { summary?: string }).summary;
     const { messages: conversationMessages, summary: conversationSummary } = buildModelConversationContext(
       allMessagesForContext,
-      message,
+      messageForLlm,
       { recentWindow: 14, storedSummary: convSummary },
     );
 
@@ -601,7 +648,7 @@ export class ChatEngineService {
     try {
       unifiedResult = await this.unifiedKnowledgeRetrievalService.getRelevantKnowledgeItemsForBot(
         bot._id.toString(),
-        message,
+        messageForLlm,
         {
           limit: 25,
           apiKeyOverride: resolvedApiKey,
@@ -635,7 +682,7 @@ export class ChatEngineService {
       getLeadStateFromConversation(conv.capturedLeadData, leadConfig);
     const allFieldKeys = [...requiredFields, ...optionalFields];
     const { extracted, confidenceByField, matchedByField } = extractLeadFieldsFromMessage(
-      message,
+      messageForLlm,
       allFieldKeys,
       fieldLabels,
       { lastAskedField: conv.leadCaptureMeta?.lastAskedField, fieldAliases },
@@ -655,7 +702,7 @@ export class ChatEngineService {
       );
 
     const updates: { capturedLeadData?: CapturedLeadData; leadCaptureMeta?: LeadCaptureMeta } = {};
-    const declineResult = detectDeclineResult(message);
+    const declineResult = detectDeclineResult(messageForLlm);
     const lastAsked = conv.leadCaptureMeta?.lastAskedField;
     if (declineResult && lastAsked) {
       const meta = { ...conv.leadCaptureMeta };
@@ -727,7 +774,7 @@ export class ChatEngineService {
 
     const evidenceItems: ChatContextEvidenceItem[] = unifiedResult.items.map(rankedItemToEvidenceItem);
     const userMax = DEFAULT_SECTION_BUDGET.userMaxTokens;
-    const currentMsgTokens = estimateTokens(message);
+    const currentMsgTokens = estimateTokens(messageForLlm);
     const budget = assembleEvidencePromptWithBudget(
       evidenceItems,
       conversationMessages,
@@ -775,7 +822,7 @@ export class ChatEngineService {
     const documentDirectAnswerLikely = evidenceKept.length > 0;
 
     const keptRankedItems = unifiedResult.items.slice(0, evidenceKeptCount);
-    const questionClassification = classifyQuestion(message);
+    const questionClassification = classifyQuestion(messageForLlm);
     const evidenceStrength = evaluateEvidenceStrength(keptRankedItems);
     const answerabilityContext = computeAnswerabilityContext(questionClassification, evidenceStrength);
 
@@ -792,7 +839,7 @@ export class ChatEngineService {
       leadCapture: leadCaptureContext,
       conversationMessages: budgetResult.conversationMessages as Array<{ role: 'user' | 'assistant' | 'system'; content: string }>,
       conversationSummary,
-      currentUserMessage: message,
+      currentUserMessage: messageForLlm,
       retrievalConfidence,
       documentDirectAnswerLikely,
       unifiedEvidence: evidenceKept,
@@ -925,6 +972,7 @@ export class ChatEngineService {
       sources: sources.length ? sources : undefined,
       displaySources: displaySources.length ? displaySources : undefined,
       isNewConversation,
+      ...(inputAttachments?.length ? { userAttachments: inputAttachments } : {}),
     };
     if (requestDebug) {
       const topRetrievedForDebug = unifiedResult.items.slice(0, 12).map(rankedItemToEnrichedChunk);
@@ -945,7 +993,7 @@ export class ChatEngineService {
           : (answerabilityContext?.evidenceStrongEnough === true ? 'strong' : 'weak');
 
       const debugInfo: ChatDebugInfo = {
-        userQuery: message,
+        userQuery: messageForLlm,
         finalAnswerPipeline: 'unified',
         finalAnswerMode,
         retrievalOutcome,
@@ -1112,7 +1160,22 @@ export class ChatEngineService {
     botOid: Types.ObjectId;
     chatVisitorId: string;
     conversationId: string;
-  }): Promise<Array<{ role: 'user' | 'assistant' | 'system'; content: string; createdAt: string }> | null> {
+  }): Promise<
+    | Array<{
+        role: 'user' | 'assistant' | 'system';
+        content: string;
+        createdAt: string;
+        speechInput?: {
+          mode: 'dictate' | 'voice';
+          transcript?: string;
+          audioUrl?: string;
+          mimeType?: string;
+          durationMs?: number;
+        };
+        attachments?: Array<{ name: string; mimeType: string; url: string; size?: number }>;
+      }>
+    | null
+  > {
     let cid: Types.ObjectId;
     try {
       cid = new Types.ObjectId(String(params.conversationId).trim());
@@ -1130,12 +1193,162 @@ export class ChatEngineService {
     const msgs = await this.messageModel
       .find({ conversationId: cid })
       .sort({ createdAt: 1 })
-      .select({ role: 1, content: 1, createdAt: 1 })
+      .select({ role: 1, content: 1, createdAt: 1, speechInput: 1, attachments: 1 })
       .lean();
-    return msgs.map((m) => ({
-      role: m.role as 'user' | 'assistant' | 'system',
-      content: String(m.content || ''),
-      createdAt: new Date((m as { createdAt?: Date }).createdAt ?? Date.now()).toISOString(),
-    }));
+    return msgs.map((m) => {
+      const raw = m as {
+        role?: string;
+        content?: string;
+        createdAt?: Date;
+        speechInput?: {
+          mode?: string;
+          transcript?: string;
+          audioUrl?: string;
+          mimeType?: string;
+          durationMs?: number;
+        };
+        attachments?: Array<{ name?: string; mimeType?: string; url?: string; size?: number }>;
+      };
+      const si = raw.speechInput;
+      const speechOut =
+        si && (si.mode === 'voice' || si.mode === 'dictate')
+          ? {
+              mode: si.mode as 'dictate' | 'voice',
+              ...(typeof si.transcript === 'string' && si.transcript.trim() ? { transcript: si.transcript.trim() } : {}),
+              ...(typeof si.audioUrl === 'string' && si.audioUrl.trim() ? { audioUrl: si.audioUrl.trim() } : {}),
+              ...(typeof si.mimeType === 'string' && si.mimeType.trim() ? { mimeType: si.mimeType.trim() } : {}),
+              ...(typeof si.durationMs === 'number' && Number.isFinite(si.durationMs) && si.durationMs >= 0
+                ? { durationMs: Math.round(si.durationMs) }
+                : {}),
+            }
+          : undefined;
+      const attRaw = Array.isArray(raw.attachments) ? raw.attachments : [];
+      const attachmentsOut =
+        attRaw.length > 0
+          ? attRaw
+              .map((a) => ({
+                name: typeof a.name === 'string' ? a.name.trim() : '',
+                mimeType: typeof a.mimeType === 'string' ? a.mimeType.trim() : '',
+                url: typeof a.url === 'string' ? a.url.trim() : '',
+                ...(typeof a.size === 'number' && Number.isFinite(a.size) && a.size >= 0 ? { size: Math.round(a.size) } : {}),
+              }))
+              .filter((a) => a.name && a.url)
+          : undefined;
+      return {
+        role: raw.role as 'user' | 'assistant' | 'system',
+        content: String(raw.content || ''),
+        createdAt: new Date(raw.createdAt ?? Date.now()).toISOString(),
+        ...(speechOut ? { speechInput: speechOut } : {}),
+        ...(attachmentsOut?.length ? { attachments: attachmentsOut } : {}),
+      };
+    });
+  }
+
+  /**
+   * All conversations for a bot (operator workspace — admin or tenant customer).
+   * Newest first; optional cursor on `lastActivityAt` (strictly older than `beforeIso`).
+   */
+  async listBotConversationsForWorkspace(params: {
+    botOid: Types.ObjectId;
+    limit: number;
+    beforeIso?: string | null;
+  }): Promise<{
+    conversations: Array<{
+      id: string;
+      lastActivityAt: string;
+      chatVisitorId: string;
+      userPreview: string;
+      assistantPreview: string;
+    }>;
+    nextCursor: string | null;
+  }> {
+    const limit = Math.min(50, Math.max(1, params.limit));
+    const filter: Record<string, unknown> = { botId: params.botOid };
+    if (params.beforeIso) {
+      const d = new Date(params.beforeIso);
+      if (Number.isFinite(d.getTime())) {
+        filter.lastActivityAt = { $lt: d };
+      }
+    }
+    const take = limit + 1;
+    const convs = await this.conversationModel
+      .find(filter)
+      .sort({ lastActivityAt: -1, createdAt: -1 })
+      .limit(take)
+      .lean();
+    const slice = convs.slice(0, limit);
+    const hasMore = convs.length > limit;
+    const ids = slice.map((c) => (c as { _id: Types.ObjectId })._id);
+
+    const userByC = new Map<string, string>();
+    const asstByC = new Map<string, string>();
+    if (ids.length) {
+      const [userRows, asstRows] = await Promise.all([
+        this.messageModel.aggregate<{ _id: Types.ObjectId; c: string }>([
+          { $match: { conversationId: { $in: ids }, role: 'user' } },
+          { $sort: { createdAt: -1 } },
+          { $group: { _id: '$conversationId', c: { $first: '$content' } } },
+        ]),
+        this.messageModel.aggregate<{ _id: Types.ObjectId; c: string }>([
+          { $match: { conversationId: { $in: ids }, role: 'assistant' } },
+          { $sort: { createdAt: -1 } },
+          { $group: { _id: '$conversationId', c: { $first: '$content' } } },
+        ]),
+      ]);
+      for (const r of userRows) {
+        userByC.set(String(r._id), String(r.c ?? '').trim().slice(0, 200));
+      }
+      for (const r of asstRows) {
+        asstByC.set(String(r._id), String(r.c ?? '').trim().slice(0, 200));
+      }
+    }
+
+    const conversations = slice.map((c) => {
+      const _id = (c as { _id: Types.ObjectId })._id;
+      const id = _id.toString();
+      const lastAt =
+        (c as { lastActivityAt?: Date; createdAt?: Date }).lastActivityAt ??
+        (c as { createdAt?: Date }).createdAt;
+      return {
+        id,
+        lastActivityAt: lastAt ? new Date(lastAt).toISOString() : new Date().toISOString(),
+        chatVisitorId: String((c as { chatVisitorId?: string }).chatVisitorId ?? ''),
+        userPreview: userByC.get(id) ?? '',
+        assistantPreview: asstByC.get(id) ?? '',
+      };
+    });
+
+    const last = slice[slice.length - 1];
+    let nextCursor: string | null = null;
+    if (hasMore && last) {
+      const la =
+        (last as { lastActivityAt?: Date; createdAt?: Date }).lastActivityAt ??
+        (last as { createdAt?: Date }).createdAt;
+      nextCursor = la ? new Date(la).toISOString() : null;
+    }
+    return { conversations, nextCursor };
+  }
+
+  /**
+   * Load messages for a conversation when the caller has already proven access to the bot.
+   */
+  async getBotConversationMessagesForWorkspace(params: { botOid: Types.ObjectId; conversationId: string }): ReturnType<
+    ChatEngineService['getConversationMessagesForEmbed']
+  > {
+    let cid: Types.ObjectId;
+    try {
+      cid = new Types.ObjectId(String(params.conversationId).trim());
+    } catch {
+      return null;
+    }
+    const conv = await this.conversationModel.findOne({ _id: cid, botId: params.botOid });
+    if (!conv) {
+      return null;
+    }
+    return this.getConversationMessagesForEmbed({
+      botOid: params.botOid,
+      chatVisitorId: String((conv as { chatVisitorId?: string }).chatVisitorId ?? ''),
+      conversationId: params.conversationId,
+    });
   }
 }

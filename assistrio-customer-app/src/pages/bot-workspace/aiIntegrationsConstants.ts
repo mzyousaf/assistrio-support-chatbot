@@ -1,5 +1,5 @@
 /**
- * Response language and AI tuning options for the customer “AI & Responses” workspace.
+ * Response language and AI tuning options for the customer “AI & Advanced” workspace.
  * Response language list: full ISO 639-1 set (see `responseLanguageOptions.ts`).
  */
 

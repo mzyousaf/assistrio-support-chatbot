@@ -1,3 +1,5 @@
+import { BOT_FIELD_MAX, LEAD_CAPTURE_FIELDS_MAX } from '@/lib/botFieldLimits';
+
 /** Shown under Preset when “Default helper — uses instructions” is selected. */
 export const DEFAULT_PRESET_HELPER =
   'Uses the instructions below as the main behavior instructions (no fixed role template).';
@@ -93,11 +95,11 @@ export const CUSTOM_CATEGORY_PILL = '__custom__';
 
 export const MAX_CATEGORY_PILLS = 3;
 
-/** UI max length (aligned with reasonable model context size). */
-export const PERSONALITY_DESCRIPTION_MAX = 2500;
-export const THINGS_TO_AVOID_MAX = 1200;
+/** `personality.description` — keep in sync with `BOT_FIELD_MAX.personalityDescription`. */
+export const PERSONALITY_DESCRIPTION_MAX = BOT_FIELD_MAX.personalityDescription;
+export const THINGS_TO_AVOID_MAX = BOT_FIELD_MAX.thingsToAvoid;
 /** First message shown in empty threads. */
-export const WELCOME_MESSAGE_MAX = 2000;
+export const WELCOME_MESSAGE_MAX = BOT_FIELD_MAX.welcomeMessage;
 
 export const TONE_OPTIONS = [
   { value: 'friendly', label: 'Friendly' },
@@ -127,7 +129,7 @@ export const VALID_TONE_VALUES = new Set<string>(TONE_OPTIONS.map((o) => o.value
 export const EXAMPLE_QUESTIONS_MAX = 5;
 
 /** Max length per suggested question chip (aligned with widget display). */
-export const EXAMPLE_QUESTION_MAX_CHARS = 140;
+export const EXAMPLE_QUESTION_MAX_CHARS = BOT_FIELD_MAX.exampleQuestion;
 
 export const ASK_STRATEGY_OPTIONS = [
   { value: 'soft', label: 'Soft — ask less often' },
@@ -143,8 +145,8 @@ export const CAPTURE_MODE_OPTIONS = [
 
 export const LEAD_FIELD_TYPES = ['text', 'email', 'phone', 'number', 'url'] as const;
 
-/** Max lead fields per bot (customer app editor). */
-export const LEAD_FIELDS_MAX = 5;
+/** Max lead fields per bot (see `LEAD_CAPTURE_FIELDS_MAX` in `botFieldLimits`). */
+export const LEAD_FIELDS_MAX = LEAD_CAPTURE_FIELDS_MAX;
 
 const PREDEFINED_SET = new Set<string>(CATEGORY_OPTIONS.map((c) => c.value));
 

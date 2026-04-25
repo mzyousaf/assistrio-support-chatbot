@@ -14,7 +14,11 @@ export type VisitorEventType =
   | 'website_register_started'
   | 'website_register_succeeded'
   | 'widget_runtime_opened'
-  | 'quota_viewed';
+  | 'quota_viewed'
+  /** Embed widget — thumbs up/down on an assistant message (`metadata`: messageId, conversationId?, rating). */
+  | 'assistant_message_feedback'
+  /** Widget completed a speech pipeline (`metadata`: mode dictate|voice, transcriptLength, hasAudioUrl). */
+  | 'widget_speech_completed';
 
 const VISITOR_EVENT_ENUM: VisitorEventType[] = [
   'page_view',
@@ -29,6 +33,8 @@ const VISITOR_EVENT_ENUM: VisitorEventType[] = [
   'website_register_succeeded',
   'widget_runtime_opened',
   'quota_viewed',
+  'assistant_message_feedback',
+  'widget_speech_completed',
 ];
 
 @Schema({ timestamps: false })

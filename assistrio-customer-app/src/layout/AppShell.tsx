@@ -1422,7 +1422,7 @@ export function AppShell() {
 
         {/* Workspace canvas — routes supply centered containers and page intros */}
         <main
-          className="min-w-0 flex-1 overflow-x-visible overflow-y-auto"
+          className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-visible overflow-y-auto"
           style={{ background: 'var(--bg-workspace-canvas)' }}
         >
           <BotLifecycleProvider value={lifecycleControls}>

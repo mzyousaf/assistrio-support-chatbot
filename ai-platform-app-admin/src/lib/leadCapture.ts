@@ -1,3 +1,4 @@
+import { BOT_FIELD_MAX, clampStr, LEAD_CAPTURE_FIELDS_MAX } from "@/lib/botFieldLimits";
 import type {
   BotLeadCaptureLegacy,
   BotLeadCaptureV2,
@@ -78,10 +79,11 @@ function normalizeFields(input: unknown): BotLeadField[] {
   const usedKeys = new Set<string>();
   const output: BotLeadField[] = [];
   for (const field of input) {
+    if (output.length >= LEAD_CAPTURE_FIELDS_MAX) break;
     if (!isObject(field)) {
       continue;
     }
-    const labelRaw = typeof field.label === "string" ? field.label.trim() : "";
+    const labelRaw = clampStr(typeof field.label === "string" ? field.label.trim() : "", BOT_FIELD_MAX.leadFieldLabel);
     const keyRaw = typeof field.key === "string" ? field.key.trim() : "";
     if (!labelRaw && !keyRaw) {
       continue;

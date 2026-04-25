@@ -1,9 +1,15 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { ThumbsDown, ThumbsUp } from "lucide-react";
+import type { UserBubbleStyle } from "../../models/botChatUI";
 import type { ChatUIMessage, ChatUISource } from "./types";
 import { cx } from "./utils";
 import { ChatSources } from "./ChatSources";
+import { AttachmentCountBadge } from "./AttachmentCountBadge";
+import { ChatUserVoiceMessage } from "./ChatUserVoiceMessage";
+import { formatRelativeSendTime } from "./relativeTime";
+import { VoiceTranscriptPreview } from "./VoiceTranscriptPreview";
 
 export interface ChatBubbleProps {
   /** Dark theme (default true) */
@@ -11,6 +17,10 @@ export interface ChatBubbleProps {
   message: ChatUIMessage;
   /** Accent color for user bubble (CSS value, e.g. #6366f1) */
   accentColor?: string;
+  /** User **text-only** messages. Ignored for voice notes. */
+  userTextBubbleStyle?: UserBubbleStyle;
+  /** User **voice** messages only. Ignored for text. */
+  userVoiceBubbleStyle?: UserBubbleStyle;
   /** Show role + timestamp above/below bubble */
   showMetadata?: boolean;
   /** Display name for assistant (e.g. "Bot Name - AI"). User messages always show "User". */
@@ -40,6 +50,16 @@ export interface ChatBubbleProps {
   messageSendFailedLabel?: string;
   retrySendLabel?: string;
   onRetrySend?: (messageId: string) => void;
+  /** Thumbs up/down for assistant replies (after message is fully received). */
+  showMessageFeedback?: boolean;
+  onMessageFeedback?: (rating: "up" | "down") => void;
+  feedbackHelpfulLabel?: string;
+  feedbackNotHelpfulLabel?: string;
+  voiceShowTranscriptLabel?: string;
+  voiceHideTranscriptLabel?: string;
+  onOpenVoiceMessageDetail?: (messageId: string) => void;
+  /** Opens full-screen attachments list for this user message (read-only). */
+  onOpenAttachments?: (messageId: string) => void;
   className?: string;
 }
 
@@ -53,10 +73,42 @@ function formatTime(createdAt: string): string {
   }
 }
 
+function CopyGlyph({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+      />
+    </svg>
+  );
+}
+
+/** Filled “like” silhouette (Material-style), distinct from Lucide’s outline thumb when unselected. */
+function SolidThumbsUpGlyph({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z" />
+    </svg>
+  );
+}
+
+/** Filled dislike silhouette (Material-style), paired with {@link SolidThumbsUpGlyph}. */
+function SolidThumbsDownGlyph({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M15 3H6c-.83 0-1.54.5-1.84 1.22l-3.02 7.05c-.09.23-.14.47-.14.73V14c0 1.1.9 2 2 2h6.31l-.95 4.57-.03.32c0 .41.17.79.44 1.06L9.83 23l6.58-6.59c.37-.36.59-.86.59-1.41V5c0-1.1-.9-2-2-2zm4 0v12h4V3h-4z" />
+    </svg>
+  );
+}
+
 export function ChatBubble({
   dark = true,
   message,
   accentColor = "#6366f1",
+  userTextBubbleStyle = "primary",
+  userVoiceBubbleStyle = "primary",
   showMetadata = true,
   senderName,
   showSenderName = true,
@@ -75,31 +127,88 @@ export function ChatBubble({
   messageSendFailedLabel = "Couldn’t send",
   retrySendLabel = "Retry",
   onRetrySend,
+  showMessageFeedback = false,
+  onMessageFeedback,
+  feedbackHelpfulLabel = "Helpful",
+  feedbackNotHelpfulLabel = "Not helpful",
+  voiceShowTranscriptLabel = "Show transcript",
+  voiceHideTranscriptLabel = "Hide transcript",
+  onOpenVoiceMessageDetail,
+  onOpenAttachments,
   className,
 }: ChatBubbleProps) {
   const [copied, setCopied] = useState(false);
+  const [relativeTick, setRelativeTick] = useState(0);
+  const [voiceTranscriptOpen, setVoiceTranscriptOpen] = useState(false);
   const isUser = message.role === "user";
   const isAssistant = message.role === "assistant";
+  const isUserVoice =
+    isUser &&
+    message.speechInput?.mode === "voice" &&
+    Boolean(message.speechInput.audioUrl?.trim());
+  const voiceTranscript = message.speechInput?.transcript?.trim() ?? "";
+  const attachmentCount = message.attachments?.length ?? 0;
+  useEffect(() => {
+    if (!isAssistant) return;
+    const id = window.setInterval(() => setRelativeTick((n) => n + 1), 30_000);
+    return () => window.clearInterval(id);
+  }, [isAssistant]);
   const userFailed = isUser && message.status === "error";
   const userSending = isUser && message.status === "sending";
   const radiusPx = Math.max(0, Math.min(32, bubbleBorderRadius ?? 20));
 
   const roleLabel = isAssistant && senderName ? senderName : isUser ? "User" : "Assistant";
+  const resolvedUserBubbleStyle: UserBubbleStyle = isUserVoice ? userVoiceBubbleStyle : userTextBubbleStyle;
+  /** Text vs voice each has its own setting; this drives the outer bubble fill only. */
+  const userUsesPrimaryBubble = isUser && resolvedUserBubbleStyle === "primary";
+  const userIsDefaultDark = isUser && resolvedUserBubbleStyle === "defaultDark";
   const showTimeAbove = showTime && timePosition !== "bottom";
   const showTimeBelow = showTime && timePosition === "bottom";
 
+  const copyText =
+    isUserVoice && message.speechInput?.transcript?.trim()
+      ? message.speechInput.transcript.trim()
+      : message.content?.trim()
+        ? message.content
+        : (message.attachments?.map((a) => a.name).join(", ") ?? "");
+
   const handleCopy = useCallback(async () => {
     try {
-      await navigator.clipboard.writeText(message.content);
+      await navigator.clipboard.writeText(copyText);
       setCopied(true);
-      onCopy?.(message.id, message.content);
+      onCopy?.(message.id, copyText);
       setTimeout(() => setCopied(false), 1500);
     } catch {
       // no-op
     }
-  }, [message.id, message.content, onCopy]);
+  }, [message.id, copyText, onCopy]);
 
-  const showMarkdown = isAssistant && allowMarkdown && message.content;
+  const isStreaming = message.status === "streaming";
+  const showMarkdown = isAssistant && allowMarkdown && message.content && !isStreaming;
+  const isWelcomeAssistant =
+    isAssistant && typeof message.id === "string" && message.id.startsWith("welcome_");
+
+  const relativeSentLabel =
+    isAssistant && message.createdAt && !isWelcomeAssistant
+      ? formatRelativeSendTime(message.createdAt)
+      : "";
+  void relativeTick; // bump re-renders on interval so “N minutes ago” updates
+
+  const showAssistantFooter =
+    isAssistant &&
+    (message.status === "sent" || message.status === "error" || isWelcomeAssistant);
+  const showAssistantThumbs =
+    showMessageFeedback &&
+    onMessageFeedback &&
+    message.status === "sent" &&
+    !isWelcomeAssistant &&
+    !isStreaming;
+  const showAssistantCopy =
+    showCopyButton && Boolean(message.content?.trim()) && message.status !== "streaming";
+
+  const showSourcesRow =
+    (isAssistant && showSources && Boolean(message.sources?.length)) ||
+    (showMetadata && showTimeBelow && !isWelcomeAssistant);
 
   const metaClass = cx(
     "text-xs flex items-center gap-2",
@@ -108,36 +217,39 @@ export function ChatBubble({
   );
 
   const bubbleSurfaceClass = cx(
-    "chat-bubble-surface inline-block max-w-full min-w-0 align-top box-border px-3 py-2.5 text-left text-sm leading-relaxed",
+    "chat-bubble-surface inline-block max-w-full min-w-0 align-top box-border px-3 py-2.5 text-left text-sm font-normal leading-relaxed",
     "break-words [overflow-wrap:anywhere]",
-    isUser && "text-white",
+    isUser && userUsesPrimaryBubble && "text-white",
+    isUser && !userUsesPrimaryBubble && userIsDefaultDark && "text-white bg-black border border-gray-600/80",
+    isUser &&
+      !userUsesPrimaryBubble &&
+      !userIsDefaultDark &&
+      (dark
+        ? "text-gray-100 bg-gray-600/78 border border-gray-500/40"
+        : "text-gray-800 bg-gray-100 border border-gray-200/85"),
     isAssistant &&
     (dark
-      ? "bg-gray-700/80 text-gray-100 border border-gray-600"
-      : "bg-gray-100 text-gray-900 border border-gray-200")
+      ? "bg-gray-600/70 text-gray-300 border border-gray-500/55"
+      : "bg-gray-50/95 text-gray-700 border border-gray-200/90")
   );
 
   const bubbleInlineStyle: React.CSSProperties =
-    isUser && accentColor
+    isUser && userUsesPrimaryBubble && accentColor
       ? {
-          backgroundColor: userFailed ? undefined : accentColor,
+          backgroundColor: accentColor,
           color: "#fff",
           borderRadius: `${radiusPx}px`,
-          ...(userFailed
-            ? {
-                backgroundColor: dark ? "rgb(31 41 55 / 0.95)" : "rgb(243 244 246)",
-                color: dark ? "rgb(243 244 246)" : "rgb(17 24 39)",
-                boxShadow: "inset 0 0 0 2px rgb(239 68 68 / 0.55)",
-              }
-            : {}),
           ...(userSending ? { opacity: 0.88 } : {}),
         }
-      : { borderRadius: `${radiusPx}px` };
+      : {
+          borderRadius: `${radiusPx}px`,
+          ...(isUser && userSending ? { opacity: 0.88 } : {}),
+        };
 
   const contentWrapperClass = cx(
     "text-left min-w-0 max-w-full chat-bubble-content",
     "[&>*]:min-w-0 [&>*]:max-w-full",
-    dark ? "[&>code]:bg-gray-600 [&>code]:text-gray-200" : "[&>code]:bg-gray-300 [&>code]:text-gray-800",
+    dark ? "[&>code]:bg-gray-500/85 [&>code]:text-gray-200" : "[&>code]:bg-gray-200 [&>code]:text-gray-800",
     "[&>code]:rounded [&>code]:px-1 [&>code]:py-0.5 [&>code]:break-all"
   );
 
@@ -151,49 +263,130 @@ export function ChatBubble({
 
   const bubbleColumnClass = cx(
     "flex min-w-0 max-w-[85%] flex-col gap-0.5",
-    isAssistant && "flex-1",
-    isUser ? "w-full items-end" : "items-start"
+    isUser ? "w-full items-end" : "w-fit items-start"
   );
 
   return (
     <article
       className={cx(
-        "flex w-full min-w-0 max-w-full flex-col gap-1",
+        "flex w-full min-w-0 max-w-full flex-col",
+        isAssistant ? "gap-0.5" : "gap-1",
         isUser ? "items-end" : "items-start",
         className
       )}
       data-message-id={message.id}
       aria-label={`${roleLabel} message`}
     >
-      {showMetadata && (showSenderName || showTimeAbove) && (
+      {showMetadata && (showSenderName || (showTimeAbove && !isWelcomeAssistant)) && (
         <div className={metaClass} aria-hidden>
           {showSenderName && <span>{roleLabel}</span>}
-          {showTimeAbove && <time dateTime={message.createdAt}>{formatTime(message.createdAt)}</time>}
+          {showTimeAbove && !isWelcomeAssistant ? (
+            <time dateTime={message.createdAt}>{formatTime(message.createdAt)}</time>
+          ) : null}
         </div>
       )}
 
       <div className={messageRowClass}>
         <div className={bubbleColumnClass}>
-          <div className={bubbleSurfaceClass} style={bubbleInlineStyle} role="article">
-            {showMarkdown ? (
-              <div
-                className={cx(
-                  contentWrapperClass,
-                  "prose prose-sm max-w-full dark:prose-invert",
-                  dark
-                    ? "text-gray-100 [&_p]:text-gray-100 [&_li]:text-gray-100 [&_strong]:text-white [&_em]:text-gray-200 [&_blockquote]:text-gray-300 [&_h1]:text-gray-50 [&_h2]:text-gray-50 [&_h3]:text-gray-100 [&_pre]:text-gray-100"
-                    : "text-gray-900 [&_p]:text-gray-900 [&_pre]:text-gray-800",
-                  "[&_a]:text-blue-400 [&_a]:underline [&_a]:break-all",
-                  "[&_pre]:text-sm [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_pre]:rounded",
-                  "[&_table]:max-w-full [&_table]:block [&_table]:overflow-x-auto"
-                )}
-              >
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
+          {isUserVoice && message.speechInput?.audioUrl ? (
+            <div className="flex w-[80%] min-w-0 max-w-[320px] flex-col items-stretch self-end">
+              <div className={cx(bubbleSurfaceClass, "block w-full min-w-0")} style={bubbleInlineStyle} role="article">
+                <ChatUserVoiceMessage
+                  messageId={message.id}
+                  audioUrl={message.speechInput.audioUrl}
+                  durationMs={message.speechInput.durationMs}
+                  disabled={userSending}
+                  dark={dark}
+                  onAccent={userVoiceBubbleStyle === "primary" && Boolean(accentColor)}
+                  neutralBubbleBlack={userVoiceBubbleStyle === "defaultDark"}
+                  accentColor={accentColor}
+                  className="w-full min-w-0 !max-w-none"
+                />
               </div>
-            ) : (
-              <div className={plainTextClass}>{message.content}</div>
-            )}
-          </div>
+              {isUser && attachmentCount > 0 && !voiceTranscript ? (
+                <div className="mt-1 flex w-full min-w-0 max-w-full justify-end">
+                  <AttachmentCountBadge
+                    count={attachmentCount}
+                    dark={dark}
+                    onClick={onOpenAttachments ? () => onOpenAttachments(message.id) : undefined}
+                  />
+                </div>
+              ) : null}
+              {voiceTranscript ? (
+                <div className="mt-0.5 w-full min-w-0 max-w-full flex flex-col items-stretch gap-1">
+                  <div className="flex w-full min-w-0 max-w-full flex-wrap items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setVoiceTranscriptOpen((v) => !v)}
+                      aria-expanded={voiceTranscriptOpen}
+                      className={cx(
+                        "shrink-0 text-right text-[12px] font-medium focus:outline-none focus-visible:ring-2 rounded px-0.5 transition-colors duration-200",
+                        "hover:underline hover:decoration-current hover:underline-offset-2",
+                        dark
+                          ? "text-gray-400 hover:text-gray-300 focus-visible:ring-gray-500/50"
+                          : "text-gray-500 hover:text-gray-700 focus-visible:ring-gray-400/60",
+                      )}
+                    >
+                      {voiceTranscriptOpen ? voiceHideTranscriptLabel : voiceShowTranscriptLabel}
+                    </button>
+                    {attachmentCount > 0 ? (
+                      <AttachmentCountBadge
+                        count={attachmentCount}
+                        dark={dark}
+                        onClick={onOpenAttachments ? () => onOpenAttachments(message.id) : undefined}
+                      />
+                    ) : null}
+                  </div>
+                  <div
+                    className={cx(
+                      "grid w-full min-w-0 max-w-full transition-[grid-template-rows] duration-300 ease-out motion-reduce:transition-none",
+                      voiceTranscriptOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+                    )}
+                  >
+                    <div className="min-h-0 overflow-hidden">
+                      {voiceTranscriptOpen ? (
+                        <VoiceTranscriptPreview
+                          text={voiceTranscript}
+                          dark={dark}
+                          onSeeMore={onOpenVoiceMessageDetail ? () => onOpenVoiceMessageDetail(message.id) : undefined}
+                        />
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <div className={bubbleSurfaceClass} style={bubbleInlineStyle} role="article">
+              {showMarkdown ? (
+                <div
+                  className={cx(
+                    contentWrapperClass,
+                    "prose prose-sm max-w-full dark:prose-invert",
+                    dark
+                      ? "text-gray-300 [&_p]:text-gray-300 [&_li]:text-gray-300 [&_strong]:font-medium [&_strong]:text-gray-200 [&_em]:text-gray-400 [&_blockquote]:text-gray-400 [&_h1]:text-gray-200 [&_h2]:text-gray-200 [&_h3]:text-gray-300 [&_pre]:text-gray-300"
+                      : "text-gray-700 [&_p]:text-gray-700 [&_strong]:font-medium [&_pre]:text-gray-600",
+                    "[&_a]:text-blue-400 [&_a]:underline [&_a]:break-all",
+                    "[&_pre]:text-sm [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_pre]:rounded",
+                    "[&_table]:max-w-full [&_table]:block [&_table]:overflow-x-auto"
+                  )}
+                >
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
+                </div>
+              ) : message.content?.trim() ? (
+                <div className={plainTextClass}>{message.content}</div>
+              ) : null}
+            </div>
+          )}
+          {isUser && attachmentCount > 0 && !(isUserVoice && voiceTranscript) && !isUserVoice ? (
+            <div className="mt-1 flex w-full max-w-[min(90%,21rem)] justify-end">
+              <AttachmentCountBadge
+                count={attachmentCount}
+                dark={dark}
+                onClick={onOpenAttachments ? () => onOpenAttachments(message.id) : undefined}
+              />
+            </div>
+          ) : null}
           {userFailed ? (
             <div
               className={cx(
@@ -218,91 +411,141 @@ export function ChatBubble({
               ) : null}
             </div>
           ) : null}
+          {showAssistantFooter ? (
+            <div
+              className={cx(
+                "mt-1 flex w-full min-w-0 items-center justify-between gap-2 text-[12px] leading-none",
+                dark ? "text-gray-400" : "text-gray-500",
+              )}
+              data-assistrio-assistant-footer
+            >
+              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1 text-[12px] leading-none">
+                {relativeSentLabel ? (
+                  <time
+                    className={cx(
+                      "inline-flex min-h-[14px] items-center whitespace-nowrap tabular-nums font-medium leading-none",
+                      dark ? "text-gray-400" : "text-gray-500",
+                    )}
+                    dateTime={message.createdAt}
+                    title={formatTime(message.createdAt)}
+                  >
+                    {relativeSentLabel}
+                  </time>
+                ) : null}
+                {relativeSentLabel && showAssistantThumbs ? (
+                  <span
+                    className="h-[12px] w-px shrink-0 self-center rounded-full bg-current opacity-40 mt-[2px]"
+                    aria-hidden
+                  />
+                ) : null}
+                {showAssistantThumbs ? (
+                  <div className="flex items-center gap-2" role="group" aria-label="Rate this reply">
+                    <button
+                      type="button"
+                      onClick={() => onMessageFeedback!("up")}
+                      className={cx(
+                        "inline-flex h-[14px] w-[14px] shrink-0 items-center justify-center rounded p-0 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1",
+                        dark ? "focus-visible:ring-offset-gray-900" : "focus-visible:ring-offset-white",
+                        message.feedbackRating === "up"
+                          ? dark
+                            ? "text-gray-300 focus-visible:ring-gray-500/70"
+                            : "text-gray-500 focus-visible:ring-gray-400/70"
+                          : dark
+                            ? "text-gray-400 hover:text-gray-300"
+                            : "text-gray-500 hover:text-gray-600",
+                      )}
+                      aria-label={feedbackHelpfulLabel}
+                      title={feedbackHelpfulLabel}
+                      aria-pressed={message.feedbackRating === "up"}
+                    >
+                      {message.feedbackRating === "up" ? (
+                        <SolidThumbsUpGlyph className="block h-[13px] w-[13px] shrink-0" />
+                      ) : (
+                        <ThumbsUp className="block h-[13px] w-[13px] shrink-0" strokeWidth={2} fill="none" aria-hidden />
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onMessageFeedback!("down")}
+                      className={cx(
+                        "inline-flex h-[14px] w-[14px] shrink-0 items-center justify-center rounded p-0 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1",
+                        dark ? "focus-visible:ring-offset-gray-900" : "focus-visible:ring-offset-white",
+                        message.feedbackRating === "down"
+                          ? dark
+                            ? "text-gray-300 focus-visible:ring-gray-500/70"
+                            : "text-gray-500 focus-visible:ring-gray-400/70"
+                          : dark
+                            ? "text-gray-400 hover:text-gray-300"
+                            : "text-gray-500 hover:text-gray-600",
+                      )}
+                      aria-label={feedbackNotHelpfulLabel}
+                      title={feedbackNotHelpfulLabel}
+                      aria-pressed={message.feedbackRating === "down"}
+                    >
+                      {message.feedbackRating === "down" ? (
+                        <SolidThumbsDownGlyph className="block h-[13px] w-[13px] shrink-0" />
+                      ) : (
+                        <ThumbsDown className="block h-[13px] w-[13px] shrink-0" strokeWidth={2} fill="none" aria-hidden />
+                      )}
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+              {showAssistantCopy ? (
+                <button
+                  type="button"
+                  onClick={handleCopy}
+                  className={cx(
+                    "inline-flex h-[14px] w-[14px] shrink-0 items-center justify-center rounded p-0 text-[12px] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1",
+                    dark
+                      ? "text-gray-400 hover:text-gray-300 focus-visible:ring-gray-500/60 focus-visible:ring-offset-gray-900"
+                      : "text-gray-500 hover:text-gray-600 focus-visible:ring-gray-400/70 focus-visible:ring-offset-white",
+                  )}
+                  aria-label={copied ? copiedLabel : copyLabel}
+                  title={copied ? copiedLabel : copyLabel}
+                >
+                  {copied ? (
+                    <svg className="block h-[14px] w-[14px] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                  ) : (
+                    <CopyGlyph className="block h-[14px] w-[14px] shrink-0" />
+                  )}
+                </button>
+              ) : null}
+            </div>
+          ) : null}
         </div>
-        {isAssistant && showCopyButton && message.content && renderCopyInBubble && (
-          <button
-            type="button"
-            onClick={handleCopy}
-            className={cx(
-              "mt-1 flex-shrink-0 rounded p-1.5 transition-colors",
-              dark
-                ? "text-gray-400 hover:bg-gray-700/50 hover:text-gray-300"
-                : "text-gray-500 hover:bg-gray-200 hover:text-gray-700"
-            )}
-            aria-label={copied ? copiedLabel : copyLabel}
-            title={copied ? copiedLabel : copyLabel}
-          >
-            {copied ? (
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-              </svg>
-            ) : (
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-                />
-              </svg>
-            )}
-          </button>
-        )}
       </div>
 
-      <div
-        className={cx(
-          "flex min-w-0 max-w-[85%] flex-wrap items-center gap-2",
-          isUser ? "justify-end self-end" : "justify-start self-start"
-        )}
-        data-sources-row
-      >
-        {isAssistant && showSources && message.sources && message.sources.length > 0 && (
-          <ChatSources
-            dark={dark}
-            sources={message.sources}
-            messageId={message.id}
-            label={sourcesLabel}
-            onSourceClick={onSourceClick}
-            className="flex-shrink-0"
-          />
-        )}
-        {isAssistant && showCopyButton && message.content && !renderCopyInBubble && (
-          <button
-            type="button"
-            onClick={handleCopy}
-            className={cx(
-              "flex-shrink-0 rounded p-1.5 transition-colors",
-              dark
-                ? "text-gray-400 hover:bg-gray-700/50 hover:text-gray-300"
-                : "text-gray-500 hover:bg-gray-200 hover:text-gray-700"
-            )}
-            aria-label={copied ? copiedLabel : copyLabel}
-            title={copied ? copiedLabel : copyLabel}
-          >
-            {copied ? (
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-              </svg>
-            ) : (
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-                />
-              </svg>
-            )}
-          </button>
-        )}
-        {showMetadata && showTimeBelow && (
-          <span
-            className={cx("flex-shrink-0 text-xs", dark ? "text-gray-400" : "text-gray-500")}
-            aria-hidden
-          >
-            <time dateTime={message.createdAt}>{formatTime(message.createdAt)}</time>
-          </span>
-        )}
-      </div>
+      {showSourcesRow ? (
+        <div
+          className={cx(
+            "flex min-w-0 max-w-[85%] flex-wrap items-center gap-2",
+            isUser ? "justify-end self-end" : "justify-start self-start",
+          )}
+          data-sources-row
+        >
+          {isAssistant && showSources && message.sources && message.sources.length > 0 ? (
+            <ChatSources
+              dark={dark}
+              sources={message.sources}
+              messageId={message.id}
+              label={sourcesLabel}
+              onSourceClick={onSourceClick}
+              className="flex-shrink-0"
+            />
+          ) : null}
+          {showMetadata && showTimeBelow ? (
+            <span
+              className={cx("flex-shrink-0 text-xs", dark ? "text-gray-400" : "text-gray-500")}
+              aria-hidden
+            >
+              <time dateTime={message.createdAt}>{formatTime(message.createdAt)}</time>
+            </span>
+          ) : null}
+        </div>
+      ) : null}
     </article>
   );
 }

@@ -90,7 +90,6 @@ export interface PublicBotDto {
     timePosition?: 'top' | 'bottom';
     showSources?: boolean;
     showCopyButton?: boolean;
-    showEmoji?: boolean;
     showMenuQuickLinks?: boolean;
     launcherAvatarUrl?: string;
   };
@@ -845,7 +844,7 @@ export class BotsService {
   async findOneWorkspaceForAdmin(id: string) {
     const bot = await this.botModel
       .findById(id)
-      .select('slug name shortDescription description category categories imageUrl avatarEmoji openaiApiKeyOverride whisperApiKeyOverride welcomeMessage status isPublic leadCapture chatUI exampleQuestions personality config limitOverrideMessages visibility accessKey secretKey ownerId messageLimitMode messageLimitTotal messageLimitUpgradeMessage visitorMultiChatEnabled visitorMultiChatMax includeNameInKnowledge includeTaglineInKnowledge includeNotesInKnowledge allowedOrigins workspaceId agentsPackAgent')
+      .select('slug name shortDescription description category categories imageUrl avatarEmoji openaiApiKeyOverride whisperApiKeyOverride welcomeMessage welcomeMessageEnabled status isPublic leadCapture chatUI exampleQuestions personality config limitOverrideMessages visibility accessKey secretKey ownerId messageLimitMode messageLimitTotal messageLimitUpgradeMessage visitorMultiChatEnabled visitorMultiChatMax includeNameInKnowledge includeTaglineInKnowledge includeNotesInKnowledge allowedOrigins workspaceId agentsPackAgent')
       .lean();
     if (!bot) return null;
     const [faqs, knowledgeDescription] = await Promise.all([
@@ -1018,6 +1017,7 @@ export class BotsService {
       openaiApiKeyOverride?: string;
       whisperApiKeyOverride?: string;
       welcomeMessage?: string;
+      welcomeMessageEnabled?: boolean;
       knowledgeDescription?: string;
       leadCapture?: unknown;
       chatUI?: unknown;
@@ -1080,6 +1080,10 @@ export class BotsService {
               openaiApiKeyOverride: normalized.openaiApiKeyOverride,
               whisperApiKeyOverride: normalized.whisperApiKeyOverride,
               welcomeMessage: normalized.welcomeMessage,
+              welcomeMessageEnabled:
+                normalized.welcomeMessageEnabled !== undefined
+                  ? normalized.welcomeMessageEnabled
+                  : Boolean(normalized.welcomeMessage),
               leadCapture: normalized.leadCapture,
               chatUI: normalized.chatUI,
               exampleQuestions: normalized.exampleQuestions ?? [],
@@ -1148,6 +1152,10 @@ export class BotsService {
           openaiApiKeyOverride: normalized.openaiApiKeyOverride,
           whisperApiKeyOverride: normalized.whisperApiKeyOverride,
           welcomeMessage: normalized.welcomeMessage,
+          welcomeMessageEnabled:
+            normalized.welcomeMessageEnabled !== undefined
+              ? normalized.welcomeMessageEnabled
+              : Boolean(normalized.welcomeMessage),
           leadCapture: normalized.leadCapture,
           chatUI: normalized.chatUI,
           exampleQuestions: normalized.exampleQuestions ?? [],
@@ -1312,6 +1320,9 @@ export class BotsService {
     }
     if (patch.touched.has('welcomeMessage')) {
       updateDoc.welcomeMessage = patch.welcomeMessage ?? '';
+    }
+    if (patch.touched.has('welcomeMessageEnabled')) {
+      updateDoc.welcomeMessageEnabled = patch.welcomeMessageEnabled === true;
     }
     if (patch.touched.has('exampleQuestions')) {
       updateDoc.exampleQuestions = patch.exampleQuestions ?? [];

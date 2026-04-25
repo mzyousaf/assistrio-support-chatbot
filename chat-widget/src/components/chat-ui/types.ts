@@ -45,7 +45,24 @@ export function mapSources(raw: unknown): ChatUISource[] {
 
 export type ChatUIMessageRole = "user" | "assistant" | "system";
 
-export type ChatUIMessageStatus = "sending" | "sent" | "error";
+export type ChatUIMessageStatus = "sending" | "sent" | "error" | "streaming";
+
+/** Sent with `onSend` when the user submits a voice message (stored on backend Message). */
+export type ChatSpeechInputMeta = {
+  mode: "dictate" | "voice";
+  transcript?: string;
+  audioUrl?: string;
+  mimeType?: string;
+  durationMs?: number;
+};
+
+/** Visitor file sent with a user message (widget upload). */
+export type ChatUIMessageAttachment = {
+  name: string;
+  mimeType: string;
+  url: string;
+  size?: number;
+};
 
 export interface ChatUIMessage {
   id: string;
@@ -54,6 +71,12 @@ export interface ChatUIMessage {
   createdAt: string;
   sources?: ChatUISource[];
   status?: ChatUIMessageStatus;
+  /** Visitor’s thumbs up / down on this assistant reply (widget only). */
+  feedbackRating?: "up" | "down";
+  /** User voice message metadata (playback + transcript); from API or optimistic send. */
+  speechInput?: ChatSpeechInputMeta;
+  /** Files attached from the composer (persisted URLs after send). */
+  attachments?: ChatUIMessageAttachment[];
 }
 
 export interface ChatUITheme {
@@ -75,5 +98,9 @@ export interface ChatUIStrings {
   back?: string;
   close?: string;
   menu?: string;
+  /** User bubble text when voice has no transcript (audio still sent). Default “Voice message”. */
+  voiceMessageFallback?: string;
+  voiceShowTranscript?: string;
+  voiceHideTranscript?: string;
 }
 

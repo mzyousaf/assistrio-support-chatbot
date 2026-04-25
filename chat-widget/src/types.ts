@@ -9,7 +9,7 @@ export type EmbedPresentation = "floating" | "contained";
 
 /**
  * Pixel sizes for the non-floating inline panel when `presentation: "contained"`.
- * Omitted fields fall back to library defaults (400×700 collapsed, 560×75vh expanded).
+ * Omitted fields fall back to library defaults (404×730 collapsed, 560×75vh expanded; both clamped to host/viewport).
  */
 export type ContainedInlineSize = {
   collapsedWidth?: number;
@@ -68,6 +68,11 @@ export type EmbedChatConfig = {
    * (bottom corners per `chatUI.launcherPosition`). Does not enable floating mode.
    */
   showContainedLauncherPreview?: boolean;
+  /**
+   * Contained mode: when the user expands or collapses the inline panel, so the host can adjust
+   * surrounding chrome (e.g. preview `max-height`).
+   */
+  onContainedPanelExpandChange?: (expanded: boolean) => void;
   previewOverrides?: WidgetPreviewOverrides;
   disableRemoteConfig?: boolean;
   /**
@@ -121,6 +126,8 @@ export interface WidgetInitResponse {
     tagline?: string;
     description?: string;
     welcomeMessage?: string;
+    /** When false, welcome text is hidden in the widget (text may still be stored server-side). */
+    welcomeMessageEnabled?: boolean;
     suggestedQuestions?: string[];
     exampleQuestions?: string[];
   };
@@ -159,6 +166,7 @@ export interface WidgetPreviewOverrides {
   tagline?: string;
   description?: string;
   welcomeMessage?: string;
+  welcomeMessageEnabled?: boolean;
   suggestedQuestions?: string[];
   brandingMessage?: string;
   privacyText?: string;

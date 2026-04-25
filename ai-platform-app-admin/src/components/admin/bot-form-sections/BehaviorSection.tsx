@@ -13,6 +13,7 @@ import MultiSelect from "@/components/ui/MultiSelect";
 import { Textarea } from "@/components/ui/Textarea";
 import type { BotPersonality } from "@/models/Bot";
 
+import { BOT_FIELD_MAX } from "@/lib/botFieldLimits";
 import { useBotFormEditor } from "./BotFormEditorContext";
 import {
   BEHAVIOR_PRESETS,
@@ -100,9 +101,10 @@ export function BehaviorSection() {
             <Input
               id="bot-custom-category"
               value={customCategory}
+              maxLength={BOT_FIELD_MAX.categoryText}
               disabled={categories.length > 0}
               onChange={(event) => {
-                const next = event.target.value;
+                const next = event.target.value.slice(0, BOT_FIELD_MAX.categoryText);
                 setCustomCategory(next);
                 if (next.trim()) setCategories([]);
               }}
@@ -173,7 +175,10 @@ export function BehaviorSection() {
               id="behavior-description"
               rows={4}
               value={behaviorText}
-              onChange={(event) => setBehaviorText(event.target.value)}
+              maxLength={BOT_FIELD_MAX.personalityDescription}
+              onChange={(event) =>
+                setBehaviorText(event.target.value.slice(0, BOT_FIELD_MAX.personalityDescription))
+              }
               className="w-full min-h-[6rem] resize-y"
             />
           </SettingsFieldRow>
@@ -186,7 +191,8 @@ export function BehaviorSection() {
               id="things-to-avoid"
               rows={3}
               value={thingsToAvoid}
-              onChange={(event) => setThingsToAvoid(event.target.value)}
+              maxLength={BOT_FIELD_MAX.thingsToAvoid}
+              onChange={(event) => setThingsToAvoid(event.target.value.slice(0, BOT_FIELD_MAX.thingsToAvoid))}
               placeholder="e.g. medical advice, legal opinions, off-topic chat"
               className="w-full min-h-[4rem] resize-y"
             />
@@ -236,7 +242,8 @@ export function BehaviorSection() {
                   id="welcome-message"
                   rows={3}
                   value={welcomeMessage}
-                  onChange={(event) => setWelcomeMessage(event.target.value)}
+                  maxLength={BOT_FIELD_MAX.welcomeMessage}
+                  onChange={(event) => setWelcomeMessage(event.target.value.slice(0, BOT_FIELD_MAX.welcomeMessage))}
                   placeholder={DEFAULT_WELCOME_MESSAGE}
                   className="w-full min-h-[5rem] resize-y"
                 />
@@ -262,9 +269,10 @@ export function BehaviorSection() {
                 <div key={index} className="flex items-center gap-2">
                   <Input
                     value={q}
+                    maxLength={BOT_FIELD_MAX.exampleQuestion}
                     onChange={(e) => {
                       const next = [...exampleQuestions];
-                      next[index] = e.target.value;
+                      next[index] = e.target.value.slice(0, BOT_FIELD_MAX.exampleQuestion);
                       setExampleQuestions(next);
                     }}
                     placeholder="e.g. What are your opening hours?"

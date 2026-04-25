@@ -1,3 +1,5 @@
+import type { MessageAttachment, MessageSpeechInput } from '../models/message.schema';
+
 export type ChatMode = 'user';
 
 /** Lead field as used by chat (key, label, type, required). */
@@ -21,6 +23,8 @@ export interface BotLike {
   category?: string;
   openaiApiKeyOverride?: string;
   welcomeMessage?: string;
+  /** When false, welcome text is not seeded into new conversations (text may still be stored). */
+  welcomeMessageEnabled?: boolean;
   /** Knowledge notes / internal description (included in RAG context). */
   knowledgeDescription?: string;
   leadCapture?: BotLikeLeadCapture;
@@ -72,6 +76,10 @@ export interface RunChatInput {
    * Preview/widget-testing: run the full model path without persisting Conversation/Message to Mongo.
    */
   ephemeral?: boolean;
+  /** Optional: how the user composed this turn (dictate / voice); stored on the user Message in Mongo. */
+  speechInput?: MessageSpeechInput;
+  /** Visitor files uploaded with this turn (widget); stored on the user Message. */
+  attachments?: MessageAttachment[];
 }
 
 /** Single source item (chunk-level, deduped by chunkId; order by retrieval score). */
@@ -279,6 +287,8 @@ export type RunChatResult =
     sources?: ChatSource[];
     displaySources?: DisplaySource[];
     isNewConversation: boolean;
+    /** Echo persisted attachment metadata for the user message (widget). */
+    userAttachments?: MessageAttachment[];
     /** Present only when RunChatInput.debug is true; safe for admin. */
     debug?: ChatDebugInfo;
   }

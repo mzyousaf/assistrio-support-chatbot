@@ -18,6 +18,7 @@ import {
 } from "@/components/admin/settings";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { BOT_FIELD_MAX, clampStr } from "@/lib/botFieldLimits";
 import { normalizeQuickLinkIcon } from "@/lib/quickLinkIconNormalize";
 import type { ChatMenuQuickLink } from "@/models/Bot";
 
@@ -33,8 +34,8 @@ function normalize(links: ChatMenuQuickLink[] | undefined): ChatMenuQuickLink[] 
   const trimmed = raw
     .slice(0, MAX_LINKS)
     .map((l) => {
-      const text = (l.text ?? "").trim();
-      const route = (l.route ?? "").trim();
+      const text = clampStr((l.text ?? "").trim(), BOT_FIELD_MAX.menuQuickLinkText);
+      const route = clampStr((l.route ?? "").trim(), BOT_FIELD_MAX.menuQuickLinkRoute);
       const icon = normalizeQuickLinkIcon(l.icon);
       return { text, route, ...(icon ? { icon } : {}) };
     })
@@ -66,8 +67,8 @@ export default function MenuQuickLinksEditor({ value, onChange }: MenuQuickLinks
   };
 
   const handleSave = () => {
-    const text = draft.text.trim();
-    const route = draft.route.trim();
+    const text = clampStr(draft.text.trim(), BOT_FIELD_MAX.menuQuickLinkText);
+    const route = clampStr(draft.route.trim(), BOT_FIELD_MAX.menuQuickLinkRoute);
     if (!text && !route) {
       if (editingIndex !== null) {
         const next = links.filter((_, i) => i !== editingIndex);
@@ -169,7 +170,7 @@ export default function MenuQuickLinksEditor({ value, onChange }: MenuQuickLinks
         open={modalOpen}
         onClose={closeModal}
         title={editingIndex !== null ? "Edit link" : "Add link"}
-        description="Text, route (path or URL), and optional icon for the header menu."
+        description="Label, route (path or URL), and optional icon for the header menu."
         maxWidthClass="max-w-md"
         footer={
           <>
@@ -184,11 +185,22 @@ export default function MenuQuickLinksEditor({ value, onChange }: MenuQuickLinks
       >
         <div className="space-y-5">
           <div>
-            <label className="mb-1.5 block text-xs font-medium text-gray-600 dark:text-gray-400">Text</label>
+            <div className="mb-1.5 flex w-full items-center justify-between gap-2">
+              <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Label</label>
+              <span className="text-[11px] font-normal text-gray-500 tabular-nums dark:text-gray-400" aria-live="polite">
+                {draft.text.length}/{BOT_FIELD_MAX.menuQuickLinkText}
+              </span>
+            </div>
             <Input
               value={draft.text}
-              onChange={(e) => setDraft((prev) => ({ ...prev, text: e.target.value }))}
-              placeholder="Link text"
+              maxLength={BOT_FIELD_MAX.menuQuickLinkText}
+              onChange={(e) =>
+                setDraft((prev) => ({
+                  ...prev,
+                  text: e.target.value.slice(0, BOT_FIELD_MAX.menuQuickLinkText),
+                }))
+              }
+              placeholder="e.g. Contact"
               className="w-full"
             />
           </div>
@@ -196,7 +208,13 @@ export default function MenuQuickLinksEditor({ value, onChange }: MenuQuickLinks
             <label className="mb-1.5 block text-xs font-medium text-gray-600 dark:text-gray-400">Route</label>
             <Input
               value={draft.route}
-              onChange={(e) => setDraft((prev) => ({ ...prev, route: e.target.value }))}
+              maxLength={BOT_FIELD_MAX.menuQuickLinkRoute}
+              onChange={(e) =>
+                setDraft((prev) => ({
+                  ...prev,
+                  route: e.target.value.slice(0, BOT_FIELD_MAX.menuQuickLinkRoute),
+                }))
+              }
               placeholder="/path or https://..."
               className="w-full"
             />

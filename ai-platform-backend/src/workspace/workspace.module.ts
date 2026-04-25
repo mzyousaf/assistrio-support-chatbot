@@ -7,6 +7,7 @@ import { KnowledgeModule } from '../knowledge/knowledge.module';
 import { AnalyticsModule } from '../analytics/analytics.module';
 import { AuthModule } from '../auth/auth.module';
 import { WorkspacesModule } from '../workspaces/workspaces.module';
+import { AdminBotConversationsController } from './admin-bot-conversations.controller';
 import { AdminBotsController } from './admin-bots.controller';
 import { AdminDocumentsController } from './admin-documents.controller';
 import { AdminJobsController } from './admin-jobs.controller';
@@ -14,6 +15,7 @@ import { AdminSeedController } from './admin-seed.controller';
 import { AdminUploadController } from './admin-upload.controller';
 import { CustomerBotsController } from './customer-bots.controller';
 import { CustomerBotInsightsController } from './customer-bot-insights.controller';
+import { CustomerBotConversationsController } from './customer-bot-conversations.controller';
 import { CustomerChatController } from './customer-chat.controller';
 import { CustomerDocumentsController } from './customer-documents.controller';
 import { OperatorWorkspaceUploadService } from './shared/operator-workspace-upload.service';
@@ -36,6 +38,7 @@ import { ShowcaseAgentsPackService } from './shared/showcase-agents-pack.service
     AnalyticsModule,
   ],
   controllers: [
+    AdminBotConversationsController,
     AdminBotsController,
     AdminDocumentsController,
     AdminJobsController,
@@ -43,6 +46,7 @@ import { ShowcaseAgentsPackService } from './shared/showcase-agents-pack.service
     AdminUploadController,
     CustomerBotsController,
     CustomerBotInsightsController,
+    CustomerBotConversationsController,
     CustomerDocumentsController,
     CustomerChatController,
   ],

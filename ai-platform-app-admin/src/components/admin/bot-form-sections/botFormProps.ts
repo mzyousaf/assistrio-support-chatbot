@@ -22,6 +22,7 @@ export interface BotFormProps {
     imageUrl?: string;
     avatarEmoji?: string;
     welcomeMessage?: string;
+    welcomeMessageEnabled?: boolean;
     knowledgeDescription?: string;
     status?: "draft" | "published";
     faqs?: BotFaq[];

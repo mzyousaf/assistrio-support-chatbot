@@ -75,6 +75,8 @@ export function normalizeWidgetSettings(
     | undefined;
   const visitorMultiChatMax = normalizeVisitorMultiChatMax(settings?.visitorMultiChatMax);
 
+  const isPreview = config.mode === "preview";
+
   return {
     botId: config.botId,
     botName,
@@ -82,11 +84,14 @@ export function normalizeWidgetSettings(
     avatarEmoji: response.bot?.avatarEmoji,
     tagline: response.bot?.tagline,
     description: response.bot?.description,
-    welcomeMessage: response.bot?.welcomeMessage,
+    welcomeMessage:
+      response.bot?.welcomeMessageEnabled === false ? undefined : response.bot?.welcomeMessage,
     suggestedQuestions: normalizeSuggestedQuestions(response),
     chatUI: {
       ...chatUI,
       launcherPosition,
+      /** Live embed never exposes citation sources; preview may when `showSources` is enabled in workspace. */
+      ...(!isPreview ? { showSources: false } : {}),
     },
     launcherPosition,
     brandingMessage: response.settings?.brandingMessage ?? chatUI.brandingMessage,
