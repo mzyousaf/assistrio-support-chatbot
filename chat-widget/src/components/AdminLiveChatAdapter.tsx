@@ -141,8 +141,52 @@ function getRuntimeErrorMessage(
 
 function truncateSubtitle(text: string, maxLen: number): string {
   const t = text.trim();
-  if (t.length <= maxLen) return t;
+  if (t.length > maxLen) return t;
   return t.slice(0, maxLen).trimEnd().replace(/\s+\S*$/, "") + "…";
+}
+
+/** Map embed API `messages` (runtime or preview) to `ChatUIMessage` for display parity with the DB. */
+function mapEmbedApiRowsToChatUIMessages(
+  rows: Array<{
+    role: string;
+    content: string;
+    createdAt: string;
+    speechInput?: ChatSpeechInputMeta;
+    attachments?: Array<{ name: string; mimeType: string; url: string; size?: number }>;
+  }>,
+): ChatUIMessage[] {
+  return rows
+    .filter((m) => m.role === "user" || m.role === "assistant")
+    .map((m) => ({
+      id: generateId(),
+      role: m.role as "user" | "assistant",
+      content: String(m.content ?? ""),
+      createdAt: m.createdAt || isoNow(),
+      status: "sent" as const,
+      ...(m.speechInput?.mode === "voice" || m.speechInput?.mode === "dictate"
+        ? {
+            speechInput: {
+              mode: m.speechInput.mode,
+              ...(m.speechInput.transcript ? { transcript: m.speechInput.transcript } : {}),
+              ...(m.speechInput.audioUrl ? { audioUrl: m.speechInput.audioUrl } : {}),
+              ...(m.speechInput.mimeType ? { mimeType: m.speechInput.mimeType } : {}),
+              ...(m.speechInput.durationMs != null ? { durationMs: m.speechInput.durationMs } : {}),
+            },
+          }
+        : {}),
+      ...(Array.isArray(m.attachments) && m.attachments.length > 0
+        ? {
+            attachments: m.attachments
+              .map((a) => ({
+                name: String(a.name ?? ""),
+                mimeType: String(a.mimeType ?? "application/octet-stream"),
+                url: String(a.url ?? ""),
+                ...(typeof a.size === "number" && Number.isFinite(a.size) ? { size: a.size } : {}),
+              }))
+              .filter((a) => a.name && a.url),
+          }
+        : {}),
+    }));
 }
 
 export interface AdminLiveChatAdapterProps {
@@ -194,6 +238,13 @@ export interface AdminLiveChatAdapterProps {
    */
   showContainedLauncherPreview?: boolean;
   onContainedPanelExpandChange?: (expanded: boolean) => void;
+  /**
+   * Preview init may omit this; the first `chat` response supplies `conversationId` once the user
+   * sends a message (no server thread until then).
+   */
+  serverConversationIdFromInit?: string;
+  /** Admin preview: sent as `previewContext.sourcePage` on each chat message. */
+  previewSourcePage?: string;
 }
 
 const DEFAULT_PRIMARY = "#14B8A6";
@@ -273,6 +324,8 @@ export function AdminLiveChatAdapter({
   inlinePanelExpandedHeight,
   showContainedLauncherPreview = false,
   onContainedPanelExpandChange,
+  serverConversationIdFromInit,
+  previewSourcePage,
 }: AdminLiveChatAdapterProps) {
   void expandHref;
   void debug;
@@ -292,6 +345,7 @@ export function AdminLiveChatAdapter({
   const speechEndpointUrl = useMemo(() => speechEndpointFromChatUrl(endpoint), [endpoint]);
   const conversationIdRef = useRef<string | null>(null);
   const pendingStartNewRef = useRef(false);
+  const previewHydrationKeyRef = useRef(0);
   const containedStageRef = useRef<HTMLDivElement | null>(null);
   /** One-time restore of latest thread on runtime load (always for runtime so single-thread embeds load history). */
   const didAutoRestoreConversationRef = useRef(false);
@@ -316,6 +370,9 @@ export function AdminLiveChatAdapter({
       status: "sent",
     };
   }, [botId, welcomeMessage, botName, tagline, description]);
+
+  const welcomeMsgRef = useRef(welcomeMsg);
+  welcomeMsgRef.current = welcomeMsg;
 
   const preferredScheme = usePreferredColorScheme();
   /** Runtime: no welcome until list confirms empty thread; preview: show welcome immediately. */
@@ -411,6 +468,37 @@ export function AdminLiveChatAdapter({
     }
   }, [mode, botId, apiBaseUrl, accessKey, secretKey, runtimeEmbedOrigin, chatVisitorId]);
 
+  const fetchPreviewMessagesFromApi = useCallback(
+    async (forConversationId: string): Promise<ChatUIMessage[] | null> => {
+      const cid = forConversationId.trim();
+      const vid = (chatVisitorId ?? "").trim();
+      if (!cid || !vid || !apiBaseUrl?.trim()) return null;
+      const url = `${apiBaseUrl.replace(/\/+$/, "")}/api/widget/preview/conversations/messages`;
+      const res = await fetchWithNetworkRetry(
+        () =>
+          fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({
+              botId,
+              conversationId: cid,
+              chatVisitorId: vid,
+              ...(authToken ? { authToken } : {}),
+            }),
+          }),
+        { retries: 2, delayMs: 400 },
+      );
+      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; messages?: unknown[] };
+      if (!res.ok || !Array.isArray(data.messages) || data.messages.length === 0) return null;
+      const mapped = mapEmbedApiRowsToChatUIMessages(
+        data.messages as Parameters<typeof mapEmbedApiRowsToChatUIMessages>[0],
+      );
+      return mapped.length > 0 ? mapped : null;
+    },
+    [apiBaseUrl, botId, chatVisitorId, authToken],
+  );
+
   useEffect(() => {
     if (mode === "preview") {
       // Preview: do not restore assistrio_preview_* from sessionStorage on load; identity reset effect clears it.
@@ -428,13 +516,42 @@ export function AdminLiveChatAdapter({
     if (mode === "preview") {
       clearPreviewThreadSessionStorage(botId, previewVisitorStorageKey);
       setRecentChats([]);
-      conversationIdRef.current = null;
-      pendingStartNewRef.current = true;
+      const initCid = (serverConversationIdFromInit ?? "").trim();
+      if (initCid) {
+        conversationIdRef.current = initCid;
+        pendingStartNewRef.current = false;
+      } else {
+        conversationIdRef.current = null;
+        pendingStartNewRef.current = true;
+      }
       setMessages(welcomeMsg ? [welcomeMsg] : []);
     } else {
       setMessages([]);
     }
-  }, [botId, chatVisitorId, mode, welcomeMsg, previewVisitorStorageKey]);
+  }, [botId, chatVisitorId, mode, welcomeMsg, previewVisitorStorageKey, serverConversationIdFromInit]);
+
+  /** After preview `init`, load the thread from the API so the UI matches Mongo. Draft welcome (ref) is fallback if API is empty. */
+  useEffect(() => {
+    if (mode !== "preview") return;
+    const cid = (serverConversationIdFromInit ?? "").trim();
+    const vid = (chatVisitorId ?? "").trim();
+    if (!cid || !vid || !apiBaseUrl?.trim()) return;
+    const seq = (previewHydrationKeyRef.current += 1);
+    setMessagesLoading(true);
+    void (async () => {
+      const mapped = await fetchPreviewMessagesFromApi(cid);
+      if (seq !== previewHydrationKeyRef.current) return;
+      if (mapped && mapped.length > 0) {
+        setIncludeWelcomeInMessages(false);
+        setMessages(mapped);
+      } else {
+        const w = welcomeMsgRef.current;
+        setIncludeWelcomeInMessages(true);
+        setMessages(w ? [w] : []);
+      }
+      setMessagesLoading(false);
+    })();
+  }, [mode, serverConversationIdFromInit, chatVisitorId, apiBaseUrl, fetchPreviewMessagesFromApi]);
 
   /** No saved threads: show welcome in widget after list has loaded. */
   useEffect(() => {
@@ -674,6 +791,7 @@ export function AdminLiveChatAdapter({
                 },
               };
         const fileList = files?.length ? files : [];
+        const sp = (previewSourcePage ?? "").trim();
         const bodyPayload = {
           botId,
           message: value,
@@ -684,6 +802,7 @@ export function AdminLiveChatAdapter({
           ...(chatVisitorId ? { chatVisitorId } : {}),
           ...(authToken ? { authToken } : {}),
           ...(previewOverrides ? { previewOverrides } : {}),
+          ...(mode === "preview" && sp ? { previewContext: { sourcePage: sp } } : {}),
           ...speechPayload,
         };
         const bodyWithoutKeys = {
@@ -871,6 +990,7 @@ export function AdminLiveChatAdapter({
       chatVisitorId,
       authToken,
       previewOverrides,
+      previewSourcePage,
       visitorMultiChatEnabled,
       visitorMultiChatMax,
       readPreviewRecent,
