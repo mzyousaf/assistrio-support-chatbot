@@ -1,5 +1,6 @@
 import {
   buildFaqEmbeddingText,
+  buildQaEmbeddingText,
   buildNoteEmbeddingText,
   normalizeForEmbeddingInput,
   computeEmbeddingInputHash,
@@ -15,6 +16,14 @@ describe('faq-note-embedding.helper', () => {
     });
     it('trims question and answer', () => {
       expect(buildFaqEmbeddingText('  Q  ', '  A  ')).toBe('Question: Q\nAnswer: A');
+    });
+  });
+
+  describe('buildQaEmbeddingText', () => {
+    it('includes title, questions, and answer', () => {
+      expect(
+        buildQaEmbeddingText('Returns', ['How do I return?', 'Refund policy?'], 'You may return within 30 days.'),
+      ).toContain('Title: Returns');
     });
   });
 
@@ -75,5 +84,4 @@ describe('faq-note-embedding.helper', () => {
       expect(isEmbeddingValidForSemantic(undefined, hash, hash, embedding)).toBe(false);
     });
   });
-
-  });
+});

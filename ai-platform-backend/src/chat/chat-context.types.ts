@@ -85,4 +85,9 @@ export interface ChatKnowledgeContext {
     shouldUseFallback: boolean;
     shouldAnswerGenerally: boolean;
   };
+  /**
+   * True when the only evidence is a visitor-selected suggestion’s scoped `context` (not full RAG).
+   * Prompts the model to use that block as the sole source of company-specific facts for this turn.
+   */
+  suggestionScopeOnly?: boolean;
 }

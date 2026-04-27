@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import {
   Check, Code2, ExternalLink, FileText, Globe, GraduationCap, HelpCircle, Link2,
   Lock, MessagesSquare, MessageSquare, MoreHorizontal,
-  StickyNote, Trash2, UserCheck,
+  StickyNote, Table2, Trash2, UserCheck,
 } from 'lucide-react';
 import { getCustomerApiOrigin } from '../api/client';
 import { widgetSnippet } from '../lib/embedOrigin';
@@ -197,7 +197,8 @@ export function AgentCard({ bot, deleting, onDelete }: AgentCardProps) {
   const docs = bot.knowledgeDocs ?? 0;
   const faqs = bot.knowledgeFaqs ?? 0;
   const snippets = bot.knowledgeSnippets ?? 0;
-  const knowledgeTotal = docs + faqs + snippets;
+  const datasheets = bot.knowledgeDatasheets ?? 0;
+  const knowledgeTotal = docs + faqs + snippets + datasheets;
 
   return (
     <article
@@ -286,6 +287,15 @@ export function AgentCard({ bot, deleting, onDelete }: AgentCardProps) {
                 <span className="inline-flex items-center gap-1" title={`${snippets} snippet${snippets !== 1 ? 's' : ''}`}>
                   <StickyNote size={11} strokeWidth={2} className="text-gray-400" />
                   {snippets}
+                </span>
+              )}
+              {datasheets > 0 && (
+                <span
+                  className="inline-flex items-center gap-1"
+                  title={`${datasheets} datasheet${datasheets !== 1 ? 's' : ''}`}
+                >
+                  <Table2 size={11} strokeWidth={2} className="text-gray-400" />
+                  {datasheets}
                 </span>
               )}
             </span>

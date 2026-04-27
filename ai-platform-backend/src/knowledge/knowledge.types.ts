@@ -4,11 +4,11 @@
  * for future unified retrieval, ranking, and prompt building.
  */
 
-/** Source type for the unified knowledge model (documents, FAQs, notes, URL, HTML). */
-export type KnowledgeSourceType = 'document' | 'faq' | 'note' | 'url' | 'html';
+/** Source type for the unified knowledge model (documents, Q&A, snippets, URL, HTML, tables). */
+export type KnowledgeSourceType = 'document' | 'faq' | 'note' | 'url' | 'html' | 'table';
 
 /** All valid KnowledgeSourceType values (for schema enums and validation). */
-export const KNOWLEDGE_SOURCE_TYPES: KnowledgeSourceType[] = ['document', 'faq', 'note', 'url', 'html'];
+export const KNOWLEDGE_SOURCE_TYPES: KnowledgeSourceType[] = ['document', 'faq', 'note', 'url', 'html', 'table'];
 
 /** Status of a knowledge item (ready for use, failed, or pending). */
 export type KnowledgeItemStatus = 'ready' | 'failed' | 'pending';

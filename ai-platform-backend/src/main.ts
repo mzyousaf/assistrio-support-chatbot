@@ -7,7 +7,7 @@ import cors from '@fastify/cors';
 import type { FastifyRequest } from 'fastify';
 import multipart from '@fastify/multipart';
 import { AppModule } from './app.module';
-import { MAX_BOT_DOCUMENT_UPLOAD_BYTES } from './documents/bot-document-upload.constants';
+import { MAX_MULTIPART_FILE_BYTES } from './documents/bot-document-upload.constants';
 import {
   isBrowserOriginAllowedForCors,
   isReflectablePublicEmbedOrigin,
@@ -72,7 +72,7 @@ async function bootstrap() {
   });
 
   await app.getHttpAdapter().getInstance().register(multipart as never, {
-    limits: { fileSize: MAX_BOT_DOCUMENT_UPLOAD_BYTES },
+    limits: { fileSize: MAX_MULTIPART_FILE_BYTES },
     throwFileSizeLimit: true,
   });
   const port = process.env.PORT ?? 3001;

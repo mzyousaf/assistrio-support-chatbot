@@ -9,9 +9,6 @@ export function preserveUneditedBotFields(bot: CustomerBotDetail): Record<string
     status: bot.status === 'published' ? 'published' : 'draft',
     isPublic: bot.isPublic !== false,
     visibility: bot.visibility === 'private' ? 'private' : 'public',
-    messageLimitMode: bot.messageLimitMode === 'fixed_total' ? 'fixed_total' : 'none',
-    messageLimitTotal: bot.messageLimitTotal ?? null,
-    messageLimitUpgradeMessage: bot.messageLimitUpgradeMessage ?? null,
     chatUI: b.chatUI,
     leadCapture: b.leadCapture,
     faqs: Array.isArray(bot.faqs) ? bot.faqs : [],
@@ -19,6 +16,13 @@ export function preserveUneditedBotFields(bot: CustomerBotDetail): Record<string
     welcomeMessage: bot.welcomeMessage ?? '',
     welcomeMessageEnabled: bot.welcomeMessageEnabled !== false,
     knowledgeDescription: bot.knowledgeDescription ?? '',
+    knowledgeSnippets: Array.isArray(bot.knowledgeSnippets) ? bot.knowledgeSnippets : [],
+    knowledgeDatasheets: Array.isArray(bot.knowledgeDatasheets)
+      ? bot.knowledgeDatasheets
+      : (() => {
+          const legacy = (b as unknown as { knowledgeTables?: unknown }).knowledgeTables;
+          return Array.isArray(legacy) ? legacy : [];
+        })(),
     categories: Array.isArray(bot.categories)
       ? bot.categories
       : bot.category

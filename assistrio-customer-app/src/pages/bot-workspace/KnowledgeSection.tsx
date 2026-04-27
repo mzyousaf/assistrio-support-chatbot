@@ -1,14 +1,12 @@
 import {
   useCallback,
   useEffect,
-  useId,
   useMemo,
   useRef,
   useState,
   type ComponentProps,
-  type FormEvent,
 } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { appToast } from '@/lib/app-toast';
 import { FileIcon, defaultStyles } from 'react-file-icon';
 import {
@@ -16,10 +14,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Loader2,
-  MessageCircleQuestion,
-  Pencil,
   RefreshCw,
-  Save,
   Search,
   Sparkles,
   Trash2,
@@ -28,7 +23,6 @@ import {
 import {
   deleteCustomerBotDocument,
   getCustomerBotDocuments,
-  patchCustomerBot,
   patchCustomerBotDocument,
   postCustomerBotDocumentRequeue,
   postCustomerBotDocumentUpload,
@@ -36,7 +30,6 @@ import {
 } from '../../api/customerApi';
 import type { CustomerWorkspaceDocument } from '../../api/types';
 import { useBotWorkspace } from './BotWorkspaceContext';
-import { registerManualSaveGuard } from './workspaceManualSaveGuard';
 import { cn } from '@/lib/utils';
 import { ws as styles } from './workspace';
 import {
@@ -50,11 +43,7 @@ import {
   Modal,
   Select,
   Switch,
-  Textarea,
 } from '@/components/ui';
-import { WorkspaceSectionHeader } from './WorkspaceSectionHeader';
-
-const SECTION_NAV_LABEL = 'Knowledge Base';
 const cardClass =
   'w-full min-w-0 overflow-visible border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)] ring-1 ring-slate-900/[0.035]';
 
@@ -76,10 +65,6 @@ function newClientPendingDocumentId(): string {
   const c = globalThis.crypto?.randomUUID?.();
   return `${CLIENT_PENDING_DOC_PREFIX}${c ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`}`;
 }
-
-type FaqRow = { question: string; answer: string; active?: boolean };
-type KnowledgeTabId = 'documents' | 'faqs' | 'notes';
-type FaqEditModalState = { mode: 'create' | 'edit'; index: number; question: string; answer: string } | null;
 
 function previewText(text: string, maxLen: number): string {
   const t = text.replace(/\s+/g, ' ').trim();
@@ -314,8 +299,9 @@ function fileDocumentFileIconProps(
 }
 
 export function KnowledgeBaseSection() {
-  const { pathname } = useLocation();
-  const { bot, botId, softReload: softReloadBot } = useBotWorkspace();
+  const { bot, botId } = useBotWorkspace();
+  const navigate = useNavigate();
+  const kbBase = botId ? `/bots/${botId}/playground/knowledgebase` : '';
   const [rows, setRows] = useState<CustomerWorkspaceDocument[]>([]);
   const [total, setTotal] = useState(0);
   const [docCounts, setDocCounts] = useState<{
@@ -343,71 +329,23 @@ export function KnowledgeBaseSection() {
   const tableSelectAllRef = useRef<HTMLInputElement | null>(null);
   const [docLoading, setDocLoading] = useState(false);
   const [docErr, setDocErr] = useState<string | null>(null);
-  const [notesDirty, setNotesDirty] = useState(false);
-  const notesDirtyRef = useRef(false);
-  notesDirtyRef.current = notesDirty;
-  const [notesSaving, setNotesSaving] = useState(false);
-  const [faqSaving, setFaqSaving] = useState(false);
-  type PersistFaqsResult = { ok: true } | { ok: false; error: string };
-  const faqPersistTail = useRef<Promise<PersistFaqsResult>>(Promise.resolve({ ok: true }));
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [snippet, setSnippet] = useState('');
-  const [faqs, setFaqs] = useState<FaqRow[]>([]);
-  const faqsRef = useRef<FaqRow[]>([]);
-  faqsRef.current = faqs;
-  const [faqModal, setFaqModal] = useState<FaqEditModalState>(null);
-  const [faqModalAttempted, setFaqModalAttempted] = useState(false);
-  const [faqQuery, setFaqQuery] = useState('');
-  const [faqDeleteIndex, setFaqDeleteIndex] = useState<number | null>(null);
   const [docDeleteTarget, setDocDeleteTarget] = useState<{ id: string; label: string } | null>(null);
   const [docDeleteLoading, setDocDeleteLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   /** Client-only placeholder rows while multipart upload is in flight (survive background list refresh). */
   const pendingDocUploadIdsRef = useRef<Set<string>>(new Set());
-  const faqQuestionInputRef = useRef<HTMLInputElement | null>(null);
-  const faqFormId = useId();
 
   function closeDocDeleteModal() {
     setDocDeleteTarget(null);
     setDocDeleteLoading(false);
   }
 
-  const activeTab = useMemo<KnowledgeTabId>(() => {
-    const p = pathname.replace(/\/$/, '');
-    if (
-      p.endsWith('/playground/knowledgebase/documents') ||
-      p.endsWith('/knowledge/documents') ||
-      p.endsWith('/knowledge/files')
-    ) {
-      return 'documents';
-    }
-    if (p.endsWith('/playground/knowledgebase/faqs') || p.endsWith('/knowledge/faqs') || p.endsWith('/knowledge/qa')) {
-      return 'faqs';
-    }
-    return 'notes';
-  }, [pathname]);
-
-  const knowledgePageMeta = useMemo(() => {
-    switch (activeTab) {
-      case 'documents':
-        return {
-          pageTitle: 'Documents',
-          pageLead:
-            'Upload files, see when each one is indexed and ready, and choose which files the assistant may use in replies.',
-        };
-      case 'faqs':
-        return {
-          pageTitle: 'Questions & answers',
-          pageLead: 'Short Q&A pairs stored on your assistant. Each change saves immediately.',
-        };
-      default:
-        return {
-          pageTitle: 'Notes',
-          pageLead: 'Freeform context alongside documents and Q&A.',
-        };
-    }
-  }, [activeTab]);
+  const knowledgePageMeta = {
+    pageTitle: 'Documents',
+    pageLead:
+      'Add files with the button or the drop zone, then use the list to track training status, enable or disable, and remove files. Uploading starts saving immediately; you do not need a separate save action.',
+  };
 
   const closeDocFilterMenu = useCallback(() => setOpenDocFilter(null), []);
 
@@ -465,44 +403,6 @@ export function KnowledgeBaseSection() {
     const t = window.setInterval(() => void loadDocs({ background: true }), 4000);
     return () => window.clearInterval(t);
   }, [botId, hasPendingIngestion, uploading, loadDocs]);
-
-  useEffect(() => {
-    if (!bot) return;
-    const raw = Array.isArray(bot.faqs) ? bot.faqs : [];
-    const fr: FaqRow[] = raw
-      .filter((f) => f.active !== false)
-      .map((f) => ({
-        question: String(f.question ?? ''),
-        answer: String(f.answer ?? ''),
-        active: true,
-      }))
-      .filter((f) => f.question && f.answer);
-    setFaqs(fr);
-    if (!notesDirtyRef.current) {
-      setSnippet(String(bot.knowledgeDescription ?? ''));
-      setNotesDirty(false);
-    }
-    setSaveError(null);
-  }, [bot]);
-
-  const faqHeaderDescription = useMemo(() => {
-    if (faqs.length === 0) {
-      return 'Pair common visitor questions with concise answers. Both fields are required for each pair.';
-    }
-    return `${faqs.length} question${faqs.length === 1 ? '' : 's'} · Each change saves immediately.`;
-  }, [faqs.length]);
-
-  const faqEntries = useMemo(() => {
-    const q = faqQuery.trim().toLowerCase();
-    return faqs
-      .map((faq, index) => ({ faq, index }))
-      .filter(({ faq }) => {
-        if (!q) return true;
-        return (
-          faq.question.toLowerCase().includes(q) || faq.answer.toLowerCase().includes(q)
-        );
-      });
-  }, [faqs, faqQuery]);
 
   /** Counts by indexing step / pipeline status (full list — for filter). */
   const docStatusCounts = useMemo(() => {
@@ -948,111 +848,6 @@ export function KnowledgeBaseSection() {
     });
   }
 
-  function markNotesDirty() {
-    setNotesDirty(true);
-    setSaveError(null);
-  }
-
-  async function persistFaqs(nextFaqs: FaqRow[]): Promise<PersistFaqsResult> {
-    if (!botId) return { ok: false, error: 'Missing assistant.' };
-    const cleaned = nextFaqs
-      .map((f) => ({
-        question: f.question.trim(),
-        answer: f.answer.trim(),
-        active: f.active !== false,
-      }))
-      .filter((f) => f.question && f.answer);
-
-    const run = (async (): Promise<PersistFaqsResult> => {
-      setFaqSaving(true);
-      setSaveError(null);
-      try {
-        const res = await patchCustomerBot(botId, { faqs: cleaned });
-        if (!res.ok) {
-          setSaveError(res.error);
-          return { ok: false, error: res.error };
-        }
-        setFaqs(cleaned.map((f) => ({ question: f.question, answer: f.answer, active: f.active !== false })));
-        void softReloadBot();
-        return { ok: true };
-      } finally {
-        setFaqSaving(false);
-      }
-    })();
-
-    const prev = faqPersistTail.current;
-    const chained = prev.then(() => run);
-    faqPersistTail.current = chained.catch(() => ({ ok: false, error: 'Could not save. Try again.' }));
-    return chained;
-  }
-
-  async function onSaveKnowledge(e: FormEvent) {
-    e.preventDefault();
-    if (!bot || !botId) return;
-    if (!notesDirty || notesSaving) return;
-    setNotesSaving(true);
-    setSaveError(null);
-    const res = await patchCustomerBot(botId, { knowledgeDescription: snippet.trim() });
-    setNotesSaving(false);
-    if (!res.ok) {
-      setSaveError(res.error);
-      return;
-    }
-    setNotesDirty(false);
-    void softReloadBot();
-  }
-
-  async function commitFaqModal() {
-    if (!faqModal) return;
-    setFaqModalAttempted(true);
-    const question = faqModal.question.trim();
-    const answer = faqModal.answer.trim();
-    if (!question || !answer) return;
-    const base = faqsRef.current;
-    const next =
-      faqModal.mode === 'create'
-        ? [...base, { question, answer, active: true }]
-        : base.map((item, idx) => (idx === faqModal.index ? { ...item, question, answer } : item));
-    const r = await persistFaqs(next);
-    if (!r.ok) {
-      appToast.error('Could not save Q&A', { description: r.error });
-      return;
-    }
-    const successHeadline = faqModal.mode === 'create' ? 'Q&A added' : 'Q&A updated';
-    setFaqModal(null);
-    setFaqModalAttempted(false);
-    queueMicrotask(() =>
-      appToast.success(successHeadline, {
-        description: 'Saved to this assistant.',
-      }),
-    );
-  }
-
-  const discardNotes = useCallback(() => {
-    if (!bot) return;
-    setSnippet(String(bot.knowledgeDescription ?? ''));
-    setNotesDirty(false);
-    setSaveError(null);
-  }, [bot]);
-
-  useEffect(() => {
-    return registerManualSaveGuard('knowledge-notes', () => notesDirty, discardNotes);
-  }, [notesDirty, discardNotes]);
-
-  const faqModalOpen = faqModal != null;
-  const faqModalMode = faqModal?.mode ?? null;
-  useEffect(() => {
-    if (!faqModalOpen) return;
-    setFaqModalAttempted(false);
-    const t = window.setTimeout(() => {
-      const el = faqQuestionInputRef.current;
-      if (!el) return;
-      el.focus();
-      if (faqModalMode === 'create') el.select();
-    }, 0);
-    return () => window.clearTimeout(t);
-  }, [faqModalOpen, faqModalMode]);
-
   if (!bot || !botId) return null;
 
   return (
@@ -1066,7 +861,7 @@ export function KnowledgeBaseSection() {
         tabIndex={-1}
         onChange={(ev) => void onUploadFileChange(ev)}
       />
-      <form className="flex min-h-0 w-full flex-1 flex-col" onSubmit={(e) => void onSaveKnowledge(e)}>
+      <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col">
         <div className="w-full min-w-0 flex-1 pb-10">
           <header className={styles.workspaceEditorPageHeader}>
             <div className={styles.workspaceEditorTitleBlock}>
@@ -1076,61 +871,23 @@ export function KnowledgeBaseSection() {
               </div>
             </div>
             <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-end sm:pt-0">
-              {activeTab === 'documents' ? (
-                <Button
-                  type="button"
-                  variant="primary"
-                  size="sm"
-                  disabled={uploading}
-                  onClick={() => fileInputRef.current?.click()}
-                  className={cn(
-                    styles.workspaceEditorButtonLabel,
-                    'h-9 w-full gap-1.5 px-4 shadow-sm sm:w-auto sm:min-w-[9.5rem]',
-                  )}
-                  aria-busy={uploading || undefined}
-                >
-                  <Upload size={15} strokeWidth={2} aria-hidden />
-                  {uploading ? 'Uploading' : 'Add files'}
-                </Button>
-              ) : activeTab === 'notes' ? (
-                <Button
-                  type="submit"
-                  variant="primary"
-                  size="sm"
-                  disabled={!notesDirty || notesSaving}
-                  className={cn(
-                    styles.workspaceEditorButtonLabel,
-                    'h-9 w-full gap-1.5 px-4 shadow-sm sm:w-auto sm:min-w-[9.5rem]',
-                  )}
-                  aria-busy={notesSaving || undefined}
-                  aria-label={notesSaving ? 'Saving notes' : `Save ${SECTION_NAV_LABEL} notes`}
-                >
-                  {notesSaving ? (
-                    <>
-                      <Loader2 size={15} strokeWidth={2} className="animate-spin opacity-90" aria-hidden />
-                      Saving...
-                    </>
-                  ) : (
-                    <>
-                      <Save size={15} strokeWidth={2} aria-hidden />
-                      Save notes
-                    </>
-                  )}
-                </Button>
-              ) : null}
+              <Button
+                type="button"
+                variant="primary"
+                size="sm"
+                disabled={uploading}
+                onClick={() => fileInputRef.current?.click()}
+                className={cn(
+                  styles.workspaceEditorButtonLabel,
+                  'h-9 w-full gap-1.5 px-4 shadow-sm sm:w-auto sm:min-w-[9.5rem]',
+                )}
+                aria-busy={uploading || undefined}
+              >
+                <Upload size={15} strokeWidth={2} aria-hidden />
+                {uploading ? 'Uploading' : 'Add files'}
+              </Button>
             </div>
           </header>
-
-          {saveError ? (
-            <div
-              className={cn(
-                styles.workspaceEditorBannerText,
-                'mb-4 rounded-lg border border-[var(--color-danger-border)] bg-[var(--color-danger-bg)] px-3.5 py-2.5 text-[var(--color-danger-text-emphasis)]',
-              )}
-            >
-              {saveError}
-            </div>
-          ) : null}
 
           {docErr ? (
             <div
@@ -1148,10 +905,8 @@ export function KnowledgeBaseSection() {
             role="region"
             aria-label={knowledgePageMeta.pageTitle}
           >
-            {activeTab === 'documents' ? (
-              <div className="flex flex-col gap-5">
+            <div className="flex flex-col gap-5">
                 <div>
-                  <p className="mb-2 text-xs font-medium text-slate-500">Documents</p>
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
                     {(
                       [
@@ -1519,7 +1274,7 @@ export function KnowledgeBaseSection() {
                         <table className="w-full min-w-[46rem] table-fixed border-collapse text-left text-sm">
                           <colgroup>
                             <col className="w-10" />
-                            <col />
+                            <col className="min-w-0 w-[30%] sm:w-[32%]" />
                             <col className="w-[6.75rem] sm:w-28" />
                             <col className="w-[7.5rem] sm:w-[8.5rem]" />
                             <col className="w-[7rem] sm:w-32" />
@@ -1649,8 +1404,8 @@ export function KnowledgeBaseSection() {
                                       aria-label={`Select ${fileLabel}`}
                                     />
                                   </td>
-                                  <td className="min-w-0 px-2 py-2.5 align-middle sm:px-3">
-                                    <div className="flex min-w-0 items-center gap-2">
+                                  <td className="min-w-0 overflow-hidden px-2 py-2.5 align-middle sm:px-3">
+                                    <div className="flex min-w-0 max-w-full items-center gap-2">
                                       <span
                                         className="inline-flex aspect-[40/48] h-6 w-auto max-h-6 shrink-0 overflow-hidden rounded-[2px] ring-1 ring-slate-200/65 shadow-sm"
                                         title={ftLabel}
@@ -1658,14 +1413,34 @@ export function KnowledgeBaseSection() {
                                         <FileIcon {...fileDocumentFileIconProps(row.fileName, row.fileType)} />
                                         <span className="sr-only">{ftLabel}</span>
                                       </span>
-                                      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                                        <span
-                                          className="min-w-0 truncate font-normal text-slate-800"
-                                          title={fileLabel}
-                                        >
-                                          {fileLabel}
-                                        </span>
-                                        <span className="text-xs tabular-nums text-slate-500">{size}</span>
+                                      <div className="min-w-0 max-w-full flex-1 overflow-hidden">
+                                        {isPendingRow || !documentId ? (
+                                          <>
+                                            <span
+                                              className="block min-w-0 truncate font-normal text-slate-800"
+                                              title={fileLabel}
+                                            >
+                                              {fileLabel}
+                                            </span>
+                                            <span className="mt-0.5 block text-xs tabular-nums text-slate-500">{size}</span>
+                                          </>
+                                        ) : (
+                                          <button
+                                            type="button"
+                                            className="block w-full min-w-0 max-w-full overflow-hidden border-0 bg-transparent p-0 text-left"
+                                            onClick={() => void navigate(`${kbBase}/documents/${encodeURIComponent(documentId)}`)}
+                                          >
+                                            <span
+                                              className="block min-w-0 truncate font-normal text-slate-800 underline decoration-slate-300 decoration-1 underline-offset-2 hover:text-teal-700 hover:decoration-teal-600"
+                                              title={fileLabel}
+                                            >
+                                              {fileLabel}
+                                            </span>
+                                            <span className="mt-0.5 block text-xs tabular-nums text-slate-500">
+                                              {size}
+                                            </span>
+                                          </button>
+                                        )}
                                       </div>
                                     </div>
                                   </td>
@@ -1857,389 +1632,10 @@ export function KnowledgeBaseSection() {
                   </CardBody>
                 </Card>
               </div>
-            ) : null}
-
-            {activeTab === 'faqs' ? (
-              <Card className={cardClass}>
-                <CardBody className="w-full min-w-0 px-5 py-5 sm:px-6 sm:py-6">
-                  <section className={styles.workspaceEditorCardSection} aria-labelledby="knowledge-faqs">
-                    <WorkspaceSectionHeader
-                      id="knowledge-faqs"
-                      title="Questions & answers"
-                      description={faqHeaderDescription}
-                      inlineEnd={
-                        <Button
-                          type="button"
-                          variant="primary"
-                          size="sm"
-                          onClick={() =>
-                            setFaqModal({ mode: 'create', index: -1, question: '', answer: '' })
-                          }
-                        >
-                          Add Q&amp;A
-                        </Button>
-                      }
-                    />
-                    {faqs.length > 2 || faqQuery.trim() ? (
-                      <div className="mt-4">
-                        <FieldRow
-                          label="Search"
-                          htmlFor="knowledge-faq-search"
-                          helperText={
-                            faqs.length > 2
-                              ? 'Filter by words in the question or answer.'
-                              : 'Showing search because a filter is active.'
-                          }
-                          className="max-w-md"
-                        >
-                          <Input
-                            id="knowledge-faq-search"
-                            quiet
-                            value={faqQuery}
-                            onChange={(e) => setFaqQuery(e.target.value)}
-                            placeholder="Search FAQs…"
-                            leadingIcon={<Search size={16} strokeWidth={2} className="text-slate-400" aria-hidden />}
-                            autoComplete="off"
-                          />
-                        </FieldRow>
-                      </div>
-                    ) : null}
-                    <div className="mt-4 space-y-2">
-                      {faqs.length === 0 ? (
-                        <div
-                          className={cn(
-                            'rounded-xl border border-dashed border-slate-200/90 bg-slate-50/80 px-5 py-8 text-center',
-                          )}
-                        >
-                          <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm ring-1 ring-slate-200/80">
-                            <MessageCircleQuestion size={20} strokeWidth={1.75} className="text-teal-600" aria-hidden />
-                          </div>
-                          <p className="mt-3 text-sm font-semibold text-slate-900">No Q&amp;A yet</p>
-                          <p className="mx-auto mt-1.5 max-w-sm text-sm leading-relaxed text-slate-500">
-                            Add pairs for pricing, hours, shipping, or policies—keep answers short and factual.
-                          </p>
-                          <Button
-                            type="button"
-                            variant="primary"
-                            size="sm"
-                            className="mt-5"
-                            onClick={() =>
-                              setFaqModal({ mode: 'create', index: -1, question: '', answer: '' })
-                            }
-                          >
-                            Add your first Q&amp;A
-                          </Button>
-                        </div>
-                      ) : faqEntries.length === 0 ? (
-                        <div className={styles.knowledgeEmpty}>
-                          <p className="m-0">No matches for &ldquo;{faqQuery.trim()}&rdquo;.</p>
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            size="sm"
-                            className="mt-3"
-                            onClick={() => setFaqQuery('')}
-                          >
-                            Clear search
-                          </Button>
-                        </div>
-                      ) : (
-                        faqEntries.map(({ faq, index: i }) => {
-                          const q = faq.question.trim() || 'Untitled question';
-                          const answerPreview = previewText(faq.answer.trim() || 'No answer yet.', 180);
-                          return (
-                            <article
-                              key={i}
-                              className="rounded-lg border border-slate-200/80 bg-white ring-1 ring-slate-900/[0.02] transition-colors hover:border-slate-300/90"
-                            >
-                              <div className="flex gap-3 p-3.5 sm:gap-4 sm:p-4">
-                                <div
-                                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-slate-100 text-xs font-semibold tabular-nums text-slate-600"
-                                  aria-hidden
-                                >
-                                  {i + 1}
-                                </div>
-                                <button
-                                  type="button"
-                                  className="min-w-0 flex-1 rounded-md text-left outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
-                                  onClick={() =>
-                                    setFaqModal({
-                                      mode: 'edit',
-                                      index: i,
-                                      question: faq.question,
-                                      answer: faq.answer,
-                                    })
-                                  }
-                                >
-                                  <p className="m-0 text-[0.6875rem] font-semibold uppercase tracking-wide text-slate-400">
-                                    Question
-                                  </p>
-                                  <p className="mt-0.5 text-sm font-semibold leading-snug text-slate-900">{q}</p>
-                                  <p className="mt-3 text-[0.6875rem] font-semibold uppercase tracking-wide text-slate-400">
-                                    Answer
-                                  </p>
-                                  <p className="mt-0.5 line-clamp-3 text-sm leading-relaxed text-slate-600">
-                                    {answerPreview}
-                                  </p>
-                                </button>
-                                <div className="flex shrink-0 flex-col gap-1.5 sm:flex-row sm:items-start">
-                                  <Button
-                                    type="button"
-                                    variant="secondary"
-                                    size="sm"
-                                    className="gap-0 px-2"
-                                    onClick={() =>
-                                      setFaqModal({
-                                        mode: 'edit',
-                                        index: i,
-                                        question: faq.question,
-                                        answer: faq.answer,
-                                      })
-                                    }
-                                    aria-label={`Edit: ${q}`}
-                                  >
-                                    <Pencil size={14} strokeWidth={2} aria-hidden />
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    className="px-2 text-[var(--color-danger-text-emphasis)] hover:bg-[var(--color-danger-bg)]"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setFaqDeleteIndex(i);
-                                    }}
-                                    aria-label={`Delete: ${q}`}
-                                  >
-                                    <Trash2 size={14} strokeWidth={2} aria-hidden />
-                                  </Button>
-                                </div>
-                              </div>
-                            </article>
-                          );
-                        })
-                      )}
-                    </div>
-                  </section>
-                </CardBody>
-              </Card>
-            ) : null}
-
-            {activeTab === 'notes' ? (
-              <Card className={cardClass}>
-                <CardBody className="w-full min-w-0 px-5 py-5 sm:px-6 sm:py-6">
-                  <section className={styles.workspaceEditorCardSection} aria-labelledby="knowledge-notes">
-                    <WorkspaceSectionHeader
-                      id="knowledge-notes"
-                      title="Notes"
-                      description="Add freeform context your assistant can use while answering."
-                    />
-                    <div className="mt-4">
-                      <FieldRow
-                        label="Knowledge notes"
-                        htmlFor="knowledge-notes-text"
-                        helperText="Keep this focused on evergreen context, policies, and important details."
-                      >
-                        <Textarea
-                          id="knowledge-notes-text"
-                          quiet
-                          rows={12}
-                          value={snippet}
-                          onChange={(e) => {
-                            setSnippet(e.target.value);
-                            markNotesDirty();
-                          }}
-                        />
-                      </FieldRow>
-                    </div>
-                  </section>
-                </CardBody>
-              </Card>
-            ) : null}
           </div>
         </div>
-      </form>
+      </div>
 
-      <Modal
-        open={faqModal != null}
-        onClose={() => {
-          setFaqModal(null);
-          setFaqModalAttempted(false);
-        }}
-        title={faqModal?.mode === 'create' ? 'Add question & answer' : 'Edit question & answer'}
-        description="Visitors may ask similar questions—keep the question natural and the answer direct."
-        size="lg"
-        footer={
-          <>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              disabled={faqSaving}
-              onClick={() => {
-                setFaqModal(null);
-                setFaqModalAttempted(false);
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              form={faqFormId}
-              variant="primary"
-              size="sm"
-              disabled={faqSaving}
-              className="gap-1.5"
-              aria-busy={faqSaving || undefined}
-            >
-              {faqSaving ? (
-                <>
-                  <Loader2 size={15} strokeWidth={2} className="animate-spin opacity-90" aria-hidden />
-                  {faqModal?.mode === 'create' ? 'Adding…' : 'Saving…'}
-                </>
-              ) : faqModal?.mode === 'create' ? (
-                'Add to list'
-              ) : (
-                'Save changes'
-              )}
-            </Button>
-          </>
-        }
-      >
-        <form
-          id={faqFormId}
-          className="space-y-5"
-          onSubmit={(e) => {
-            e.preventDefault();
-            commitFaqModal();
-          }}
-        >
-          <FieldRow
-            label="Question"
-            htmlFor="knowledge-faq-question"
-            helperText="Phrase it like a customer would (not keywords only)."
-            error={
-              faqModalAttempted && !String(faqModal?.question ?? '').trim()
-                ? 'Enter a question.'
-                : undefined
-            }
-          >
-            <Input
-              ref={faqQuestionInputRef}
-              id="knowledge-faq-question"
-              quiet
-              value={faqModal?.question ?? ''}
-              invalid={Boolean(faqModalAttempted && !String(faqModal?.question ?? '').trim())}
-              onChange={(e) =>
-                setFaqModal((prev) => (prev ? { ...prev, question: e.target.value } : prev))
-              }
-              placeholder="What are your support hours?"
-              autoComplete="off"
-            />
-          </FieldRow>
-          <FieldRow
-            label="Answer"
-            htmlFor="knowledge-faq-answer"
-            helperText="Aim for one short paragraph. You can edit again anytime."
-            error={
-              faqModalAttempted && !String(faqModal?.answer ?? '').trim()
-                ? 'Enter an answer.'
-                : undefined
-            }
-          >
-            <Textarea
-              id="knowledge-faq-answer"
-              quiet
-              rows={7}
-              value={faqModal?.answer ?? ''}
-              invalid={Boolean(faqModalAttempted && !String(faqModal?.answer ?? '').trim())}
-              onChange={(e) =>
-                setFaqModal((prev) => (prev ? { ...prev, answer: e.target.value } : prev))
-              }
-              onKeyDown={(e) => {
-                if (e.key !== 'Enter') return;
-                if (!(e.metaKey || e.ctrlKey)) return;
-                e.preventDefault();
-                commitFaqModal();
-              }}
-              placeholder="We provide support Monday to Friday, 9am to 6pm (local time)."
-            />
-          </FieldRow>
-          <p className={cn(styles.workspaceEditorHelperText, 'm-0')}>
-            Tip: <span className="font-medium text-slate-600">Ctrl+Enter</span> saves from the answer field.
-          </p>
-        </form>
-      </Modal>
-
-      <Modal
-        open={faqDeleteIndex != null}
-        onClose={() => setFaqDeleteIndex(null)}
-        title="Delete this Q&A?"
-        tone="danger"
-        description={
-          faqDeleteIndex != null && faqs[faqDeleteIndex] ? (
-            <span className="font-medium text-slate-800">
-              &ldquo;
-              {previewText(faqs[faqDeleteIndex].question.trim() || 'Untitled', 100)}
-              &rdquo;
-            </span>
-          ) : (
-            'This permanently deletes the pair. This action cannot be undone.'
-          )
-        }
-        footer={
-          <>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              disabled={faqSaving}
-              onClick={() => setFaqDeleteIndex(null)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="danger"
-              size="sm"
-              disabled={faqSaving}
-              className="gap-1.5"
-              aria-busy={faqSaving || undefined}
-              onClick={() => {
-                void (async () => {
-                  const idx = faqDeleteIndex;
-                  if (idx == null) return;
-                  const next = faqsRef.current.filter((_, i) => i !== idx);
-                  const r = await persistFaqs(next);
-                  if (!r.ok) {
-                    appToast.error('Could not delete Q&A', { description: r.error });
-                    return;
-                  }
-                  setFaqDeleteIndex(null);
-                  queueMicrotask(() =>
-                    appToast.success('Q&A removed', {
-                      description: 'That entry is no longer in this assistant’s list.',
-                    }),
-                  );
-                })();
-              }}
-            >
-              {faqSaving ? (
-                <>
-                  <Loader2 size={15} strokeWidth={2} className="animate-spin opacity-90" aria-hidden />
-                  Deleting…
-                </>
-              ) : (
-                'Delete Q&A'
-              )}
-            </Button>
-          </>
-        }
-      >
-        <p className={cn(styles.workspaceEditorHelperText, 'm-0')}>
-          You can add this question again later with <span className="font-medium text-slate-700">Add Q&amp;A</span>.
-        </p>
-      </Modal>
 
       <Modal
         open={docDeleteTarget != null}
@@ -2257,14 +1653,21 @@ export function KnowledgeBaseSection() {
         }
         footer={
           <>
-            <Button type="button" variant="secondary" size="sm" disabled={docDeleteLoading} onClick={closeDocDeleteModal}>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className={styles.knowledgeFormActionSecondary}
+              disabled={docDeleteLoading}
+              onClick={closeDocDeleteModal}
+            >
               Cancel
             </Button>
             <Button
               type="button"
               variant="danger"
               size="sm"
-              className="gap-1.5"
+              className={styles.knowledgeModalActionDanger}
               disabled={docDeleteLoading}
               aria-busy={docDeleteLoading || undefined}
               onClick={() => {
@@ -2308,6 +1711,10 @@ export function KnowledgeBaseSection() {
       </Modal>
     </div>
   );
+}
+
+export function KnowledgeDocumentsPage() {
+  return <KnowledgeBaseSection />;
 }
 
 export function KnowledgeSection() {

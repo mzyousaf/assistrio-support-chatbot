@@ -21,13 +21,28 @@ export const BOT_FIELD_MAX = {
   thingsToAvoid: 4000,
   welcomeMessage: 2000,
   knowledgeDescription: 2000,
-  /** Per suggested-question string */
+  /** Titled knowledge snippet (title) */
+  knowledgeSnippetTitle: 200,
+  /** Single snippet / cell text */
+  knowledgeSnippetBody: 12_000,
+  /** Q&A group title */
+  knowledgeQaTitle: 200,
+  /** One phrasing in a Q&A group */
+  knowledgeQaQuestion: 2000,
+  knowledgeQaAnswer: 12_000,
+  /** Per spreadsheet table title */
+  knowledgeDatasheetTitle: 200,
+  knowledgeDatasheetCell: 2000,
+  /** Original import filename stored with a datasheet (metadata only). */
+  knowledgeDatasheetImportFileName: 255,
+  /** Shown on the chip */
   exampleQuestion: 140,
+  /** Per-suggestion scoped facts (first reply when chip has context; no full KB) */
+  exampleQuestionContext: 4000,
   /** Single custom category or comma-joined (customer UI) */
   categoryText: 200,
   senderName: 120,
   scrollToBottomLabel: 120,
-  messageLimitUpgradeMessage: 500,
   /** Header menu quick link label */
   menuQuickLinkText: 120,
   /** Path or full URL for a quick link */
@@ -41,3 +56,10 @@ export function clampStr(s: string, max: number): string {
 
 /** Max `leadCapture.fields` entries per bot (UI + API normalization). */
 export const LEAD_CAPTURE_FIELDS_MAX = 10;
+
+export const KNOWLEDGE_SNIPPETS_MAX = 80;
+export const KNOWLEDGE_QA_MAX = 200;
+export const KNOWLEDGE_TABLES_MAX = 40;
+export const KNOWLEDGE_TABLE_MAX_COLUMNS = 64;
+export const KNOWLEDGE_TABLE_MAX_ROWS = 2000;
+export const KNOWLEDGE_QA_QUESTIONS_MAX = 24;

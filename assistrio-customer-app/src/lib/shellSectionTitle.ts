@@ -15,6 +15,22 @@ export function customerShellSectionTitle(pathname: string): string | null {
   const workspace = /^\/bots\/[^/]+\/(.+)$/.exec(path);
   if (workspace) {
     const rest = workspace[1];
+    if (rest === 'playground/knowledgebase' || rest.startsWith('playground/knowledgebase/')) {
+      if (rest.startsWith('playground/knowledgebase/documents')) return 'Agent · Documents';
+      if (rest.startsWith('playground/knowledgebase/snippets') || rest === 'playground/knowledgebase/notes')
+        return 'Agent · Snippets';
+      if (rest.startsWith('playground/knowledgebase/datasheets') || rest === 'playground/knowledgebase/tables')
+        return 'Agent · Datasheets';
+      if (rest.startsWith('playground/knowledgebase/faqs')) return 'Agent · Q&A';
+      if (rest.startsWith('playground/knowledgebase/suggestions')) return 'Agent · Suggestions';
+    }
+    if (rest === 'knowledge' || rest.startsWith('knowledge/')) {
+      if (rest.startsWith('knowledge/documents')) return 'Agent · Documents';
+      if (rest.startsWith('knowledge/snippets') || rest === 'knowledge/notes') return 'Agent · Snippets';
+      if (rest.startsWith('knowledge/datasheets') || rest === 'knowledge/tables') return 'Agent · Datasheets';
+      if (rest.startsWith('knowledge/faqs')) return 'Agent · Q&A';
+      if (rest.startsWith('knowledge/suggestions')) return 'Agent · Suggestions';
+    }
     const labels: Record<string, string> = {
       'playground/profile': 'Agent · Profile',
       'playground/behavior': 'Agent · Behavior',
@@ -23,11 +39,11 @@ export function customerShellSectionTitle(pathname: string): string | null {
       'playground/appearance': 'Agent · Widget Appearance',
       'playground/deploy': 'Agent · Deploy & Go Live',
       'playground/publish': 'Agent · Deploy & Go Live',
-      'playground/knowledgebase/documents': 'Agent · Documents',
-      'playground/knowledgebase/notes': 'Agent · Notes',
-      'playground/knowledgebase/faqs': 'Agent · Q&A',
       'knowledge/documents': 'Agent · Documents',
-      'knowledge/notes': 'Agent · Notes',
+      'knowledge/snippets': 'Agent · Snippets',
+      'knowledge/notes': 'Agent · Snippets',
+      'knowledge/datasheets': 'Agent · Datasheets',
+      'knowledge/tables': 'Agent · Datasheets',
       'knowledge/faqs': 'Agent · Q&A',
       'activity/chat-logs': 'Agent · Conversations',
       'insights/conversations': 'Agent · Conversations',

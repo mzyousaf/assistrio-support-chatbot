@@ -3,8 +3,20 @@ import type { LeadFieldType } from '../../models/bot.schema';
 import type { AllowedOrigin } from '../../bots/origin-validation.util';
 import { normalizeUserAllowedOriginInput } from '../../bots/origin-validation.util';
 import { normalizeVisitorMultiChatMax } from '../../bots/visitor-multi-chat.util';
-import { BOT_FIELD_MAX, clampStr, LEAD_CAPTURE_FIELDS_MAX } from './bot-field-limits';
+import {
+  BOT_FIELD_MAX,
+  clampStr,
+  KNOWLEDGE_QA_MAX,
+  KNOWLEDGE_QA_QUESTIONS_MAX,
+  KNOWLEDGE_SNIPPETS_MAX,
+  KNOWLEDGE_TABLES_MAX,
+  KNOWLEDGE_TABLE_MAX_COLUMNS,
+  KNOWLEDGE_TABLE_MAX_ROWS,
+  LEAD_CAPTURE_FIELDS_MAX,
+} from './bot-field-limits';
+import { MAX_DATASHEET_IMPORT_BYTES } from '../../documents/bot-document-upload.constants';
 import { normalizeQuickLinkIcon } from './quick-link-icon-ids';
+import { type ExampleQuestionDoc, normalizeExampleQuestionsForStorage } from './example-questions.util';
 
 const LEAD_TYPES: LeadFieldType[] = ['text', 'email', 'phone', 'number', 'url'];
 
@@ -80,28 +92,136 @@ function normalizeLeadCapture(input: unknown): BotLeadCaptureV2 {
   return { enabled: false, fields: [], ...extra };
 }
 
-function normalizeFaqs(input: unknown): Array<{ question: string; answer: string; active?: boolean }> {
+export type NormalizedFaqV2 = {
+  title: string;
+  questions: string[];
+  question: string;
+  answer: string;
+  active: boolean;
+};
+
+function normalizeFaqs(input: unknown): NormalizedFaqV2[] {
   const parsed = typeof input === 'string' ? (() => { try { return JSON.parse(input); } catch { return []; } })() : input;
   if (!Array.isArray(parsed)) return [];
-  return parsed
-    .map((item: unknown) => ({
-      question: typeof (item as { question?: unknown })?.question === 'string' ? (item as { question: string }).question.trim() : '',
-      answer: typeof (item as { answer?: unknown })?.answer === 'string' ? (item as { answer: string }).answer.trim() : '',
-      active: (item as { active?: unknown })?.active === false ? false : true,
-    }))
-    .filter((f) => f.question && f.answer);
+  const out: NormalizedFaqV2[] = [];
+  for (const item of parsed) {
+    if (!item || typeof item !== 'object') continue;
+    const o = item as Record<string, unknown>;
+    const title = clampStr(String(o.title ?? '').trim(), BOT_FIELD_MAX.knowledgeQaTitle);
+    const answer = clampStr(String(o.answer ?? '').trim(), BOT_FIELD_MAX.knowledgeQaAnswer);
+    const legacyQ = clampStr(String(o.question ?? '').trim(), BOT_FIELD_MAX.knowledgeQaQuestion);
+    let questions: string[] = [];
+    if (Array.isArray(o.questions)) {
+      questions = o.questions
+        .map((q) => clampStr(String(q ?? '').trim(), BOT_FIELD_MAX.knowledgeQaQuestion))
+        .filter(Boolean);
+    }
+    if (legacyQ) questions = [legacyQ, ...questions.filter((q) => q !== legacyQ)];
+    questions = [...new Set(questions)].slice(0, KNOWLEDGE_QA_QUESTIONS_MAX);
+    if (!answer.trim()) continue;
+    if (questions.length === 0 && !title.trim()) continue;
+    if (questions.length === 0) questions = [title || 'Question'];
+    const question = questions[0] ?? '';
+    out.push({
+      title,
+      questions,
+      question,
+      answer,
+      active: o.active === false ? false : true,
+    });
+    if (out.length >= KNOWLEDGE_QA_MAX) break;
+  }
+  return out;
+}
+
+function normalizeKnowledgeSnippets(
+  input: unknown,
+): Array<{ title: string; snippet: string; active: boolean }> {
+  const parsed = typeof input === 'string' ? (() => { try { return JSON.parse(input); } catch { return []; } })() : input;
+  if (!Array.isArray(parsed)) return [];
+  const out: Array<{ title: string; snippet: string; active: boolean }> = [];
+  for (const item of parsed) {
+    if (!item || typeof item !== 'object') continue;
+    const o = item as Record<string, unknown>;
+    const title = clampStr(String(o.title ?? '').trim(), BOT_FIELD_MAX.knowledgeSnippetTitle) || 'Snippet';
+    const snippet = clampStr(String(o.snippet ?? o.description ?? '').trim(), BOT_FIELD_MAX.knowledgeSnippetBody);
+    if (!snippet) continue;
+    out.push({ title, snippet, active: o.active === false ? false : true });
+    if (out.length >= KNOWLEDGE_SNIPPETS_MAX) break;
+  }
+  return out;
+}
+
+function normalizeKnowledgeDatasheets(
+  input: unknown,
+): Array<{
+  title: string;
+  columns: string[];
+  rows: string[][];
+  active: boolean;
+  importFileSize?: number;
+  importFileName?: string;
+}> {
+  const parsed = typeof input === 'string' ? (() => { try { return JSON.parse(input); } catch { return []; } })() : input;
+  if (!Array.isArray(parsed)) return [];
+  const out: Array<{
+    title: string;
+    columns: string[];
+    rows: string[][];
+    active: boolean;
+    importFileSize?: number;
+    importFileName?: string;
+  }> = [];
+  for (const item of parsed) {
+    if (!item || typeof item !== 'object') continue;
+    const o = item as Record<string, unknown>;
+    const title = clampStr(String(o.title ?? '').trim(), BOT_FIELD_MAX.knowledgeDatasheetTitle) || 'Datasheet';
+    const colRaw = Array.isArray(o.columns) ? o.columns : [];
+    const columns = colRaw
+      .slice(0, KNOWLEDGE_TABLE_MAX_COLUMNS)
+      .map((c) => clampStr(String(c ?? '').trim(), BOT_FIELD_MAX.knowledgeDatasheetCell));
+    const rowRaw = Array.isArray(o.rows) ? o.rows : [];
+    const rows: string[][] = [];
+    for (const r of rowRaw) {
+      if (rows.length >= KNOWLEDGE_TABLE_MAX_ROWS) break;
+      if (!Array.isArray(r)) continue;
+      const row = r
+        .slice(0, columns.length)
+        .map((c) => clampStr(String(c ?? '').trim(), BOT_FIELD_MAX.knowledgeDatasheetCell));
+      while (row.length < columns.length) row.push('');
+      rows.push(row);
+    }
+    if (columns.length === 0) continue;
+    if (rows.length === 0) {
+      rows.push(columns.map(() => ''));
+    }
+    let importFileSize: number | undefined;
+    const rawSz = o.importFileSize;
+    if (typeof rawSz === 'number' && Number.isFinite(rawSz) && rawSz >= 0) {
+      importFileSize = Math.min(Math.floor(rawSz), MAX_DATASHEET_IMPORT_BYTES);
+    }
+    const rawFn = o.importFileName;
+    const importFileName =
+      typeof rawFn === 'string' && rawFn.trim()
+        ? clampStr(rawFn.trim(), BOT_FIELD_MAX.knowledgeDatasheetImportFileName)
+        : undefined;
+    out.push({
+      title,
+      columns,
+      rows,
+      active: o.active === false ? false : true,
+      ...(importFileSize != null ? { importFileSize } : {}),
+      ...(importFileName ? { importFileName } : {}),
+    });
+    if (out.length >= KNOWLEDGE_TABLES_MAX) break;
+  }
+  return out;
 }
 
 const EXAMPLE_QUESTIONS_MAX = 5;
 
-function normalizeExampleQuestions(input: unknown): string[] {
-  if (!Array.isArray(input)) return [];
-  return input
-    .slice(0, EXAMPLE_QUESTIONS_MAX)
-    .map((item: unknown) =>
-      typeof item === 'string' ? clampStr(item.trim(), BOT_FIELD_MAX.exampleQuestion) : '',
-    )
-    .filter(Boolean);
+function normalizeExampleQuestions(input: unknown): ExampleQuestionDoc[] {
+  return normalizeExampleQuestionsForStorage(input);
 }
 
 const MENU_QUICK_LINKS_MAX = 10;
@@ -123,6 +243,9 @@ const WORKSPACE_PATCH_RECOGNIZED_KEYS = new Set([
   'avatarEmoji',
   'avatarSource',
   'knowledgeDescription',
+  'knowledgeSnippets',
+  'knowledgeDatasheets',
+  'knowledgeTables',
   'welcomeMessage',
   'welcomeMessageEnabled',
   'faqs',
@@ -135,9 +258,6 @@ const WORKSPACE_PATCH_RECOGNIZED_KEYS = new Set([
   'whisperApiKeyOverride',
   'limitOverrideMessages',
   'visibility',
-  'messageLimitMode',
-  'messageLimitTotal',
-  'messageLimitUpgradeMessage',
   'isPublic',
   'status',
   'includeNameInKnowledge',
@@ -387,8 +507,17 @@ export interface NormalizedBotPayload {
   imageUrl?: string;
   avatarEmoji?: string;
   knowledgeDescription?: string;
-  faqs: Array<{ question: string; answer: string; active?: boolean }>;
-  exampleQuestions?: string[];
+  knowledgeSnippets?: Array<{ title: string; snippet: string; active: boolean }>;
+  knowledgeDatasheets?: Array<{
+    title: string;
+    columns: string[];
+    rows: string[][];
+    active: boolean;
+    importFileSize?: number;
+    importFileName?: string;
+  }>;
+  faqs: NormalizedFaqV2[];
+  exampleQuestions?: ExampleQuestionDoc[];
   welcomeMessage?: string;
   welcomeMessageEnabled?: boolean;
   leadCapture?: BotLeadCaptureV2;
@@ -399,9 +528,6 @@ export interface NormalizedBotPayload {
   whisperApiKeyOverride?: string;
   limitOverrideMessages?: number;
   visibility?: 'public' | 'private';
-  messageLimitMode?: 'none' | 'fixed_total';
-  messageLimitTotal?: number | null;
-  messageLimitUpgradeMessage?: string | null;
   isPublic: boolean;
   status?: 'draft' | 'published';
   includeNameInKnowledge?: boolean;
@@ -443,28 +569,16 @@ export function normalizeBotPayload(input: Record<string, unknown>): NormalizedB
     input.visibility === 'private' || input.visibility === 'public'
       ? input.visibility
       : undefined;
-  const messageLimitMode =
-    input.messageLimitMode === 'none' || input.messageLimitMode === 'fixed_total'
-      ? input.messageLimitMode
-      : undefined;
-  const messageLimitTotal =
-    input.messageLimitTotal == null
-      ? null
-      : typeof input.messageLimitTotal === 'number' && Number.isFinite(input.messageLimitTotal)
-        ? Math.max(0, Math.floor(input.messageLimitTotal))
-        : undefined;
-  const messageLimitUpgradeMessage =
-    input.messageLimitUpgradeMessage == null
-      ? null
-      : typeof input.messageLimitUpgradeMessage === 'string'
-        ? clampStr(input.messageLimitUpgradeMessage.trim(), BOT_FIELD_MAX.messageLimitUpgradeMessage) || null
-        : undefined;
   const isPublic = input.isPublic !== false;
   const status = input.status === 'draft' || input.status === 'published' ? input.status : undefined;
   const includeNameInKnowledge = input.includeNameInKnowledge === true;
   const includeTaglineInKnowledge = input.includeTaglineInKnowledge === true;
   const includeNotesInKnowledge = input.includeNotesInKnowledge !== false;
   const faqs = normalizeFaqs(input.faqs);
+  const knowledgeSnippets = normalizeKnowledgeSnippets(input.knowledgeSnippets);
+  const knowledgeDatasheets = normalizeKnowledgeDatasheets(
+    (input as Record<string, unknown>).knowledgeDatasheets ?? (input as Record<string, unknown>).knowledgeTables,
+  );
   const exampleQuestions = normalizeExampleQuestions(input.exampleQuestions);
   const leadCapture = normalizeLeadCapture(input.leadCapture);
 
@@ -497,6 +611,8 @@ export function normalizeBotPayload(input: Record<string, unknown>): NormalizedB
     imageUrl: imageUrl || undefined,
     avatarEmoji: avatarEmoji || undefined,
     knowledgeDescription: knowledgeDescription || undefined,
+    ...(knowledgeSnippets.length > 0 ? { knowledgeSnippets } : {}),
+    ...(knowledgeDatasheets.length > 0 ? { knowledgeDatasheets } : {}),
     faqs,
     exampleQuestions: exampleQuestions.length > 0 ? exampleQuestions : undefined,
     welcomeMessage: welcomeMessage || undefined,
@@ -509,9 +625,6 @@ export function normalizeBotPayload(input: Record<string, unknown>): NormalizedB
     whisperApiKeyOverride: whisperApiKeyOverride || undefined,
     limitOverrideMessages,
     visibility,
-    messageLimitMode,
-    messageLimitTotal,
-    messageLimitUpgradeMessage,
     isPublic,
     status,
     includeNameInKnowledge,
@@ -536,10 +649,19 @@ export type WorkspaceBotPatchNormalized = {
   avatarEmoji?: string;
   avatarSource?: 'upload' | 'url' | 'emoji' | 'none';
   knowledgeDescription?: string;
+  knowledgeSnippets?: Array<{ title: string; snippet: string; active: boolean }>;
+  knowledgeDatasheets?: Array<{
+    title: string;
+    columns: string[];
+    rows: string[][];
+    active: boolean;
+    importFileSize?: number;
+    importFileName?: string;
+  }>;
   welcomeMessage?: string;
   welcomeMessageEnabled?: boolean;
-  faqs?: Array<{ question: string; answer: string; active?: boolean }>;
-  exampleQuestions?: string[];
+  faqs?: NormalizedFaqV2[];
+  exampleQuestions?: ExampleQuestionDoc[];
   leadCapture?: BotLeadCaptureV2;
   chatUI?: BotChatUI;
   personality?: BotPersonality;
@@ -548,9 +670,6 @@ export type WorkspaceBotPatchNormalized = {
   whisperApiKeyOverride?: string;
   limitOverrideMessages?: number;
   visibility?: 'public' | 'private';
-  messageLimitMode?: 'none' | 'fixed_total';
-  messageLimitTotal?: number | null;
-  messageLimitUpgradeMessage?: string | null;
   isPublic?: boolean;
   status?: 'draft' | 'published';
   includeNameInKnowledge?: boolean;
@@ -605,6 +724,14 @@ export function normalizeWorkspaceBotPatch(input: Record<string, unknown>): Work
     const s = clampStr(String(input.knowledgeDescription ?? '').trim(), BOT_FIELD_MAX.knowledgeDescription);
     out.knowledgeDescription = s || undefined;
   }
+  if (touched.has('knowledgeSnippets')) {
+    out.knowledgeSnippets = normalizeKnowledgeSnippets(input.knowledgeSnippets);
+  }
+  if (touched.has('knowledgeDatasheets') || touched.has('knowledgeTables')) {
+    out.knowledgeDatasheets = normalizeKnowledgeDatasheets(
+      (input as Record<string, unknown>).knowledgeDatasheets ?? (input as Record<string, unknown>).knowledgeTables,
+    );
+  }
   if (touched.has('welcomeMessage')) {
     const s = clampStr(String(input.welcomeMessage ?? '').trim(), BOT_FIELD_MAX.welcomeMessage);
     out.welcomeMessage = s || undefined;
@@ -650,28 +777,6 @@ export function normalizeWorkspaceBotPatch(input: Record<string, unknown>): Work
   if (touched.has('visibility')) {
     out.visibility =
       input.visibility === 'private' || input.visibility === 'public' ? input.visibility : undefined;
-  }
-  if (touched.has('messageLimitMode')) {
-    out.messageLimitMode =
-      input.messageLimitMode === 'none' || input.messageLimitMode === 'fixed_total'
-        ? input.messageLimitMode
-        : undefined;
-  }
-  if (touched.has('messageLimitTotal')) {
-    out.messageLimitTotal =
-      input.messageLimitTotal == null
-        ? null
-        : typeof input.messageLimitTotal === 'number' && Number.isFinite(input.messageLimitTotal)
-          ? Math.max(0, Math.floor(input.messageLimitTotal))
-          : undefined;
-  }
-  if (touched.has('messageLimitUpgradeMessage')) {
-    out.messageLimitUpgradeMessage =
-      input.messageLimitUpgradeMessage == null
-        ? null
-        : typeof input.messageLimitUpgradeMessage === 'string'
-          ? clampStr(input.messageLimitUpgradeMessage.trim(), BOT_FIELD_MAX.messageLimitUpgradeMessage) || null
-          : undefined;
   }
   if (touched.has('isPublic')) {
     out.isPublic = input.isPublic !== false;

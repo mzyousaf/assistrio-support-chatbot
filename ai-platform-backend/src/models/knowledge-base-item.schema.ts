@@ -1,13 +1,14 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Types } from 'mongoose';
 
-/** Source type for unified knowledge items (document, faq, note, url, html). */
+/** Source type for unified knowledge items (document, faq, note, url, html, table). */
 export const KNOWLEDGE_BASE_ITEM_SOURCE_TYPES = [
   'document',
   'faq',
   'note',
   'url',
   'html',
+  'table',
 ] as const;
 export type KnowledgeBaseItemSourceType = (typeof KNOWLEDGE_BASE_ITEM_SOURCE_TYPES)[number];
 
@@ -35,6 +36,12 @@ export class KnowledgeBaseItemSourceMeta {
 
 @Schema({ _id: false })
 export class KnowledgeBaseItemFaqMeta {
+  /** Q&A group title (optional; legacy rows may omit). */
+  @Prop()
+  title?: string;
+  /** Phrasing variants; legacy uses `question` as the first question only. */
+  @Prop({ type: [String], default: undefined })
+  questions?: string[];
   @Prop()
   question?: string;
   @Prop()
@@ -45,8 +52,17 @@ export class KnowledgeBaseItemFaqMeta {
 
 @Schema({ _id: false })
 export class KnowledgeBaseItemNoteMeta {
+  /** `snippet` = titled snippet; `general_note` = legacy single note blob. */
   @Prop()
   kind?: string;
+  @Prop()
+  snippetIndex?: number;
+}
+
+@Schema({ _id: false })
+export class KnowledgeBaseItemTableMeta {
+  @Prop()
+  tableIndex?: number;
 }
 
 @Schema({ timestamps: true, collection: 'knowledge_base_items' })
@@ -86,6 +102,8 @@ export class KnowledgeBaseItem {
   faqMeta?: KnowledgeBaseItemFaqMeta;
   @Prop({ type: KnowledgeBaseItemNoteMeta })
   noteMeta?: KnowledgeBaseItemNoteMeta;
+  @Prop({ type: KnowledgeBaseItemTableMeta })
+  tableMeta?: KnowledgeBaseItemTableMeta;
   createdAt?: Date;
   updatedAt?: Date;
 }

@@ -1,12 +1,10 @@
-import { useId, useRef, useState } from 'react';
-import { Loader2, MessageCircle, Pencil, Plus, Save, Sparkles, Trash2, type LucideIcon } from 'lucide-react';
+import { useId, useRef } from 'react';
+import { Loader2, MessageCircle, Save, Sparkles, type LucideIcon } from 'lucide-react';
 import {
   BEHAVIOR_PRESETS,
   DEFAULT_PRESET_HELPER,
   CATEGORY_OPTIONS,
   CUSTOM_CATEGORY_PILL,
-  EXAMPLE_QUESTIONS_MAX,
-  EXAMPLE_QUESTION_MAX_CHARS,
   MAX_CATEGORY_PILLS,
   PERSONALITY_DESCRIPTION_MAX,
   THINGS_TO_AVOID_MAX,
@@ -17,7 +15,7 @@ import { useBehaviorWorkspace, type BehaviorSubnav } from './BehaviorWorkspaceCo
 import { WELCOME_KEYWORD_PILLS, WelcomeMessageKeywordPreview } from './welcomeMessageKeywords';
 import { WorkspaceSectionHeader } from './WorkspaceSectionHeader';
 import { ws } from './workspace';
-import { Button, Card, CardBody, FieldRow, Input, Label, Modal, Select, Switch, Textarea } from '@/components/ui';
+import { Button, Card, CardBody, FieldRow, Input, Label, Select, Switch, Textarea } from '@/components/ui';
 import { BOT_FIELD_MAX } from '@/lib/botFieldLimits';
 import { cn } from '@/lib/utils';
 
@@ -48,7 +46,7 @@ const SUBNAV: { id: BehaviorSubnav; label: string; hint: string; icon: LucideIco
   {
     id: 'first-message',
     label: 'Agent First Message(s)',
-    hint: 'Welcome line and quick prompts for new chats.',
+    hint: 'Welcome line for new chats. Tappable starter chips live in Knowledge Base → Suggestions.',
     icon: MessageCircle,
   },
 ];
@@ -77,53 +75,10 @@ export function BehaviorSection() {
     setWelcomeMessage,
     welcomeMessageEnabled,
     setWelcomeMessageEnabled,
-    exampleQuestions,
-    setExampleQuestions,
     saving,
     saveError,
     save,
   } = useBehaviorWorkspace();
-
-  const [suggestedQuestionDeleteIndex, setSuggestedQuestionDeleteIndex] = useState<number | null>(null);
-  const [suggestedQuestionModal, setSuggestedQuestionModal] = useState<
-    null | { mode: 'create' } | { mode: 'edit'; index: number }
-  >(null);
-  const [suggestedQuestionDraft, setSuggestedQuestionDraft] = useState('');
-
-  function closeSuggestedQuestionDeleteModal() {
-    setSuggestedQuestionDeleteIndex(null);
-  }
-
-  function confirmSuggestedQuestionDelete() {
-    if (suggestedQuestionDeleteIndex === null) return;
-    const idx = suggestedQuestionDeleteIndex;
-    setExampleQuestions(exampleQuestions.filter((_, i) => i !== idx));
-    setSuggestedQuestionDeleteIndex(null);
-  }
-
-  const suggestedQuestionPendingText =
-    suggestedQuestionDeleteIndex !== null ? exampleQuestions[suggestedQuestionDeleteIndex] ?? '' : '';
-
-  function closeSuggestedQuestionEditModal() {
-    setSuggestedQuestionModal(null);
-    setSuggestedQuestionDraft('');
-  }
-
-  function commitSuggestedQuestionModal() {
-    const t = suggestedQuestionDraft.trim().slice(0, EXAMPLE_QUESTION_MAX_CHARS);
-    if (!suggestedQuestionModal || !t) return;
-    if (suggestedQuestionModal.mode === 'create') {
-      if (exampleQuestions.length >= EXAMPLE_QUESTIONS_MAX) return;
-      setExampleQuestions([...exampleQuestions, t]);
-    } else {
-      const i = suggestedQuestionModal.index;
-      const next = [...exampleQuestions];
-      if (next[i] === undefined) return;
-      next[i] = t;
-      setExampleQuestions(next);
-    }
-    closeSuggestedQuestionEditModal();
-  }
 
   function insertWelcomeKeyword(token: string) {
     if (!welcomeMessageEnabled) return;
@@ -574,222 +529,11 @@ export function BehaviorSection() {
                     </section>
                   </CardBody>
                 </Card>
-
-                <Card className="w-full min-w-0 overflow-hidden border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)] ring-1 ring-slate-900/[0.035]">
-                  <CardBody className="w-full min-w-0 px-5 py-5 sm:px-6 sm:py-6">
-                    <section className={ws.workspaceEditorCardSection} aria-labelledby={`${subnavId}-sq-h`}>
-                      <WorkspaceSectionHeader
-                        id={`${subnavId}-sq-h`}
-                        title="Suggested questions"
-                        titleAddon={
-                          <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-xs font-medium tabular-nums text-slate-500">
-                            {exampleQuestions.length}/{EXAMPLE_QUESTIONS_MAX}
-                          </span>
-                        }
-                        inlineEnd={
-                          exampleQuestions.length < EXAMPLE_QUESTIONS_MAX ? (
-                            <Button
-                              type="button"
-                              variant="outlinePrimary"
-                              size="sm"
-                              className="shrink-0 cursor-pointer"
-                              onClick={() => {
-                                setSuggestedQuestionDraft('');
-                                setSuggestedQuestionModal({ mode: 'create' });
-                              }}
-                            >
-                              <Plus size={14} strokeWidth={2} aria-hidden />
-                              Add question
-                            </Button>
-                          ) : null
-                        }
-                        description="Short chips visitors can tap to start—keep them specific to your business."
-                      />
-                      {exampleQuestions.length === 0 ? (
-                        <div className="rounded-xl border border-dashed border-slate-200/90 bg-slate-50/70 px-5 py-10 text-center sm:px-8 sm:py-12">
-                          <h3 className={cn(ws.workspaceEditorSubsectionTitle, 'text-center')}>
-                            No suggested questions yet
-                          </h3>
-                          <p className={cn(ws.workspaceEditorHelperText, 'mx-auto mt-2 max-w-md text-center leading-relaxed')}>
-                            Add up to {EXAMPLE_QUESTIONS_MAX} short prompts. They appear as tappable chips so visitors can
-                            start in one tap. Use <span className="font-medium text-slate-600">Add question</span> to open
-                            the editor.
-                          </p>
-                          <Button
-                            type="button"
-                            variant="primary"
-                            size="sm"
-                            className="mt-5"
-                            onClick={() => {
-                              setSuggestedQuestionDraft('');
-                              setSuggestedQuestionModal({ mode: 'create' });
-                            }}
-                          >
-                            Add your first question
-                          </Button>
-                        </div>
-                      ) : (
-                        <div className="flex flex-col gap-4">
-                          <div className="overflow-hidden rounded-xl border border-slate-200/85 bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] ring-1 ring-slate-900/[0.03]">
-                            <ul className="m-0 divide-y divide-slate-100 p-0" role="list">
-                              {exampleQuestions.map((q, index) => (
-                                <li key={index}>
-                                  <div className="flex min-w-0 items-start gap-3 px-3 py-3 sm:items-center sm:px-4 sm:py-3.5">
-                                    <span
-                                      className="mt-0.5 flex h-6 min-w-[1.375rem] shrink-0 items-center justify-center rounded-[5px] bg-slate-100 px-1 text-[0.625rem] font-semibold tabular-nums leading-none text-slate-600 ring-1 ring-slate-200/90 sm:mt-0"
-                                      aria-hidden
-                                    >
-                                      {index + 1}
-                                    </span>
-                                    <p className="m-0 min-w-0 flex-1 text-sm leading-relaxed text-slate-800">
-                                      {q.trim() ? (
-                                        <span className="line-clamp-3">{q}</span>
-                                      ) : (
-                                        <span className="text-slate-400">Empty question</span>
-                                      )}
-                                    </p>
-                                    <div className="flex shrink-0 items-center gap-1">
-                                      <Button
-                                        type="button"
-                                        variant="secondary"
-                                        size="sm"
-                                        className="gap-0 px-2"
-                                        onClick={() => {
-                                          setSuggestedQuestionDraft(q);
-                                          setSuggestedQuestionModal({ mode: 'edit', index });
-                                        }}
-                                        aria-label={`Edit suggested question ${index + 1}`}
-                                      >
-                                        <Pencil size={14} strokeWidth={2} aria-hidden />
-                                      </Button>
-                                      <Button
-                                        type="button"
-                                        variant="ghost"
-                                        size="sm"
-                                        className={cn(
-                                          'cursor-pointer rounded-md px-2 text-slate-500',
-                                          '[&_svg]:text-slate-500 [&_svg]:transition-colors',
-                                          'hover:enabled:bg-red-50 hover:enabled:text-[var(--color-danger-text-emphasis)]',
-                                          'hover:enabled:[&_svg]:text-[var(--color-danger-text-emphasis)]',
-                                        )}
-                                        onClick={() => setSuggestedQuestionDeleteIndex(index)}
-                                        aria-label={`Remove suggested question ${index + 1}`}
-                                      >
-                                        <Trash2 size={15} strokeWidth={2} aria-hidden />
-                                      </Button>
-                                    </div>
-                                  </div>
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                          {exampleQuestions.length >= EXAMPLE_QUESTIONS_MAX ? (
-                            <p className={cn(ws.workspaceEditorHelperText, 'm-0')}>
-                              You have added the maximum of {EXAMPLE_QUESTIONS_MAX} suggested questions.
-                            </p>
-                          ) : null}
-                        </div>
-                      )}
-                    </section>
-                  </CardBody>
-                </Card>
               </div>
             ) : null}
           </div>
         </div>
       </form>
-
-      <Modal
-        open={suggestedQuestionModal != null}
-        onClose={closeSuggestedQuestionEditModal}
-        title={suggestedQuestionModal?.mode === 'edit' ? 'Edit suggested question' : 'Add suggested question'}
-        description="Short prompts appear as tappable chips in new chats. Save behavior settings to apply."
-        size="lg"
-        footer={
-          <>
-            <Button type="button" variant="secondary" size="sm" onClick={closeSuggestedQuestionEditModal}>
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              form="behavior-suggested-question-form"
-              variant="primary"
-              size="sm"
-              disabled={!suggestedQuestionDraft.trim()}
-            >
-              {suggestedQuestionModal?.mode === 'edit' ? 'Save' : 'Add'}
-            </Button>
-          </>
-        }
-      >
-        <form
-          id="behavior-suggested-question-form"
-          className="space-y-4"
-          onSubmit={(e) => {
-            e.preventDefault();
-            commitSuggestedQuestionModal();
-          }}
-        >
-          <FieldRow
-            label="Question"
-            htmlFor="behavior-sq-draft"
-            helperText="Keep it short and specific to your business."
-            labelRowClassName="w-full min-w-0"
-            labelAddon={
-              <RecommendedCharLabelAddon
-                length={suggestedQuestionDraft.length}
-                max={EXAMPLE_QUESTION_MAX_CHARS}
-              />
-            }
-          >
-            <Input
-              id="behavior-sq-draft"
-              quiet
-              value={suggestedQuestionDraft}
-              placeholder="What services do you offer?"
-              autoComplete="off"
-              maxLength={EXAMPLE_QUESTION_MAX_CHARS}
-              onChange={(e) => setSuggestedQuestionDraft(e.target.value.slice(0, EXAMPLE_QUESTION_MAX_CHARS))}
-            />
-          </FieldRow>
-        </form>
-      </Modal>
-
-      <Modal
-        open={suggestedQuestionDeleteIndex !== null}
-        onClose={closeSuggestedQuestionDeleteModal}
-        title="Remove suggested question?"
-        tone="danger"
-        description={
-          suggestedQuestionDeleteIndex !== null
-            ? suggestedQuestionPendingText.trim()
-              ? (
-                  <span className="font-medium text-slate-800">
-                    &ldquo;
-                    {suggestedQuestionPendingText.trim().length > 72
-                      ? `${suggestedQuestionPendingText.trim().slice(0, 72)}…`
-                      : suggestedQuestionPendingText.trim()}
-                    &rdquo;
-                  </span>
-                )
-              : 'This permanently removes the question from your list. This action cannot be undone.'
-            : null
-        }
-        footer={
-          <>
-            <Button type="button" variant="secondary" size="sm" onClick={closeSuggestedQuestionDeleteModal}>
-              Cancel
-            </Button>
-            <Button type="button" variant="danger" size="sm" onClick={confirmSuggestedQuestionDelete}>
-              Remove question
-            </Button>
-          </>
-        }
-      >
-        <p className={cn(ws.workspaceEditorHelperText, 'm-0')}>
-          This action cannot be undone. You can add a new suggested question later with <span className="font-medium text-slate-700">Add question</span>.
-        </p>
-      </Modal>
     </div>
   );
 }

@@ -52,6 +52,15 @@ export class Conversation {
   /** Optional short summary for long conversations (future summarization pipeline). */
   @Prop({ default: undefined })
   summary?: string;
+  /**
+   * Where this conversation was created. `widget_preview` = admin editor preview (persists like runtime; filter in analytics).
+   * Omitted on older rows = treat as runtime.
+   */
+  @Prop({ enum: ['runtime', 'widget_preview'], default: 'runtime' })
+  sessionSource?: 'runtime' | 'widget_preview';
+  /** Admin user who started this preview session (`sessionSource: widget_preview` only). */
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  previewInitiatedByUserId?: Types.ObjectId;
 }
 
 export const ConversationSchema = SchemaFactory.createForClass(Conversation);

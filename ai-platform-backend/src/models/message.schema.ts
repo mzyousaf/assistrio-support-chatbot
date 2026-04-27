@@ -94,6 +94,12 @@ export class Message {
   attachments?: MessageAttachment[];
   @Prop({ default: Date.now })
   createdAt: Date;
+  /** Admin app route (e.g. path) when this message was sent in widget preview. */
+  @Prop()
+  previewSourcePage?: string;
+  /** Browser origin (e.g. https://admin.assistrio.com) when the message was sent in preview. */
+  @Prop()
+  previewOrigin?: string;
 }
 
 export const MessageSchema = SchemaFactory.createForClass(Message);

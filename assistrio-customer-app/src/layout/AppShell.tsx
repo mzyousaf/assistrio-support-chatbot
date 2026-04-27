@@ -379,15 +379,24 @@ export function AppShell() {
   const isTrainingNow = docsQueued + docsProcessing > 0;
   const trainedAgo = relTrainedAgo(lastTrainedAt);
   const notesBytes = useMemo(() => {
-    const text = String(agentBot?.knowledgeDescription ?? '');
-    return new TextEncoder().encode(text).length;
-  }, [agentBot?.knowledgeDescription]);
+    if (!agentBot) return 0;
+    const b = agentBot as { knowledgeSnippets?: { title?: string; snippet?: string }[]; knowledgeDescription?: string };
+    if (Array.isArray(b.knowledgeSnippets) && b.knowledgeSnippets.length > 0) {
+      return b.knowledgeSnippets.reduce((n, s) => {
+        const t = String(s?.title ?? '') + String(s?.snippet ?? '');
+        return n + new TextEncoder().encode(t).length;
+      }, 0);
+    }
+    return new TextEncoder().encode(String(b.knowledgeDescription ?? '')).length;
+  }, [agentBot]);
   const qaBytes = useMemo(() => {
     const faqs = Array.isArray(agentBot?.faqs) ? agentBot.faqs : [];
     return faqs.reduce((sum, row) => {
-      const q = String((row as { question?: unknown })?.question ?? '');
-      const a = String((row as { answer?: unknown })?.answer ?? '');
-      return sum + q.length + a.length;
+      const o = row as { title?: unknown; questions?: unknown; question?: unknown; answer?: unknown };
+      const title = String(o.title ?? '');
+      const qJoin = Array.isArray(o.questions) ? o.questions.map((x) => String(x)).join('') : String(o.question ?? '');
+      const a = String(o.answer ?? '');
+      return sum + title.length + qJoin.length + a.length;
     }, 0);
   }, [agentBot?.faqs]);
   const missingPublishChecks = useMemo(() => {
@@ -436,6 +445,10 @@ export function AppShell() {
   }, [agentId, userCollapsed]);
 
   const isSettingsActive = location.pathname.startsWith('/settings');
+  /** Datasheet full-screen editor: only top nav, edge-to-edge below (see `PlaygroundLayout` widget hidden). */
+  const hideAgentWorkspaceChrome = /\/playground\/knowledgebase\/datasheets\/[^/]+\/fullscreen\/?$/.test(
+    location.pathname,
+  );
 
   const settingsSubNav: [string, string, LucideIcon][] = [
     ['/settings/general', 'General', Sliders],
@@ -1025,6 +1038,7 @@ export function AppShell() {
         <aside
           className={cn(
             'relative flex shrink-0 flex-col transition-[width] duration-200 ease-out max-[900px]:w-full max-[900px]:border-b',
+            hideAgentWorkspaceChrome && 'hidden',
           )}
           style={{ background: 'var(--bg-sidebar-primary)', borderRight: '1px solid var(--border-sidebar)', width: sidebarCollapsed ? 'var(--sidebar-width-collapsed)' : 'var(--sidebar-width)' }}
           aria-label="Application"
@@ -1399,7 +1413,7 @@ export function AppShell() {
         </aside>
 
         {/* Sidebar collapse/expand handle — hidden when agent detail is open */}
-        {!agentId && (
+        {!agentId && !hideAgentWorkspaceChrome && (
           <button
             type="button"
             className="group relative z-10 flex w-3 shrink-0 cursor-pointer items-center justify-center border-none bg-transparent p-0 max-[900px]:hidden"
@@ -1416,13 +1430,18 @@ export function AppShell() {
         )}
 
         {/* Agent workspace sidebar — renders immediately, bot details fill in async */}
-        {agentId && (
+        {agentId && !hideAgentWorkspaceChrome && (
           <AgentWorkspaceSidebar bot={agentBot} health={agentHealth} />
         )}
 
         {/* Workspace canvas — routes supply centered containers and page intros */}
         <main
-          className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-visible overflow-y-auto"
+          className={cn(
+            'flex min-h-0 min-w-0 flex-1 flex-col overflow-x-visible',
+            hideAgentWorkspaceChrome
+              ? 'h-[calc(100dvh-var(--nav-height))] min-h-0 overflow-y-hidden'
+              : 'overflow-y-auto',
+          )}
           style={{ background: 'var(--bg-workspace-canvas)' }}
         >
           <BotLifecycleProvider value={lifecycleControls}>

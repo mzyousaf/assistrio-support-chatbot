@@ -23,6 +23,7 @@ export interface UnifiedRetrievalEligibleCounts {
   faq?: number;
   note?: number;
   html?: number;
+  table?: number;
 }
 
 /** Full score breakdown for one item (debug). */

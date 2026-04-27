@@ -1,4 +1,5 @@
 import type { CustomerBotDetail } from '../api/types';
+import { exampleQuestionsToPatchPayload, hydrateExampleQuestionsFromBot } from '../pages/bot-workspace/exampleQuestionHelpers';
 
 /** Build a full finalize body.payload from the latest GET bot shape (matches normalizeBotPayload). */
 export function buildFinalizePayloadFromBot(
@@ -36,9 +37,10 @@ export function buildFinalizePayloadFromBot(
     welcomeMessage: String(bot.welcomeMessage ?? '').trim() || undefined,
     knowledgeDescription: String(bot.knowledgeDescription ?? '').trim() || undefined,
     faqs,
-    exampleQuestions: Array.isArray(bot.exampleQuestions)
-      ? (bot.exampleQuestions as unknown[]).map((q) => String(q ?? '').trim()).filter(Boolean)
-      : undefined,
+    exampleQuestions: (() => {
+      const ex = exampleQuestionsToPatchPayload(hydrateExampleQuestionsFromBot(bot));
+      return ex.length > 0 ? ex : undefined;
+    })(),
     personality: Object.keys(personality).length ? personality : undefined,
     config: Object.keys(config).length ? config : undefined,
     includeNameInKnowledge: bot.includeNameInKnowledge === true,
@@ -46,10 +48,6 @@ export function buildFinalizePayloadFromBot(
     includeNotesInKnowledge: bot.includeNotesInKnowledge !== false,
     isPublic: bot.isPublic !== false,
     visibility: bot.visibility === 'private' ? 'private' : 'public',
-    messageLimitMode: bot.messageLimitMode === 'fixed_total' ? 'fixed_total' : 'none',
-    messageLimitTotal: typeof bot.messageLimitTotal === 'number' ? bot.messageLimitTotal : null,
-    messageLimitUpgradeMessage:
-      typeof bot.messageLimitUpgradeMessage === 'string' ? bot.messageLimitUpgradeMessage : null,
     leadCapture: bot.leadCapture,
     chatUI: bot.chatUI,
   };

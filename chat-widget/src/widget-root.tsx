@@ -89,16 +89,22 @@ export function EmbedWidgetRoot({ rawConfig }: EmbedWidgetRootProps) {
 
         const storageKey = chatVisitorIdStorageKey(normalized.botId, mode);
         const persistChatSession = normalized.persistChatSession !== false;
-        const existingChatVisitorId =
-          !authPreview && persistChatSession && typeof window !== "undefined"
+        const existingRuntimeVisitorId =
+          !authPreview && persistChatSession && typeof window !== "undefined" && window.localStorage
             ? window.localStorage.getItem(storageKey)
+            : null;
+        const existingPreviewSessionVisitorId =
+          authPreview && mode === "preview" && typeof window !== "undefined" && window.sessionStorage
+            ? window.sessionStorage.getItem(storageKey)
             : null;
 
         const initRequestConfig: Partial<EmbedChatConfig> = {
           ...rawConfig,
-          ...(existingChatVisitorId ? { chatVisitorId: existingChatVisitorId } : {}),
+          ...((existingRuntimeVisitorId ?? existingPreviewSessionVisitorId)
+            ? { chatVisitorId: (existingRuntimeVisitorId ?? existingPreviewSessionVisitorId) as string }
+            : {}),
         };
-        if (authPreview) {
+        if (authPreview && !existingPreviewSessionVisitorId) {
           delete (initRequestConfig as { chatVisitorId?: string }).chatVisitorId;
         }
         if (mode === "preview") {
@@ -113,17 +119,16 @@ export function EmbedWidgetRoot({ rawConfig }: EmbedWidgetRootProps) {
           setChatVisitorId("");
         } else if (typeof init.chatVisitorId === "string" && init.chatVisitorId.trim()) {
           const id = init.chatVisitorId.trim();
-          if (
-            persistChatSession &&
-            !authPreview &&
-            typeof window !== "undefined" &&
-            typeof window.localStorage !== "undefined"
-          ) {
-            window.localStorage.setItem(storageKey, id);
+          if (typeof window !== "undefined") {
+            if (authPreview && mode === "preview" && window.sessionStorage) {
+              window.sessionStorage.setItem(storageKey, id);
+            } else if (persistChatSession && !authPreview && window.localStorage) {
+              window.localStorage.setItem(storageKey, id);
+            }
           }
           setChatVisitorId(id);
-        } else if (existingChatVisitorId) {
-          setChatVisitorId(existingChatVisitorId);
+        } else if (existingRuntimeVisitorId) {
+          setChatVisitorId(existingRuntimeVisitorId);
         } else {
           setChatVisitorId(null);
         }
@@ -269,6 +274,8 @@ export function EmbedWidgetRoot({ rawConfig }: EmbedWidgetRootProps) {
       inlinePanelExpandedHeight={config.containedInlineSize?.expandedHeight}
       showContainedLauncherPreview={contained && config.showContainedLauncherPreview === true}
       onContainedPanelExpandChange={config.onContainedPanelExpandChange}
+      serverConversationIdFromInit={initResponse?.conversationId}
+      previewSourcePage={config.previewSourcePage}
     />
   );
 }

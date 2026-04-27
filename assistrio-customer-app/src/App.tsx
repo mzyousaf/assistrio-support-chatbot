@@ -9,7 +9,22 @@ import { BotWorkspaceLayout } from './pages/bot-workspace/BotWorkspaceLayout';
 import { PlaygroundLayout } from './pages/bot-workspace/PlaygroundLayout';
 import { PublishWorkspacePage } from './pages/bot-workspace/PublishWorkspacePage';
 import { InsightsSection } from './pages/bot-workspace/InsightsSection';
-import { KnowledgeBaseWorkspacePage } from './pages/bot-workspace/KnowledgeBaseWorkspacePage';
+import { KnowledgeBaseLayout } from './pages/bot-workspace/knowledge/KnowledgeBaseLayout';
+import { SnippetsListPage } from './pages/bot-workspace/knowledge/SnippetsListPage';
+import { SnippetEditPage } from './pages/bot-workspace/knowledge/SnippetEditPage';
+import { QaListPage } from './pages/bot-workspace/knowledge/QaListPage';
+import { QaEditPage } from './pages/bot-workspace/knowledge/QaEditPage';
+import { DatasheetsListPage } from './pages/bot-workspace/knowledge/DatasheetsListPage';
+import { DatasheetEditPage } from './pages/bot-workspace/knowledge/DatasheetEditPage';
+import { SnippetDetailPage } from './pages/bot-workspace/knowledge/SnippetDetailPage';
+import { QaDetailPage } from './pages/bot-workspace/knowledge/QaDetailPage';
+import { KnowledgeDatasheetDetailPage } from './pages/bot-workspace/knowledge/KnowledgeDatasheetDetailPage';
+import { DocumentDetailPage } from './pages/bot-workspace/knowledge/DocumentDetailPage';
+import { DocumentEditPage } from './pages/bot-workspace/knowledge/DocumentEditPage';
+import { KnowledgeSuggestionsPage } from './pages/bot-workspace/knowledge/KnowledgeSuggestionsPage';
+import { KnowledgeSuggestionDetailPage } from './pages/bot-workspace/knowledge/KnowledgeSuggestionDetailPage';
+import { KnowledgeSuggestionEditPage } from './pages/bot-workspace/knowledge/KnowledgeSuggestionEditPage';
+import { KnowledgeDocumentsPage } from './pages/bot-workspace/KnowledgeSection';
 import { WidgetAppearanceWorkspacePage } from './pages/bot-workspace/WidgetAppearanceWorkspacePage';
 import { BehaviorWorkspacePage } from './pages/bot-workspace/BehaviorWorkspacePage';
 import { CaptureLeadsWorkspacePage } from './pages/bot-workspace/CaptureLeadsWorkspacePage';
@@ -34,15 +49,17 @@ import { OnboardingLayout } from './pages/onboarding/OnboardingLayout';
 import { PostLoginRedirect } from './routes/PostLoginRedirect';
 import { AppToaster } from './components/AppToaster';
 
-function RedirectToPlaygroundKnowledge({ tab }: { tab: 'notes' | 'faqs' | 'documents' }) {
+function RedirectToPlaygroundKnowledge({
+  tab,
+}: {
+  tab: 'snippets' | 'faqs' | 'documents' | 'datasheets' | 'notes' | 'suggestions';
+}) {
   const { id } = useParams();
   if (!id) return null;
-  return <Navigate to={`/bots/${id}/playground/knowledgebase/${tab}`} replace />;
+  const path = tab === 'notes' ? 'snippets' : tab;
+  return <Navigate to={`/bots/${id}/playground/knowledgebase/${path}`} replace />;
 }
 
-function RedirectPlaygroundKnowledgeBaseIndex() {
-  return <Navigate to="notes" replace />;
-}
 
 export function App() {
   return (
@@ -115,14 +132,34 @@ export function App() {
                 <Route path="appearance" element={<WidgetAppearanceWorkspacePage />} />
                 <Route path="deploy" element={<PublishWorkspacePage />} />
                 <Route path="publish" element={<Navigate to="../deploy" replace />} />
-                <Route path="knowledgebase" element={<RedirectPlaygroundKnowledgeBaseIndex />} />
-                <Route path="knowledgebase/notes" element={<KnowledgeBaseWorkspacePage />} />
-                <Route path="knowledgebase/faqs" element={<KnowledgeBaseWorkspacePage />} />
-                <Route path="knowledgebase/documents" element={<KnowledgeBaseWorkspacePage />} />
+                <Route path="knowledgebase" element={<KnowledgeBaseLayout />}>
+                  <Route index element={<Navigate to="snippets" replace />} />
+                  <Route path="documents/:docId/edit" element={<DocumentEditPage />} />
+                  <Route path="documents/:docId" element={<DocumentDetailPage />} />
+                  <Route path="documents" element={<KnowledgeDocumentsPage />} />
+                  <Route path="suggestions/:index/edit" element={<KnowledgeSuggestionEditPage />} />
+                  <Route path="suggestions/:index" element={<KnowledgeSuggestionDetailPage />} />
+                  <Route path="suggestions" element={<KnowledgeSuggestionsPage />} />
+                  <Route path="snippets" element={<SnippetsListPage />} />
+                  <Route path="snippets/:index/edit" element={<SnippetEditPage />} />
+                  <Route path="snippets/:index" element={<SnippetDetailPage />} />
+                  <Route path="faqs" element={<QaListPage />} />
+                  <Route path="faqs/:index/edit" element={<QaEditPage />} />
+                  <Route path="faqs/:index" element={<QaDetailPage />} />
+                  <Route path="datasheets" element={<DatasheetsListPage />} />
+                  <Route path="datasheets/:index/fullscreen" element={<DatasheetEditPage />} />
+                  <Route path="datasheets/:index/edit" element={<DatasheetEditPage />} />
+                  <Route path="datasheets/:index" element={<KnowledgeDatasheetDetailPage />} />
+                  <Route path="notes" element={<Navigate to="../snippets" replace />} />
+                  <Route path="tables" element={<Navigate to="../datasheets" replace />} />
+                </Route>
               </Route>
               <Route path="knowledge/notes" element={<RedirectToPlaygroundKnowledge tab="notes" />} />
               <Route path="knowledge/faqs" element={<RedirectToPlaygroundKnowledge tab="faqs" />} />
               <Route path="knowledge/documents" element={<RedirectToPlaygroundKnowledge tab="documents" />} />
+              <Route path="knowledge/datasheets" element={<RedirectToPlaygroundKnowledge tab="datasheets" />} />
+              <Route path="knowledge/tables" element={<RedirectToPlaygroundKnowledge tab="datasheets" />} />
+              <Route path="knowledge/suggestions" element={<RedirectToPlaygroundKnowledge tab="suggestions" />} />
 
               {/* ── Insights (distinct from admin: `/admin/bots/:id/insights/...` on the operator app) ── */}
               <Route

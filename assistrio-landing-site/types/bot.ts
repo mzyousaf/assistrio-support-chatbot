@@ -31,6 +31,7 @@ export type PublicKnowledgeBaseCounts = {
   notes: number;
   urls: number;
   html: number;
+  datasheets: number;
 };
 
 /** Public gallery: KB labels from `GET /api/public/bots`; file download via public redirect when `fileDownloadable`. */

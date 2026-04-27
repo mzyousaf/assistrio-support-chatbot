@@ -3,6 +3,7 @@
  * Maps to the nested API shape; getDefaultBotCreatePayload() converts to the flat Bot schema.
  */
 import { generateBotAccessKey, generateBotSecretKey } from '../../bots/bot-keys.util';
+import { DEFAULT_WIDGET_EMBED_RATE_LIMIT_PER_MINUTE } from '../../models/bot.schema';
 
 export const DEFAULT_NEW_BOT_PAYLOAD = {
   general: {
@@ -186,9 +187,8 @@ export type DefaultBotCreatePayload = {
   config: { temperature: number; maxTokens: number; responseLength?: string };
   openaiApiKeyOverride?: string | null;
   whisperApiKeyOverride?: string | null;
-  messageLimitMode: 'none' | 'fixed_total';
-  messageLimitTotal?: number | null;
-  messageLimitUpgradeMessage?: string | null;
+  /** Aligns with `Bot` schema default; set explicitly so new drafts always store 90 in Mongo. */
+  widgetEmbedRateLimitPerMinute: number;
   createdAt: Date;
 };
 
@@ -271,9 +271,7 @@ export function getDefaultBotCreatePayload(
       maxTokens: ai.maxTokens,
       responseLength: 'medium',
     },
-    messageLimitMode: 'none',
-    messageLimitTotal: null,
-    messageLimitUpgradeMessage: null,
+    widgetEmbedRateLimitPerMinute: DEFAULT_WIDGET_EMBED_RATE_LIMIT_PER_MINUTE,
     openaiApiKeyOverride: ai.openAiApiKeyOverride ?? undefined,
     whisperApiKeyOverride: ai.whisperApiKey ?? undefined,
     createdAt: new Date(),

@@ -247,6 +247,37 @@ export class DocumentsService {
     await this.knowledgeBaseItemService.setDocumentKnowledgeItemStatus(botId, docId, { active });
   }
 
+  async updateFieldsById(botId: string, docId: string, set: Record<string, unknown>): Promise<void> {
+    if (!Types.ObjectId.isValid(botId) || !Types.ObjectId.isValid(docId)) return;
+    await this.documentModel.updateOne(
+      { _id: new Types.ObjectId(docId), botId: new Types.ObjectId(botId) },
+      { $set: set },
+    );
+  }
+
+  /** After title/text/active change: sync KB item as queued (ingestion will replace chunks). */
+  async upsertDocumentKnowledgeItemAfterContentChange(botId: string, docId: string): Promise<void> {
+    const doc = await this.findOneByBotAndDoc(botId, docId);
+    if (!doc) return;
+    const d = doc as Record<string, unknown>;
+    await this.knowledgeBaseItemService.upsertDocumentKnowledgeItem({
+      _id: d._id as Types.ObjectId,
+      botId: d.botId as Types.ObjectId,
+      title: String(d.title ?? 'Document'),
+      status: 'queued',
+      active: d.active !== false,
+      text: typeof d.text === 'string' ? d.text : '',
+      fileName: d.fileName as string | undefined,
+      fileType: d.fileType as string | undefined,
+      fileSize: d.fileSize as number | undefined,
+      url: d.url as string | undefined,
+      storage: d.storage as string | undefined,
+      s3Bucket: d.s3Bucket as string | undefined,
+      s3Key: d.s3Key as string | undefined,
+      uploadSessionId: d.uploadSessionId as string | undefined,
+    });
+  }
+
   async findActiveDocumentIds(botId: string): Promise<Types.ObjectId[]> {
     if (!Types.ObjectId.isValid(botId)) return [];
     const docs = await this.documentModel

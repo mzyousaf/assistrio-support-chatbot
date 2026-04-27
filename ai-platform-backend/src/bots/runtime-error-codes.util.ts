@@ -4,8 +4,7 @@ export type RuntimeErrorCode =
   | 'BOT_NOT_PUBLISHED'
   | 'INVALID_ACCESS_KEY'
   | 'INVALID_SECRET_KEY'
-  | 'VISITOR_ID_REQUIRED'
-  | 'MESSAGE_LIMIT_REACHED';
+  | 'VISITOR_ID_REQUIRED';
 
 export function toRuntimeCredentialErrorCode(
   result: Extract<RuntimeAccessValidationResult, { ok: false }>,

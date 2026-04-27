@@ -20,9 +20,10 @@ function resolveApiBaseUrl(): string {
 }
 
 /**
- * Live widget **only** under `/bots/:id/playground/...`. Inside playground: contained when the
- * inline slot is open, else floating. A stable off-screen portal root keeps the same React tree
- * when switching playground sections (brief gap with no surface) so the widget does not remount.
+ * Live widget **only** under `/bots/:id/playground/...` (customer dashboard). Inside playground:
+ * contained when the inline slot is open, else floating. A stable `key` per bot keeps the same
+ * embed instance across section tabs. After ~1h without activity, sending a message shows an idle
+ * refresh modal (see `assistrio-chat-override/AdminLiveChatAdapter.tsx`, not `chat-widget`).
  */
 export function CustomerWidgetPreviewHost() {
   const { botId, loadState } = useBotWorkspace();
@@ -124,7 +125,7 @@ export function CustomerWidgetPreviewHost() {
         ) : null
       }
     >
-      {/** One key per bot so section changes / surface handoff do not remount the tree */}
+      {/** One key per bot: preview “new session after idle” is handled by AdminLiveChatAdapter override, not remounts */}
       <EmbedWidgetRoot key={botId} rawConfig={rawConfig} />
     </Suspense>
   );

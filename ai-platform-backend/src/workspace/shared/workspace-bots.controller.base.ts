@@ -23,6 +23,7 @@ import { BotOnboardingService } from './bot-onboarding.service';
 import type { RequestUser } from '../../auth/shared/request-user.types';
 import { WorkspacesService } from '../../workspaces/workspaces.service';
 import { uploadPublic } from '../../lib/s3';
+import { parseExampleQuestionsFromDoc } from './example-questions.util';
 
 type RequestWithUser = FastifyRequest & { user?: RequestUser };
 
@@ -170,9 +171,6 @@ export abstract class WorkspaceBotsControllerBase {
         status: b.status ?? 'draft',
         isPublic: Boolean(b.isPublic),
         visibility: b.visibility ?? 'public',
-        messageLimitMode: b.messageLimitMode ?? 'none',
-        messageLimitTotal:
-          typeof b.messageLimitTotal === 'number' ? b.messageLimitTotal : null,
         createdAt: (b.createdAt as Date)?.toISOString?.() ?? null,
         slug: b.slug ?? '',
         primaryColor,
@@ -186,6 +184,7 @@ export abstract class WorkspaceBotsControllerBase {
         knowledgeDocs: stats?.knowledgeDocs ?? 0,
         knowledgeFaqs: stats?.knowledgeFaqs ?? 0,
         knowledgeSnippets: stats?.knowledgeSnippets ?? 0,
+        knowledgeDatasheets: stats?.knowledgeDatasheets ?? 0,
         lastActivityAt: stats?.lastActivityAt ?? null,
         lastTrainedAt: stats?.lastTrainedAt ?? null,
       };
@@ -406,6 +405,21 @@ export abstract class WorkspaceBotsControllerBase {
     const listStats = await this.botsService.getListStatsForBots([id]);
     const lastTrainedAt = listStats.get(id)?.lastTrainedAt ?? null;
     const b = bot as Record<string, unknown>;
+    const rawSnippets = Array.isArray((b as { knowledgeSnippets?: unknown }).knowledgeSnippets)
+      ? (b as { knowledgeSnippets: Array<{ title?: unknown; snippet?: unknown; description?: unknown; active?: unknown }> })
+          .knowledgeSnippets
+      : [];
+    const rawFaqsForTraining = Array.isArray(b.faqs) ? (b.faqs as Array<Record<string, unknown>>) : [];
+    const rawSheets = Array.isArray((b as { knowledgeDatasheets?: unknown }).knowledgeDatasheets)
+      ? (b as { knowledgeDatasheets: unknown[] }).knowledgeDatasheets
+      : Array.isArray((b as { knowledgeTables?: unknown }).knowledgeTables)
+        ? (b as { knowledgeTables: unknown[] }).knowledgeTables
+        : [];
+    const [snippetTraining, faqTraining, tableTraining] = await Promise.all([
+      this.knowledgeBaseItemService.getIndexedSnippetTraining(id, rawSnippets.length),
+      this.knowledgeBaseItemService.getIndexedFaqTraining(id, rawFaqsForTraining.length),
+      this.knowledgeBaseItemService.getIndexedTableTraining(id, rawSheets.length),
+    ]);
     return {
       ok: true,
       bot: {
@@ -425,20 +439,65 @@ export abstract class WorkspaceBotsControllerBase {
         welcomeMessage: b.welcomeMessage ?? '',
         welcomeMessageEnabled: (b as { welcomeMessageEnabled?: boolean }).welcomeMessageEnabled !== false,
         knowledgeDescription: (b.knowledgeDescription as string) ?? '',
+        knowledgeSnippets: rawSnippets
+          .map((s, originalIndex) => ({ s, originalIndex }))
+          .filter(({ s }) => (s as { active?: unknown }).active !== false)
+          .map(({ s, originalIndex }) => {
+            const t = snippetTraining[originalIndex];
+            return {
+              title: String(s?.title ?? '').trim() || 'Snippet',
+              snippet: String(s?.snippet ?? s?.description ?? '').trim(),
+              active: true,
+              ...(t
+                ? {
+                    trainingStatus: t.trainingStatus,
+                    lastTrainedAt: t.lastTrainedAt,
+                  }
+                : {}),
+            };
+          }),
+        knowledgeDatasheets: rawSheets.map((raw, i) => {
+          const t = tableTraining[i];
+          const base = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+          return {
+            ...base,
+            ...(t
+              ? {
+                  trainingStatus: t.trainingStatus,
+                  lastTrainedAt: t.lastTrainedAt,
+                  importFileSize: t.importFileSize,
+                  importFileName: t.importFileName,
+                }
+              : {}),
+          };
+        }),
         status: b.status === 'published' ? 'published' : 'draft',
         isPublic: Boolean(b.isPublic),
         leadCapture: b.leadCapture ?? undefined,
         chatUI: b.chatUI ?? undefined,
-        faqs: (Array.isArray(b.faqs) ? (b.faqs as Array<{ question?: unknown; answer?: unknown; active?: unknown }>) : [])
-          .filter((faq) => (faq as { active?: unknown }).active !== false)
-          .map((faq) => ({
-            question: String(faq?.question ?? ''),
-            answer: String(faq?.answer ?? ''),
-            active: true,
-          })),
-        exampleQuestions: Array.isArray(b.exampleQuestions)
-          ? (b.exampleQuestions as string[]).map((q) => String(q ?? '').trim()).filter(Boolean)
-          : [],
+        faqs: rawFaqsForTraining
+          .map((faq, originalIndex) => ({ faq, originalIndex }))
+          .filter(({ faq }) => faq?.active !== false)
+          .map(({ faq, originalIndex }) => {
+            const questions = Array.isArray(faq.questions) ? (faq.questions as unknown[]).map((q) => String(q ?? '')) : [];
+            const q0 = String(faq.question ?? '').trim();
+            const mergedQs = questions.length > 0 ? questions : q0 ? [q0] : [];
+            const t = faqTraining[originalIndex];
+            return {
+              title: String(faq.title ?? '').trim(),
+              questions: mergedQs,
+              question: mergedQs[0] ?? q0,
+              answer: String(faq.answer ?? '').trim(),
+              active: true,
+              ...(t
+                ? {
+                    trainingStatus: t.trainingStatus,
+                    lastTrainedAt: t.lastTrainedAt,
+                  }
+                : {}),
+            };
+          }),
+        exampleQuestions: parseExampleQuestionsFromDoc(b.exampleQuestions),
         personality: b.personality ?? {},
         config: b.config ?? {},
         limitOverrideMessages: typeof b.limitOverrideMessages === 'number' ? b.limitOverrideMessages : undefined,
@@ -451,14 +510,6 @@ export abstract class WorkspaceBotsControllerBase {
         secretKey:
           typeof b.secretKey === 'string' ? b.secretKey : '',
         ownerId: b.ownerId != null ? String(b.ownerId) : undefined,
-        messageLimitMode:
-          b.messageLimitMode === 'fixed_total' ? 'fixed_total' : 'none',
-        messageLimitTotal:
-          typeof b.messageLimitTotal === 'number' ? b.messageLimitTotal : null,
-        messageLimitUpgradeMessage:
-          typeof b.messageLimitUpgradeMessage === 'string'
-            ? b.messageLimitUpgradeMessage
-            : null,
         visitorMultiChatEnabled: (b as { visitorMultiChatEnabled?: boolean }).visitorMultiChatEnabled === true,
         visitorMultiChatMax:
           typeof (b as { visitorMultiChatMax?: unknown }).visitorMultiChatMax === 'number' &&
@@ -512,7 +563,6 @@ export abstract class WorkspaceBotsControllerBase {
       if (
         msg.includes('Name is required') ||
         msg.includes('Description is required') ||
-        msg.includes('messageLimitTotal must be a positive integer') ||
         msg.includes('allowed origin') ||
         msg.includes('allowed embed origin') ||
         msg.includes('Localhost and loopback')
@@ -529,9 +579,6 @@ export abstract class WorkspaceBotsControllerBase {
     @Body()
     body: {
       visibility?: unknown;
-      messageLimitMode?: unknown;
-      messageLimitTotal?: unknown;
-      messageLimitUpgradeMessage?: unknown;
       visitorMultiChatEnabled?: unknown;
       visitorMultiChatMax?: unknown;
     },
@@ -542,54 +589,21 @@ export abstract class WorkspaceBotsControllerBase {
     }
     await this.assertCanAccessWorkspaceBot(req, id);
     const visibility = body?.visibility === 'private' ? 'private' : body?.visibility === 'public' ? 'public' : null;
-    const messageLimitMode =
-      body?.messageLimitMode === 'fixed_total'
-        ? 'fixed_total'
-        : body?.messageLimitMode === 'none'
-          ? 'none'
-          : null;
     if (!visibility) {
       throw new HttpException({ error: 'visibility must be public or private.' }, HttpStatus.BAD_REQUEST);
     }
-    if (!messageLimitMode) {
-      throw new HttpException({ error: 'messageLimitMode must be none or fixed_total.' }, HttpStatus.BAD_REQUEST);
-    }
-    const messageLimitTotal =
-      body?.messageLimitTotal == null
-        ? null
-        : typeof body.messageLimitTotal === 'number' && Number.isFinite(body.messageLimitTotal)
-          ? Math.floor(body.messageLimitTotal)
-          : Number.isFinite(Number(body.messageLimitTotal))
-            ? Math.floor(Number(body.messageLimitTotal))
-            : null;
-    if (messageLimitMode === 'fixed_total' && (!messageLimitTotal || messageLimitTotal <= 0)) {
-      throw new HttpException(
-        { error: 'messageLimitTotal must be a positive integer when messageLimitMode is fixed_total.' },
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-    const messageLimitUpgradeMessage =
-      typeof body?.messageLimitUpgradeMessage === 'string'
-        ? body.messageLimitUpgradeMessage.trim() || null
-        : null;
     const visitorMultiChatEnabled = body?.visitorMultiChatEnabled === true;
     const rawVisitorMax = body?.visitorMultiChatMax;
     const visitorMultiChatMax = normalizeVisitorMultiChatMax(rawVisitorMax);
     try {
       return await this.botsService.updateWorkspaceAccessSettings(id, {
         visibility,
-        messageLimitMode,
-        messageLimitTotal,
-        messageLimitUpgradeMessage,
         visitorMultiChatEnabled,
         visitorMultiChatMax: visitorMultiChatEnabled ? visitorMultiChatMax : null,
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Update failed';
       if (msg === 'Bot not found') throw new HttpException({ error: 'Bot not found' }, HttpStatus.NOT_FOUND);
-      if (msg.includes('messageLimitTotal must be a positive integer')) {
-        throw new HttpException({ error: msg }, HttpStatus.BAD_REQUEST);
-      }
       throw new HttpException({ error: 'Internal server error' }, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
@@ -640,7 +654,7 @@ export abstract class WorkspaceBotsControllerBase {
       throw new HttpException({ error: 'Bot not found' }, HttpStatus.NOT_FOUND);
     }
     const result = await this.knowledgeBaseChunkService.replaceFaqKnowledgeChunksForBot(id);
-    return { ok: true, message: 'FAQ knowledge base chunks refreshed.', updated: result.updated, skipped: result.skipped };
+    return { ok: true, message: 'Q&A knowledge base chunks refreshed.', updated: result.updated, skipped: result.skipped };
   }
 
   @Post(':id/embed/retry-note')
@@ -652,7 +666,19 @@ export abstract class WorkspaceBotsControllerBase {
       throw new HttpException({ error: 'Bot not found' }, HttpStatus.NOT_FOUND);
     }
     const count = await this.knowledgeBaseChunkService.replaceNoteKnowledgeChunksForBot(id);
-    return { ok: true, message: 'Note knowledge base chunks refreshed.', chunksUpdated: count };
+    return { ok: true, message: 'Snippet knowledge base chunks refreshed.', chunksUpdated: count };
+  }
+
+  @Post(':id/embed/retry-table')
+  async retryTableEmbedding(@Param('id') id: string, @Req() req: RequestWithUser) {
+    if (!Types.ObjectId.isValid(id)) throw new HttpException({ error: 'Invalid id' }, HttpStatus.BAD_REQUEST);
+    await this.assertCanAccessWorkspaceBot(req, id);
+    const bot = await this.botsService.findOne(id);
+    if (!bot) {
+      throw new HttpException({ error: 'Bot not found' }, HttpStatus.NOT_FOUND);
+    }
+    const result = await this.knowledgeBaseChunkService.replaceTableKnowledgeChunksForBot(id);
+    return { ok: true, message: 'Table knowledge base chunks refreshed.', ...result };
   }
 
   @Delete(':id')

@@ -221,9 +221,6 @@ export interface BotDocument {
   visibility?: "public" | "private";
   accessKey?: string;
   secretKey?: string;
-  messageLimitMode?: "none" | "fixed_total";
-  messageLimitTotal?: number | null;
-  messageLimitUpgradeMessage?: string | null;
   /** When true, embed visitors can start multiple saved conversations (see visitorMultiChatMax). */
   visitorMultiChatEnabled?: boolean;
   /** Max saved threads per visitor when visitorMultiChatEnabled; omit/null = unlimited. Minimum 2 when set (current chat counts as one). */

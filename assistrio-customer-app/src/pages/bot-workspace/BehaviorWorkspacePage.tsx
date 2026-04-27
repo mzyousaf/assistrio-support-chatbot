@@ -1,10 +1,6 @@
 import { BehaviorSection } from './BehaviorSection';
-import { BehaviorWorkspaceProvider } from './BehaviorWorkspaceContext';
 
+/** `BehaviorWorkspaceProvider` wraps the playground in `PlaygroundLayout` so all sections share one behavior draft. */
 export function BehaviorWorkspacePage() {
-  return (
-    <BehaviorWorkspaceProvider>
-      <BehaviorSection />
-    </BehaviorWorkspaceProvider>
-  );
+  return <BehaviorSection />;
 }

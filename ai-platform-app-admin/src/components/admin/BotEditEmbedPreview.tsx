@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { usePathname } from "next/navigation";
 import React, { useEffect, useState } from "react";
 import type { EmbedChatConfig } from "@assistrio/chat-widget";
 
@@ -26,6 +27,7 @@ type BotEditEmbedPreviewProps = {
  */
 export function BotEditEmbedPreview({ botId, previewOverrides }: BotEditEmbedPreviewProps) {
   const [apiBaseUrl, setApiBaseUrl] = useState("");
+  const pathname = usePathname() ?? "";
 
   useEffect(() => {
     setApiBaseUrl(
@@ -45,6 +47,7 @@ export function BotEditEmbedPreview({ botId, previewOverrides }: BotEditEmbedPre
         mode: "preview",
         sessionPreview: true,
         position: "right",
+        previewSourcePage: pathname || undefined,
         previewOverrides: previewOverrides as EmbedChatConfig["previewOverrides"],
       }}
     />

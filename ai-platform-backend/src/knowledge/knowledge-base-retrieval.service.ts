@@ -85,7 +85,7 @@ export class KnowledgeBaseRetrievalService {
   ): Promise<UnifiedRetrievalResult> {
     const limit = options.limit ?? DEFAULT_LIMIT;
     const queryTrimmed = (query ?? '').trim();
-    const eligibleCounts: UnifiedRetrievalEligibleCounts = { document: 0, faq: 0, note: 0, html: 0 };
+    const eligibleCounts: UnifiedRetrievalEligibleCounts = { document: 0, faq: 0, note: 0, html: 0, table: 0 };
 
     if (!Types.ObjectId.isValid(botId)) {
       return this.emptyResult(eligibleCounts, options.debug ?? false);
@@ -171,6 +171,7 @@ export class KnowledgeBaseRetrievalService {
     eligibleCounts.document = items.filter((i) => (i as ItemRow).sourceType === 'document').length;
     eligibleCounts.faq = items.filter((i) => (i as ItemRow).sourceType === 'faq').length;
     eligibleCounts.note = items.filter((i) => (i as ItemRow).sourceType === 'note').length;
+    eligibleCounts.table = items.filter((i) => (i as ItemRow).sourceType === 'table').length;
 
     if (itemsWithEmbedding.length === 0) {
       return this.emptyResult(eligibleCounts, options.debug ?? false);

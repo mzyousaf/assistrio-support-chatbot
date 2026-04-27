@@ -34,9 +34,6 @@ export interface BotFormProps {
     visibility?: "public" | "private";
     accessKey?: string;
     secretKey?: string;
-    messageLimitMode?: "none" | "fixed_total";
-    messageLimitTotal?: number | null;
-    messageLimitUpgradeMessage?: string | null;
     visitorMultiChatEnabled?: boolean;
     visitorMultiChatMax?: number | null;
     allowedOrigins?: BotAllowedOrigin[];

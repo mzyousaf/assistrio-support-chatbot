@@ -21,7 +21,13 @@ export function buildCustomerWidgetPreviewOverridesFromBot(bot: CustomerBotDetai
   const suggested =
     Array.isArray(bot.exampleQuestions) && bot.exampleQuestions.length > 0
       ? bot.exampleQuestions
-          .map((q) => String(q).trim())
+          .map((q) => {
+            if (typeof q === 'string') return q.trim();
+            if (q && typeof q === 'object' && typeof (q as { label?: string }).label === 'string') {
+              return (q as { label: string }).label.trim();
+            }
+            return '';
+          })
           .filter(Boolean)
           .slice(0, EXAMPLE_CAP)
       : undefined;

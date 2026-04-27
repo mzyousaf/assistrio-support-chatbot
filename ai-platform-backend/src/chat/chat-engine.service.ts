@@ -42,6 +42,8 @@ import { isWelcomeMessageActive } from '../bots/welcome-message-display.util';
 import { normalizeVisitorMultiChatMax } from '../bots/visitor-multi-chat.util';
 import type { MessageAttachment, MessageSpeechInput } from '../models/message.schema';
 import { userMessageTextForLlm } from './user-message-text-for-llm';
+import { findMatchingSuggestionContext, parseExampleQuestionsFromDoc } from '../workspace/shared/example-questions.util';
+import { buildSuggestionScopedRankedItem } from './suggestion-scoped.util';
 
 function rankedItemToEvidenceItem(item: RankedKnowledgeItem): ChatContextEvidenceItem {
   const url =
@@ -228,19 +230,6 @@ export class ChatEngineService {
     private readonly summaryJobService: SummaryJobService,
   ) { }
 
-  private readonly ephemeralPreviewThreads = new Map<
-    string,
-    {
-      messages: Array<{ role: string; content: string; createdAt: Date; sources?: unknown }>;
-      conv: {
-        _id: Types.ObjectId;
-        capturedLeadData?: CapturedLeadData;
-        leadCaptureMeta?: LeadCaptureMeta;
-        summary?: string;
-      };
-    }
-  >();
-
   private parseOptionalObjectId(s?: string): Types.ObjectId | null {
     if (!s || !String(s).trim()) return null;
     try {
@@ -258,64 +247,6 @@ export class ChatEngineService {
     return String(this.config.get<string>('openaiApiKey') || '').trim();
   }
 
-  private resolveEphemeralThread(
-    bot: BotLike,
-    chatVisitorId: string,
-    inputConversationId: string | undefined,
-    now: Date,
-  ): {
-    conversation: Conversation & { _id: Types.ObjectId };
-    isNewConversation: boolean;
-    thread: {
-      messages: Array<{
-        role: string;
-        content: string;
-        createdAt: Date;
-        sources?: unknown;
-        speechInput?: MessageSpeechInput;
-        attachments?: MessageAttachment[];
-      }>;
-      conv: {
-        _id: Types.ObjectId;
-        capturedLeadData?: CapturedLeadData;
-        leadCaptureMeta?: LeadCaptureMeta;
-        summary?: string;
-      };
-    };
-  } {
-    const botOid =
-      typeof bot._id === 'object' && 'toHexString' in bot._id
-        ? (bot._id as Types.ObjectId)
-        : new Types.ObjectId(bot._id.toString());
-    const convId = this.parseOptionalObjectId(inputConversationId) ?? new Types.ObjectId();
-    const key = `${botOid.toHexString()}\0${chatVisitorId}\0${convId.toHexString()}`;
-    let thread = this.ephemeralPreviewThreads.get(key);
-    let isNewConversation = false;
-    if (!thread) {
-      thread = { messages: [], conv: { _id: convId } };
-      this.ephemeralPreviewThreads.set(key, thread);
-      isNewConversation = true;
-      const rawWelcome = typeof bot.welcomeMessage === 'string' ? bot.welcomeMessage.trim() : '';
-      if (rawWelcome && isWelcomeMessageActive(bot)) {
-        const welcomeText = resolveWelcomeMessage(rawWelcome, {
-          name: bot.name,
-          shortDescription: bot.shortDescription,
-          description: bot.description,
-        });
-        thread.messages.push({
-          role: 'assistant',
-          content: welcomeText,
-          createdAt: now,
-        });
-      }
-    }
-    return {
-      conversation: thread.conv as unknown as Conversation & { _id: Types.ObjectId },
-      isNewConversation,
-      thread,
-    };
-  }
-
   private async resolveMongoConversation(
     bot: BotLike,
     chatVisitorId: string,
@@ -324,6 +255,8 @@ export class ChatEngineService {
     inputStartNew: boolean | undefined,
     multiEnabled: boolean,
     multiMax: number | null,
+    sessionSource: 'runtime' | 'widget_preview',
+    previewInitiatedByUserId?: string,
   ): Promise<
     | { ok: true; conversation: Conversation; isNewConversation: boolean }
     | { ok: false; error: 'conversation_not_found' | 'visitor_multi_chat_limit_reached' }
@@ -333,33 +266,80 @@ export class ChatEngineService {
         ? (bot._id as Types.ObjectId)
         : new Types.ObjectId(bot._id.toString());
 
+    const initiatorOid =
+      sessionSource === 'widget_preview' &&
+      previewInitiatedByUserId &&
+      Types.ObjectId.isValid(previewInitiatedByUserId.trim())
+        ? new Types.ObjectId(previewInitiatedByUserId.trim())
+        : undefined;
+
     const createWithWelcome = async (): Promise<Conversation> => {
       const conv = await this.conversationModel.create({
         botId: botOid,
         chatVisitorId,
         createdAt: now,
         lastActivityAt: now,
+        sessionSource,
+        ...(initiatorOid ? { previewInitiatedByUserId: initiatorOid } : {}),
       });
-      const rawWelcome = typeof bot.welcomeMessage === 'string' ? bot.welcomeMessage.trim() : '';
-      if (rawWelcome && isWelcomeMessageActive(bot)) {
-        const welcomeText = resolveWelcomeMessage(rawWelcome, {
-          name: bot.name,
-          shortDescription: bot.shortDescription,
-          description: bot.description,
-        });
-        await this.messageModel.create({
-          conversationId: conv._id,
-          botId: botOid,
-          chatVisitorId,
-          role: 'assistant',
-          content: welcomeText,
-          createdAt: now,
-        });
+      if (sessionSource !== 'widget_preview') {
+        const rawWelcome = typeof bot.welcomeMessage === 'string' ? bot.welcomeMessage.trim() : '';
+        if (rawWelcome && isWelcomeMessageActive(bot)) {
+          const welcomeText = resolveWelcomeMessage(rawWelcome, {
+            name: bot.name,
+            shortDescription: bot.shortDescription,
+            description: bot.description,
+          });
+          await this.messageModel.create({
+            conversationId: conv._id,
+            botId: botOid,
+            chatVisitorId,
+            role: 'assistant',
+            content: welcomeText,
+            createdAt: now,
+          });
+        }
       }
       return conv;
     };
 
     if (!multiEnabled) {
+      if (sessionSource === 'widget_preview') {
+        const parsedPrevSingle = inputConversationId?.trim()
+          ? this.parseOptionalObjectId(inputConversationId)
+          : null;
+        if (parsedPrevSingle) {
+          let conversation = await this.conversationModel.findOne({
+            _id: parsedPrevSingle,
+            botId: botOid,
+            chatVisitorId,
+          });
+          if (!conversation) {
+            conversation = await this.conversationModel.findOne({
+              _id: parsedPrevSingle,
+              botId: botOid,
+              visitorId: chatVisitorId,
+            });
+          }
+          if (conversation) {
+            return { ok: true, conversation, isNewConversation: false };
+          }
+          return { ok: false, error: 'conversation_not_found' };
+        }
+        if (inputStartNew) {
+          const conv = await createWithWelcome();
+          return { ok: true, conversation: conv, isNewConversation: true };
+        }
+        let conversation = await this.conversationModel.findOne({ botId: botOid, chatVisitorId });
+        if (!conversation) {
+          conversation = await this.conversationModel.findOne({ botId: botOid, visitorId: chatVisitorId });
+        }
+        if (!conversation) {
+          const conv = await createWithWelcome();
+          return { ok: true, conversation: conv, isNewConversation: true };
+        }
+        return { ok: true, conversation, isNewConversation: false };
+      }
       let conversation = await this.conversationModel.findOne({
         botId: botOid,
         chatVisitorId,
@@ -429,10 +409,23 @@ export class ChatEngineService {
       debug: requestDebug = false,
       conversationId: inputConversationId,
       startNewConversation: inputStartNew,
-      ephemeral: inputEphemeral,
       speechInput: inputSpeechInput,
       attachments: inputAttachments = [],
+      previewInitiatedByUserId: inputPreviewInitiatedBy,
+      previewMessageContext: inputPreviewMessageContext,
     } = input;
+    const sessionSource: 'runtime' | 'widget_preview' = input.sessionSource ?? 'runtime';
+    const previewMsgPersist =
+      sessionSource === 'widget_preview' && inputPreviewMessageContext
+        ? {
+            ...(inputPreviewMessageContext.sourcePage?.trim()
+              ? { previewSourcePage: inputPreviewMessageContext.sourcePage.trim().slice(0, 512) }
+              : {}),
+            ...(inputPreviewMessageContext.origin?.trim()
+              ? { previewOrigin: inputPreviewMessageContext.origin.trim().slice(0, 256) }
+              : {}),
+          }
+        : {};
     const messageForLlm = userMessageTextForLlm(message, inputSpeechInput, inputAttachments);
     const requestId = inputRequestId ?? `chat-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
     const startTime = Date.now();
@@ -445,6 +438,7 @@ export class ChatEngineService {
       chatVisitorId,
       requestId,
       endpoint,
+      metadata: { sessionSource },
     });
 
     const resolvedApiKey = this.resolveOpenAIKey({ userApiKey, bot });
@@ -469,164 +463,87 @@ export class ChatEngineService {
 
     let conversation: Conversation & { _id: Types.ObjectId };
     let isNewConversation = false;
-    let ephemeralThread:
-      | {
-          messages: Array<{
-            role: string;
-            content: string;
-            createdAt: Date;
-            sources?: unknown;
-            speechInput?: MessageSpeechInput;
-            attachments?: MessageAttachment[];
-          }>;
-          conv: {
-            _id: Types.ObjectId;
-            capturedLeadData?: CapturedLeadData;
-            leadCaptureMeta?: LeadCaptureMeta;
-            summary?: string;
-          };
-        }
-      | undefined;
 
-    if (inputEphemeral) {
-      const ep = this.resolveEphemeralThread(bot, chatVisitorId, inputConversationId, now);
-      conversation = ep.conversation;
-      isNewConversation = ep.isNewConversation;
-      ephemeralThread = ep.thread;
-    } else {
-      const resolved = await this.resolveMongoConversation(
-        bot,
-        chatVisitorId,
-        now,
-        inputConversationId,
-        inputStartNew,
-        multiEnabled,
-        multiMax,
-      );
-      if (resolved.ok === false) return resolved;
-      conversation = resolved.conversation as Conversation & { _id: Types.ObjectId };
-      isNewConversation = resolved.isNewConversation;
-    }
+    const resolved = await this.resolveMongoConversation(
+      bot,
+      chatVisitorId,
+      now,
+      inputConversationId,
+      inputStartNew,
+      multiEnabled,
+      multiMax,
+      sessionSource,
+      inputPreviewInitiatedBy,
+    );
+    if (resolved.ok === false) return resolved;
+    conversation = resolved.conversation as Conversation & { _id: Types.ObjectId };
+    isNewConversation = resolved.isNewConversation;
 
-    if (!inputEphemeral) {
-      const lastTwo = await this.messageModel
-        .find({ conversationId: conversation._id })
-        .sort({ createdAt: -1 })
-        .limit(2)
-        .select({ role: 1, content: 1, createdAt: 1, speechInput: 1 })
-        .lean();
-      if (lastTwo.length === 2) {
-        const [newest, second] = lastTwo as Array<{
-          role: string;
-          content?: string;
-          createdAt: Date;
-          speechInput?: MessageSpeechInput;
-        }>;
-        const norm = normalizeMessageForDedupe(messageForLlm);
-        if (
-          newest.role === 'assistant' &&
-          second.role === 'user' &&
-          normalizeMessageForDedupe(
-            userMessageTextForLlm(
-              String(second.content || ''),
-              second.speechInput,
-              (second as { attachments?: MessageAttachment[] }).attachments,
-            ),
-          ) === norm &&
-          now.getTime() - new Date(second.createdAt).getTime() < DEDUPE_WINDOW_MS
-        ) {
-          chatLog({
-            event: 'chat.duplicate_request_detected',
-            level: 'info',
-            botId: bot._id.toString(),
-            conversationId: conversation._id.toString(),
-            chatVisitorId,
-            requestId,
-            endpoint,
-          });
-          return {
-            ok: true,
-            conversationId: conversation._id.toString(),
-            assistantMessage: String(newest.content || '').trim() || "I'm here. How can I help?",
-            isNewConversation: false,
-          };
-        }
-      }
-    } else if (ephemeralThread) {
-      const arr = ephemeralThread.messages;
-      if (arr.length >= 2) {
-        const newest = arr[arr.length - 1];
-        const second = arr[arr.length - 2];
-        const norm = normalizeMessageForDedupe(messageForLlm);
-        if (
-          newest.role === 'assistant' &&
-          second.role === 'user' &&
-          normalizeMessageForDedupe(
-            userMessageTextForLlm(
-              String(second.content || ''),
-              second.speechInput as MessageSpeechInput | undefined,
-              (second as { attachments?: MessageAttachment[] }).attachments,
-            ),
-          ) === norm &&
-          now.getTime() - new Date(second.createdAt).getTime() < DEDUPE_WINDOW_MS
-        ) {
-          chatLog({
-            event: 'chat.duplicate_request_detected',
-            level: 'info',
-            botId: bot._id.toString(),
-            conversationId: conversation._id.toString(),
-            chatVisitorId,
-            requestId,
-            endpoint,
-          });
-          return {
-            ok: true,
-            conversationId: conversation._id.toString(),
-            assistantMessage: String(newest.content || '').trim() || "I'm here. How can I help?",
-            isNewConversation: false,
-          };
-        }
+    const lastTwo = await this.messageModel
+      .find({ conversationId: conversation._id })
+      .sort({ createdAt: -1 })
+      .limit(2)
+      .select({ role: 1, content: 1, createdAt: 1, speechInput: 1 })
+      .lean();
+    if (lastTwo.length === 2) {
+      const [newest, second] = lastTwo as Array<{
+        role: string;
+        content?: string;
+        createdAt: Date;
+        speechInput?: MessageSpeechInput;
+      }>;
+      const norm = normalizeMessageForDedupe(messageForLlm);
+      if (
+        newest.role === 'assistant' &&
+        second.role === 'user' &&
+        normalizeMessageForDedupe(
+          userMessageTextForLlm(
+            String(second.content || ''),
+            second.speechInput,
+            (second as { attachments?: MessageAttachment[] }).attachments,
+          ),
+        ) === norm &&
+        now.getTime() - new Date(second.createdAt).getTime() < DEDUPE_WINDOW_MS
+      ) {
+        chatLog({
+          event: 'chat.duplicate_request_detected',
+          level: 'info',
+          botId: bot._id.toString(),
+          conversationId: conversation._id.toString(),
+          chatVisitorId,
+          requestId,
+          endpoint,
+        });
+        return {
+          ok: true,
+          conversationId: conversation._id.toString(),
+          assistantMessage: String(newest.content || '').trim() || "I'm here. How can I help?",
+          isNewConversation: false,
+        };
       }
     }
 
-    if (!inputEphemeral) {
-      await this.messageModel.create({
-        conversationId: conversation._id,
-        botId: bot._id,
-        chatVisitorId,
-        role: 'user',
-        content: message,
-        ...(inputSpeechInput ? { speechInput: inputSpeechInput } : {}),
-        ...(inputAttachments?.length ? { attachments: inputAttachments } : {}),
-        createdAt: now,
-      });
-      await this.conversationModel.updateOne(
-        { _id: conversation._id },
-        { $set: { lastActivityAt: now } },
-      );
-    } else {
-      ephemeralThread!.messages.push({
-        role: 'user',
-        content: message,
-        createdAt: now,
-        ...(inputSpeechInput ? { speechInput: inputSpeechInput } : {}),
-        ...(inputAttachments?.length ? { attachments: inputAttachments } : {}),
-      });
-    }
+    await this.messageModel.create({
+      conversationId: conversation._id,
+      botId: bot._id,
+      chatVisitorId,
+      role: 'user',
+      content: message,
+      ...(inputSpeechInput ? { speechInput: inputSpeechInput } : {}),
+      ...(inputAttachments?.length ? { attachments: inputAttachments } : {}),
+      createdAt: now,
+      ...previewMsgPersist,
+    });
+    await this.conversationModel.updateOne(
+      { _id: conversation._id },
+      { $set: { lastActivityAt: now } },
+    );
 
-    const allMessages = inputEphemeral
-      ? ephemeralThread!.messages.map((m) => ({
-          role: m.role,
-          content: m.content,
-          createdAt: m.createdAt,
-          speechInput: m.speechInput as MessageSpeechInput | undefined,
-          attachments: m.attachments,
-        }))
-      : await this.messageModel
-          .find({ conversationId: conversation._id })
-          .sort({ createdAt: 1 })
-          .select({ role: 1, content: 1, createdAt: 1, speechInput: 1, attachments: 1 })
-          .lean();
+    const allMessages = await this.messageModel
+      .find({ conversationId: conversation._id })
+      .sort({ createdAt: 1 })
+      .select({ role: 1, content: 1, createdAt: 1, speechInput: 1, attachments: 1 })
+      .lean();
     const allMessagesForContext = allMessages.map((m) => ({
       role: m.role as 'user' | 'assistant' | 'system',
       content: userMessageTextForLlm(
@@ -642,34 +559,62 @@ export class ChatEngineService {
       { recentWindow: 14, storedSummary: convSummary },
     );
 
-    // Unified knowledge retrieval (evidence-first prompt).
-    const retrievalStart = Date.now();
-    let unifiedResult: Awaited<ReturnType<UnifiedKnowledgeRetrievalService['getRelevantKnowledgeItemsForBot']>>;
-    try {
-      unifiedResult = await this.unifiedKnowledgeRetrievalService.getRelevantKnowledgeItemsForBot(
-        bot._id.toString(),
-        messageForLlm,
-        {
-          limit: 25,
-          apiKeyOverride: resolvedApiKey,
-          debug: requestDebug ?? false,
-        },
-      );
-    } catch (unifiedErr) {
-      const msg = unifiedErr instanceof Error ? unifiedErr.message : 'unified_retrieval_failed';
+    const userMessageCount = allMessagesForContext.filter((m) => m.role === 'user').length;
+    const exampleQ = parseExampleQuestionsFromDoc(
+      (bot as { exampleQuestions?: unknown }).exampleQuestions,
+    );
+    const matchedSuggestionContext = findMatchingSuggestionContext(exampleQ, messageForLlm, userMessageCount);
+    const suggestionScopeOnly = Boolean(matchedSuggestionContext);
+
+    if (suggestionScopeOnly) {
       chatLog({
-        event: 'chat.unified_retrieval_failed',
-        level: 'warn',
+        event: 'chat.suggestion_scoped',
+        level: 'info',
         botId: bot._id.toString(),
         conversationId: conversation._id.toString(),
         chatVisitorId,
         requestId,
-        reason: msg.slice(0, 80),
       });
-      unifiedResult = { items: [] };
+    }
+
+    // Unified knowledge retrieval (evidence-first prompt). Skipped when a suggestion with scoped `context` matches the first user turn.
+    const retrievalStart = Date.now();
+    let unifiedResult: Awaited<ReturnType<UnifiedKnowledgeRetrievalService['getRelevantKnowledgeItemsForBot']>>;
+    if (suggestionScopeOnly && matchedSuggestionContext) {
+      unifiedResult = {
+        items: [buildSuggestionScopedRankedItem(matchedSuggestionContext, bot._id.toString())],
+      };
+    } else {
+      try {
+        unifiedResult = await this.unifiedKnowledgeRetrievalService.getRelevantKnowledgeItemsForBot(
+          bot._id.toString(),
+          messageForLlm,
+          {
+            limit: 25,
+            apiKeyOverride: resolvedApiKey,
+            debug: requestDebug ?? false,
+          },
+        );
+      } catch (unifiedErr) {
+        const msg = unifiedErr instanceof Error ? unifiedErr.message : 'unified_retrieval_failed';
+        chatLog({
+          event: 'chat.unified_retrieval_failed',
+          level: 'warn',
+          botId: bot._id.toString(),
+          conversationId: conversation._id.toString(),
+          chatVisitorId,
+          requestId,
+          reason: msg.slice(0, 80),
+        });
+        unifiedResult = { items: [] };
+      }
     }
     const retrievalDurationMs = Date.now() - retrievalStart;
-    const retrievalConfidence = unifiedResult.items.length === 0 ? 'low' : 'medium';
+    const retrievalConfidence: 'high' | 'medium' | 'low' = suggestionScopeOnly
+      ? 'high'
+      : unifiedResult.items.length === 0
+        ? 'low'
+        : 'medium';
 
     // Lead capture: state from conversation + meta; extraction with last-asked context; decline detection.
     const leadConfig = bot.leadCapture;
@@ -760,16 +705,7 @@ export class ChatEngineService {
       };
     }
     if (Object.keys(updates).length > 0) {
-      if (inputEphemeral && ephemeralThread) {
-        if (updates.capturedLeadData !== undefined) {
-          ephemeralThread.conv.capturedLeadData = updates.capturedLeadData;
-        }
-        if (updates.leadCaptureMeta !== undefined) {
-          ephemeralThread.conv.leadCaptureMeta = updates.leadCaptureMeta;
-        }
-      } else {
-        await this.conversationModel.updateOne({ _id: conversation._id }, { $set: updates });
-      }
+      await this.conversationModel.updateOne({ _id: conversation._id }, { $set: updates });
     }
 
     const evidenceItems: ChatContextEvidenceItem[] = unifiedResult.items.map(rankedItemToEvidenceItem);
@@ -849,6 +785,7 @@ export class ChatEngineService {
         shouldUseFallback: answerabilityContext.shouldUseFallback,
         shouldAnswerGenerally: answerabilityContext.shouldAnswerGenerally,
       },
+      suggestionScopeOnly: suggestionScopeOnly && Boolean(matchedSuggestionContext),
     });
 
     const { systemPrompt, userPrompt } = formatPromptFromContext(ctx);
@@ -916,31 +853,23 @@ export class ChatEngineService {
         }))
         : undefined;
 
-    if (inputEphemeral && ephemeralThread) {
-      ephemeralThread.messages.push({
-        role: 'assistant',
-        content: assistantMessage,
-        createdAt: new Date(),
-        sources: messageSources,
-      });
-    } else {
-      await this.messageModel.create({
-        conversationId: conversation._id,
-        botId: bot._id,
-        chatVisitorId,
-        role: 'assistant',
-        content: assistantMessage,
-        sources: messageSources,
-        createdAt: new Date(),
-      });
-    }
+    await this.messageModel.create({
+      conversationId: conversation._id,
+      botId: bot._id,
+      chatVisitorId,
+      role: 'assistant',
+      content: assistantMessage,
+      sources: messageSources,
+      createdAt: new Date(),
+      ...previewMsgPersist,
+    });
 
     const totalMessagesNow = messageCount + 2;
     const summaryEligible =
       totalMessagesNow >= SUMMARY_MIN_MESSAGES && totalMessagesNow % SUMMARY_UPDATE_INTERVAL === 0;
     let summaryEnqueued = false;
     const enqueueStart = Date.now();
-    if (!inputEphemeral && summaryEligible) {
+    if (summaryEligible && sessionSource !== 'widget_preview') {
       const botOid = typeof bot._id === 'object' && 'toHexString' in bot._id ? (bot._id as Types.ObjectId) : new Types.ObjectId(bot._id.toString());
       summaryEnqueued = await this.summaryJobService.enqueue(conversation._id, botOid);
     }
@@ -1160,6 +1089,8 @@ export class ChatEngineService {
     botOid: Types.ObjectId;
     chatVisitorId: string;
     conversationId: string;
+    /** When set, only return if the conversation is a widget preview session. */
+    requireSessionSource?: 'widget_preview';
   }): Promise<
     | Array<{
         role: 'user' | 'assistant' | 'system';
@@ -1182,11 +1113,15 @@ export class ChatEngineService {
     } catch {
       return null;
     }
-    const conv = await this.conversationModel.findOne({
+    const convFilter: Record<string, unknown> = {
       _id: cid,
       botId: params.botOid,
       chatVisitorId: params.chatVisitorId,
-    });
+    };
+    if (params.requireSessionSource) {
+      convFilter.sessionSource = params.requireSessionSource;
+    }
+    const conv = await this.conversationModel.findOne(convFilter);
     if (!conv) {
       return null;
     }

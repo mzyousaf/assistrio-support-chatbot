@@ -119,6 +119,20 @@ export abstract class WorkspaceBotDocumentsControllerBase {
     return { url };
   }
 
+  /** One document (includes extracted `text` when ingested) for detail view. */
+  @Get(':id')
+  async getOne(@Param('botId') botId: string, @Param('id') id: string, @Req() req: RequestWithUser) {
+    await this.assertBotAccess(botId, req);
+    if (!Types.ObjectId.isValid(id)) {
+      throw new HttpException({ error: 'Invalid id' }, HttpStatus.BAD_REQUEST);
+    }
+    const doc = await this.documentsService.findOneByBotAndDoc(botId, id);
+    if (!doc) {
+      throw new HttpException({ error: 'Not found' }, HttpStatus.NOT_FOUND);
+    }
+    return { document: doc as Record<string, unknown> };
+  }
+
   @Post(':id/embed')
   async requeueIngestion(@Param('botId') botId: string, @Param('id') docId: string, @Req() req: RequestWithUser) {
     await this.assertBotAccess(botId, req);
@@ -146,14 +160,64 @@ export abstract class WorkspaceBotDocumentsControllerBase {
   }
 
   @Patch(':id')
-  async setActive(
+  async patchDocument(
     @Param('botId') botId: string,
     @Param('id') id: string,
-    @Body() body: { active?: boolean },
+    @Body() body: { active?: boolean; title?: string; text?: string },
     @Req() req: RequestWithUser,
   ) {
     await this.assertBotAccess(botId, req);
-    await this.documentsService.setActive(botId, id, body?.active !== false);
+    if (!Types.ObjectId.isValid(id)) {
+      throw new HttpException({ error: 'Invalid document id' }, HttpStatus.BAD_REQUEST);
+    }
+    const hasTitle = typeof body?.title === 'string';
+    const hasText = typeof body?.text === 'string';
+    if (body?.active != null && !hasTitle && !hasText) {
+      await this.documentsService.setActive(botId, id, body.active !== false);
+      return { ok: true };
+    }
+    if (hasTitle || hasText) {
+      const MAX_TITLE = 500;
+      const MAX_TEXT = 1_000_000;
+      if (hasTitle && (body.title!.length > MAX_TITLE || !body.title!.trim())) {
+        throw new HttpException(
+          { error: 'Title is required and must be at most 500 characters.' },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      if (hasText) {
+        if (body.text!.length > MAX_TEXT) {
+          throw new HttpException({ error: 'Text is too long.' }, HttpStatus.BAD_REQUEST);
+        }
+        if (!body.text!.trim()) {
+          throw new HttpException({ error: 'Text cannot be empty.' }, HttpStatus.BAD_REQUEST);
+        }
+      }
+      const doc = await this.documentsService.findOneByBotAndDoc(botId, id);
+      if (!doc) {
+        throw new HttpException({ error: 'Not found' }, HttpStatus.NOT_FOUND);
+      }
+      const row = doc as Record<string, unknown>;
+      const nextTitle = hasTitle ? body.title!.trim() : String(row['title'] ?? 'Document');
+      const nextText = hasText ? body.text! : (typeof row['text'] === 'string' ? (row['text'] as string) : '');
+      const nextActive = body?.active != null ? body.active !== false : row['active'] !== false;
+      const setDoc: Record<string, unknown> = {
+        title: nextTitle,
+        text: nextText,
+        active: nextActive,
+        status: 'queued',
+        error: undefined,
+      };
+      await this.documentsService.updateFieldsById(botId, id, setDoc);
+      await this.documentsService.upsertDocumentKnowledgeItemAfterContentChange(botId, id);
+      await this.ingestionService.deleteJobsByDocId(botId, id);
+      await this.documentsService.setQueued(botId, id);
+      await this.ingestionService.createQueuedJob(botId, id);
+      return { ok: true };
+    }
+    if (body?.active != null) {
+      await this.documentsService.setActive(botId, id, body.active !== false);
+    }
     return { ok: true };
   }
 }

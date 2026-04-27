@@ -32,7 +32,7 @@ const CHAT_EXPERIENCE_TABS: { id: ChatExperienceTabId; label: string; hint: stri
   {
     id: 'input-tools',
     label: 'Input Tools',
-    hint: 'Suggested questions and how the composer behaves with them.',
+    hint: 'Suggestions and how the composer behaves with them (chips are edited in Knowledge Base → Suggestions).',
     icon: Wrench,
   },
   {
@@ -394,7 +394,7 @@ export function ChatExperienceSection() {
                       <WorkspaceSectionHeader
                         id="chat-input-tools-h"
                         title="Input Tools"
-                        description="Suggested questions flow. File uploads and voice live under AI & Advanced."
+                        description="How the composer works with suggestions from Knowledge Base → Suggestions. File uploads and voice live under AI & Advanced."
                       />
                       <div className="mt-4 space-y-0">
                         <ToggleRow

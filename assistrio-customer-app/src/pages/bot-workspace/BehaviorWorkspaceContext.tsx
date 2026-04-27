@@ -16,12 +16,17 @@ import {
   behaviorPresetToPrompt,
   CUSTOM_CATEGORY_PILL,
   EXAMPLE_QUESTIONS_MAX,
-  EXAMPLE_QUESTION_MAX_CHARS,
   MAX_CATEGORY_PILLS,
   parseCategoriesFromBot,
   VALID_TONE_VALUES,
 } from './behaviorConstants';
 import { useBotWorkspace } from './BotWorkspaceContext';
+import {
+  exampleQuestionLabelsOnly,
+  exampleQuestionsToPatchPayload,
+  hydrateExampleQuestionsFromBot,
+  type ExampleQuestionItem,
+} from './exampleQuestionHelpers';
 import { registerManualSaveGuard } from './workspaceManualSaveGuard';
 
 export type BehaviorSubnav = 'personality' | 'first-message';
@@ -49,8 +54,8 @@ type BehaviorWorkspaceValue = {
   setWelcomeMessage: (v: string) => void;
   welcomeMessageEnabled: boolean;
   setWelcomeMessageEnabled: (v: boolean) => void;
-  exampleQuestions: string[];
-  setExampleQuestions: (v: string[]) => void;
+  exampleQuestions: ExampleQuestionItem[];
+  setExampleQuestions: (v: ExampleQuestionItem[]) => void;
   dirty: boolean;
   saving: boolean;
   saveError: string | null;
@@ -76,7 +81,7 @@ export function BehaviorWorkspaceProvider({ children }: { children: ReactNode })
   const [welcomeMessage, setWelcomeMessage] = useState('');
   const welcomeStashRef = useRef('');
   const [welcomeMessageEnabled, setWelcomeMessageEnabledState] = useState(false);
-  const [exampleQuestions, setExampleQuestions] = useState<string[]>([]);
+  const [exampleQuestions, setExampleQuestions] = useState<ExampleQuestionItem[]>([]);
 
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -112,14 +117,7 @@ export function BehaviorWorkspaceProvider({ children }: { children: ReactNode })
     setWelcomeMessageEnabledState(
       bot.welcomeMessageEnabled === false ? false : Boolean(wm.trim()),
     );
-    setExampleQuestions(
-      Array.isArray(bot.exampleQuestions)
-        ? bot.exampleQuestions
-            .map((q) => String(q).trim().slice(0, EXAMPLE_QUESTION_MAX_CHARS))
-            .filter(Boolean)
-            .slice(0, EXAMPLE_QUESTIONS_MAX)
-        : [],
-    );
+    setExampleQuestions(hydrateExampleQuestionsFromBot(bot));
 
     setDirty(false);
     setSaveError(null);
@@ -149,10 +147,7 @@ export function BehaviorWorkspaceProvider({ children }: { children: ReactNode })
       systemPrompt:
         clampStr(combinedSystemPrompt.trim(), BOT_FIELD_MAX.personalitySystemPrompt) || undefined,
     };
-    const suggested = exampleQuestions
-      .map((q) => String(q).trim().slice(0, EXAMPLE_QUESTION_MAX_CHARS))
-      .filter(Boolean)
-      .slice(0, EXAMPLE_QUESTIONS_MAX);
+    const suggested = exampleQuestionLabelsOnly(exampleQuestions).slice(0, EXAMPLE_QUESTIONS_MAX);
 
     const t = window.setTimeout(() => {
       setBehaviorDraftSlice({
@@ -290,10 +285,7 @@ export function BehaviorWorkspaceProvider({ children }: { children: ReactNode })
     const tta = clampStr(thingsToAvoid.trim(), BOT_FIELD_MAX.thingsToAvoid);
     if (tta) personalityPayload.thingsToAvoid = tta;
 
-    const exampleTrimmed = exampleQuestions
-      .map((q) => q.trim().slice(0, EXAMPLE_QUESTION_MAX_CHARS))
-      .filter(Boolean)
-      .slice(0, EXAMPLE_QUESTIONS_MAX);
+    const examplePatch = exampleQuestionsToPatchPayload(exampleQuestions).slice(0, EXAMPLE_QUESTIONS_MAX);
 
     setSaving(true);
     setSaveError(null);
@@ -302,7 +294,7 @@ export function BehaviorWorkspaceProvider({ children }: { children: ReactNode })
       categories: categoriesPayload,
       welcomeMessage: clampStr(welcomeMessage.trim(), BOT_FIELD_MAX.welcomeMessage),
       welcomeMessageEnabled,
-      exampleQuestions: exampleTrimmed,
+      exampleQuestions: examplePatch,
       personality: personalityPayload,
     });
     setSaving(false);

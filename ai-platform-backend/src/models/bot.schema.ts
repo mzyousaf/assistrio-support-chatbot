@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Types } from 'mongoose';
+import { Types, Schema as MongooseSchema } from 'mongoose';
 import { generateBotAccessKey, generateBotSecretKey } from '../bots/bot-keys.util';
 
 export type LeadFieldType = 'text' | 'email' | 'phone' | 'number' | 'url';
@@ -41,7 +41,6 @@ export class BotLeadCaptureV2 {
 export type ChatBackgroundStyle = 'auto' | 'light' | 'dark';
 export type ChatLauncherPosition = 'bottom-right' | 'bottom-left';
 export type BotVisibility = 'public' | 'private';
-export type BotMessageLimitMode = 'none' | 'fixed_total';
 
 /** Default max embed API requests per minute per IP when not set on the bot document. */
 export const DEFAULT_WIDGET_EMBED_RATE_LIMIT_PER_MINUTE = 90;
@@ -338,15 +337,6 @@ export class Bot {
   whisperApiKeyOverride?: string;
   @Prop()
   limitOverrideMessages?: number;
-  /** Bot-level usage policy mode; step-1 prepares storage only (no runtime enforcement yet). */
-  @Prop({ enum: ['none', 'fixed_total'], default: 'none' })
-  messageLimitMode?: BotMessageLimitMode;
-  /** Total allowed messages when messageLimitMode='fixed_total'. Null/undefined means unlimited. */
-  @Prop({ type: Number, default: null })
-  messageLimitTotal?: number | null;
-  /** Custom upgrade/upsell copy shown when bot-level quota is reached. */
-  @Prop({ type: String, default: null })
-  messageLimitUpgradeMessage?: string | null;
   /**
    * When true, embed visitors may keep multiple chat threads (start new / recent chats).
    * When false, one conversation per chatVisitorId (legacy).
@@ -374,8 +364,9 @@ export class Bot {
   chatUI?: BotChatUI;
   @Prop()
   description?: string;
-  @Prop({ type: [String], default: [] })
-  exampleQuestions?: string[];
+  /** Legacy: `string[]`. New: `{ label, context? }[]` — optional `context` scopes the first reply when that chip is used. */
+  @Prop({ type: [MongooseSchema.Types.Mixed], default: [] })
+  exampleQuestions?: unknown[];
   @Prop({ type: BotPersonality })
   personality?: BotPersonality;
   @Prop({ type: BotConfig })

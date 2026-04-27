@@ -95,6 +95,7 @@ export const ASSISTRIO_PREVIEW_ORIGINS_PRODUCTION = [
   'https://assistrio.com',
   'https://www.assistrio.com',
   'https://app.assistrio.com',
+  'https://admin.assistrio.com',
 ] as const;
 
 /**

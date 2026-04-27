@@ -19,10 +19,10 @@ export const BOT_FIELD_MAX = {
   welcomeMessage: 2000,
   knowledgeDescription: 2000,
   exampleQuestion: 140,
+  exampleQuestionContext: 4000,
   categoryText: 200,
   senderName: 120,
   scrollToBottomLabel: 120,
-  messageLimitUpgradeMessage: 500,
   menuQuickLinkText: 120,
   menuQuickLinkRoute: 2000,
 } as const;
@@ -34,3 +34,6 @@ export function clampStr(s: string, max: number): string {
 
 /** Keep in sync with `ai-platform-backend/.../bot-field-limits.ts`. */
 export const LEAD_CAPTURE_FIELDS_MAX = 10;
+
+/** Datasheet import. Sync with `MAX_DATASHEET_IMPORT_BYTES` in backend `bot-document-upload.constants.ts`. */
+export const MAX_DATASHEET_IMPORT_FILE_BYTES = 10 * 1024 * 1024;

@@ -12,12 +12,14 @@ import {
   BarChart3,
   StickyNote,
   HelpCircle,
+  Table2,
   FileText,
   MessagesSquare,
   Tags,
   SmilePlus,
   ClipboardList,
   Sparkles,
+  Lightbulb,
 } from 'lucide-react';
 import { NavLink, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { getCustomerBot } from '../../api/customerApi';
@@ -210,17 +212,28 @@ export function AgentWorkspaceSidebar({ bot: _bot, health }: Props) {
 
   const match = (suffix: string) => Boolean(base) && pathname.startsWith(`${base}/${suffix}`);
 
-  const isKnowledgeNotes =
-    match('playground/knowledgebase/notes') || match('knowledge/notes') || match('knowledge/text');
+  const isKnowledgeSnippets =
+    match('playground/knowledgebase/snippets') ||
+    match('playground/knowledgebase/notes') ||
+    match('knowledge/snippets') ||
+    match('knowledge/notes') ||
+    match('knowledge/text');
   const isKnowledgeFaqs =
     match('playground/knowledgebase/faqs') || match('knowledge/faqs') || match('knowledge/qa');
+  const isKnowledgeDatasheets =
+    match('playground/knowledgebase/datasheets') ||
+    match('playground/knowledgebase/tables') ||
+    match('knowledge/datasheets') ||
+    match('knowledge/tables');
   const isKnowledgeDocs =
     match('playground/knowledgebase/documents') ||
     match('knowledge/documents') ||
     match('knowledge/files') ||
     pathname === `${base}/knowledge` ||
     pathname === `${base}/playground/knowledgebase`;
-  const isKnowledgeParent = isKnowledgeNotes || isKnowledgeFaqs || isKnowledgeDocs;
+  const isKnowledgeSuggestions = match('playground/knowledgebase/suggestions') || match('knowledge/suggestions');
+  const isKnowledgeParent =
+    isKnowledgeSnippets || isKnowledgeFaqs || isKnowledgeDatasheets || isKnowledgeDocs || isKnowledgeSuggestions;
 
   const isAnalyticsChats = match('analytics/chats');
   const isAnalyticsTopics = match('analytics/topics');
@@ -231,9 +244,21 @@ export function AgentWorkspaceSidebar({ bot: _bot, health }: Props) {
   const [analyticsOpen, setAnalyticsOpen] = useState(isAnalyticsParent);
 
   const kbSubNav = [
-    { to: `${base}/playground/knowledgebase/notes`, label: 'Notes', Icon: StickyNote, active: isKnowledgeNotes },
-    { to: `${base}/playground/knowledgebase/faqs`, label: 'FAQs', Icon: HelpCircle, active: isKnowledgeFaqs },
+    { to: `${base}/playground/knowledgebase/snippets`, label: 'Snippets', Icon: StickyNote, active: isKnowledgeSnippets },
+    { to: `${base}/playground/knowledgebase/faqs`, label: 'Q&A', Icon: HelpCircle, active: isKnowledgeFaqs },
+    {
+      to: `${base}/playground/knowledgebase/datasheets`,
+      label: 'Datasheets',
+      Icon: Table2,
+      active: isKnowledgeDatasheets,
+    },
     { to: `${base}/playground/knowledgebase/documents`, label: 'Documents', Icon: FileText, active: isKnowledgeDocs },
+    {
+      to: `${base}/playground/knowledgebase/suggestions`,
+      label: 'Suggestions',
+      Icon: Lightbulb,
+      active: isKnowledgeSuggestions,
+    },
   ];
 
   const analyticsSubNav = [
@@ -317,7 +342,7 @@ export function AgentWorkspaceSidebar({ bot: _bot, health }: Props) {
             setKbOpen(opening);
             if (opening && !isKnowledgeParent) {
               void (async () => {
-                if (await requestDiscardIfNeeded()) navigate(`${base}/playground/knowledgebase/notes`);
+                if (await requestDiscardIfNeeded()) navigate(`${base}/playground/knowledgebase/snippets`);
               })();
             }
           }}>

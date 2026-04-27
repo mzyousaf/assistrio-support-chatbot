@@ -111,6 +111,12 @@ export class CustomerDocumentsController extends WorkspaceBotDocumentsController
             this.logger.warn(`[upload] skip empty file part +${Date.now() - t0}ms botId=${botId}`);
             continue;
           }
+          if (buffer.length > MAX_BOT_DOCUMENT_UPLOAD_BYTES) {
+            throw new HttpException(
+              { error: 'File too large', maxBytes: MAX_BOT_DOCUMENT_UPLOAD_BYTES },
+              HttpStatus.PAYLOAD_TOO_LARGE,
+            );
+          }
           const originalName = (part.filename || 'document').trim() || 'document';
           const ext = getBotDocumentExtension(originalName);
           if (!ext || !isAllowedBotDocumentExtension(ext)) {

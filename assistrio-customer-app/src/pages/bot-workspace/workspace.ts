@@ -34,6 +34,8 @@ export const ws = {
     'm-0 text-lg font-semibold tracking-tight text-slate-900 sm:text-xl',
   /** Lead under page title (same scale as tab context). */
   workspaceEditorLead: 'm-0 max-w-xl text-sm leading-relaxed text-slate-500',
+  /** Full-width lead (e.g. Datasheets explainer spanning the content column). */
+  workspaceEditorLeadFull: 'm-0 w-full max-w-none text-sm leading-relaxed text-slate-500',
   workspaceEditorSubnavSection: 'mb-6 space-y-2',
   workspaceEditorSubnavBar: 'min-w-0 border-b border-slate-200',
   /** Tab strip context line */
@@ -58,6 +60,24 @@ export const ws = {
     'block text-xs font-medium uppercase tracking-wide text-slate-500',
   /** Save / primary toolbar actions */
   workspaceEditorButtonLabel: 'text-sm font-semibold',
+
+  /**
+   * Knowledge base — shared `Button` sizing (use with `size="sm"`; overrides to `h-9` for alignment).
+   * Covers form footers, modals, header CTAs, and pagination in playground/knowledgebase.
+   */
+  knowledgeFormActionsRow: 'flex flex-wrap items-center justify-end gap-2',
+  knowledgeFormActionPrimary:
+    'h-9 min-w-[9.5rem] gap-1.5 px-4 text-sm font-semibold shadow-sm',
+  knowledgeFormActionSecondary: 'h-9 gap-1.5 px-4 text-sm font-medium',
+  /** Detail page header: primary Edit */
+  knowledgeDetailHeaderButtonPrimary: 'h-9 gap-1.5 px-4 text-sm font-semibold',
+  /** Detail page header: secondary Delete (add danger text/hover classes in `cn` where needed) */
+  knowledgeDetailHeaderButtonSecondary: 'h-9 gap-1.5 px-4 text-sm font-medium',
+  knowledgeModalActionPrimary: 'h-9 min-w-[9.5rem] gap-1.5 px-4 text-sm font-semibold shadow-sm',
+  knowledgeModalActionDanger: 'h-9 min-w-[9.5rem] gap-1.5 px-4 text-sm font-semibold',
+  knowledgeListPaginationButton: 'h-9 gap-1.5 px-3 text-sm font-medium',
+  /** Bulk selection bar (same vertical rhythm as form actions) */
+  knowledgeBulkBarButton: 'h-9 gap-1.5 px-3 text-sm font-medium',
   /** Inline banners (error, info) */
   workspaceEditorBannerText: 'text-sm',
   /** `Input` / `Textarea` editor content (matches UI components) */

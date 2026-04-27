@@ -25,10 +25,10 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function 
       aria-invalid={invalid || undefined}
       className={cn(
         base,
-        invalid
-          ? 'border-[var(--color-danger-border)] focus-visible:border-[var(--color-danger-text-emphasis)] focus-visible:ring-red-900/10'
-          : 'border-[var(--ui-border)] hover:border-[var(--ui-border-hover)]',
+        !invalid && 'border-[var(--ui-border)] hover:border-[var(--ui-border-hover)]',
         className,
+        invalid &&
+          'border-[var(--color-danger-border)] focus-visible:border-[var(--color-danger-text-emphasis)] focus-visible:ring-red-900/10',
       )}
       {...props}
     />

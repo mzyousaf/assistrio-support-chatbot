@@ -23,6 +23,7 @@ import {
   resolveRuntimeEmbedOriginFromHeaders,
 } from './origin-validation.util';
 import { RUNTIME_INIT_DEPLOYMENT_HINTS } from './runtime-deployment-hints';
+import { exampleQuestionsToPublicLabels } from '../workspace/shared/example-questions.util';
 
 type WidgetInitBody = {
   botId?: unknown;
@@ -204,8 +205,8 @@ export class WidgetInitController {
             : undefined
           : undefined,
         welcomeMessageEnabled: (row as { welcomeMessageEnabled?: boolean }).welcomeMessageEnabled !== false,
-        suggestedQuestions: Array.isArray(row.exampleQuestions) ? row.exampleQuestions : [],
-        exampleQuestions: Array.isArray(row.exampleQuestions) ? row.exampleQuestions : [],
+        suggestedQuestions: exampleQuestionsToPublicLabels(row.exampleQuestions),
+        exampleQuestions: exampleQuestionsToPublicLabels(row.exampleQuestions),
       },
       settings: {
         chatUI,

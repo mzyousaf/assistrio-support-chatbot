@@ -21,8 +21,6 @@ export type CustomerBotListItem = {
   status: string;
   isPublic: boolean;
   visibility: string;
-  messageLimitMode: string;
-  messageLimitTotal: number | null;
   createdAt: string | null;
   slug: string;
   primaryColor: string;
@@ -36,8 +34,26 @@ export type CustomerBotListItem = {
   knowledgeDocs?: number;
   knowledgeFaqs?: number;
   knowledgeSnippets?: number;
+  knowledgeDatasheets?: number;
   lastActivityAt?: string | null;
   lastTrainedAt?: string | null;
+};
+
+/** POST /api/customer/bots/:id/datasheets/preview (multipart `file`) */
+export type CustomerDatasheetPreviewResponse = {
+  ok: true;
+  fileName: string;
+  columns: string[];
+  previewRows: string[][];
+  totalDataRows: number;
+};
+
+/** POST /api/customer/bots/:id/datasheets/import (multipart `file`) */
+export type CustomerDatasheetImportResponse = {
+  ok: true;
+  botId: string;
+  sheetIndex: number;
+  sourceFile: { bucket: string; key: string };
 };
 
 /** Subset of `leadCapture` aligned with backend `BotLeadCaptureV2` / workspace PATCH. */
@@ -58,12 +74,41 @@ export type CustomerLeadCapture = {
   captureMode?: 'chat' | 'form' | 'hybrid';
 };
 
-/** FAQ row from KB (`getFaqsForBot` / PATCH `faqs`). */
+/** Pipeline state for a snippet/FAQ row from knowledge base items (`GET` bot). */
+export type CustomerKnowledgeItemTrainingStatus = 'queued' | 'processing' | 'ready' | 'failed';
+
+/** Q&A group from KB (`PATCH` `faqs`). Legacy rows may only have `question` + `answer`. */
 export type CustomerKnowledgeFaq = {
+  /** Group label shown in the library. */
+  title?: string;
+  /** Phrasing variants for retrieval; first maps to `question` for older clients. */
+  questions?: string[];
   question: string;
   answer: string;
-  /** When false, pair is retained but excluded from retrieval (admin/workspace GET may include inactive). */
   active?: boolean;
+  trainingStatus?: CustomerKnowledgeItemTrainingStatus;
+  lastTrainedAt?: string | null;
+};
+
+export type CustomerKnowledgeSnippet = {
+  title: string;
+  snippet: string;
+  active?: boolean;
+  trainingStatus?: CustomerKnowledgeItemTrainingStatus;
+  lastTrainedAt?: string | null;
+};
+
+export type CustomerKnowledgeDatasheet = {
+  title: string;
+  columns: string[];
+  rows: string[][];
+  active?: boolean;
+  /** KB pipeline status for this datasheet (from `GET` bot). */
+  trainingStatus?: CustomerKnowledgeItemTrainingStatus;
+  lastTrainedAt?: string | null;
+  /** Original import file size in bytes, when available. */
+  importFileSize?: number | null;
+  importFileName?: string | null;
 };
 
 /** Document row from GET `/api/customer/bots/:botId/documents` (list). */
@@ -80,6 +125,8 @@ export type CustomerWorkspaceDocument = {
   fileSize?: number;
   active?: boolean;
   createdAt?: string | Date;
+  /** Populated on GET single-document when ingested. */
+  text?: string;
 };
 
 /** Subset of `personality` aligned with backend `BotPersonality` / workspace PATCH. */
@@ -109,6 +156,8 @@ export type CustomerBotDetail = {
   category?: string;
   categories?: string[];
   knowledgeDescription?: string;
+  knowledgeSnippets?: CustomerKnowledgeSnippet[];
+  knowledgeDatasheets?: CustomerKnowledgeDatasheet[];
   welcomeMessage?: string;
   /** When false, welcome text is kept but not shown in the widget. */
   welcomeMessageEnabled?: boolean;
@@ -116,16 +165,14 @@ export type CustomerBotDetail = {
   isPublic?: boolean;
   visibility?: string;
   faqs?: CustomerKnowledgeFaq[];
-  exampleQuestions?: string[];
+  /** Legacy: `string`. New: `{ label, context? }` — optional `context` limits the first reply to that text (no full KB). */
+  exampleQuestions?: Array<string | { label: string; context?: string }>;
   personality?: CustomerBotPersonality;
   config?: Record<string, unknown>;
   allowedOrigins?: Array<{ origin: string; label?: string; isActive?: boolean }>;
   includeNameInKnowledge?: boolean;
   includeTaglineInKnowledge?: boolean;
   includeNotesInKnowledge?: boolean;
-  messageLimitMode?: string;
-  messageLimitTotal?: number | null;
-  messageLimitUpgradeMessage?: string | null;
   leadCapture?: CustomerLeadCapture;
   chatUI?: unknown;
   clientDraftId?: string;

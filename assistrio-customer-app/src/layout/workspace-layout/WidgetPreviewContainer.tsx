@@ -115,6 +115,11 @@ export type WidgetPreviewContainerProps = {
    */
   previewBodyClassName?: string;
   className?: string;
+  /**
+   * When there is no preview, the editor is normally centered with `max-w` (see `WIDGET_PREVIEW_EDITOR_MAX_PX`).
+   * Set true for routes that should use the full main width (e.g. datasheet full screen).
+   */
+  editorFullWidth?: boolean;
 };
 
 /**
@@ -131,6 +136,7 @@ export function WidgetPreviewContainer({
   previewDescription,
   previewBodyClassName,
   className,
+  editorFullWidth = false,
 }: WidgetPreviewContainerProps) {
   const tier = useWidgetPreviewBreakpoint();
   const prefersReducedMotion = usePrefersReducedMotion();
@@ -282,10 +288,14 @@ export function WidgetPreviewContainer({
       {hasResolvedPreview && (tier === 'small' || tier === 'medium') && !floatingOpen ? (
         <PreviewExpandEyeButton onExpand={openPreview} />
       ) : null}
-      <div className="flex min-h-0 min-w-0 w-full flex-1 overflow-x-hidden overflow-y-auto">
-        <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col px-4 py-6 pb-12 sm:px-6 md:px-8 md:py-8">
-          <div className="w-full min-w-0">{children}</div>
-        </div>
+      <div
+        className={cn(
+          'flex min-h-0 min-w-0 w-full flex-1 flex-col overflow-x-hidden overflow-y-auto',
+          'px-4 pt-6 pb-8 sm:px-6 md:px-8 md:pt-8 md:pb-10',
+        )}
+      >
+        {/** Horizontal + top padding; bottom padding only here (single source) so it isn’t stacked with layouts/pages. */}
+        <div className="w-full min-w-0 flex flex-col">{children}</div>
       </div>
     </div>
   );
@@ -343,12 +353,27 @@ export function WidgetPreviewContainer({
           className,
         )}
       >
-        <div className="flex min-h-0 min-w-0 flex-1 justify-center overflow-x-hidden overflow-y-auto">
+        <div
+          className={cn(
+            'flex min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto',
+            editorFullWidth
+              ? 'min-h-0 flex flex-1 flex-col'
+              : 'justify-center px-4 pt-6 pb-8 sm:px-6 md:px-8 md:pt-8 md:pb-10',
+          )}
+        >
           <div
-            className="flex min-h-0 w-full min-w-0 max-w-[var(--editor-max)] flex-1 flex-col px-4 py-6 pb-12 sm:px-6 md:px-8 md:py-8"
-            style={{ ['--editor-max' as string]: `${WIDGET_PREVIEW_EDITOR_MAX_PX}px` }}
+            className={cn(
+              'flex w-full min-w-0 flex-col',
+              !editorFullWidth && 'max-w-[var(--editor-max)]',
+              editorFullWidth && 'min-h-0 flex-1',
+            )}
+            style={
+              editorFullWidth
+                ? undefined
+                : { ['--editor-max' as string]: `${WIDGET_PREVIEW_EDITOR_MAX_PX}px` }
+            }
           >
-            <div className="w-full min-w-0">{children}</div>
+            {children}
           </div>
         </div>
       </div>

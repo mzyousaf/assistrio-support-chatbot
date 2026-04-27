@@ -95,6 +95,9 @@ function parseObjectConfig(input: unknown): Partial<EmbedChatConfig> {
     ...(widgetInitPath ? { widgetInitPath } : {}),
     ...(chatPostPath ? { chatPostPath } : {}),
     ...(toNonEmptyString(cfg.locale) ? { locale: toNonEmptyString(cfg.locale) } : {}),
+    ...(toNonEmptyString(cfg.previewSourcePage)
+      ? { previewSourcePage: toNonEmptyString(cfg.previewSourcePage) }
+      : {}),
     ...(cfg.widgetStrings && typeof cfg.widgetStrings === "object"
       ? { widgetStrings: cfg.widgetStrings as Partial<WidgetStrings> }
       : {}),
@@ -152,6 +155,7 @@ export function normalizeEmbedConfig(input: Partial<EmbedChatConfig>): EmbedChat
       typeof input.disableRemoteConfig === "boolean" ? input.disableRemoteConfig : undefined,
     embedOrigin: toNonEmptyString(input.embedOrigin),
     locale: toNonEmptyString(input.locale),
+    previewSourcePage: toNonEmptyString(input.previewSourcePage),
     widgetStrings: input.widgetStrings,
   };
 }

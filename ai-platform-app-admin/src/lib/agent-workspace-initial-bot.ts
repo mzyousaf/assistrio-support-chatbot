@@ -120,11 +120,6 @@ export function buildInitialBotPayload(
         : "public",
     accessKey: typeof bot.accessKey === "string" ? bot.accessKey : "",
     secretKey: typeof bot.secretKey === "string" ? bot.secretKey : "",
-    messageLimitMode:
-      (bot.messageLimitMode === "fixed_total" ? "fixed_total" : "none") as "none" | "fixed_total",
-    messageLimitTotal: typeof bot.messageLimitTotal === "number" ? bot.messageLimitTotal : null,
-    messageLimitUpgradeMessage:
-      typeof bot.messageLimitUpgradeMessage === "string" ? bot.messageLimitUpgradeMessage : null,
     visitorMultiChatEnabled: (bot as { visitorMultiChatEnabled?: boolean }).visitorMultiChatEnabled === true,
     visitorMultiChatMax: normalizeVisitorMultiChatMax(
       (bot as { visitorMultiChatMax?: unknown }).visitorMultiChatMax,

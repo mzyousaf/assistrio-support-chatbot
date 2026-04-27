@@ -418,6 +418,7 @@ export class ChatController {
       visitorMultiChatEnabled:
         (b.visitorMultiChatEnabled as boolean | undefined) === true ? true : undefined,
       visitorMultiChatMax: normalizeVisitorMultiChatMax(b.visitorMultiChatMax),
+      exampleQuestions: b.exampleQuestions,
     };
 
     const chatResult = await this.chatEngineService.runChat({
@@ -458,7 +459,6 @@ export class ChatController {
     );
     return {
       ok: true,
-      limitReached: false,
       conversationId: chatResult.conversationId,
       assistantMessage: chatResult.assistantMessage,
       sources: chatResult.sources,

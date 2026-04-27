@@ -47,6 +47,11 @@ export interface BotLike {
   visitorMultiChatEnabled?: boolean;
   /** Max saved threads per visitor when visitorMultiChatEnabled; null = unlimited. */
   visitorMultiChatMax?: number | null;
+  /**
+   * Suggestion chips: legacy `string[]` or `{ label, context? }[]`. Optional `context` scopes
+   * the first reply when the visitor message matches `label` (no full KB retrieval that turn).
+   */
+  exampleQuestions?: unknown;
 }
 
 export interface RunChatInput {
@@ -73,9 +78,17 @@ export interface RunChatInput {
    */
   startNewConversation?: boolean;
   /**
-   * Preview/widget-testing: run the full model path without persisting Conversation/Message to Mongo.
+   * Distinguish embed runtime vs admin widget preview in stored conversations (default `runtime`).
    */
-  ephemeral?: boolean;
+  sessionSource?: 'runtime' | 'widget_preview';
+  /**
+   * Platform user id (ObjectId string) for preview: stored on new `widget_preview` conversations.
+   */
+  previewInitiatedByUserId?: string;
+  /**
+   * Preview-only: admin route + request origin, stored on user (and matching assistant) messages.
+   */
+  previewMessageContext?: { sourcePage?: string; origin?: string };
   /** Optional: how the user composed this turn (dictate / voice); stored on the user Message in Mongo. */
   speechInput?: MessageSpeechInput;
   /** Visitor files uploaded with this turn (widget); stored on the user Message. */

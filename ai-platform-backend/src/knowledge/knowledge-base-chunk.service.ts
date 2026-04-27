@@ -148,8 +148,8 @@ export class KnowledgeBaseChunkService {
   }
 
   /**
-   * Chunk the note content and replace KnowledgeBaseChunks for the bot's note item.
-   * If note is empty or inactive, removes chunks.
+   * Chunk all active note/snippet items and replace KnowledgeBaseChunks per item.
+   * Inactive items have chunks removed.
    */
   async replaceNoteKnowledgeChunksForBot(botId: string, apiKeyOverride?: string): Promise<number> {
     const key = apiKeyOverride ?? (await this.getBotApiKeyOverride(botId));
@@ -165,30 +165,83 @@ export class KnowledgeBaseChunkService {
       sourceType: 'note',
       activeOnly: true,
     });
-    const noteItem = items[0] as { _id: Types.ObjectId; content?: string } | undefined;
-    if (!noteItem) return 0;
-    const content = (noteItem.content ?? '').trim();
-    if (!content) {
-      return this.removeChunksForKnowledgeItem(noteItem._id);
-    }
-    const chunkTexts = chunkDocumentText(content).slice(0, MAX_NOTE_CHUNKS);
-    if (chunkTexts.length === 0) {
-      return this.removeChunksForKnowledgeItem(noteItem._id);
-    }
     const botOid = new Types.ObjectId(botId);
-    const embeddings: number[][] = [];
-    for (let i = 0; i < chunkTexts.length; i += MAX_EMBED_BATCH) {
-      const batch = chunkTexts.slice(i, i + MAX_EMBED_BATCH);
-      const batchEmbeds = await this.ragService.embedTexts(batch, key);
-      embeddings.push(...batchEmbeds);
+    let total = 0;
+    for (const noteItem of items) {
+      const it = noteItem as { _id: Types.ObjectId; content?: string };
+      const content = (it.content ?? '').trim();
+      if (!content) {
+        await this.removeChunksForKnowledgeItem(it._id);
+        continue;
+      }
+      const chunkTexts = chunkDocumentText(content).slice(0, MAX_NOTE_CHUNKS);
+      if (chunkTexts.length === 0) {
+        await this.removeChunksForKnowledgeItem(it._id);
+        continue;
+      }
+      const embeddings: number[][] = [];
+      for (let i = 0; i < chunkTexts.length; i += MAX_EMBED_BATCH) {
+        const batch = chunkTexts.slice(i, i + MAX_EMBED_BATCH);
+        const batchEmbeds = await this.ragService.embedTexts(batch, key);
+        embeddings.push(...batchEmbeds);
+      }
+      const chunks: ChunkInput[] = chunkTexts.slice(0, embeddings.length).map((text, i) => ({
+        text,
+        embedding: embeddings[i] ?? [],
+        chunkIndex: i,
+      }));
+      const valid = chunks.filter((c) => c.embedding.length > 0);
+      const n = await this.replaceChunksForKnowledgeItem(botOid, it._id, 'note', valid);
+      total += n;
     }
-    const chunks: ChunkInput[] = chunkTexts.slice(0, embeddings.length).map((text, i) => ({
-      text,
-      embedding: embeddings[i] ?? [],
-      chunkIndex: i,
-    }));
-    const valid = chunks.filter((c) => c.embedding.length > 0);
-    return this.replaceChunksForKnowledgeItem(botOid, noteItem._id, 'note', valid);
+    return total;
+  }
+
+  /**
+   * One embedding chunk per active spreadsheet table (full table text in `content`).
+   */
+  async replaceTableKnowledgeChunksForBot(botId: string, apiKeyOverride?: string): Promise<{ updated: number; skipped: number }> {
+    const key = apiKeyOverride ?? (await this.getBotApiKeyOverride(botId));
+    const all = await this.knowledgeBaseItemService.findKnowledgeItemsForBot(botId, {
+      sourceType: 'table',
+      activeOnly: false,
+    });
+    for (const it of all.filter((i) => (i as { active?: boolean }).active === false)) {
+      await this.removeChunksForKnowledgeItem((it as { _id: Types.ObjectId })._id);
+    }
+    const items = await this.knowledgeBaseItemService.findKnowledgeItemsForBot(botId, {
+      sourceType: 'table',
+      activeOnly: true,
+    });
+    const botOid = new Types.ObjectId(botId);
+    let updated = 0;
+    let skipped = 0;
+    for (const item of items) {
+      const it = item as { _id: Types.ObjectId; content?: string };
+      const content = (it.content ?? '').trim();
+      if (!content) {
+        await this.removeChunksForKnowledgeItem(it._id);
+        continue;
+      }
+      const existing = await this.chunkModel.find({ knowledgeBaseItemId: it._id }).sort({ chunkIndex: 1 }).lean();
+      if (existing.length === 1 && (existing[0] as { text?: string }).text === content) {
+        skipped++;
+        continue;
+      }
+      let embedding: number[];
+      try {
+        embedding = await this.ragService.embedText(content, key);
+      } catch {
+        await this.removeChunksForKnowledgeItem(it._id);
+        continue;
+      }
+      if (!embedding?.length) continue;
+      await this.replaceChunksForKnowledgeItem(botOid, it._id, 'table', [
+        { text: content, embedding, chunkIndex: 0 },
+      ]);
+      updated++;
+    }
+    return { updated, skipped };
   }
 
   async findChunksForKnowledgeItem(knowledgeBaseItemId: string) {

@@ -1,21 +1,30 @@
 "use client";
 
+import { usePathname } from "next/navigation";
+
 import { BotEditEmbedPreview } from "@/components/admin/BotEditEmbedPreview";
 import { useEmbedPreview } from "@/contexts/EmbedPreviewContext";
 import { useAgentWorkspace } from "@/contexts/AgentWorkspaceContext";
 
 /**
- * Lives in the bot workspace layout (not in each playground tab page) so the
- * preview widget stays mounted across Playground route changes — avoids
- * re-calling `/api/widget/preview/init` on every tab switch.
+ * Playground-only live embed: not mounted on Insights / other sections so we do not
+ * run preview `init` off-editor. A **new** `pathname` under `.../playground/...` remounts
+ * the widget (key = bot + path) for a **clean thread** on each tab change—similar to
+ * “new panel = clean” in tools like Chatbase.
  */
 export function AgentWorkspaceEmbedPreviewHost() {
+  const pathname = usePathname() ?? "";
   const { state, botId } = useAgentWorkspace();
   const { previewOverrides } = useEmbedPreview();
+  const onPlayground = pathname.includes("/playground/");
 
   if (state !== "ready" || !botId || !previewOverrides) {
     return null;
   }
 
-  return <BotEditEmbedPreview botId={botId} previewOverrides={previewOverrides} />;
+  if (!onPlayground) {
+    return null;
+  }
+
+  return <BotEditEmbedPreview key={`${botId}::${pathname}`} botId={botId} previewOverrides={previewOverrides} />;
 }

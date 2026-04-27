@@ -1,4 +1,5 @@
 import { isWelcomeMessageActive } from './welcome-message-display.util';
+import { exampleQuestionsToPublicLabels } from '../workspace/shared/example-questions.util';
 
 export interface PublicKnowledgeBasePreviewItemResponse {
   title: string;
@@ -15,6 +16,7 @@ export interface PublicKnowledgeBaseCountsResponse {
   notes: number;
   urls: number;
   html: number;
+  datasheets: number;
 }
 
 export interface PublicBotListItemResponse {
@@ -117,6 +119,7 @@ function toKnowledgeBaseCounts(value: unknown): PublicKnowledgeBaseCountsRespons
     notes: 0,
     urls: 0,
     html: 0,
+    datasheets: 0,
   };
   if (!value || typeof value !== 'object') return empty;
   const o = value as Record<string, unknown>;
@@ -126,6 +129,7 @@ function toKnowledgeBaseCounts(value: unknown): PublicKnowledgeBaseCountsRespons
     notes: nonNegInt(o.notes),
     urls: nonNegInt(o.urls),
     html: nonNegInt(o.html),
+    datasheets: nonNegInt((o as Record<string, unknown>).datasheets ?? o.tables),
   };
 }
 
@@ -168,7 +172,7 @@ export function shapePublicBotListItem(raw: unknown): PublicBotListItemResponse 
     category: optionalNonEmpty(row.category),
     avatarEmoji: optionalNonEmpty(row.avatarEmoji),
     imageUrl: optionalNonEmpty(row.imageUrl),
-    exampleQuestions: toStringArray(row.exampleQuestions),
+    exampleQuestions: exampleQuestionsToPublicLabels(row.exampleQuestions),
     chatUI:
       row.chatUI && typeof row.chatUI === 'object'
         ? (row.chatUI as PublicBotListItemResponse['chatUI'])
@@ -208,7 +212,7 @@ export function shapePublicBotDetail(raw: unknown): PublicBotDetailResponse | nu
       : undefined,
     chatUI: row.chatUI,
     faqs: toFaqArray(row.faqs),
-    exampleQuestions: toStringArray(row.exampleQuestions),
+    exampleQuestions: exampleQuestionsToPublicLabels(row.exampleQuestions),
   };
 }
 

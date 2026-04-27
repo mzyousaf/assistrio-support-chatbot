@@ -5,11 +5,33 @@
 
 import * as crypto from 'crypto';
 
-/** Format used for FAQ embedding input (must stay stable for hash). */
+/** Format used for legacy FAQ embedding input (must stay stable for hash). */
 export function buildFaqEmbeddingText(question: string, answer: string): string {
   const q = (question ?? '').trim();
   const a = (answer ?? '').trim();
   return `Question: ${q}\nAnswer: ${a}`;
+}
+
+/** Q&A: title, multiple phrasings, one answer. */
+export function buildQaEmbeddingText(title: string, questions: string[], answer: string): string {
+  const t = (title ?? '').trim();
+  const qs = (questions ?? []).map((q) => (q ?? '').trim()).filter(Boolean);
+  const a = (answer ?? '').trim();
+  const head = t ? `Title: ${t}\n` : '';
+  const qBlock = qs.length ? `Questions:\n${qs.map((q) => `- ${q}`).join('\n')}\n` : '';
+  return `${head}${qBlock}Answer: ${a}`;
+}
+
+/** One spreadsheet table for embedding: title, header row, TSV body lines. */
+export function buildTableEmbeddingText(title: string, columns: string[], rows: string[][]): string {
+  const t = (title ?? '').trim() || 'Table';
+  const cols = (columns ?? []).map((c) => String(c ?? '').trim());
+  const header = cols.length ? cols.join(' | ') : '';
+  const body = (rows ?? [])
+    .map((r) => (r ?? []).map((c) => String(c ?? '').replace(/\s+/g, ' ').trim()).join(' | '))
+    .filter((line) => line.length > 0);
+  if (!header && body.length === 0) return `Table: ${t}\n(empty)`;
+  return `Table: ${t}\n${[header, ...body].filter(Boolean).join('\n')}`;
 }
 
 /** Format used for note embedding input (title optional). */

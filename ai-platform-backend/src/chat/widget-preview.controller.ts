@@ -2,6 +2,7 @@ import { Controller, HttpException, HttpStatus, Post, Req } from '@nestjs/common
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
 import { FastifyRequest } from 'fastify';
+import { Types } from 'mongoose';
 import { getRequestId } from '../lib/request-id.helper';
 import { AuthService } from '../auth/shared/auth.service';
 import { resolveUserFromPlatformCookieHeader } from '../auth/shared/platform-session.resolve';
@@ -9,10 +10,19 @@ import { BotsService } from '../bots/bots.service';
 import { VisitorsService } from '../visitors/visitors.service';
 import { ChatEngineService } from './chat-engine.service';
 import type { BotLike } from './chat-engine.types';
+import { exampleQuestionsToPublicLabels } from '../workspace/shared/example-questions.util';
 import { WorkspacesService } from '../workspaces/workspaces.service';
 import { normalizeVisitorMultiChatMax } from '../bots/visitor-multi-chat.util';
 import { resolveEmbedChatVisitorIdFromBody } from '../bots/widget-embed-identity.util';
 import { isPreviewRequestOriginAllowed } from '../bots/preview-origin.util';
+import {
+  consumeEmbedRuntimeRateLimitToken,
+  EMBED_PREVIEW_RATE_LIMIT_KEY_PREFIX,
+  EMBED_RUNTIME_RATE_LIMIT_WINDOW_MS,
+  getClientIpForRateLimit,
+} from '../bots/embed-runtime-rate-limit.util';
+import { resolveWidgetEmbedRateLimitPerMinute } from '../models/bot.schema';
+import { throwEmbedRuntimeIpRateLimited } from '../rate-limit/rate-limit-http-exception.util';
 import { isWelcomeMessageActive } from '../bots/welcome-message-display.util';
 import { normalizeSpeechInputFromBody } from './speech-input.normalize';
 import { WidgetSpeechService } from './widget-speech.service';
@@ -55,6 +65,7 @@ type PreviewChatBody = PreviewInitBody & {
   visitorId?: unknown;
   conversationId?: unknown;
   startNewConversation?: boolean;
+  previewContext?: unknown;
 };
 
 function toNonEmptyString(value: unknown): string | undefined {
@@ -154,6 +165,32 @@ function parseInitBody(
   };
 }
 
+type PreviewListMessagesBody = {
+  botId: string;
+  conversationId: string;
+  authToken?: string;
+  chatVisitorId?: string;
+  visitorId?: string;
+};
+
+function parsePreviewListMessagesBody(body: unknown): PreviewListMessagesBody | null {
+  if (body == null || typeof body !== 'object') return null;
+  const o = body as Record<string, unknown>;
+  const botId = typeof o.botId === 'string' ? o.botId.trim() : '';
+  const conversationId = typeof o.conversationId === 'string' ? o.conversationId.trim() : '';
+  if (!botId || !conversationId) return null;
+  const authToken = toNonEmptyString((o as { authToken?: unknown }).authToken);
+  const chatVisitorId = toNonEmptyString((o as { chatVisitorId?: unknown }).chatVisitorId);
+  const visitorId = toNonEmptyString((o as { visitorId?: unknown }).visitorId);
+  return {
+    botId,
+    conversationId,
+    ...(authToken ? { authToken } : {}),
+    ...(chatVisitorId ? { chatVisitorId } : {}),
+    ...(visitorId ? { visitorId } : {}),
+  };
+}
+
 function parseChatBody(
   body: unknown,
   opts?: { allowEmptyMessage?: boolean },
@@ -169,6 +206,7 @@ function parseChatBody(
   conversationId?: string;
   startNewConversation?: boolean;
   speechInput?: MessageSpeechInput;
+  previewContext?: { sourcePage?: string };
 } | null {
   if (!isPlainRecord(body)) return null;
   const parsed = parseInitBody(body);
@@ -180,6 +218,7 @@ function parseChatBody(
   const conversationId = toNonEmptyString((body as Record<string, unknown>).conversationId);
   const startNewConversation = (body as Record<string, unknown>).startNewConversation === true;
   const speechInput = normalizeSpeechInputFromBody((body as Record<string, unknown>).speechInput);
+  const previewContext = parsePreviewContextField(body);
   return {
     ...parsed,
     message: messageRaw,
@@ -187,11 +226,34 @@ function parseChatBody(
     ...(conversationId ? { conversationId } : {}),
     ...(startNewConversation ? { startNewConversation: true } : {}),
     ...(speechInput ? { speechInput } : {}),
+    ...(previewContext ? { previewContext } : {}),
   };
 }
 
 function normalizeObjectIdString(value: unknown): string {
   return String(value ?? '').trim();
+}
+
+function parsePreviewContextField(body: unknown): { sourcePage?: string } | undefined {
+  if (!isPlainRecord(body)) return undefined;
+  const ctx = (body as { previewContext?: unknown }).previewContext;
+  if (!isPlainRecord(ctx)) return undefined;
+  const sp = toNonEmptyString((ctx as { sourcePage?: unknown }).sourcePage);
+  if (!sp) return undefined;
+  return { sourcePage: sp.slice(0, 512) };
+}
+
+function previewMessageOriginFromRequest(request: FastifyRequest): string | undefined {
+  const origin = toNonEmptyString(request.headers.origin);
+  if (origin) return origin.slice(0, 256);
+  const refererRaw = request.headers.referer;
+  const referer = typeof refererRaw === 'string' ? toNonEmptyString(refererRaw) : undefined;
+  if (!referer) return undefined;
+  try {
+    return new URL(referer).origin.slice(0, 256);
+  } catch {
+    return referer.slice(0, 256);
+  }
 }
 
 /** Stable preview chat visitor id (never equal to platform visitor id). */
@@ -211,6 +273,18 @@ export class WidgetPreviewController {
     private readonly workspacesService: WorkspacesService,
     private readonly widgetSpeechService: WidgetSpeechService,
   ) {}
+
+  /**
+   * Same token bucket as public embed: `widgetEmbedRateLimitPerMinute` (default 90), 60s window, per client IP.
+   * Uses a separate key prefix from runtime so admin preview and live embed do not share one bucket.
+   */
+  private assertPreviewWidgetIpRateLimitOrThrow(request: FastifyRequest, bot: Record<string, unknown>): void {
+    const limit = resolveWidgetEmbedRateLimitPerMinute(bot);
+    const ip = getClientIpForRateLimit(request);
+    if (!consumeEmbedRuntimeRateLimitToken(`${EMBED_PREVIEW_RATE_LIMIT_KEY_PREFIX}:${ip}`, limit)) {
+      throwEmbedRuntimeIpRateLimited(EMBED_RUNTIME_RATE_LIMIT_WINDOW_MS);
+    }
+  }
 
   private assertPreviewOriginAllowed(request: FastifyRequest): void {
     const nodeEnv = this.configService.get<string>('nodeEnv') ?? 'development';
@@ -308,12 +382,7 @@ export class WidgetPreviewController {
       mergedChatUI.launcherPosition = previewOverrides.launcherPosition;
     }
 
-    const savedSuggestedQuestions = Array.isArray(bot.exampleQuestions)
-      ? (bot.exampleQuestions as unknown[])
-          .map((q) => toNonEmptyString(q))
-          .filter((q): q is string => typeof q === 'string')
-          .slice(0, 6)
-      : [];
+    const savedSuggestedQuestions = exampleQuestionsToPublicLabels(bot.exampleQuestions);
     const suggestedQuestions = Array.isArray(previewOverrides?.suggestedQuestions)
       ? previewOverrides.suggestedQuestions
       : savedSuggestedQuestions;
@@ -424,6 +493,7 @@ export class WidgetPreviewController {
       visitorMultiChatEnabled:
         (bot as { visitorMultiChatEnabled?: unknown }).visitorMultiChatEnabled === true ? true : undefined,
       visitorMultiChatMax: normalizeVisitorMultiChatMax((bot as { visitorMultiChatMax?: unknown }).visitorMultiChatMax),
+      exampleQuestions: (bot as { exampleQuestions?: unknown }).exampleQuestions,
     };
   }
 
@@ -450,7 +520,13 @@ export class WidgetPreviewController {
       );
     }
 
-    await this.verifyPreviewOwnerOrThrow(request, bot as Record<string, unknown>, parsed.authToken);
+    this.assertPreviewWidgetIpRateLimitOrThrow(request, bot as Record<string, unknown>);
+
+    const ownerUserId = await this.verifyPreviewOwnerOrThrow(
+      request,
+      bot as Record<string, unknown>,
+      parsed.authToken,
+    );
 
     const chatVisitorId =
       parsed.chatVisitorId && parsed.chatVisitorId.trim()
@@ -463,7 +539,59 @@ export class WidgetPreviewController {
       console.error('[widget/preview/init] getOrCreateChatVisitor failed', err);
     }
 
-    return { ...this.buildInitResponse(bot, parsed.previewOverrides), chatVisitorId };
+    return {
+      ...this.buildInitResponse(bot, parsed.previewOverrides),
+      chatVisitorId,
+    };
+  }
+
+  /** Load persisted thread for a preview session (same rows as /api/chat/conversations/messages, owner auth + `widget_preview` only). */
+  @Post('conversations/messages')
+  async conversationMessages(@Req() request: FastifyRequest) {
+    this.assertPreviewOriginAllowed(request);
+    const parsed = parsePreviewListMessagesBody((request as { body?: unknown }).body);
+    if (!parsed) {
+      throw new HttpException(
+        { error: 'Invalid request body', errorCode: 'BAD_REQUEST' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const bot = await this.botsService.findOneByIdForExternalRuntime(parsed.botId);
+    if (!bot) {
+      throw new HttpException({ error: 'Bot not found', errorCode: 'BOT_NOT_FOUND' }, HttpStatus.NOT_FOUND);
+    }
+
+    this.assertPreviewWidgetIpRateLimitOrThrow(request, bot as Record<string, unknown>);
+
+    await this.verifyPreviewOwnerOrThrow(request, bot as Record<string, unknown>, parsed.authToken);
+
+    const resolvedChatVisitorId = resolveEmbedChatVisitorIdFromBody(
+      parsed.chatVisitorId,
+      parsed.visitorId,
+    )?.trim();
+    if (!resolvedChatVisitorId) {
+      throw new HttpException(
+        { error: 'chatVisitorId is required', errorCode: 'CHAT_VISITOR_ID_REQUIRED' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const botOid = new Types.ObjectId(String((bot as { _id: unknown })._id));
+    const messages = await this.chatEngineService.getConversationMessagesForEmbed({
+      botOid,
+      chatVisitorId: resolvedChatVisitorId,
+      conversationId: parsed.conversationId,
+      requireSessionSource: 'widget_preview',
+    });
+    if (!messages) {
+      throw new HttpException(
+        { error: 'Conversation not found', errorCode: 'CONVERSATION_NOT_FOUND' },
+        HttpStatus.NOT_FOUND,
+      );
+    }
+
+    return { ok: true, messages };
   }
 
   @Post('chat')
@@ -500,6 +628,8 @@ export class WidgetPreviewController {
       throw new HttpException({ error: 'Bot not found', errorCode: 'BOT_NOT_FOUND' }, HttpStatus.NOT_FOUND);
     }
 
+    this.assertPreviewWidgetIpRateLimitOrThrow(request, bot as Record<string, unknown>);
+
     const mergedChatUiForUpload: Record<string, unknown> = {
       ...((bot as { chatUI?: Record<string, unknown> }).chatUI ?? {}),
       ...(typeof parsed.previewOverrides?.chatUI === 'object' && parsed.previewOverrides.chatUI
@@ -525,24 +655,14 @@ export class WidgetPreviewController {
       console.error('[widget/preview/chat] getOrCreateChatVisitor failed', err);
     }
 
-    const previewQuotaUserId = String(ownerUserId ?? '').trim();
-    if (previewQuotaUserId) {
-      await this.visitorsService.ensureOwnerPreviewVisitor(previewQuotaUserId);
-      const previewQuota = await this.visitorsService.checkOwnerPreviewMessageQuota(previewQuotaUserId);
-      if (!previewQuota.allowed) {
-        throw new HttpException(
-          {
-            error: 'Preview message limit reached for this account.',
-            errorCode: 'PREVIEW_MESSAGE_QUOTA_EXCEEDED',
-            current: previewQuota.current,
-            limit: previewQuota.limit,
-          },
-          HttpStatus.TOO_MANY_REQUESTS,
-        );
-      }
-    }
-
     const botLike = this.buildPreviewBotLike(bot, parsed.previewOverrides);
+    const msgOrigin = previewMessageOriginFromRequest(request);
+    const previewCtx: { sourcePage?: string; origin?: string } = {
+      ...(parsed.previewContext?.sourcePage?.trim() ? { sourcePage: parsed.previewContext.sourcePage.trim() } : {}),
+      ...(msgOrigin?.trim() ? { origin: msgOrigin.trim() } : {}),
+    };
+    // Persisted like embed runtime, tagged `sessionSource: 'widget_preview'` for analytics. Abuse
+    // control uses the same per-IP limit as public embed (see `assertPreviewWidgetIpRateLimitOrThrow`).
     const result = await this.chatEngineService.runChat({
       bot: botLike,
       chatVisitorId: chatVisitorResolved,
@@ -550,7 +670,9 @@ export class WidgetPreviewController {
       mode: 'user',
       requestId: getRequestId(request),
       debug: false,
-      ephemeral: true,
+      sessionSource: 'widget_preview',
+      previewInitiatedByUserId: ownerUserId,
+      ...(Object.keys(previewCtx).length > 0 ? { previewMessageContext: previewCtx } : {}),
       ...(parsed.conversationId ? { conversationId: parsed.conversationId } : {}),
       ...(parsed.startNewConversation ? { startNewConversation: true } : {}),
       ...(parsed.speechInput ? { speechInput: parsed.speechInput } : {}),
@@ -558,10 +680,6 @@ export class WidgetPreviewController {
     });
     if (!result.ok) {
       throw new HttpException(result, HttpStatus.BAD_REQUEST);
-    }
-
-    if (previewQuotaUserId) {
-      await this.visitorsService.incrementOwnerPreviewMessageCount(previewQuotaUserId);
     }
 
     return {
@@ -581,6 +699,7 @@ export class WidgetPreviewController {
     if (!bot) {
       throw new HttpException({ error: 'Bot not found', errorCode: 'BOT_NOT_FOUND' }, HttpStatus.NOT_FOUND);
     }
+    this.assertPreviewWidgetIpRateLimitOrThrow(request, bot as Record<string, unknown>);
     await this.verifyPreviewOwnerOrThrow(request, bot as Record<string, unknown>, parsed.authToken);
     return this.widgetSpeechService.handlePreview(bot as Record<string, unknown>, parsed);
   }

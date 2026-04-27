@@ -6,10 +6,13 @@ import type {
   CustomerBotInsightsResponse,
   CustomerBotLifecycleResponse,
   CustomerBotListItem,
+  CustomerDatasheetImportResponse,
+  CustomerDatasheetPreviewResponse,
   CustomerDocumentDownloadUrlResponse,
   CustomerDocumentUploadResponse,
   CustomerDocumentsResponse,
   CustomerMe,
+  CustomerWorkspaceDocument,
 } from './types';
 
 const P = '/api/customer';
@@ -123,6 +126,34 @@ export function postCustomerBotAvatar(botId: string, formData: FormData) {
   });
 }
 
+/** Multipart: field `file` (max 10MB). Parses first sheet; returns headers and up to 10 data rows. Does not save. */
+export function postCustomerBotDatasheetPreview(botId: string, formData: FormData) {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), 120_000);
+  const path = `${P}/bots/${encodeURIComponent(botId)}/datasheets/preview`;
+  return customerFetch<CustomerDatasheetPreviewResponse>(path, {
+    method: 'POST',
+    body: formData,
+    signal: controller.signal,
+  }).finally(() => {
+    window.clearTimeout(timer);
+  });
+}
+
+/** Multipart: field `file` (CSV / XLS / XLSX; max 10MB). Server stores the file and parses the first sheet. */
+export function postCustomerBotDatasheetImport(botId: string, formData: FormData) {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), 120_000);
+  const path = `${P}/bots/${encodeURIComponent(botId)}/datasheets/import`;
+  return customerFetch<CustomerDatasheetImportResponse>(path, {
+    method: 'POST',
+    body: formData,
+    signal: controller.signal,
+  }).finally(() => {
+    window.clearTimeout(timer);
+  });
+}
+
 export function postCustomerBotChat(botId: string, body: { message: string }, debug?: boolean) {
   const q = debug ? '?debug=true' : '';
   return customerFetch<ChatResponse>(`${P}/bots/${encodeURIComponent(botId)}/chat${q}`, {
@@ -142,6 +173,13 @@ export function getCustomerBotDocuments(botId: string, params?: { page?: number;
   );
 }
 
+/** Single document (includes `text` when available). */
+export function getCustomerBotDocument(botId: string, documentId: string) {
+  return customerFetch<{ document: CustomerWorkspaceDocument }>(
+    `${P}/bots/${encodeURIComponent(botId)}/documents/${encodeURIComponent(documentId)}`,
+  );
+}
+
 /** Short-lived signed URL (or HTTPS file URL) for a ready, active uploaded document. */
 export function getCustomerBotDocumentDownloadUrl(botId: string, documentId: string) {
   return customerFetch<CustomerDocumentDownloadUrlResponse>(
@@ -149,7 +187,11 @@ export function getCustomerBotDocumentDownloadUrl(botId: string, documentId: str
   );
 }
 
-export function patchCustomerBotDocument(botId: string, documentId: string, body: { active?: boolean }) {
+export function patchCustomerBotDocument(
+  botId: string,
+  documentId: string,
+  body: { active?: boolean; title?: string; text?: string },
+) {
   return customerFetch<{ ok: boolean }>(
     `${P}/bots/${encodeURIComponent(botId)}/documents/${encodeURIComponent(documentId)}`,
     {
@@ -201,9 +243,6 @@ export function patchCustomerBotAccessSettings(
   id: string,
   body: {
     visibility: 'public' | 'private';
-    messageLimitMode: 'none' | 'fixed_total';
-    messageLimitTotal?: number | null;
-    messageLimitUpgradeMessage?: string | null;
     visitorMultiChatEnabled?: boolean;
     visitorMultiChatMax?: number | null;
   },

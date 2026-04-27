@@ -31,9 +31,6 @@ export interface BotFormSubmitPayload {
   includeTaglineInKnowledge?: boolean;
   includeNotesInKnowledge?: boolean;
   visibility?: "public" | "private";
-  messageLimitMode?: "none" | "fixed_total";
-  messageLimitTotal?: number | null;
-  messageLimitUpgradeMessage?: string | null;
   allowedOrigins?: BotAllowedOrigin[];
   visitorMultiChatEnabled?: boolean;
   visitorMultiChatMax?: number | null;

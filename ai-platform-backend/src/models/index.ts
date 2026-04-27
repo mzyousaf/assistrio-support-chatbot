@@ -17,7 +17,6 @@ export type {
   LiveIndicatorStyle,
   ChatStatusIndicator,
   BotVisibility,
-  BotMessageLimitMode,
 } from './bot.schema';
 
 export { DocumentModel, DocumentSchema } from './document.schema';
@@ -60,5 +59,6 @@ export type {
   KnowledgeBaseItemSourceMeta,
   KnowledgeBaseItemFaqMeta,
   KnowledgeBaseItemNoteMeta,
+  KnowledgeBaseItemTableMeta,
 } from './knowledge-base-item.schema';
 export { KnowledgeBaseChunk, KnowledgeBaseChunkSchema } from './knowledge-base-chunk.schema';

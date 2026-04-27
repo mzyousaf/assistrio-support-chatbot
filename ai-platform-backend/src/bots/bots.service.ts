@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
+import { DEFAULT_WIDGET_EMBED_RATE_LIMIT_PER_MINUTE } from '../models/bot.schema';
 import {
   Bot,
   Conversation,
@@ -23,6 +24,7 @@ import { WorkspacesService } from '../workspaces/workspaces.service';
 import type { WorkspaceBotPatchNormalized } from '../workspace/shared/bot-payload';
 import { buildCustomerEmbedSnippet } from '../workspace/shared/customer-embed-snippet.util';
 import type { BotLifecycleAction } from '../workspace/shared/bot-lifecycle-action.dto';
+import { type ExampleQuestionDoc, exampleQuestionsToPublicLabels } from '../workspace/shared/example-questions.util';
 
 function slugify(input: string): string {
   const slug = input
@@ -37,9 +39,6 @@ function slugify(input: string): string {
 function getCreatorDefaultsForUserFlow(createdByUserId?: Types.ObjectId) {
   return {
     visibility: 'public' as const,
-    messageLimitMode: 'none' as const,
-    messageLimitTotal: null as number | null,
-    messageLimitUpgradeMessage: null as string | null,
     accessKey: generateBotAccessKey(),
     secretKey: generateBotSecretKey(),
     ...(createdByUserId ? { ownerId: createdByUserId } : {}),
@@ -68,6 +67,7 @@ export type PublicKnowledgeBaseCounts = {
   notes: number;
   urls: number;
   html: number;
+  datasheets: number;
 };
 
 export interface PublicBotDto {
@@ -106,9 +106,6 @@ export interface PublicBotDto {
 
 export interface ShowcaseAccessSettingsInput {
   visibility: 'public' | 'private';
-  messageLimitMode: 'none' | 'fixed_total';
-  messageLimitTotal?: number | null;
-  messageLimitUpgradeMessage?: string | null;
   visitorMultiChatEnabled?: boolean;
   visitorMultiChatMax?: number | null;
 }
@@ -226,7 +223,7 @@ export class BotsService {
         .find(base)
         .sort({ createdAt: -1 })
         .select(
-          'name agentsPackAgent category status isPublic createdAt _id slug visibility messageLimitMode messageLimitTotal workspaceId chatUI avatarEmoji imageUrl shortDescription allowedOrigins leadCapture',
+          'name agentsPackAgent category status isPublic createdAt _id slug visibility workspaceId chatUI avatarEmoji imageUrl shortDescription allowedOrigins leadCapture',
         )
         .lean();
     }
@@ -247,7 +244,7 @@ export class BotsService {
       .find({ ...base, $or: orClause })
       .sort({ createdAt: -1 })
       .select(
-        'name agentsPackAgent category status isPublic createdAt _id slug visibility messageLimitMode messageLimitTotal workspaceId chatUI avatarEmoji imageUrl shortDescription allowedOrigins leadCapture',
+        'name agentsPackAgent category status isPublic createdAt _id slug visibility workspaceId chatUI avatarEmoji imageUrl shortDescription allowedOrigins leadCapture',
       )
       .lean();
   }
@@ -267,6 +264,7 @@ export class BotsService {
         knowledgeDocs: number;
         knowledgeFaqs: number;
         knowledgeSnippets: number;
+        knowledgeDatasheets: number;
         lastActivityAt: string | null;
         lastTrainedAt: string | null;
       }
@@ -280,6 +278,7 @@ export class BotsService {
         knowledgeDocs: number;
         knowledgeFaqs: number;
         knowledgeSnippets: number;
+        knowledgeDatasheets: number;
         lastActivityAt: string | null;
         lastTrainedAt: string | null;
       }
@@ -294,6 +293,7 @@ export class BotsService {
         knowledgeDocs: 0,
         knowledgeFaqs: 0,
         knowledgeSnippets: 0,
+        knowledgeDatasheets: 0,
         lastActivityAt: null,
         lastTrainedAt: null,
       });
@@ -313,7 +313,7 @@ export class BotsService {
         { $group: { _id: '$botId', n: { $sum: 1 } } },
       ]),
       this.knowledgeBaseItemModel.aggregate<KBRow>([
-        { $match: { botId: { $in: oids }, active: true, sourceType: { $in: ['document', 'faq', 'note'] } } },
+        { $match: { botId: { $in: oids }, active: true, sourceType: { $in: ['document', 'faq', 'note', 'table'] } } },
         { $group: { _id: { b: '$botId', t: '$sourceType' }, n: { $sum: 1 } } },
       ]),
       this.conversationModel.aggregate<DateRow>([
@@ -341,6 +341,7 @@ export class BotsService {
       if (t === 'document') s.knowledgeDocs = r.n;
       else if (t === 'faq') s.knowledgeFaqs = r.n;
       else if (t === 'note') s.knowledgeSnippets = r.n;
+      else if (t === 'table') s.knowledgeDatasheets = r.n;
     }
     for (const r of activityAgg) {
       const s = result.get(String(r._id));
@@ -377,9 +378,7 @@ export class BotsService {
       category: bot.category != null ? String(bot.category) : undefined,
       avatarEmoji: bot.avatarEmoji != null ? String(bot.avatarEmoji) : undefined,
       imageUrl: bot.imageUrl != null ? String(bot.imageUrl) : undefined,
-      exampleQuestions: Array.isArray(bot.exampleQuestions)
-        ? (bot.exampleQuestions as unknown[]).map((q) => String(q ?? '').trim()).filter(Boolean) as string[]
-        : [],
+      exampleQuestions: exampleQuestionsToPublicLabels(bot.exampleQuestions),
       chatUI: bot.chatUI as PublicBotDto['chatUI'] | undefined,
       createdAt:
         bot.createdAt instanceof Date
@@ -392,6 +391,7 @@ export class BotsService {
         notes: 0,
         urls: 0,
         html: 0,
+        datasheets: 0,
       },
     }));
     return this.attachTotalChats(
@@ -437,7 +437,7 @@ export class BotsService {
   }
 
   private emptyKnowledgeBaseCounts(): PublicKnowledgeBaseCounts {
-    return { documents: 0, faqs: 0, notes: 0, urls: 0, html: 0 };
+    return { documents: 0, faqs: 0, notes: 0, urls: 0, html: 0, datasheets: 0 };
   }
 
   /**
@@ -455,7 +455,7 @@ export class BotsService {
           botId: { $in: botOids },
           active: true,
           status: 'ready',
-          sourceType: { $in: ['document', 'faq', 'note', 'url', 'html'] },
+          sourceType: { $in: ['document', 'faq', 'note', 'url', 'html', 'table'] },
         },
       },
       {
@@ -506,6 +506,9 @@ export class BotsService {
         case 'html':
           cur.html += n;
           break;
+        case 'table':
+          cur.datasheets += n;
+          break;
         default:
           break;
       }
@@ -536,7 +539,7 @@ export class BotsService {
           botId: { $in: botIds },
           active: true,
           status: 'ready',
-          sourceType: { $in: ['document', 'faq', 'note', 'url', 'html'] },
+          sourceType: { $in: ['document', 'faq', 'note', 'url', 'html', 'table'] },
         },
       },
       {
@@ -719,9 +722,6 @@ export class BotsService {
       .lean();
     if (!doc) return null;
     const b = doc as Record<string, unknown>;
-    const exampleQuestions = Array.isArray(b.exampleQuestions)
-      ? (b.exampleQuestions as unknown[]).map((q) => String(q ?? '').trim()).filter(Boolean) as string[]
-      : [];
     const welcomeMsg =
       typeof b.welcomeMessage === 'string' && b.welcomeMessage.trim() ? b.welcomeMessage.trim() : undefined;
     return {
@@ -737,7 +737,7 @@ export class BotsService {
       imageUrl: b.imageUrl != null ? String(b.imageUrl) : undefined,
       welcomeMessage: welcomeMsg,
       chatUI: (b.chatUI && typeof b.chatUI === 'object' ? b.chatUI : {}) as Record<string, unknown>,
-      exampleQuestions,
+      exampleQuestions: exampleQuestionsToPublicLabels(b.exampleQuestions),
     };
   }
 
@@ -748,7 +748,7 @@ export class BotsService {
     const bot = await this.botModel
       .findById(new Types.ObjectId(id))
            .select(
-        '_id slug name shortDescription description category avatarEmoji imageUrl openaiApiKeyOverride welcomeMessage leadCapture personality config chatUI status isPublic visibility accessKey secretKey ownerId createdByUserId messageLimitMode messageLimitTotal messageLimitUpgradeMessage includeNameInKnowledge includeTaglineInKnowledge exampleQuestions allowedOrigins visitorMultiChatEnabled visitorMultiChatMax agentsPackAgent',
+        '_id slug name shortDescription description category avatarEmoji imageUrl openaiApiKeyOverride welcomeMessage leadCapture personality config chatUI status isPublic visibility accessKey secretKey ownerId createdByUserId includeNameInKnowledge includeTaglineInKnowledge exampleQuestions allowedOrigins visitorMultiChatEnabled visitorMultiChatMax agentsPackAgent',
       )
       .lean();
     if (!bot) return null;
@@ -809,9 +809,7 @@ export class BotsService {
       welcomeMessage: welcomeMsg,
       chatUI: b.chatUI as unknown,
       faqs,
-      exampleQuestions: Array.isArray(b.exampleQuestions)
-        ? (b.exampleQuestions as unknown[]).map((q) => String(q ?? '').trim()).filter(Boolean) as string[]
-        : [],
+      exampleQuestions: exampleQuestionsToPublicLabels(b.exampleQuestions),
     };
   }
 
@@ -840,18 +838,20 @@ export class BotsService {
     return `${normalized}-${Date.now()}`;
   }
 
-  /** Workspace bot for admin GET (faqs and knowledgeDescription from KB). */
+  /** Workspace bot for admin GET (faqs, snippets, tables, knowledgeDescription from KB). */
   async findOneWorkspaceForAdmin(id: string) {
     const bot = await this.botModel
       .findById(id)
-      .select('slug name shortDescription description category categories imageUrl avatarEmoji openaiApiKeyOverride whisperApiKeyOverride welcomeMessage welcomeMessageEnabled status isPublic leadCapture chatUI exampleQuestions personality config limitOverrideMessages visibility accessKey secretKey ownerId messageLimitMode messageLimitTotal messageLimitUpgradeMessage visitorMultiChatEnabled visitorMultiChatMax includeNameInKnowledge includeTaglineInKnowledge includeNotesInKnowledge allowedOrigins workspaceId agentsPackAgent')
+      .select('slug name shortDescription description category categories imageUrl avatarEmoji openaiApiKeyOverride whisperApiKeyOverride welcomeMessage welcomeMessageEnabled status isPublic leadCapture chatUI exampleQuestions personality config limitOverrideMessages visibility accessKey secretKey ownerId visitorMultiChatEnabled visitorMultiChatMax includeNameInKnowledge includeTaglineInKnowledge includeNotesInKnowledge allowedOrigins workspaceId agentsPackAgent')
       .lean();
     if (!bot) return null;
-    const [faqs, knowledgeDescription] = await Promise.all([
+    const [faqs, knowledgeSnippets, knowledgeDatasheets, knowledgeDescription] = await Promise.all([
       this.knowledgeBaseItemService.getFaqsForBot(id, { includeInactive: true }),
+      this.knowledgeBaseItemService.getSnippetsForBot(id, { includeInactive: true }),
+      this.knowledgeBaseItemService.getTablesForBot(id, { includeInactive: true }),
       this.knowledgeBaseItemService.getNoteContentForBot(id),
     ]);
-    return { ...bot, faqs, knowledgeDescription } as Record<string, unknown>;
+    return { ...bot, faqs, knowledgeSnippets, knowledgeDatasheets, knowledgeDescription } as Record<string, unknown>;
   }
 
   async create(data: Record<string, unknown>) {
@@ -868,34 +868,17 @@ export class BotsService {
     visibility: 'public' | 'private';
     accessKey: string;
     secretKey: string;
-    messageLimitMode: 'none' | 'fixed_total';
-    messageLimitTotal: number | null;
-    messageLimitUpgradeMessage: string | null;
     visitorMultiChatEnabled: boolean;
     visitorMultiChatMax: number | null;
   }> {
     const existing = await this.botModel
       .findById(id)
-      .select('_id visibility accessKey secretKey messageLimitMode messageLimitTotal messageLimitUpgradeMessage')
+      .select('_id visibility accessKey secretKey')
       .lean();
     if (!existing) {
       throw new Error('Bot not found');
     }
     const visibility = input.visibility === 'private' ? 'private' : 'public';
-    const messageLimitMode = input.messageLimitMode === 'fixed_total' ? 'fixed_total' : 'none';
-    const parsedTotal =
-      typeof input.messageLimitTotal === 'number' && Number.isFinite(input.messageLimitTotal)
-        ? Math.floor(input.messageLimitTotal)
-        : null;
-    if (messageLimitMode === 'fixed_total' && (!parsedTotal || parsedTotal <= 0)) {
-      throw new Error('messageLimitTotal must be a positive integer when messageLimitMode is fixed_total.');
-    }
-    const messageLimitTotal = messageLimitMode === 'fixed_total' ? parsedTotal : null;
-    const upgradeMessageRaw =
-      typeof input.messageLimitUpgradeMessage === 'string'
-        ? input.messageLimitUpgradeMessage.trim()
-        : '';
-    const messageLimitUpgradeMessage = upgradeMessageRaw ? upgradeMessageRaw : null;
 
     const visitorMultiChatEnabled = input.visitorMultiChatEnabled === true;
     const rawVisitorMax = input.visitorMultiChatMax;
@@ -911,15 +894,12 @@ export class BotsService {
         id,
         {
           visibility,
-          messageLimitMode,
-          messageLimitTotal,
-          messageLimitUpgradeMessage,
           visitorMultiChatEnabled,
           visitorMultiChatMax,
         },
         { new: true },
       )
-      .select('_id visibility accessKey secretKey messageLimitMode messageLimitTotal messageLimitUpgradeMessage visitorMultiChatEnabled visitorMultiChatMax')
+      .select('_id visibility accessKey secretKey visitorMultiChatEnabled visitorMultiChatMax')
       .lean();
     if (!updated) throw new Error('Bot not found');
     const bot = updated as Record<string, unknown>;
@@ -929,10 +909,6 @@ export class BotsService {
       visibility: bot.visibility === 'private' ? 'private' : 'public',
       accessKey: String(bot.accessKey ?? ''),
       secretKey: String(bot.secretKey ?? ''),
-      messageLimitMode: bot.messageLimitMode === 'fixed_total' ? 'fixed_total' : 'none',
-      messageLimitTotal: typeof bot.messageLimitTotal === 'number' ? bot.messageLimitTotal : null,
-      messageLimitUpgradeMessage:
-        typeof bot.messageLimitUpgradeMessage === 'string' ? bot.messageLimitUpgradeMessage : null,
       visitorMultiChatEnabled: (bot as { visitorMultiChatEnabled?: boolean }).visitorMultiChatEnabled === true,
       visitorMultiChatMax: normalizeVisitorMultiChatMax((bot as { visitorMultiChatMax?: unknown }).visitorMultiChatMax),
     };
@@ -1022,7 +998,7 @@ export class BotsService {
       leadCapture?: unknown;
       chatUI?: unknown;
       faqs?: unknown;
-      exampleQuestions?: string[];
+      exampleQuestions?: ExampleQuestionDoc[];
       personality?: unknown;
       config?: unknown;
       limitOverrideMessages?: number;
@@ -1031,9 +1007,6 @@ export class BotsService {
       includeTaglineInKnowledge?: boolean;
       includeNotesInKnowledge: boolean;
       visibility?: 'public' | 'private';
-      messageLimitMode?: 'none' | 'fixed_total';
-      messageLimitTotal?: number | null;
-      messageLimitUpgradeMessage?: string | null;
       allowedOrigins?: AllowedOrigin[];
     },
     createdByUserId?: string,
@@ -1049,7 +1022,7 @@ export class BotsService {
         : undefined;
     const existing = await this.botModel
       .findOne({ clientDraftId })
-      .select('_id slug name createdAt createdByUserId accessKey secretKey ownerId visibility messageLimitMode messageLimitTotal messageLimitUpgradeMessage workspaceId')
+      .select('_id slug name createdAt createdByUserId accessKey secretKey ownerId visibility workspaceId')
       .lean();
     if (existing) {
       let finalSlug = (existing as { slug: string }).slug;
@@ -1100,33 +1073,40 @@ export class BotsService {
               visibility: normalized.visibility ?? (existing as { visibility?: 'public' | 'private' }).visibility ?? 'public',
               accessKey: (existing as { accessKey?: string }).accessKey || generateBotAccessKey(),
               secretKey: (existing as { secretKey?: string }).secretKey || generateBotSecretKey(),
-              messageLimitMode: normalized.messageLimitMode ?? (existing as { messageLimitMode?: 'none' | 'fixed_total' }).messageLimitMode ?? 'none',
-              messageLimitTotal:
-                normalized.messageLimitTotal !== undefined
-                  ? normalized.messageLimitTotal
-                  : (existing as { messageLimitTotal?: number | null }).messageLimitTotal ?? null,
-              messageLimitUpgradeMessage:
-                normalized.messageLimitUpgradeMessage !== undefined
-                  ? normalized.messageLimitUpgradeMessage
-                  : (existing as { messageLimitUpgradeMessage?: string | null }).messageLimitUpgradeMessage ?? null,
               ...(normalized.allowedOrigins !== undefined ? { allowedOrigins: normalized.allowedOrigins } : {}),
               ...(workspaceIdResolved ? { workspaceId: workspaceIdResolved } : {}),
               ...setCreatedBy,
             },
           );
           const botIdStr = String((existing as { _id: unknown })._id);
-          const finalFaqs = Array.isArray(normalized.faqs)
-            ? (normalized.faqs as Array<{ question?: string; answer?: string; active?: boolean }>).map((f) => ({
-              question: String(f?.question ?? '').trim(),
-              answer: String(f?.answer ?? '').trim(),
-              active: f?.active !== false,
-            })).filter((f) => f.question || f.answer)
+          const finalFaqs = Array.isArray(normalized.faqs) ? normalized.faqs : [];
+          const norm = normalized as unknown as Record<string, unknown>;
+          const finalSnippets = Array.isArray(norm.knowledgeSnippets)
+            ? (norm.knowledgeSnippets as Array<{ title: string; snippet: string; active?: boolean }>)
+            : [];
+          const finalTables = Array.isArray(norm.knowledgeDatasheets ?? norm.knowledgeTables)
+            ? ((norm.knowledgeDatasheets ?? norm.knowledgeTables) as Array<{
+                title: string;
+                columns: string[];
+                rows: string[][];
+                active?: boolean;
+              }>)
             : [];
           const finalNote = String(normalized.knowledgeDescription ?? '').trim();
           await this.knowledgeBaseItemService.upsertFaqKnowledgeItemsForBot(botIdStr, finalFaqs);
-          await this.knowledgeBaseItemService.upsertNoteKnowledgeItemForBot(botIdStr, finalNote);
+          if (finalSnippets.length > 0) {
+            await this.knowledgeBaseItemService.upsertSnippetKnowledgeItemsForBot(botIdStr, finalSnippets);
+          } else {
+            await this.knowledgeBaseItemService.upsertNoteKnowledgeItemForBot(botIdStr, finalNote);
+          }
+          if (finalTables.length > 0) {
+            await this.knowledgeBaseItemService.upsertTableKnowledgeItemsForBot(botIdStr, finalTables);
+          }
           await this.knowledgeBaseChunkService.replaceFaqKnowledgeChunksForBot(botIdStr);
           await this.knowledgeBaseChunkService.replaceNoteKnowledgeChunksForBot(botIdStr);
+          if (finalTables.length > 0) {
+            await this.knowledgeBaseChunkService.replaceTableKnowledgeChunksForBot(botIdStr);
+          }
           return { botId: botIdStr, slug: finalSlug };
         } catch (err: unknown) {
           const e = err as { code?: number; keyPattern?: Record<string, number> };
@@ -1162,6 +1142,7 @@ export class BotsService {
           personality: normalized.personality,
           config: normalized.config,
           limitOverrideMessages: normalized.limitOverrideMessages,
+          widgetEmbedRateLimitPerMinute: DEFAULT_WIDGET_EMBED_RATE_LIMIT_PER_MINUTE,
           status: 'published',
           isPublic: normalized.isPublic,
           includeNameInKnowledge: normalized.includeNameInKnowledge,
@@ -1169,27 +1150,40 @@ export class BotsService {
           includeNotesInKnowledge: normalized.includeNotesInKnowledge,
           ...getCreatorDefaultsForUserFlow(creatorOid),
           ...(normalized.visibility ? { visibility: normalized.visibility } : {}),
-          ...(normalized.messageLimitMode ? { messageLimitMode: normalized.messageLimitMode } : {}),
-          ...(normalized.messageLimitTotal !== undefined ? { messageLimitTotal: normalized.messageLimitTotal } : {}),
-          ...(normalized.messageLimitUpgradeMessage !== undefined ? { messageLimitUpgradeMessage: normalized.messageLimitUpgradeMessage } : {}),
           ...(normalized.allowedOrigins !== undefined ? { allowedOrigins: normalized.allowedOrigins } : {}),
           ...(wsForCreate ? { workspaceId: wsForCreate } : {}),
           createdAt: new Date(),
           ...(creatorOid ? { createdByUserId: creatorOid } : {}),
         });
         const botIdStr = String((created as { _id: unknown })._id);
-        const finalFaqs = Array.isArray(normalized.faqs)
-          ? (normalized.faqs as Array<{ question?: string; answer?: string; active?: boolean }>).map((f) => ({
-            question: String(f?.question ?? '').trim(),
-            answer: String(f?.answer ?? '').trim(),
-            active: f?.active !== false,
-          })).filter((f) => f.question || f.answer)
+        const finalFaqs = Array.isArray(normalized.faqs) ? normalized.faqs : [];
+        const nrm = normalized as unknown as Record<string, unknown>;
+        const finalSnippets = Array.isArray(nrm.knowledgeSnippets)
+          ? (nrm.knowledgeSnippets as Array<{ title: string; snippet: string; active?: boolean }>)
+          : [];
+        const finalTables = Array.isArray(nrm.knowledgeDatasheets ?? nrm.knowledgeTables)
+          ? ((nrm.knowledgeDatasheets ?? nrm.knowledgeTables) as Array<{
+              title: string;
+              columns: string[];
+              rows: string[][];
+              active?: boolean;
+            }>)
           : [];
         const finalNote = String(normalized.knowledgeDescription ?? '').trim();
         await this.knowledgeBaseItemService.upsertFaqKnowledgeItemsForBot(botIdStr, finalFaqs);
-        await this.knowledgeBaseItemService.upsertNoteKnowledgeItemForBot(botIdStr, finalNote);
+        if (finalSnippets.length > 0) {
+          await this.knowledgeBaseItemService.upsertSnippetKnowledgeItemsForBot(botIdStr, finalSnippets);
+        } else {
+          await this.knowledgeBaseItemService.upsertNoteKnowledgeItemForBot(botIdStr, finalNote);
+        }
+        if (finalTables.length > 0) {
+          await this.knowledgeBaseItemService.upsertTableKnowledgeItemsForBot(botIdStr, finalTables);
+        }
         await this.knowledgeBaseChunkService.replaceFaqKnowledgeChunksForBot(botIdStr);
         await this.knowledgeBaseChunkService.replaceNoteKnowledgeChunksForBot(botIdStr);
+        if (finalTables.length > 0) {
+          await this.knowledgeBaseChunkService.replaceTableKnowledgeChunksForBot(botIdStr);
+        }
         return { botId: botIdStr, slug: (created as { slug: string }).slug };
       } catch (err: unknown) {
         const e = err as { code?: number; keyPattern?: Record<string, number> };
@@ -1243,43 +1237,6 @@ export class BotsService {
       if (!hasActiveAllowedOrigin(mergedOriginsForPublish)) {
         throw new Error('At least one active allowed embed origin is required to publish.');
       }
-    }
-
-    let mlm: 'none' | 'fixed_total' =
-      ex.messageLimitMode === 'fixed_total' ? 'fixed_total' : 'none';
-    let mlt: number | null =
-      typeof ex.messageLimitTotal === 'number' && Number.isFinite(ex.messageLimitTotal)
-        ? Math.floor(ex.messageLimitTotal as number)
-        : null;
-    let mlum: string | null =
-      typeof ex.messageLimitUpgradeMessage === 'string' && ex.messageLimitUpgradeMessage.trim()
-        ? String(ex.messageLimitUpgradeMessage).trim()
-        : null;
-
-    if (patch.touched.has('messageLimitMode')) {
-      mlm = patch.messageLimitMode === 'fixed_total' ? 'fixed_total' : 'none';
-    }
-    if (patch.touched.has('messageLimitTotal')) {
-      mlt =
-        patch.messageLimitTotal == null
-          ? null
-          : typeof patch.messageLimitTotal === 'number' && Number.isFinite(patch.messageLimitTotal)
-            ? Math.floor(patch.messageLimitTotal)
-            : null;
-    }
-    if (patch.touched.has('messageLimitUpgradeMessage')) {
-      mlum =
-        patch.messageLimitUpgradeMessage == null
-          ? null
-          : typeof patch.messageLimitUpgradeMessage === 'string' && patch.messageLimitUpgradeMessage.trim()
-            ? patch.messageLimitUpgradeMessage.trim()
-            : null;
-    }
-
-    if (mlm === 'none') mlt = null;
-
-    if (mlm === 'fixed_total' && (!mlt || mlt <= 0)) {
-      throw new Error('messageLimitTotal must be a positive integer when messageLimitMode is fixed_total.');
     }
 
     const updateDoc: Record<string, unknown> = {};
@@ -1352,11 +1309,6 @@ export class BotsService {
     if (patch.touched.has('visibility') && patch.visibility) {
       updateDoc.visibility = patch.visibility;
     }
-    if (patch.touched.has('messageLimitMode') || patch.touched.has('messageLimitTotal') || patch.touched.has('messageLimitUpgradeMessage')) {
-      updateDoc.messageLimitMode = mlm;
-      updateDoc.messageLimitTotal = mlt;
-      updateDoc.messageLimitUpgradeMessage = mlum;
-    }
     if (patch.touched.has('isPublic')) {
       updateDoc.isPublic = patch.isPublic !== false;
     }
@@ -1381,16 +1333,12 @@ export class BotsService {
         patch.visitorMultiChatEnabled === true ? patch.visitorMultiChatMax ?? null : null;
     }
 
-    const faqRowsForKb =
-      patch.touched.has('faqs') && Array.isArray(patch.faqs)
-        ? (patch.faqs as Array<{ question?: string; answer?: string; active?: boolean }>)
-          .map((f) => ({
-            question: String(f?.question ?? '').trim(),
-            answer: String(f?.answer ?? '').trim(),
-            active: f?.active !== false,
-          }))
-          .filter((f) => f.question || f.answer)
-        : null;
+    const faqTouched = patch.touched.has('faqs');
+    const faqRowsForKb = faqTouched && Array.isArray(patch.faqs) ? patch.faqs : null;
+    const snippetsTouched = patch.touched.has('knowledgeSnippets');
+    const knowledgeSnippetsForKb = snippetsTouched && Array.isArray(patch.knowledgeSnippets) ? patch.knowledgeSnippets : null;
+    const tablesTouched = patch.touched.has('knowledgeDatasheets') || patch.touched.has('knowledgeTables');
+    const knowledgeDatasheetsForKb = tablesTouched && Array.isArray(patch.knowledgeDatasheets) ? patch.knowledgeDatasheets : null;
     const noteBodyForKb =
       patch.touched.has('knowledgeDescription') ? String(patch.knowledgeDescription ?? '').trim() : null;
 
@@ -1404,13 +1352,20 @@ export class BotsService {
           : 'draft';
 
     const runKbSideEffects = async () => {
-      if (faqRowsForKb) {
+      if (faqTouched && faqRowsForKb) {
         await this.knowledgeBaseItemService.upsertFaqKnowledgeItemsForBot(id, faqRowsForKb);
         await this.knowledgeBaseChunkService.replaceFaqKnowledgeChunksForBot(id);
       }
-      if (noteBodyForKb !== null) {
+      if (snippetsTouched && knowledgeSnippetsForKb) {
+        await this.knowledgeBaseItemService.upsertSnippetKnowledgeItemsForBot(id, knowledgeSnippetsForKb);
+        await this.knowledgeBaseChunkService.replaceNoteKnowledgeChunksForBot(id);
+      } else if (noteBodyForKb !== null) {
         await this.knowledgeBaseItemService.upsertNoteKnowledgeItemForBot(id, noteBodyForKb);
         await this.knowledgeBaseChunkService.replaceNoteKnowledgeChunksForBot(id);
+      }
+      if (tablesTouched && knowledgeDatasheetsForKb) {
+        await this.knowledgeBaseItemService.upsertTableKnowledgeItemsForBot(id, knowledgeDatasheetsForKb);
+        await this.knowledgeBaseChunkService.replaceTableKnowledgeChunksForBot(id);
       }
     };
 

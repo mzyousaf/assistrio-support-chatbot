@@ -33,6 +33,8 @@ export interface BuildChatContextInput {
     shouldUseFallback: boolean;
     shouldAnswerGenerally: boolean;
   };
+  /** When true, evidence is suggestion-scoped only (no full knowledge base for this turn). */
+  suggestionScopeOnly?: boolean;
 }
 
 /**
@@ -65,6 +67,7 @@ export function buildChatKnowledgeContext(input: BuildChatContextInput): ChatKno
     retrievalConfidence: input.retrievalConfidence,
     documentDirectAnswerLikely: input.documentDirectAnswerLikely,
     answerability: input.answerability,
+    suggestionScopeOnly: input.suggestionScopeOnly,
   };
 }
 
@@ -93,8 +96,15 @@ export function formatPromptFromContext(ctx: ChatKnowledgeContext): {
 
   // --- USER: Retrieved Knowledge Evidence ---
   if (hasEvidence) {
-    userParts.push('--- Retrieved Knowledge Evidence ---');
-    userParts.push('Answer from the following evidence only. Each item has sourceType, title, and optionally section and URL.');
+    if (ctx.suggestionScopeOnly) {
+      userParts.push('--- Suggestion-scoped information (this turn only) ---');
+      userParts.push(
+        'The visitor started from a quick suggestion. For company-specific facts, use **only** the block below. Do not rely on the rest of the knowledge base for this reply.',
+      );
+    } else {
+      userParts.push('--- Retrieved Knowledge Evidence ---');
+      userParts.push('Answer from the following evidence only. Each item has sourceType, title, and optionally section and URL.');
+    }
     ctx.knowledge.unifiedEvidence!.forEach((e, i) => {
       const lines: string[] = [];
       lines.push(`[${i + 1}] sourceType: ${e.sourceType}`);

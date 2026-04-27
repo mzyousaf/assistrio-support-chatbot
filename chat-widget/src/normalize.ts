@@ -24,7 +24,13 @@ function normalizeSuggestedQuestions(response: WidgetInitResponse): string[] {
   const source = response.bot?.suggestedQuestions ?? response.bot?.exampleQuestions ?? [];
   if (!Array.isArray(source)) return [];
   return source
-    .map((q) => (typeof q === "string" ? q.trim() : ""))
+    .map((q) => {
+      if (typeof q === "string") return q.trim();
+      if (q && typeof q === "object" && typeof (q as { label?: string }).label === "string") {
+        return (q as { label: string }).label.trim();
+      }
+      return "";
+    })
     .filter(Boolean)
     .slice(0, 6);
 }

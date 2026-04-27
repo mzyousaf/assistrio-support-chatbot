@@ -131,6 +131,9 @@ export const EXAMPLE_QUESTIONS_MAX = 5;
 /** Max length per suggested question chip (aligned with widget display). */
 export const EXAMPLE_QUESTION_MAX_CHARS = BOT_FIELD_MAX.exampleQuestion;
 
+/** Max length for optional per-suggestion scoped context (first reply when chip is used). */
+export const EXAMPLE_QUESTION_CONTEXT_MAX = BOT_FIELD_MAX.exampleQuestionContext;
+
 export const ASK_STRATEGY_OPTIONS = [
   { value: 'soft', label: 'Soft — ask less often' },
   { value: 'balanced', label: 'Balanced' },

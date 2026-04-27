@@ -41,10 +41,14 @@ function toInitRequest(config: EmbedChatConfig): WidgetInitRequest {
       return {
         ...minimalPreviewInit(config),
         authToken,
+        ...(config.chatVisitorId?.trim() ? { chatVisitorId: config.chatVisitorId.trim() } : {}),
       };
     }
     if (config.sessionPreview === true) {
-      return minimalPreviewInit(config);
+      return {
+        ...minimalPreviewInit(config),
+        ...(config.chatVisitorId?.trim() ? { chatVisitorId: config.chatVisitorId.trim() } : {}),
+      };
     }
     throw new Error("Preview mode requires cookie session (sessionPreview: true) or authToken.");
   }

@@ -57,3 +57,5 @@ export function consumeEmbedRuntimeRateLimitToken(clientKey: string, maxPerMinut
 }
 
 export const EMBED_RUNTIME_RATE_LIMIT_KEY_PREFIX = 'embed_rt';
+/** In-process per-IP limiter for `/api/widget/preview/*` (separate bucket from public embed for the same IP). */
+export const EMBED_PREVIEW_RATE_LIMIT_KEY_PREFIX = 'embed_prv';

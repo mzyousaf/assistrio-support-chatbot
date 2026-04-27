@@ -50,8 +50,9 @@ export type EmbedChatConfig = {
   authToken?: string;
   /**
    * Preview mode: authenticate with the same `user_token` HttpOnly cookie as private APIs
-   * (`fetch` with `credentials: "include"` to the API origin). Omits keys and `chatVisitorId`
-   * from init; do not set `authToken` in the JSON body.
+   * (`fetch` with `credentials: "include"` to the API origin). Omits access keys; optional
+   * `chatVisitorId` reuses a session-stored id across route changes. Do not set `authToken` in
+   * the JSON body for cookie session preview.
    */
   sessionPreview?: boolean;
   /**
@@ -74,6 +75,11 @@ export type EmbedChatConfig = {
    */
   onContainedPanelExpandChange?: (expanded: boolean) => void;
   previewOverrides?: WidgetPreviewOverrides;
+  /**
+   * Admin preview: editor pathname (or label); sent as `previewContext.sourcePage` on preview chat
+   * requests so each message is attributed to a workspace page.
+   */
+  previewSourcePage?: string;
   disableRemoteConfig?: boolean;
   /**
    * BCP 47-ish locale hint (default `"en"`). Reserved for future translations; strings still merge from `widgetStrings`.
@@ -92,6 +98,7 @@ export interface WidgetInitRequest {
   secretKey?: string;
   /** Page origin (e.g. https://www.example.com). Sent on runtime init when the embedding site is known. */
   embedOrigin?: string;
+  /** Reuse across preview inits in the same browser tab (sessionStorage); server may return the same id. */
   chatVisitorId?: string;
   authToken?: string;
   previewOverrides?: WidgetPreviewOverrides;
@@ -117,6 +124,12 @@ export interface WidgetInitResponse {
   deploymentHint?: string;
   /** Suggested backoff for 429 RATE_LIMITED. */
   retryAfterSeconds?: number;
+  /**
+   * Set after the first user message in preview (returned on `chat`); init may omit it so
+   * nothing is stored until the visitor actually sends a message. Use the same `chatVisitorId`
+   * across requests in that session.
+   */
+  conversationId?: string;
   chatVisitorId?: string;
   bot?: {
     id?: string;
