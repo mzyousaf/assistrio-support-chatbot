@@ -1,4 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
+import type { PipelineStage } from 'mongoose';
 import {
   DEFAULT_OVERVIEW_RANGE_DAYS,
   MAX_OVERVIEW_RANGE_MS,
@@ -39,7 +40,8 @@ export type ParsedCustomerChatsAnalyticsQuery = {
   to: Date;
   granularity: CustomerChatsGranularity;
   includePreview: boolean;
-  startedFrom?: ConversationStartedFromKey;
+  /** When set, conversations must match one of these `startedFrom` keys (OR). */
+  startedFrom?: ConversationStartedFromKey[];
   countryCode?: string;
   deviceType?: string;
 };
@@ -53,6 +55,95 @@ const STARTED_FROM_SET = new Set<string>([
   'runtime_iframe',
   'unknown',
 ]);
+
+/**
+ * Parses `startedFrom` query param: a single key or comma-separated keys (OR semantics).
+ */
+export function parseStartedFromQueryParam(
+  rawInput?: string,
+): ConversationStartedFromKey[] | undefined {
+  const raw = rawInput?.trim().toLowerCase();
+  if (!raw) return undefined;
+  const tokens = raw.split(',').map((p) => p.trim()).filter(Boolean);
+  if (!tokens.length) return undefined;
+  const out: ConversationStartedFromKey[] = [];
+  const seen = new Set<string>();
+  for (const t of tokens) {
+    if (!STARTED_FROM_SET.has(t)) {
+      throw new BadRequestException({
+        error: 'Invalid startedFrom filter.',
+        errorCode: 'INVALID_STARTED_FROM',
+      });
+    }
+    if (seen.has(t)) continue;
+    seen.add(t);
+    out.push(t as ConversationStartedFromKey);
+  }
+  return out.length ? out : undefined;
+}
+
+export type StartedFromMatchOptions = {
+  /** When true, match explicit `unknown` string on the field (sentiment conversation filters use this). */
+  includeExplicitUnknownString?: boolean;
+};
+
+/**
+ * Mongo match condition for a single `startedFrom` field (conversation root, lookup alias, or metadata).
+ */
+export function buildStartedFromMatchClause(
+  fieldPath: string,
+  keys: ConversationStartedFromKey[],
+  options?: StartedFromMatchOptions,
+): Record<string, unknown> {
+  const incUnkStr = Boolean(options?.includeExplicitUnknownString);
+  const hasUnknown = keys.includes('unknown');
+  const known = keys.filter((k): k is Exclude<ConversationStartedFromKey, 'unknown'> => k !== 'unknown');
+
+  const unknownBranches: Record<string, unknown>[] = [
+    { [fieldPath]: { $exists: false } },
+    { [fieldPath]: null },
+    { [fieldPath]: '' },
+  ];
+  if (incUnkStr) {
+    unknownBranches.push({ [fieldPath]: 'unknown' });
+  }
+
+  if (hasUnknown && known.length === 0) {
+    return { $or: unknownBranches };
+  }
+  if (!hasUnknown) {
+    if (known.length === 1) {
+      return { [fieldPath]: known[0] };
+    }
+    return { [fieldPath]: { $in: known } };
+  }
+  return {
+    $or: [
+      ...unknownBranches,
+      ...(known.length === 1 ? [{ [fieldPath]: known[0] }] : [{ [fieldPath]: { $in: known } }]),
+    ],
+  };
+}
+
+/**
+ * Applies startedFrom to pipelines that merge conditions into `matchParts` (overwrites
+ * a prior `fieldPath` constraint such as preview `$nin`) or adds an `$or` `$match` stage.
+ */
+export function applyStartedFromToMessageLookup(
+  matchParts: Record<string, unknown>,
+  stages: PipelineStage[],
+  fieldPath: string,
+  keys: ConversationStartedFromKey[] | undefined,
+  options?: StartedFromMatchOptions,
+): void {
+  if (!keys?.length) return;
+  const clause = buildStartedFromMatchClause(fieldPath, keys, options);
+  if ('$or' in clause) {
+    stages.push({ $match: clause });
+  } else {
+    Object.assign(matchParts, clause);
+  }
+}
 
 export function parseCustomerChatsAnalyticsQuery(
   input: CustomerChatsAnalyticsQueryInput,
@@ -71,17 +162,7 @@ export function parseCustomerChatsAnalyticsQuery(
   const ipRaw = input.includePreview?.trim().toLowerCase();
   const includePreview = ipRaw !== 'false' && ipRaw !== '0';
 
-  let startedFrom: ConversationStartedFromKey | undefined;
-  const sfRaw = input.startedFrom?.trim().toLowerCase();
-  if (sfRaw) {
-    if (!STARTED_FROM_SET.has(sfRaw)) {
-      throw new BadRequestException({
-        error: 'Invalid startedFrom filter.',
-        errorCode: 'INVALID_STARTED_FROM',
-      });
-    }
-    startedFrom = sfRaw as ConversationStartedFromKey;
-  }
+  const startedFrom = parseStartedFromQueryParam(input.startedFrom);
 
   let countryCode: string | undefined;
   const ccRaw = input.countryCode?.trim();

@@ -12,12 +12,13 @@ type Props = {
 };
 
 /**
- * Compact sparkline matching {@link LeadsConversionRateChart}: percent axis 0–100, teal monotone line, connectNulls.
+ * Compact sparkline: same Y scaling as {@link LeadsCountKpiMiniChart} (`domain={[0, 'dataMax']}`) so a flat
+ * zero series sits in the visual band like the other lead KPI sparklines.
  */
 export function LeadsConversionKpiMiniChart({
   points,
   granularity,
-  chartHeight = 76,
+  chartHeight = 88,
   className,
 }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -33,7 +34,15 @@ export function LeadsConversionKpiMiniChart({
     return () => ro.disconnect();
   }, []);
 
-  const chartData = useMemo(() => buildLeadsConversionChartRows(points, granularity), [points, granularity]);
+  /** Map null buckets to 0 so the sparkline draws the same teal baseline as count KPIs (all-null otherwise yields no line). */
+  const chartData = useMemo(
+    () =>
+      buildLeadsConversionChartRows(points, granularity).map((row) => ({
+        ...row,
+        conversionPercent: row.conversionPercent ?? 0,
+      })),
+    [points, granularity],
+  );
 
   if (!points.length) {
     return (
@@ -51,7 +60,8 @@ export function LeadsConversionKpiMiniChart({
     <div ref={wrapRef} className={`w-full min-w-0 ${className ?? ''}`} style={{ height: chartHeight }} aria-hidden>
       <LineChart width={width} height={chartHeight} data={chartData} margin={{ top: 4, right: 4, left: 0, bottom: 2 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-        <YAxis domain={[0, 100]} hide width={0} />
+        {/* Same scale as {@link LeadsCountKpiMiniChart}: [0, dataMax] so an all-zero series sits mid-band like the count sparklines, not pinned to the bottom of a 0–100 axis. */}
+        <YAxis domain={[0, 'dataMax']} hide width={0} />
         <Line
           type="monotone"
           dataKey="conversionPercent"

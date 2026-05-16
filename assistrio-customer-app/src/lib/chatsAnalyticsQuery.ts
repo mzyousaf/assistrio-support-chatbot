@@ -13,7 +13,7 @@ export type ChatsAnalyticsUiState = {
   customFrom: string;
   customTo: string;
   includePreview: boolean;
-  startedFrom: '' | CustomerChatsAnalyticsStartedFromKey;
+  startedFromKeys: CustomerChatsAnalyticsStartedFromKey[];
   countryCode: string;
   deviceType: string;
 };
@@ -23,7 +23,7 @@ export const CHATS_ANALYTICS_DEFAULTS: ChatsAnalyticsUiState = {
   customFrom: '',
   customTo: '',
   includePreview: true,
-  startedFrom: '',
+  startedFromKeys: [],
   countryCode: '',
   deviceType: '',
 };
@@ -118,7 +118,9 @@ export function buildChatsAnalyticsApiParams(state: ChatsAnalyticsUiState): Cust
     includePreview: state.includePreview,
   };
 
-  if (state.startedFrom) params.startedFrom = state.startedFrom;
+  if (state.startedFromKeys.length > 0) {
+    params.startedFrom = [...state.startedFromKeys].sort().join(',');
+  }
   if (state.countryCode.trim()) params.countryCode = state.countryCode.trim().toUpperCase();
   const deviceForApi = normalizeChatsAnalyticsDeviceTypeForApi(state.deviceType);
   if (deviceForApi) params.deviceType = deviceForApi;

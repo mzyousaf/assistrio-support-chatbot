@@ -59,6 +59,7 @@ import {
 } from '@/lib/knowledgePipelineStuckEscalation';
 import { useSyncKnowledgeLiveCrumb } from './knowledgeItemRouteLayouts';
 import { KnowledgePipelineStuckEscalationCallout } from './KnowledgePipelineStuckEscalationCallout';
+import { KnowledgeItemPrimarySourceAnalytics } from './KnowledgeItemPrimarySourceAnalytics';
 
 function workspaceDocumentUpdatedIso(d: CustomerWorkspaceDocument | null): string | undefined {
   if (!d) return undefined;
@@ -396,7 +397,8 @@ export function DocumentDetailPage() {
         }
         analyticsContent={
           doc ? (
-            <KnowledgeItemTrainingAnalytics
+            <>
+              <KnowledgeItemTrainingAnalytics
               status={displayCanon}
               lastTrainedAt={lastTrainedIsoForRow}
               updatedAt={kbPollItem?.updatedAt ?? workspaceDocumentUpdatedIso(doc) ?? null}
@@ -458,6 +460,10 @@ export function DocumentDetailPage() {
                 </>
               }
             />
+              {botId ? (
+                <KnowledgeItemPrimarySourceAnalytics botId={botId} knowledgeItemId={canonicalDocumentKbId(doc)} />
+              ) : null}
+            </>
           ) : (
             <p className="m-0 text-sm text-slate-500">No metadata loaded.</p>
           )

@@ -568,7 +568,6 @@ export function KnowledgeItemTrainingAnalytics({
   lastTrainedAt,
   updatedAt,
   utf8SizeLabel,
-  timesUsedInChat,
   actions,
   statusLabelOverride,
   forceFailedStatusDot,
@@ -589,8 +588,6 @@ export function KnowledgeItemTrainingAnalytics({
   updatedAt?: string | null;
   /** Stored content size, formatted (e.g. via {@link formatKnowledgeUtf8BytesDisplay}). */
   utf8SizeLabel?: string | null;
-  /** When the API exposes per-item citation counts; omit when not tracked. */
-  timesUsedInChat?: number;
   actions?: ReactNode;
   /** Replaces the default label from `status` (e.g. “Storage limit reached”). */
   statusLabelOverride?: string | null;
@@ -688,18 +685,6 @@ export function KnowledgeItemTrainingAnalytics({
         <KnowledgeAnalyticsStatRow label="Stored content">{sizeLine}</KnowledgeAnalyticsStatRow>
         <KnowledgeAnalyticsStatRow label="Updated" tabular={false}>
           {formatKbItemLastTrainedDateTime(updatedAt, { emptyLabel: '—' })}
-        </KnowledgeAnalyticsStatRow>
-        <KnowledgeAnalyticsStatRow label="Used in chat">
-          {typeof timesUsedInChat === 'number' && Number.isFinite(timesUsedInChat) ? (
-            timesUsedInChat.toLocaleString()
-          ) : (
-            <span className="inline-flex flex-col gap-1">
-              <span>—</span>
-              <span className="text-xs font-normal text-slate-500">
-                Per-item retrieval counts are not available yet.
-              </span>
-            </span>
-          )}
         </KnowledgeAnalyticsStatRow>
       </dl>
       {actions ? <div className="mt-4 flex flex-wrap gap-2">{actions}</div> : null}

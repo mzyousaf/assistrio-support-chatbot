@@ -1,8 +1,15 @@
 import { X } from 'lucide-react';
 import type { CustomerBotLeadsListParams, CustomerLeadFieldDefinition } from '@/api/types';
-import { formatStartedFromLabel } from '../conversations/ConversationStartedFromBadge';
+import type { StandardDateControlValues } from '@/pages/bot-workspace/analytics/shared/analyticsFilterCapsuleUtils';
+import { analyticsDateRangeValueLabel } from '@/pages/bot-workspace/analytics/shared/analyticsFilterCapsuleUtils';
+import { dateRangeMatchesDefault, widgetChannelValueLabel } from '@/pages/bot-workspace/analytics/shared/AnalyticsInsightsFilterBars';
 import { formatCountryCodeWithNameLabel } from './leadsFilterCountryOptions';
-import type { LeadsFilterChipId } from './leadsFiltersModel';
+import {
+  apiParamsToLeadsDraft,
+  defaultLeadsFiltersDraft,
+  matchesDefaultLeadsWidgetFilters,
+  type LeadsFilterChipId,
+} from './leadsFiltersModel';
 
 function fieldLabelForKey(defs: CustomerLeadFieldDefinition[], key: string): string {
   const k = key.trim();
@@ -10,51 +17,66 @@ function fieldLabelForKey(defs: CustomerLeadFieldDefinition[], key: string): str
   return d?.label?.trim() || k;
 }
 
-function formatYmdForDisplay(iso: string): string {
-  const t = iso.trim();
-  if (!t) return '';
-  const d = new Date(t);
-  if (!Number.isFinite(d.getTime())) return t.slice(0, 10);
-  try {
-    return d.toLocaleDateString(undefined, { dateStyle: 'medium' });
-  } catch {
-    return t.slice(0, 10);
-  }
+function draftToStandard(d: ReturnType<typeof apiParamsToLeadsDraft>): StandardDateControlValues {
+  return {
+    preset: d.datePreset,
+    customFrom: d.customFrom,
+    customTo: d.customTo,
+    includePreview: d.includePreview,
+    startedFromKeys: d.startedFromKeys,
+  };
 }
 
 export function listLeadsFilterChips(
   applied: CustomerBotLeadsListParams,
   fieldDefinitions: CustomerLeadFieldDefinition[],
 ): { id: LeadsFilterChipId; label: string }[] {
+  const draft = apiParamsToLeadsDraft(applied);
   const chips: { id: LeadsFilterChipId; label: string }[] = [];
-  if (applied.dateFrom?.trim()) {
-    chips.push({ id: 'dateFrom', label: `From date: ${formatYmdForDisplay(applied.dateFrom)}` });
-  }
-  if (applied.dateTo?.trim()) {
-    chips.push({ id: 'dateTo', label: `To date: ${formatYmdForDisplay(applied.dateTo)}` });
-  }
-  if (applied.startedFrom?.trim()) {
-    const raw = applied.startedFrom.trim();
+
+  const defDraft = defaultLeadsFiltersDraft();
+  const coreStd = draftToStandard(defDraft);
+  const curStd = draftToStandard(draft);
+
+  if (!dateRangeMatchesDefault(curStd, coreStd)) {
     chips.push({
-      id: 'startedFrom',
-      label: `Started from: ${formatStartedFromLabel(raw) || raw.replace(/_/g, ' ')}`,
+      id: 'dateRange',
+      label: `Date range: ${analyticsDateRangeValueLabel({
+        preset: draft.datePreset,
+        customFrom: draft.customFrom,
+        customTo: draft.customTo,
+      })}`,
     });
   }
-  if (applied.countryCode?.trim()) {
-    const cc = applied.countryCode.trim();
+
+  if (!matchesDefaultLeadsWidgetFilters(draft)) {
+    chips.push({
+      id: 'widgetChannel',
+      label: `Widget channel: ${widgetChannelValueLabel(curStd)}`,
+    });
+  }
+
+  if (draft.countryCode.trim().length === 2) {
+    const cc = draft.countryCode.trim();
     chips.push({
       id: 'countryCode',
-      label: `Location: ${formatCountryCodeWithNameLabel(cc) || cc.toUpperCase()}`,
+      label: `Country: ${formatCountryCodeWithNameLabel(cc) || cc.toUpperCase()}`,
     });
   }
-  if (applied.fieldKey?.trim()) {
+  if (draft.fieldKey.trim()) {
     chips.push({
       id: 'fieldKey',
-      label: `Field: ${fieldLabelForKey(fieldDefinitions, applied.fieldKey.trim())}`,
+      label: `Captured fields: ${fieldLabelForKey(fieldDefinitions, draft.fieldKey.trim())}`,
     });
   }
-  if (applied.search?.trim()) {
-    chips.push({ id: 'search', label: `Search: ${applied.search.trim()}` });
+  if (draft.search.trim()) {
+    chips.push({ id: 'search', label: `Search: ${draft.search.trim()}` });
+  }
+  if (draft.leadCompletion === 'complete' || draft.leadCompletion === 'partial') {
+    chips.push({
+      id: 'leadCompletion',
+      label: `Lead status: ${draft.leadCompletion === 'complete' ? 'Complete' : 'Partial'}`,
+    });
   }
   return chips;
 }

@@ -13,19 +13,12 @@ import { WorkspaceContentContainer } from '@/layout/workspace-layout';
 import { useBotWorkspace } from '../../BotWorkspaceContext';
 import { AnalyticsErrorState } from '../shared/AnalyticsErrorState';
 import { AnalyticsPageHeader } from '../shared/AnalyticsPageHeader';
-import { SentimentEmptyState } from './SentimentEmptyState';
 import { SentimentAnalyticsFilterBar } from '../shared/AnalyticsInsightsFilterBars';
 import { SentimentPageSkeleton } from './SentimentPageSkeleton';
 import { SentimentSummaryCards } from './SentimentSummaryCards';
 import { SentimentTrendsSection } from './SentimentTrendsSection';
 import { SentimentMetricModeTabs } from './SentimentMetricModeTabs';
 import { buildSentimentRankingRows, type SentimentChartStyle } from './sentimentTrendsChartHelpers';
-
-function hasSentimentSignal(data: CustomerSentimentAnalyticsResponse | null): boolean {
-  if (!data) return false;
-  if (data.summary.totalConversations > 0) return true;
-  return (data.summary.totalUserMessages ?? 0) > 0;
-}
 
 export function SentimentAnalyticsPage() {
   const { botId } = useBotWorkspace();
@@ -126,7 +119,6 @@ export function SentimentAnalyticsPage() {
   const showSkeleton = loadState === 'loading' && !data;
   const showError = loadState === 'error';
   const showBody = data != null && !showError;
-  const empty = loadState === 'ok' && data && !hasSentimentSignal(data);
 
   return (
     <WorkspaceContentContainer size="full">
@@ -159,29 +151,23 @@ export function SentimentAnalyticsPage() {
 
             {showBody && data ? (
               <>
-                {empty ? (
-                  <SentimentEmptyState />
-                ) : (
-                  <>
-                    <SentimentSummaryCards
-                      summary={data.summary}
-                      dominantLabel={dominantLabel}
-                      sentimentBreakdown={data.sentimentBreakdown}
-                      timeSeries={chartTimeSeries}
-                      granularity={data.range.granularity}
-                      metricMode={ui.metricMode}
-                    />
-                    <SentimentTrendsSection
-                      data={data}
-                      metricMode={ui.metricMode}
-                      chartStyle={chartStyle}
-                      onChartStyleChange={setChartStyle}
-                      hiddenSeriesIds={hiddenSeriesIds}
-                      onToggleSeries={toggleSeries}
-                      disabled={loadState === 'loading'}
-                    />
-                  </>
-                )}
+                <SentimentSummaryCards
+                  summary={data.summary}
+                  dominantLabel={dominantLabel}
+                  sentimentBreakdown={data.sentimentBreakdown}
+                  timeSeries={chartTimeSeries}
+                  granularity={data.range.granularity}
+                  metricMode={ui.metricMode}
+                />
+                <SentimentTrendsSection
+                  data={data}
+                  metricMode={ui.metricMode}
+                  chartStyle={chartStyle}
+                  onChartStyleChange={setChartStyle}
+                  hiddenSeriesIds={hiddenSeriesIds}
+                  onToggleSeries={toggleSeries}
+                  disabled={loadState === 'loading'}
+                />
               </>
             ) : null}
           </div>

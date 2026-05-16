@@ -55,7 +55,7 @@ export function TopicsTopicBySentimentSection({ data, metricMode }: Props) {
       unknown: Math.max(0, Math.trunc(r.unknown)),
       totalMessages: Math.max(0, Math.trunc(r.totalMessages)),
     }));
-    return [...mapped].reverse();
+    return mapped;
   }, [rows]);
 
   const yAxisWidth = useMemo(() => {

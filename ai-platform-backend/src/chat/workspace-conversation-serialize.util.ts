@@ -7,6 +7,7 @@ import {
 } from '../analytics/topic-sentiment-classification.constants';
 import { narrowPrimarySubTopic, narrowSubTopicLabelArray } from '../analytics/topic-sentiment-classification.subtopics';
 import type { MessageAiMeta, MessageFeedback, MessageSource, MessageVoiceMeta } from '../models/message.schema';
+import { PREVIEW_STARTED_FROM_VALUES } from '../analytics/customer-chats-analytics.util';
 import { normalizeLeadCaptureConfig } from './lead-capture-config';
 
 /** Optional filters for workspace conversation list (customer/admin). */
@@ -763,12 +764,17 @@ export function serializeWorkspaceMessageRow(m: Record<string, unknown>): Record
 export type WorkspaceLeadsListFilters = {
   dateFrom?: string | null;
   dateTo?: string | null;
+  /** Single key, or comma-separated keys (OR), each in {@link STARTED_FROM_VALUES}. */
   startedFrom?: string | null;
   countryCode?: string | null;
   /** Only conversations with a non-empty string value for this `capturedLeadData` key. */
   fieldKey?: string | null;
   /** Case-insensitive match against any string value in `capturedLeadData`. */
   search?: string | null;
+  /** Analytics-parity complete vs partial (optional). */
+  leadCompletion?: 'complete' | 'partial' | null;
+  /** When false, exclude preview channels if `startedFrom` is unset (analytics parity). */
+  includePreview?: boolean;
 };
 
 export function parseWorkspaceLeadsListFilters(q: Record<string, string | string[] | undefined>): WorkspaceLeadsListFilters {
@@ -780,14 +786,34 @@ export function parseWorkspaceLeadsListFilters(q: Record<string, string | string
   const dateFrom = one('dateFrom')?.trim() || null;
   const dateTo = one('dateTo')?.trim() || null;
   const startedFromRaw = one('startedFrom')?.trim() || null;
-  const startedFrom =
-    startedFromRaw && STARTED_FROM_VALUES.has(startedFromRaw) ? startedFromRaw : null;
+  let startedFrom: string | null = null;
+  if (startedFromRaw) {
+    const keys = [...new Set(startedFromRaw.split(',').map((x) => x.trim()).filter(Boolean))].filter((k) =>
+      STARTED_FROM_VALUES.has(k),
+    );
+    if (keys.length === 1) startedFrom = keys[0]!;
+    else if (keys.length > 1) startedFrom = keys.sort().join(',');
+  }
   const cc = one('countryCode')?.trim().toUpperCase() || null;
   const countryCode = cc && /^[A-Z]{2}$/.test(cc) ? cc : null;
   const fieldKeyRaw = one('fieldKey')?.trim() || null;
   const fieldKey = sanitizeLeadFieldKeyFilter(fieldKeyRaw);
   const search = one('search')?.trim() || null;
-  return { dateFrom, dateTo, startedFrom, countryCode, fieldKey: fieldKey ?? null, search };
+  const lcRaw = one('leadCompletion')?.trim().toLowerCase() || null;
+  const leadCompletion =
+    lcRaw === 'complete' || lcRaw === 'partial' ? (lcRaw as 'complete' | 'partial') : null;
+  const includePreviewFlag = parseOptionalBool(one('includePreview'));
+  const includePreview = includePreviewFlag !== false;
+  return {
+    dateFrom,
+    dateTo,
+    startedFrom,
+    countryCode,
+    fieldKey: fieldKey ?? null,
+    search,
+    leadCompletion,
+    includePreview,
+  };
 }
 
 /** Allow only safe Mongo subfield keys (no `.` injection). */
@@ -1129,10 +1155,24 @@ export function buildWorkspaceLeadsPreSortStages(params: {
   botOid: Types.ObjectId;
   filters?: WorkspaceLeadsListFilters | null;
   beforeSortAtIso?: string | null;
+  /**
+   * Required when `filters.leadCompletion` is set — same expression as GET …/analytics/leads
+   * ({@link mongoLeadCompleteExpr}).
+   */
+  leadCompleteExpr?: Record<string, unknown> | null;
 }): Record<string, unknown>[] {
   const pre: Record<string, unknown>[] = [{ botId: params.botOid }, { hasLead: true }];
   const f = params.filters;
-  if (f?.startedFrom) pre.push({ startedFrom: f.startedFrom });
+  const sf = f?.startedFrom?.trim();
+  if (sf) {
+    const keys = [...new Set(sf.split(',').map((x) => x.trim()).filter(Boolean))].filter((k) =>
+      STARTED_FROM_VALUES.has(k),
+    );
+    if (keys.length === 1) pre.push({ startedFrom: keys[0] });
+    else if (keys.length > 1) pre.push({ startedFrom: { $in: keys } });
+  } else if (f?.includePreview === false) {
+    pre.push({ startedFrom: { $nin: [...PREVIEW_STARTED_FROM_VALUES] } });
+  }
   if (f?.countryCode) pre.push({ 'location.countryCode': f.countryCode });
   if (f?.fieldKey) pre.push({ [`capturedLeadData.${f.fieldKey}`]: { $exists: true, $nin: [null, '', undefined] } });
   const matchStage = pre.length === 1 ? pre[0] : { $and: pre };
@@ -1188,6 +1228,16 @@ export function buildWorkspaceLeadsPreSortStages(params: {
     });
   }
 
+  const lc = f?.leadCompletion;
+  const completeExpr = params.leadCompleteExpr;
+  if ((lc === 'complete' || lc === 'partial') && completeExpr) {
+    if (lc === 'complete') {
+      pipeline.push({ $match: { $expr: { $eq: [completeExpr, true] } } });
+    } else {
+      pipeline.push({ $match: { $expr: { $ne: [completeExpr, true] } } });
+    }
+  }
+
   if (params.beforeSortAtIso) {
     const d = new Date(params.beforeSortAtIso);
     if (Number.isFinite(d.getTime())) pipeline.push({ $match: { _leadSortAt: { $lt: d } } });
@@ -1196,35 +1246,8 @@ export function buildWorkspaceLeadsPreSortStages(params: {
   return pipeline;
 }
 
-/** `$expr` match: `capturedLeadData` has a non-empty string value for one of `keys` (case-insensitive key). */
-function workspaceLeadsCapturedDataKeysNonEmptyExpr(keys: string[]): Record<string, unknown> {
-  const lowerKeys = keys.map((k) => k.toLowerCase());
-  return {
-    $expr: {
-      $gt: [
-        {
-          $size: {
-            $filter: {
-              input: { $ifNull: [{ $objectToArray: { $ifNull: ['$capturedLeadData', {}] } }, []] },
-              as: 'pair',
-              cond: {
-                $and: [
-                  { $in: [{ $toLower: '$$pair.k' }, lowerKeys] },
-                  { $eq: [{ $type: '$$pair.v' }, 'string'] },
-                  { $gt: [{ $strLenCP: { $trim: { input: '$$pair.v' } } }, 0] },
-                ],
-              },
-            },
-          },
-        },
-        0,
-      ],
-    },
-  };
-}
-
 /**
- * Single aggregation with `$facet`: paged rows, total count, name/email rollups, max capture time.
+ * Single aggregation with `$facet`: paged rows, total count, complete-lead rollup (analytics parity), max capture time.
  */
 export function buildWorkspaceLeadsListFacetPipeline(params: {
   botOid: Types.ObjectId;
@@ -1232,11 +1255,19 @@ export function buildWorkspaceLeadsListFacetPipeline(params: {
   beforeSortAtIso?: string | null;
   limit: number;
   skip: number;
+  /**
+   * Mongo aggregation expression (boolean) for “complete” leads — same semantics as GET …/analytics/leads
+   * ({@link mongoLeadCompleteExpr}).
+   */
+  leadCompleteExpr: Record<string, unknown>;
 }): Record<string, unknown>[] {
   const take = Math.max(1, params.limit) + 1;
   const skip = Math.max(0, params.skip);
   const pre = buildWorkspaceLeadsPreSortStages(params);
   const sortStage = { $sort: { _leadSortAt: -1, _id: -1 } as Record<string, unknown> };
+  const completeMatch = {
+    $match: { $expr: { $eq: [params.leadCompleteExpr, true] } },
+  };
 
   return [
     ...pre,
@@ -1244,8 +1275,7 @@ export function buildWorkspaceLeadsListFacetPipeline(params: {
       $facet: {
         pageRows: [sortStage, { $skip: skip }, { $limit: take }],
         total: [{ $count: 'n' }],
-        withName: [{ $match: workspaceLeadsCapturedDataKeysNonEmptyExpr(['name', 'full_name', 'fullname']) }, { $count: 'n' }],
-        withEmail: [{ $match: workspaceLeadsCapturedDataKeysNonEmptyExpr(['email']) }, { $count: 'n' }],
+        complete: [completeMatch, { $count: 'n' }],
         latest: [{ $group: { _id: null, d: { $max: '$_leadSortAt' } } }, { $project: { _id: 0, d: 1 } }],
       },
     },

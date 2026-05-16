@@ -129,8 +129,8 @@ export function TrainingStatusSidebarCard({
     failedOnlyHeadline;
 
   /**
-   * Prefer polled `GET …/knowledge/training/status` usage (7s cadence) so the bar tracks ingestion/storage
-   * before shell `GET /bots/:id` catches up; then shell snapshot and overview.
+   * Prefer `agentTs.knowledgeUsage` from `GET …/knowledge/training/status` when present (polled every 5s only while
+   * the KB pipeline is active); otherwise shell `GET /bots/:id` and overview.
    */
   const usageResolved = agentTs?.knowledgeUsage ?? botKnowledgeUsage ?? overview?.knowledgeUsage;
   const hideManualRetrain = overview?.knowledgeTraining?.autoTrainEnabled === true;

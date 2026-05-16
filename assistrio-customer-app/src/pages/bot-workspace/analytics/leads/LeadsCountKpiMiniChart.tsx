@@ -37,7 +37,7 @@ export function LeadsCountKpiMiniChart({
   points,
   granularity,
   seriesKey,
-  chartHeight = 76,
+  chartHeight = 88,
   className,
 }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);

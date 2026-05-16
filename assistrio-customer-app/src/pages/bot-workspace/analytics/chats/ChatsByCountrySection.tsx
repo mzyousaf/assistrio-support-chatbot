@@ -6,6 +6,7 @@ import { ChatsGeoChart } from './ChatsGeoChart';
 import { formatAnalyticsInteger } from '@/lib/analyticsFormat';
 import { cn } from '@/lib/utils';
 import { AnalyticsChartCard } from '../shared/AnalyticsChartCard';
+import { AnalyticsChartEmpty } from '../shared/AnalyticsChartEmpty';
 import {
   buildChatsCountryRankingRows,
   buildChatsGeoChartData,
@@ -169,7 +170,12 @@ function CountryRankingColumn({
   const hasMore = rows.length > CHATS_COUNTRY_RANKING_COLLAPSED_LIMIT;
 
   if (rows.length === 0) {
-    return <p className="m-0 text-sm text-slate-500">No country data yet.</p>;
+    return (
+      <AnalyticsChartEmpty
+        message="No country data yet."
+        className="h-[550px] min-h-[550px] max-h-[550px]"
+      />
+    );
   }
 
   return (
@@ -238,18 +244,18 @@ function ChatsByCountryBody({
   return (
     <>
       <div
-        className="grid min-w-0 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_var(--chats-country-list-col)]"
+        className="flex min-w-0 flex-row items-start gap-4 sm:gap-6"
         style={{ ['--chats-country-list-col' as string]: CHATS_COUNTRY_LIST_GRID_COL }}
       >
-        <div className="min-w-0 w-full">{renderMapBlock(GEO_CHART_MAP_HEIGHT_PX)}</div>
-        <div className="flex w-full min-w-0 flex-col lg:max-w-[var(--chats-country-list-col)]">
+        <div className="min-h-0 min-w-0 flex-1">{renderMapBlock(GEO_CHART_MAP_HEIGHT_PX)}</div>
+        <div className="flex w-[var(--chats-country-list-col)] min-w-0 shrink-0 flex-col">
           <div className="flex w-full items-center justify-between gap-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
             <span>Country</span>
             <span className="shrink-0">Chats</span>
           </div>
           <div
             ref={sidebarListScrollRef}
-            className="mt-3 w-full max-h-[min(680px,72vh)] overflow-y-auto overflow-x-hidden pr-0.5 [scrollbar-gutter:stable]"
+            className="mt-3 w-full max-h-[680px] overflow-y-auto overflow-x-hidden pr-0.5 [scrollbar-gutter:stable]"
           >
             <CountryRankingColumn
               rows={rankingRows}
@@ -279,10 +285,10 @@ function ChatsByCountryBody({
           </Button>
         }
       >
-        <div className="flex min-h-0 flex-1 flex-col gap-5 lg:flex-row lg:items-stretch">
+        <div className="flex min-h-0 flex-1 flex-row items-stretch gap-5">
           <div className="min-h-0 min-w-0 flex-1">{renderMapBlock(modalMapHeight)}</div>
           <aside
-            className="flex min-h-0 w-full min-w-0 shrink-0 flex-col lg:w-[var(--chats-country-list-col)] lg:max-w-[var(--chats-country-list-col)]"
+            className="flex min-h-0 w-[var(--chats-country-list-col)] min-w-0 shrink-0 flex-col"
             style={{ ['--chats-country-list-col' as string]: CHATS_COUNTRY_LIST_GRID_COL }}
           >
             <div className="flex w-full shrink-0 items-center justify-between gap-2 text-xs font-semibold uppercase tracking-wide text-slate-400">

@@ -21,6 +21,7 @@ import { WorkspacesService } from '../workspaces/workspaces.service';
 import { KnowledgeOverviewService } from './knowledge-overview.service';
 import { KnowledgeItemManualRetryService } from './knowledge-item-manual-retry.service';
 import { KnowledgeBaseItemService } from '../knowledge/knowledge-base-item.service';
+import { CustomerKnowledgeItemPrimarySourceAnalyticsService } from '../analytics/customer-knowledge-item-primary-source-analytics.service';
 import { RateLimitService } from '../rate-limit/rate-limit.service';
 import { assertKnowledgeTrainQueueRateLimit } from './shared/knowledge-train-queue-rate-limit.util';
 import {
@@ -188,6 +189,7 @@ export class CustomerKnowledgeController {
     private readonly workspacesService: WorkspacesService,
     private readonly knowledgeBaseItemService: KnowledgeBaseItemService,
     private readonly rateLimitService: RateLimitService,
+    private readonly knowledgeItemPrimarySourceAnalytics: CustomerKnowledgeItemPrimarySourceAnalyticsService,
   ) {}
 
   private async assertCanAccess(req: RequestWithUser, botId: string): Promise<void> {
@@ -278,6 +280,34 @@ export class CustomerKnowledgeController {
     } catch (e) {
       if (e instanceof HttpException) throw e;
       console.error('[customer-knowledge] PATCH items/:itemId/use-in-replies', e);
+      throw new HttpException({ error: 'Internal server error' }, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  /** Primary-source usage over time for one KnowledgeBaseItem (tenant-safe aggregates only). */
+  @Get('items/:itemId/primary-source-analytics')
+  async getKnowledgeItemPrimarySourceAnalytics(
+    @Param('id') id: string,
+    @Param('itemId') itemId: string,
+    @Req() req: RequestWithUser,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('granularity') granularity?: string,
+    @Query('includePreview') includePreview?: string,
+    @Query('startedFrom') startedFrom?: string,
+  ) {
+    await this.assertCanAccess(req, id);
+    try {
+      return await this.knowledgeItemPrimarySourceAnalytics.get(id, itemId, {
+        from,
+        to,
+        granularity,
+        includePreview,
+        startedFrom,
+      });
+    } catch (e) {
+      if (e instanceof HttpException) throw e;
+      console.error('[customer-knowledge] GET items/:itemId/primary-source-analytics', e);
       throw new HttpException({ error: 'Internal server error' }, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }

@@ -7,6 +7,7 @@ import {
   PREVIEW_STARTED_FROM_VALUES,
   alignBucketStart,
   bucketKeyIso,
+  buildStartedFromMatchClause,
   enumerateBucketStarts,
   mongoDateTruncUnit,
   type CustomerChatsGranularity,
@@ -361,18 +362,8 @@ export class CustomerUsageAnalyticsService {
     if (q.usageType) {
       and.push({ usageType: q.usageType });
     }
-    if (q.startedFrom) {
-      if (q.startedFrom === 'unknown') {
-        and.push({
-          $or: [
-            { 'metadata.startedFrom': { $exists: false } },
-            { 'metadata.startedFrom': null },
-            { 'metadata.startedFrom': '' },
-          ],
-        });
-      } else {
-        and.push({ 'metadata.startedFrom': q.startedFrom });
-      }
+    if (q.startedFrom?.length) {
+      and.push(buildStartedFromMatchClause('metadata.startedFrom', q.startedFrom));
     }
     return { $and: and };
   }
@@ -396,20 +387,10 @@ export class CustomerUsageAnalyticsService {
         },
       });
     }
-    if (q.startedFrom) {
-      if (q.startedFrom === 'unknown') {
-        stages.push({
-          $match: {
-            $or: [
-              { '_conv.startedFrom': { $exists: false } },
-              { '_conv.startedFrom': null },
-              { '_conv.startedFrom': '' },
-            ],
-          },
-        });
-      } else {
-        stages.push({ $match: { '_conv.startedFrom': q.startedFrom } });
-      }
+    if (q.startedFrom?.length) {
+      stages.push({
+        $match: buildStartedFromMatchClause('_conv.startedFrom', q.startedFrom),
+      });
     }
     if (q.usageType) {
       const mapLedgerToInput: Partial<Record<string, string>> = {

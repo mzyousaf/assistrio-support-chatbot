@@ -6,6 +6,7 @@ import { Message } from '../models';
 import {
   PREVIEW_STARTED_FROM_VALUES,
   alignBucketStart,
+  applyStartedFromToMessageLookup,
   bucketKeyIso,
   enumerateBucketStarts,
   mongoDateTruncUnit,
@@ -275,7 +276,7 @@ export class CustomerAgentResourcesAnalyticsService {
         to: q.to.toISOString(),
         granularity: q.granularity,
         includePreview: q.includePreview ? 'true' : 'false',
-        startedFrom: q.startedFrom,
+        startedFrom: q.startedFrom?.length ? q.startedFrom.join(',') : undefined,
       }),
       this.aggregatePrimaryKnowledgeSummary(oid, q),
       this.aggregateUniquePrimarySources(oid, q),
@@ -393,7 +394,7 @@ export class CustomerAgentResourcesAnalyticsService {
         to: q.to.toISOString(),
         granularity: q.granularity,
         includePreview: q.includePreview,
-        ...(q.startedFrom ? { startedFrom: q.startedFrom } : {}),
+        ...(q.startedFrom?.length ? { startedFrom: q.startedFrom.join(',') } : {}),
       },
       usage: {
         summary: {
@@ -466,21 +467,7 @@ export class CustomerAgentResourcesAnalyticsService {
     if (!q.includePreview) {
       matchParts['_conv.startedFrom'] = { $nin: [...PREVIEW_STARTED_FROM_VALUES] };
     }
-    if (q.startedFrom) {
-      if (q.startedFrom === 'unknown') {
-        stages.push({
-          $match: {
-            $or: [
-              { '_conv.startedFrom': { $exists: false } },
-              { '_conv.startedFrom': null },
-              { '_conv.startedFrom': '' },
-            ],
-          },
-        });
-      } else {
-        matchParts['_conv.startedFrom'] = q.startedFrom;
-      }
-    }
+    applyStartedFromToMessageLookup(matchParts, stages, '_conv.startedFrom', q.startedFrom);
     if (Object.keys(matchParts).length > 0) {
       stages.push({ $match: matchParts });
     }

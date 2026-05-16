@@ -1,4 +1,6 @@
 import type { CustomerLeadFieldDefinition } from '@/api/types';
+import { Tooltip } from '@/components/ui';
+import { cn } from '@/lib/utils';
 import { ConversationDetailCopyButton } from '../conversations/ConversationDetailCopyButton';
 import {
   ConversationInsightsSheetRow,
@@ -13,6 +15,7 @@ import {
   leadDetailFieldLabel,
   leadDetailFieldRowShouldOfferCopy,
   leadDetailSheetSectionClassName,
+  visibleLeadFieldDefinitions,
 } from './leadsUiHelpers';
 
 type Props = {
@@ -20,18 +23,56 @@ type Props = {
   capturedLeadData: Record<string, string> | undefined;
 };
 
+function LeadFieldLifecycleTag({ definition }: { definition: CustomerLeadFieldDefinition }) {
+  const st = inferLeadFieldStatus(definition);
+  if (st === 'active') return null;
+
+  const isDeleted = st === 'deleted';
+  const shortLabel = isDeleted ? 'Deleted' : 'Inactive';
+  const explanation = isDeleted
+    ? 'This field was removed from lead capture settings. The value shown was saved earlier or from historical lead data.'
+    : 'This field was inactive or disabled in lead capture settings when this value was saved.';
+
+  return (
+    <Tooltip
+      content={<span className="text-[13px] font-normal leading-snug">{explanation}</span>}
+      side="top"
+      panelClassName="max-w-[min(20rem,calc(100vw-24px))]"
+    >
+      <span
+        className={cn(
+          'inline-flex cursor-help rounded px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide ring-1 ring-inset outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-teal-600)]/35',
+          isDeleted
+            ? 'bg-rose-50 text-rose-900 ring-rose-200/75'
+            : 'bg-amber-100 text-amber-900 ring-amber-200/75',
+        )}
+        tabIndex={0}
+      >
+        {shortLabel}
+      </span>
+    </Tooltip>
+  );
+}
+
 function renderFieldRows(definitions: CustomerLeadFieldDefinition[], capturedLeadData: Record<string, string> | undefined) {
-  return definitions.map((d) => {
+  const ordered = visibleLeadFieldDefinitions(definitions);
+  return ordered.map((d) => {
     const raw = formatLeadCellValue(capturedLeadData, d.key);
     const display = displayLeadFieldValue(capturedLeadData, d.key);
     const missing = display === '—';
     const copyable = Boolean(raw && leadDetailFieldRowShouldOfferCopy(d, raw));
     const lbl = leadDetailFieldLabel(d);
+    const labelCell = (
+      <span className="inline-flex flex-wrap items-center gap-1.5">
+        <span>{lbl}</span>
+        <LeadFieldLifecycleTag definition={d} />
+      </span>
+    );
 
     return (
       <ConversationInsightsSheetRow
         key={d.key}
-        label={lbl}
+        label={labelCell}
         value={
           missing ? (
             INSIGHT_EM_DASH
@@ -52,26 +93,9 @@ function renderFieldRows(definitions: CustomerLeadFieldDefinition[], capturedLea
 }
 
 export function LeadProfileSection({ definitions, capturedLeadData }: Props) {
-  const active = definitions.filter((d) => inferLeadFieldStatus(d) === 'active');
-  const removedOrInactive = definitions.filter((d) => inferLeadFieldStatus(d) !== 'active');
-
   return (
-    <>
-      <ConversationInsightsSheetSection title="Captured fields" className={leadDetailSheetSectionClassName}>
-        {renderFieldRows(active, capturedLeadData)}
-      </ConversationInsightsSheetSection>
-      {removedOrInactive.length ? (
-        <ConversationInsightsSheetSection
-          title="Removed & inactive fields"
-          className={leadDetailSheetSectionClassName}
-        >
-          <p className="mb-3 mt-0 text-xs leading-relaxed text-slate-500">
-            Values saved historically while the field was inactive, disabled, or before it was removed from lead capture
-            settings.
-          </p>
-          {renderFieldRows(removedOrInactive, capturedLeadData)}
-        </ConversationInsightsSheetSection>
-      ) : null}
-    </>
+    <ConversationInsightsSheetSection title="Captured fields" className={leadDetailSheetSectionClassName}>
+      {renderFieldRows(definitions, capturedLeadData)}
+    </ConversationInsightsSheetSection>
   );
 }

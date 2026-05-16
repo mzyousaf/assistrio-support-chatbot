@@ -31,7 +31,14 @@ describe('customer-usage-analytics.util', () => {
   });
 
   it('parseCustomerUsageQuery parses startedFrom', () => {
-    expect(parseCustomerUsageQuery({ startedFrom: 'runtime_iframe' }).startedFrom).toBe('runtime_iframe');
+    expect(parseCustomerUsageQuery({ startedFrom: 'runtime_iframe' }).startedFrom).toEqual(['runtime_iframe']);
+  });
+
+  it('parseCustomerUsageQuery parses comma-separated startedFrom', () => {
+    expect(parseCustomerUsageQuery({ startedFrom: 'runtime_iframe,runtime_widget' }).startedFrom).toEqual([
+      'runtime_iframe',
+      'runtime_widget',
+    ]);
   });
 
   it('usageLedgerUsageTypeLabel maps known types', () => {

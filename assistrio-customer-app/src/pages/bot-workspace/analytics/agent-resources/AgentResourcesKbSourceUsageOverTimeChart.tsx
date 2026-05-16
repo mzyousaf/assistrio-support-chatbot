@@ -17,7 +17,7 @@ import type {
 import { formatAnalyticsDateLabel, formatAnalyticsInteger } from '@/lib/analyticsFormat';
 import { KB_SOURCE_COLOR, KB_SOURCE_LABEL, KB_SOURCE_DISPLAY_ORDER } from './agentResourcesKbSourceSeries';
 import { AnalyticsChartEmpty } from '@/pages/bot-workspace/analytics/shared/AnalyticsChartEmpty';
-import { CHART } from '@/pages/bot-workspace/analytics/shared/analyticsChartTheme';
+import { ANALYTICS_FIXED_CHART_PLOT_HEIGHT_PX, CHART } from '@/pages/bot-workspace/analytics/shared/analyticsChartTheme';
 
 const CHART_ANIM_MS = 520;
 const STACK_ID = 'kbPrimarySourcesStack';
@@ -95,9 +95,9 @@ type Props = {
   fillHeight?: boolean;
 };
 
-const CHART_MOUNT_STYLE: { minHeight: number; height: string } = {
-  minHeight: 260,
-  height: 'clamp(260px, min(360px, 55vh), 560px)',
+const CHART_MOUNT_STYLE: { minHeight: number; height: number | string } = {
+  minHeight: ANALYTICS_FIXED_CHART_PLOT_HEIGHT_PX,
+  height: ANALYTICS_FIXED_CHART_PLOT_HEIGHT_PX,
 };
 
 export function AgentResourcesKbSourceUsageOverTimeChart({

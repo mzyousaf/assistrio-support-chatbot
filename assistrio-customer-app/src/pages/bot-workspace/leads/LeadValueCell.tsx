@@ -50,7 +50,7 @@ export function LeadValueCell({ field, data, suppressInteractiveLinks }: Props) 
   if (inferred === 'email' && isSafeMailtoLocalPart(raw)) {
     if (suppressInteractiveLinks) {
       return (
-        <span className="line-clamp-2 break-all text-sm font-medium text-teal-700" title={raw}>
+        <span className="line-clamp-2 break-all text-sm font-normal text-teal-700" title={raw}>
           {raw}
         </span>
       );
@@ -58,7 +58,7 @@ export function LeadValueCell({ field, data, suppressInteractiveLinks }: Props) 
     return (
       <a
         href={`mailto:${raw.trim()}`}
-        className="line-clamp-2 break-all text-sm font-medium text-teal-700 underline-offset-2 hover:text-teal-900 hover:underline"
+        className="line-clamp-2 break-all text-sm font-normal text-teal-700 underline-offset-2 hover:text-teal-900 hover:underline"
         title={raw}
       >
         {raw}
@@ -71,7 +71,7 @@ export function LeadValueCell({ field, data, suppressInteractiveLinks }: Props) 
     if (tel.length >= 6) {
       if (suppressInteractiveLinks) {
         return (
-          <span className="line-clamp-2 break-all text-sm font-medium text-teal-700" title={raw}>
+          <span className="line-clamp-2 break-all text-sm font-normal text-teal-700" title={raw}>
             {raw}
           </span>
         );
@@ -79,7 +79,7 @@ export function LeadValueCell({ field, data, suppressInteractiveLinks }: Props) 
       return (
         <a
           href={`tel:${tel}`}
-          className="line-clamp-2 break-all text-sm font-medium text-teal-700 underline-offset-2 hover:text-teal-900 hover:underline"
+          className="line-clamp-2 break-all text-sm font-normal text-teal-700 underline-offset-2 hover:text-teal-900 hover:underline"
           title={raw}
         >
           {raw}
@@ -92,7 +92,7 @@ export function LeadValueCell({ field, data, suppressInteractiveLinks }: Props) 
     const shown = formatLeadUrlInboxDisplay(raw) || raw.trim();
     if (suppressInteractiveLinks) {
       return (
-        <span className="line-clamp-2 max-w-full text-sm font-medium text-teal-700" title={raw}>
+        <span className="line-clamp-2 max-w-full text-sm font-normal text-teal-700" title={raw}>
           {shown}
         </span>
       );
@@ -103,7 +103,7 @@ export function LeadValueCell({ field, data, suppressInteractiveLinks }: Props) 
         target="_blank"
         rel="noopener noreferrer"
         className={cn(
-          'line-clamp-2 max-w-full text-sm font-medium text-teal-700 underline-offset-2 hover:text-teal-900 hover:underline',
+          'line-clamp-2 max-w-full text-sm font-normal text-teal-700 underline-offset-2 hover:text-teal-900 hover:underline',
         )}
         title={raw}
       >

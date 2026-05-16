@@ -20,7 +20,7 @@ import {
   formatAnalyticsDateLabel,
 } from '@/lib/analyticsFormat';
 import { AnalyticsChartEmpty } from '@/pages/bot-workspace/analytics/shared/AnalyticsChartEmpty';
-import { CHART } from '@/pages/bot-workspace/analytics/shared/analyticsChartTheme';
+import { ANALYTICS_FIXED_CHART_PLOT_HEIGHT_PX, CHART } from '@/pages/bot-workspace/analytics/shared/analyticsChartTheme';
 import {
   buildUsageCreditRuleLookup,
   usageCreditSplitFromTimePoint,
@@ -111,9 +111,9 @@ type Props = {
   fillHeight?: boolean;
 };
 
-const CHART_MOUNT_STYLE: { minHeight: number; height: string } = {
-  minHeight: 260,
-  height: 'clamp(260px, min(360px, 55vh), 560px)',
+const CHART_MOUNT_STYLE: { minHeight: number; height: number | string } = {
+  minHeight: ANALYTICS_FIXED_CHART_PLOT_HEIGHT_PX,
+  height: ANALYTICS_FIXED_CHART_PLOT_HEIGHT_PX,
 };
 
 export function AgentResourcesUsageOverTimeChart({

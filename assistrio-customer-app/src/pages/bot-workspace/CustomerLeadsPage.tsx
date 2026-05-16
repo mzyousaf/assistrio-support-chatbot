@@ -7,11 +7,10 @@ import { WorkspaceContentContainer } from '@/layout/workspace-layout';
 import { Button } from '@/components/ui';
 import { safeClientString } from '@/lib/safeClientString';
 import { LeadDetailDrawer } from './leads/LeadDetailDrawer';
-import { apiParamsToLeadsDraft, hasAnyLeadsFilters } from './leads/leadsFiltersModel';
+import { apiParamsToLeadsDraft, defaultLeadsFiltersDraft, hasAnyLeadsFilters, leadsDraftToApiParams } from './leads/leadsFiltersModel';
 import {
-  countLoadedLeadsWithEmail,
-  countLoadedLeadsWithName,
-  visibleLeadFieldDefinitions,
+  countLoadedLeadsAnalyticsComplete,
+  leadsInboxTableColumns,
 } from './leads/leadsUiHelpers';
 import {
   buildLeadsCsvLines,
@@ -46,8 +45,8 @@ export function CustomerLeadsPage() {
   const [leads, setLeads] = useState<CustomerLeadListItem[]>([]);
   const [listMeta, setListMeta] = useState({
     totalMatching: 0,
-    matchingWithNameCount: 0,
-    matchingWithEmailCount: 0,
+    matchingCompleteLeadsCount: 0,
+    matchingPartialLeadsCount: 0,
     latestMatchingCapturedAt: null as string | null,
   });
   const [listState, setListState] = useState<'loading' | 'ok' | 'error'>('loading');
@@ -57,7 +56,9 @@ export function CustomerLeadsPage() {
   const [listPage, setListPage] = useState(1);
   const [listPageSize, setListPageSize] = useState(LEADS_PAGE_SIZE_INITIAL);
 
-  const [appliedFilters, setAppliedFilters] = useState<CustomerBotLeadsListParams>({});
+  const [appliedFilters, setAppliedFilters] = useState<CustomerBotLeadsListParams>(() =>
+    leadsDraftToApiParams(defaultLeadsFiltersDraft()),
+  );
   const [detailConversationId, setDetailConversationId] = useState<string | null>(null);
   const [detailDrawerOpen, setDetailDrawerOpen] = useState(false);
   const [detailReloadKey, setDetailReloadKey] = useState(0);
@@ -113,7 +114,7 @@ export function CustomerLeadsPage() {
     return () => cancelSearchDebounce();
   }, [searchInput, appliedFilters.search, cancelSearchDebounce, commitSearchToApplied]);
 
-  const columnDefs = useMemo(() => visibleLeadFieldDefinitions(leadFieldDefinitions), [leadFieldDefinitions]);
+  const inboxColumns = useMemo(() => leadsInboxTableColumns(leadFieldDefinitions), [leadFieldDefinitions]);
 
   const countryCodesFromLeads = useMemo(() => {
     const s = new Set<string>();
@@ -144,8 +145,8 @@ export function CustomerLeadsPage() {
         setLeadFieldDefinitions([]);
         setListMeta({
           totalMatching: 0,
-          matchingWithNameCount: 0,
-          matchingWithEmailCount: 0,
+          matchingCompleteLeadsCount: 0,
+          matchingPartialLeadsCount: 0,
           latestMatchingCapturedAt: null,
         });
       } else {
@@ -157,10 +158,18 @@ export function CustomerLeadsPage() {
     const d = res.data;
     setLeadFieldDefinitions(d.leadFieldDefinitions);
     setLeads(d.leads);
+    const totalMatching = d.totalMatching ?? d.leads.length;
+    const completeFb = countLoadedLeadsAnalyticsComplete(d.leads, d.leadFieldDefinitions);
+    const completeN = d.matchingCompleteLeadsCount ?? completeFb;
+    const partialN =
+      d.matchingPartialLeadsCount ??
+      (d.matchingCompleteLeadsCount !== undefined
+        ? Math.max(0, totalMatching - d.matchingCompleteLeadsCount)
+        : Math.max(0, d.leads.length - completeFb));
     setListMeta({
-      totalMatching: d.totalMatching ?? d.leads.length,
-      matchingWithNameCount: d.matchingWithNameCount ?? countLoadedLeadsWithName(d.leads, d.leadFieldDefinitions),
-      matchingWithEmailCount: d.matchingWithEmailCount ?? countLoadedLeadsWithEmail(d.leads, d.leadFieldDefinitions),
+      totalMatching,
+      matchingCompleteLeadsCount: completeN,
+      matchingPartialLeadsCount: partialN,
       latestMatchingCapturedAt: d.latestMatchingCapturedAt ?? null,
     });
     setListState('ok');
@@ -244,7 +253,7 @@ export function CustomerLeadsPage() {
 
   const clearAllFilters = useCallback(() => {
     cancelSearchDebounce();
-    setAppliedFilters({});
+    setAppliedFilters(leadsDraftToApiParams(defaultLeadsFiltersDraft()));
   }, [cancelSearchDebounce]);
 
   if (!botId) return null;
@@ -276,10 +285,9 @@ export function CustomerLeadsPage() {
           <div className="shrink-0 px-4 py-3 sm:px-5">
             <LeadsSummaryCards
               leads={leads}
-              leadFieldDefinitions={leadFieldDefinitions}
               totalMatching={listMeta.totalMatching}
-              matchingWithNameCount={listMeta.matchingWithNameCount}
-              matchingWithEmailCount={listMeta.matchingWithEmailCount}
+              matchingCompleteLeadsCount={listMeta.matchingCompleteLeadsCount}
+              matchingPartialLeadsCount={listMeta.matchingPartialLeadsCount}
               latestMatchingCapturedAt={listMeta.latestMatchingCapturedAt}
             />
           </div>
@@ -354,7 +362,8 @@ export function CustomerLeadsPage() {
                 <LeadsTable
                   botId={botId}
                   leads={leads}
-                  columnDefs={columnDefs}
+                  leadFieldDefinitions={leadFieldDefinitions}
+                  inboxColumns={inboxColumns}
                   onOpenDetail={openDetail}
                   onOpenChat={(path) => navigate(path)}
                 />

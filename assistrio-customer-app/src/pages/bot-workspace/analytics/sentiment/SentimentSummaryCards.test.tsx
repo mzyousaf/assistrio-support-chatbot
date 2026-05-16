@@ -35,7 +35,7 @@ const baseSummary: CustomerSentimentAnalyticsSummary = {
 };
 
 describe('SentimentSummaryCards', () => {
-  it('renders average sentiment as a face meter (no numeric score in the card)', () => {
+  it('renders average sentiment band title with face icon (KPI matches usage card layout)', () => {
     const html = renderToStaticMarkup(
       <SentimentSummaryCards
         summary={baseSummary}
@@ -68,10 +68,8 @@ describe('SentimentSummaryCards', () => {
     expect(html).toContain('data-face-id="happy"');
     expect(html).toContain('data-testid="average-sentiment-band-label"');
     expect(html).toContain('Happy');
-    expect(html).not.toContain('(0.1–0.49)');
-    expect(html).toContain('text-teal-600');
     expect(html).not.toContain('0.42');
-    expect(html).toMatch(/>\s*Happy\s*<\/p>/);
+    expect(html).toContain('text-teal-600');
   });
 
   it('renders dominant sentiment label text', () => {
@@ -86,7 +84,6 @@ describe('SentimentSummaryCards', () => {
       />,
     );
     expect(html).toContain('Negative');
-    expect(html).toContain('Dominant sentiment');
   });
 
   it('shows an em dash for missing average score without breaking mini trend', () => {

@@ -8,26 +8,17 @@ import { useBotWorkspace } from '../../BotWorkspaceContext';
 import { WorkspaceContentContainer } from '@/layout/workspace-layout';
 import { ChatsAnalyticsFilterBar } from '../shared/AnalyticsInsightsFilterBars';
 import { AnalyticsChartCard } from '../shared/AnalyticsChartCard';
-import { AnalyticsEmptyState, AnalyticsErrorState, AnalyticsPageSkeleton } from './AnalyticsEmptyState';
+import { ANALYTICS_TWO_CHART_ROW_GRID_CLASS } from '../shared/analyticsChartTheme';
+import { AnalyticsErrorState, AnalyticsPageSkeleton } from './AnalyticsEmptyState';
 import { AnalyticsSummaryCards } from './AnalyticsSummaryCards';
 import { AnalyticsPageHeader } from '../shared/AnalyticsPageHeader';
 import { ChatsActivityTrendsSection } from './ChatsActivityTrendsSection';
 import { ChatsByCountrySection } from './ChatsByCountrySection';
+import { ChatsMessageModalityTrendsSection } from './ChatsMessageModalityTrendsSection';
 import { ChatsTopPagesPanel } from './ChatsTopPagesPanel';
 import { ChatsWidgetSourceChart } from './ChatsWidgetSourceChart';
 import { downloadChatsTopPagesCsv } from './chatsTopPagesExport';
 import { hasTopPagesSignal } from './chatsTopPages.util';
-
-function hasAnalyticsSignal(data: CustomerChatsAnalyticsResponse | null): boolean {
-  if (!data) return false;
-  const s = data.summary;
-  return (
-    (s.totalConversations ?? 0) > 0 ||
-    (s.totalMessages ?? 0) > 0 ||
-    (s.totalThumbsUp ?? 0) > 0 ||
-    (s.totalThumbsDown ?? 0) > 0
-  );
-}
 
 export function ChatsAnalyticsPage() {
   const { botId } = useBotWorkspace();
@@ -62,7 +53,6 @@ export function ChatsAnalyticsPage() {
   const showSkeleton = loadState === 'loading' && !data;
   const showError = loadState === 'error';
   const showBody = data != null && !showError;
-  const empty = loadState === 'ok' && data && !hasAnalyticsSignal(data);
   const topPagesRows = useMemo(() => data?.topPagesBreakdown ?? [], [data]);
   const topPagesExportable = useMemo(() => hasTopPagesSignal(topPagesRows), [topPagesRows]);
   const exportTopPagesCsv = useCallback(() => {
@@ -86,54 +76,53 @@ export function ChatsAnalyticsPage() {
 
             {showBody && data ? (
               <>
-                {empty ? (
-                  <AnalyticsEmptyState />
-                ) : (
-                  <>
-                    <AnalyticsSummaryCards summary={data.summary} />
-                    <ChatsActivityTrendsSection data={data} />
-                    <ChatsByCountrySection countries={data.locationBreakdown.countries} />
-                    <div className="grid min-w-0 gap-6 lg:grid-cols-2 lg:items-stretch">
-                      <AnalyticsChartCard
-                        className="h-full border-slate-100"
-                        fillVertical
-                        noMaxHeight
-                        bodyClassName="justify-center"
-                        title="Widget Source"
-                        description="Where conversations are coming from."
-                      >
-                        <ChatsWidgetSourceChart rows={data.startedFromBreakdown} />
-                      </AnalyticsChartCard>
-                      <AnalyticsChartCard
-                        className="h-full border-slate-100"
-                        fillVertical
-                        noMaxHeight
-                        bodyClassName="flex min-h-0 flex-1 flex-col"
-                        title="Top pages"
-                        description="Pages where visitors started or continued chats."
-                        titleAside={
-                          topPagesExportable ? (
-                            <button
-                              type="button"
-                              className="inline-flex cursor-pointer select-none items-center gap-1.5 rounded-lg border border-slate-200/80 bg-white px-2.5 py-1.5 text-left text-[11px] font-semibold text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/25 sm:text-xs"
-                              aria-label={`Export all ${topPagesRows.length} top pages as CSV`}
-                              onClick={exportTopPagesCsv}
-                            >
-                              <Download
-                                className="h-3 w-3 shrink-0 text-slate-600 sm:h-3.5 sm:w-3.5"
-                                strokeWidth={2.25}
-                                aria-hidden
-                              />
-                              <span>Export</span>
-                            </button>
-                          ) : null
-                        }
-                      >
-                        <ChatsTopPagesPanel rows={topPagesRows} />
-                      </AnalyticsChartCard>
-                    </div>
-                  </>
-                )}
+                <AnalyticsSummaryCards
+                  summary={data.summary}
+                  timeSeries={data.timeSeries}
+                  granularity={data.range.granularity}
+                />
+                <ChatsActivityTrendsSection data={data} />
+                <div className={ANALYTICS_TWO_CHART_ROW_GRID_CLASS}>
+                  <AnalyticsChartCard
+                    className="h-full min-w-0 w-full border-slate-100"
+                    fillVertical
+                    noMaxHeight
+                    bodyClassName="flex w-full min-h-0 flex-1 flex-col justify-center"
+                    title="Widget Channel"
+                    description="Where conversations are coming from."
+                  >
+                    <ChatsWidgetSourceChart rows={data.startedFromBreakdown} />
+                  </AnalyticsChartCard>
+                  <AnalyticsChartCard
+                    className="h-full min-w-0 w-full border-slate-100"
+                    fillVertical
+                    noMaxHeight
+                    bodyClassName="flex min-h-0 w-full min-w-0 flex-1 flex-col"
+                    title="Top pages"
+                    description="Pages where visitors started or continued chats."
+                    titleAside={
+                      topPagesExportable ? (
+                        <button
+                          type="button"
+                          className="inline-flex cursor-pointer select-none items-center gap-1.5 rounded-lg border border-slate-200/80 bg-white px-2.5 py-1.5 text-left text-[11px] font-semibold text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/25 sm:text-xs"
+                          aria-label={`Export all ${topPagesRows.length} top pages as CSV`}
+                          onClick={exportTopPagesCsv}
+                        >
+                          <Download
+                            className="h-3 w-3 shrink-0 text-slate-600 sm:h-3.5 sm:w-3.5"
+                            strokeWidth={2.25}
+                            aria-hidden
+                          />
+                          <span>Export</span>
+                        </button>
+                      ) : null
+                    }
+                  >
+                    <ChatsTopPagesPanel rows={topPagesRows} />
+                  </AnalyticsChartCard>
+                </div>
+                <ChatsByCountrySection countries={data.locationBreakdown.countries} />
+                <ChatsMessageModalityTrendsSection data={data} />
               </>
             ) : null}
           </div>

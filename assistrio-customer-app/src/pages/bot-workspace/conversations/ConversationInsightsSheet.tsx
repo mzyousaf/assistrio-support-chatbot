@@ -50,7 +50,7 @@ export function ConversationInsightsSheetSection({ title, description, children,
 }
 
 type RowProps = {
-  label: string;
+  label: ReactNode;
   value: ReactNode;
   className?: string;
 };

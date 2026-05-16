@@ -47,6 +47,7 @@ import {
   snippetsFromBot,
 } from './knowledgeViewTypes';
 import { KnowledgePipelineStuckEscalationCallout } from './KnowledgePipelineStuckEscalationCallout';
+import { KnowledgeItemPrimarySourceAnalytics } from './KnowledgeItemPrimarySourceAnalytics';
 import { KnowledgeFieldInfoIcon, KnowledgeHeadingInfoIcon } from './knowledgeFieldInfoIcon';
 import { SNIPPET_DETAIL_TITLE_INFO, SNIPPET_FIELD_DESCRIPTION_HINT, SNIPPET_FIELD_TITLE_HINT_ADD } from './knowledgeSnippetPageCopy';
 
@@ -265,7 +266,8 @@ export function SnippetDetailPage() {
           </div>
         }
         analyticsContent={
-          <KnowledgeItemTrainingAnalytics
+          <>
+            <KnowledgeItemTrainingAnalytics
             status={displayCanon}
             lastTrainedAt={kbPollItem?.lastTrainedAt ?? row.lastTrainedAt}
             updatedAt={kbPollItem?.updatedAt ?? null}
@@ -308,6 +310,10 @@ export function SnippetDetailPage() {
               </>
             }
           />
+            {botId ? (
+              <KnowledgeItemPrimarySourceAnalytics botId={botId} knowledgeItemId={knowledgeItemId || null} />
+            ) : null}
+          </>
         }
       />
       {trainingGateModal}

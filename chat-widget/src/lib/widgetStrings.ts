@@ -19,7 +19,8 @@ export interface WidgetStrings {
 }
 
 export const DEFAULT_WIDGET_STRINGS_EN: WidgetStrings = {
-  initErrorTitle: "Chat couldn’t load.",
+  /** Legacy key; embed init uses `resolveEmbedInitFailurePresentation` titles for consistent UX. */
+  initErrorTitle: "We couldn't load this chat",
   initErrorRetry: "Try again",
   messageSendFailed: "Couldn’t send",
   retrySend: "Retry",

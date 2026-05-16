@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import type {
   CustomerChatsAnalyticsGranularity,
   CustomerSentimentAnalyticsSummary,
@@ -10,9 +11,53 @@ import {
   AnalyticsKpiGrid,
   type AnalyticsKpiItem,
 } from '@/pages/bot-workspace/analytics/shared/AnalyticsKpiGrid';
-import { AverageSentimentFaceMeter, resolveAverageSentimentFace } from './AverageSentimentFaceMeter';
+import {
+  AverageSentimentFaceMeter,
+  resolveAverageSentimentFace,
+} from './AverageSentimentFaceMeter';
 import { SentimentKpiMiniDistribution } from './SentimentKpiMiniDistribution';
 import { SentimentKpiMiniTrend } from './SentimentKpiMiniTrend';
+
+/** Mirrors {@link AgentResourcesUsageSummaryCards} KPI title color. */
+const KPI_TITLE_CLASS = 'text-slate-700';
+
+/** Title row for sentiment KPIs — taller line than default analytics KPI label. */
+const SENTIMENT_KPI_LABEL_CLASS = cn(
+  KPI_TITLE_CLASS,
+  'inline-flex min-h-[2.5rem] shrink-0 items-center self-start py-0.5 text-xs leading-snug sm:min-h-11 sm:text-sm',
+);
+
+function averageSentimentTileTooltip(averageFace: ReturnType<typeof resolveAverageSentimentFace>): ReactNode {
+  return (
+    <div className="space-y-1 text-left">
+      <p className="m-0 text-[11px] font-semibold uppercase tracking-wide text-slate-300">Average sentiment</p>
+      <p className="m-0 max-w-[15rem] text-[0.75rem] font-medium leading-snug text-slate-50">
+        {averageFace ? (
+          <>
+            How visitors overall come across in messages we could read for your filters.{' '}
+            <span className="font-semibold text-white">{averageFace.label}</span> is the everyday label for that overall mood —
+            the little face matches it.
+          </>
+        ) : (
+          <>Once there are enough assessed messages in this range, an overall mood label and face will show on the card.</>
+        )}
+      </p>
+    </div>
+  );
+}
+
+function dominantSentimentTileTooltip(metricMode: SentimentMetricMode): ReactNode {
+  const detail =
+    metricMode === 'messages'
+      ? 'The feeling that shows up most often on visitor messages in this period.'
+      : 'The feeling that shows up most often across conversations in this period.';
+  return (
+    <div className="space-y-1">
+      <p className="m-0 text-[11px] font-semibold uppercase tracking-wide text-slate-300">Dominant sentiment</p>
+      <p className="m-0 max-w-[15rem] text-[0.75rem] font-medium leading-snug text-slate-50">{detail}</p>
+    </div>
+  );
+}
 
 type Props = {
   summary: CustomerSentimentAnalyticsSummary;
@@ -37,44 +82,30 @@ export function SentimentSummaryCards({
   const cards: AnalyticsKpiItem[] = [
     {
       label: 'Average sentiment',
-      value: '',
-      infoTooltip: 'Band from the average score (−1…1) on classified traffic — icon reflects the same bucket.',
-      headerInline: true,
-      headerTrailingSlot: (
+      labelClassName: SENTIMENT_KPI_LABEL_CLASS,
+      value: averageLabel,
+      valueClassName: averageFace?.iconClass ?? 'text-slate-400',
+      valueTestId: 'average-sentiment-band-label',
+      valueAddon: (
         <span
-          className={cn(
-            'inline-flex max-w-full min-w-0 items-center gap-2 rounded-full border px-2.5 py-1.5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]',
-            averageFace
-              ? 'border-slate-200/95 bg-gradient-to-r from-slate-50/95 to-white'
-              : 'border-slate-100 bg-slate-50/90 text-slate-400',
-          )}
-          role="img"
-          aria-label={averageFace ? `Average sentiment: ${averageLabel}` : 'No average score'}
+          data-testid="average-sentiment-face-meter"
+          data-face-id={averageFace?.id ?? 'none'}
+          className="inline-flex shrink-0 items-center"
+          aria-hidden
         >
-          <span data-testid="average-sentiment-face-meter" data-face-id={averageFace?.id ?? 'none'} className="flex shrink-0">
-            <AverageSentimentFaceMeter score={summary.averageSentimentScore} iconOnly className="!size-7 sm:!size-8" />
-          </span>
-          <p
-            className={cn(
-              'm-0 max-w-[min(100%,11rem)] truncate text-xl font-semibold tabular-nums tracking-tight sm:text-2xl',
-              averageFace ? 'text-slate-900' : 'text-slate-400',
-            )}
-            data-testid="average-sentiment-band-label"
-          >
-            {averageLabel}
-          </p>
+          <AverageSentimentFaceMeter score={summary.averageSentimentScore} iconOnly className="!size-8 sm:!size-9" />
         </span>
       ),
+      headerInline: true,
+      tileTooltip: averageSentimentTileTooltip(averageFace),
       footer: <SentimentKpiMiniTrend points={timeSeries} granularity={granularity} className="mt-0" chartHeight={76} />,
     },
     {
       label: 'Dominant sentiment',
+      labelClassName: SENTIMENT_KPI_LABEL_CLASS,
       value: dominantLabel,
-      infoTooltip:
-        metricMode === 'messages'
-          ? 'Sentiment label with the highest classified user-message count in this range.'
-          : 'Sentiment label with the highest classified conversation count in this range.',
       headerInline: true,
+      tileTooltip: dominantSentimentTileTooltip(metricMode),
       footer: (
         <SentimentKpiMiniDistribution
           breakdown={sentimentBreakdown}
@@ -86,5 +117,5 @@ export function SentimentSummaryCards({
     },
   ];
 
-  return <AnalyticsKpiGrid items={cards} columnsClassName="grid-cols-1 sm:grid-cols-3" />;
+  return <AnalyticsKpiGrid items={cards} columnsClassName="grid-cols-1 sm:grid-cols-2" />;
 }

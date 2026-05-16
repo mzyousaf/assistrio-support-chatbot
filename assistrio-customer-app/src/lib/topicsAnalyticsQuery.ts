@@ -20,7 +20,7 @@ export type TopicsAnalyticsUiState = {
   customFrom: string;
   customTo: string;
   includePreview: boolean;
-  startedFrom: '' | CustomerChatsAnalyticsStartedFromKey;
+  startedFromKeys: CustomerChatsAnalyticsStartedFromKey[];
   /** Chart + ranking: messages vs conversations (UI only; API returns both breakdowns). */
   metricMode: 'messages' | 'conversations';
   /** Message-level topic tag scope: primary only vs all tags on the message. Conversation metric always uses primary-only matching. */
@@ -32,7 +32,7 @@ export const TOPICS_ANALYTICS_DEFAULTS: TopicsAnalyticsUiState = {
   customFrom: '',
   customTo: '',
   includePreview: true,
-  startedFrom: '',
+  startedFromKeys: [],
   metricMode: 'messages',
   messageTopicScope: 'primary',
 };
@@ -47,7 +47,9 @@ export function buildTopicsAnalyticsApiParams(state: TopicsAnalyticsUiState): Cu
     granularity,
     includePreview: state.includePreview,
   };
-  if (state.startedFrom) params.startedFrom = state.startedFrom;
+  if (state.startedFromKeys.length > 0) {
+    params.startedFrom = [...state.startedFromKeys].sort().join(',');
+  }
   if (state.metricMode === 'conversations' || state.messageTopicScope === 'primary') {
     params.messageTopicScope = 'primary';
   }

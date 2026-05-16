@@ -1,78 +1,116 @@
 import { cn } from '@/lib/utils';
+import { ANALYTICS_TWO_CHART_ROW_GRID_CLASS } from '@/pages/bot-workspace/analytics/shared/analyticsChartTheme';
+import { TOPICS_ANALYTICS_SECTION_CARD_CLASS } from '@/pages/bot-workspace/analytics/topics/topicsAnalyticsSectionLayout';
 
 type Layout = 'chats' | 'knowledge' | 'leads' | 'topics' | 'sentiment';
 
-const layoutKpi: Record<Layout, number> = {
-  chats: 6,
-  knowledge: 6,
-  leads: 3,
-  topics: 0,
-  sentiment: 2,
-};
-
-const layoutGridLg: Record<Layout, string> = {
-  chats: 'lg:grid-cols-6',
-  knowledge: 'lg:grid-cols-6',
-  leads: 'lg:grid-cols-3',
-  topics: 'lg:grid-cols-6',
-  sentiment: '', // KPI row uses bespoke cols below (matches AnalyticsKpiGrid)
-};
-
 type Props = { layout: Layout };
 
+/**
+ * Loading placeholders aligned to each analytics route’s section order and grid breakpoints
+ * (`xl` for two-column chart rows — matches live pages).
+ */
 export function AnalyticsPageSkeleton({ layout }: Props) {
   const pulse = 'animate-pulse rounded-md bg-slate-200/80';
-  const kpi = layoutKpi[layout];
 
+  const largeTrendsCard = (
+    <div
+      className={cn(
+        pulse,
+        'w-full rounded-[0.625rem] border border-slate-100/80',
+        TOPICS_ANALYTICS_SECTION_CARD_CLASS,
+      )}
+    />
+  );
+
+  const twoChartRow = (
+    <div className={ANALYTICS_TWO_CHART_ROW_GRID_CLASS}>
+      <div className={cn(pulse, 'h-[360px] min-h-[360px] w-full rounded-[0.625rem] border border-slate-100/80')} />
+      <div className={cn(pulse, 'h-[360px] min-h-[360px] w-full rounded-[0.625rem] border border-slate-100/80')} />
+    </div>
+  );
+
+  if (layout === 'chats') {
+    return (
+      <div className="flex flex-col gap-6">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className={cn('h-28 rounded-md', pulse)} />
+          ))}
+        </div>
+        {largeTrendsCard}
+        {twoChartRow}
+        <div className={cn(pulse, 'h-[580px] min-h-[580px] w-full rounded-[0.625rem] border border-slate-100/80')} />
+        {largeTrendsCard}
+      </div>
+    );
+  }
+
+  if (layout === 'topics') {
+    return (
+      <div className="flex flex-col gap-6">
+        {largeTrendsCard}
+        {twoChartRow}
+      </div>
+    );
+  }
+
+  if (layout === 'leads') {
+    return (
+      <div className="flex flex-col gap-6">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className={cn('h-28 rounded-md', pulse)} />
+          ))}
+        </div>
+        {largeTrendsCard}
+        {twoChartRow}
+        <div className={cn(pulse, 'h-[580px] min-h-[580px] w-full rounded-[0.625rem] border border-slate-100/80')} />
+      </div>
+    );
+  }
+
+  if (layout === 'sentiment') {
+    return (
+      <div className="flex flex-col gap-6">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {Array.from({ length: 2 }).map((_, i) => (
+            <div key={i} className={cn('h-28 rounded-md', pulse)} />
+          ))}
+        </div>
+        {largeTrendsCard}
+      </div>
+    );
+  }
+
+  /* knowledge — Agent Resources */
   return (
-    <div className="space-y-6">
-      {kpi > 0 ? (
-        <div
-          className={cn(
-            'grid gap-3',
-            layout === 'sentiment'
-              ? cn('grid-cols-1 sm:grid-cols-3', layoutGridLg.leads)
-              : cn('grid-cols-2 sm:grid-cols-3', layoutGridLg[layout]),
-          )}
-        >
-          {Array.from({ length: kpi }).map((_, i) => (
+    <div className="flex flex-col gap-10">
+      <div className="flex flex-col gap-6 border-b border-slate-200/90 pb-10">
+        <div className="space-y-1">
+          <div className={cn('h-7 w-56 rounded-md', pulse)} />
+          <div className={cn('h-4 w-72 max-w-full rounded-md', pulse)} />
+        </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className={cn('h-28 rounded-md', pulse)} />
+          ))}
+        </div>
+        {largeTrendsCard}
+      </div>
+      <div className="flex flex-col gap-6">
+        <div className="space-y-1">
+          <div className={cn('h-7 w-64 rounded-md', pulse)} />
+          <div className={cn('h-4 w-80 max-w-full rounded-md', pulse)} />
+        </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+          {Array.from({ length: 6 }).map((_, i) => (
             <div key={i} className={cn('h-24 rounded-md', pulse)} />
           ))}
         </div>
-      ) : null}
-      <div
-        className={cn(
-          pulse,
-          layout === 'topics'
-            ? 'h-[495px] min-h-[495px]'
-            : layout === 'sentiment' || layout === 'leads'
-              ? 'h-[495px] min-h-[495px]'
-              : 'h-72',
-          'w-full',
-        )}
-      />
-      {layout === 'topics' ? (
-        <div className="grid gap-6 lg:grid-cols-2">
-          <div className={cn(pulse, 'h-[280px] min-h-[15rem] w-full')} />
-          <div className={cn(pulse, 'h-[280px] min-h-[15rem] w-full')} />
-        </div>
-      ) : null}
-      {layout === 'leads' ? (
-        <>
-          <div className="grid gap-4 lg:grid-cols-2">
-            <div className={cn(pulse, 'h-[280px] w-full')} />
-            <div className={cn(pulse, 'h-[280px] w-full')} />
-          </div>
-          <div className={cn(pulse, 'min-h-[220px] w-full')} />
-        </>
-      ) : null}
-      {layout !== 'leads' && layout !== 'topics' && layout !== 'sentiment' ? (
-        <div className="grid gap-4 lg:grid-cols-2">
-          <div className={cn(pulse, 'h-64')} />
-          <div className={cn(layout === 'knowledge' ? 'h-48' : 'h-64', pulse)} />
-        </div>
-      ) : null}
-      {layout === 'knowledge' ? <div className={cn(pulse, 'h-56 w-full')} /> : null}
+        {largeTrendsCard}
+        <div className={cn(pulse, 'h-[320px] min-h-[320px] w-full rounded-[0.625rem] border border-slate-100/80')} />
+      </div>
     </div>
   );
 }

@@ -8,6 +8,7 @@ import {
   PREVIEW_STARTED_FROM_VALUES,
   alignBucketStart,
   bucketKeyIso,
+  buildStartedFromMatchClause,
   enumerateBucketStarts,
   mongoDateTruncUnit,
   normalizeConversationStartedFrom,
@@ -446,16 +447,8 @@ export class CustomerLeadsAnalyticsService {
     if (!q.includePreview) {
       and.push({ startedFrom: { $nin: [...PREVIEW_STARTED_FROM_VALUES] } });
     }
-    if (q.startedFrom && q.startedFrom !== 'unknown') {
-      and.push({ startedFrom: q.startedFrom });
-    } else if (q.startedFrom === 'unknown') {
-      and.push({
-        $or: [
-          { startedFrom: { $exists: false } },
-          { startedFrom: null },
-          { startedFrom: '' },
-        ],
-      });
+    if (q.startedFrom?.length) {
+      and.push(buildStartedFromMatchClause('startedFrom', q.startedFrom));
     }
     if (q.countryCode) {
       and.push({ 'location.countryCode': q.countryCode });

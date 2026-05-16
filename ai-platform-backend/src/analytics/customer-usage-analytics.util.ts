@@ -1,9 +1,10 @@
 import { BadRequestException } from '@nestjs/common';
 import type { UsageLedgerUsageType } from '../models/usage-ledger.schema';
 import { parseOverviewDateRange } from './analytics-date-range.util';
-import type {
-  ConversationStartedFromKey,
-  CustomerChatsGranularity,
+import {
+  parseStartedFromQueryParam,
+  type ConversationStartedFromKey,
+  type CustomerChatsGranularity,
 } from './customer-chats-analytics.util';
 
 export type CustomerUsageQueryInput = {
@@ -21,18 +22,10 @@ export type ParsedCustomerUsageQuery = {
   granularity: CustomerChatsGranularity;
   includePreview: boolean;
   usageType?: UsageLedgerUsageType;
-  startedFrom?: ConversationStartedFromKey;
+  startedFrom?: ConversationStartedFromKey[];
 };
 
 const GRANULARITY_SET = new Set<string>(['hour', 'day', 'week', 'month']);
-
-const STARTED_FROM_SET = new Set<string>([
-  'playground_preview',
-  'shared_preview',
-  'runtime_widget',
-  'runtime_iframe',
-  'unknown',
-]);
 
 const USAGE_LEDGER_USAGE_TYPES = new Set<string>([
   'text_message',
@@ -62,17 +55,7 @@ export function parseCustomerUsageQuery(input: CustomerUsageQueryInput): ParsedC
   const ipRaw = input.includePreview?.trim().toLowerCase();
   const includePreview = ipRaw !== 'false' && ipRaw !== '0';
 
-  let startedFrom: ConversationStartedFromKey | undefined;
-  const sfRaw = input.startedFrom?.trim().toLowerCase();
-  if (sfRaw) {
-    if (!STARTED_FROM_SET.has(sfRaw)) {
-      throw new BadRequestException({
-        error: 'Invalid startedFrom filter.',
-        errorCode: 'INVALID_STARTED_FROM',
-      });
-    }
-    startedFrom = sfRaw as ConversationStartedFromKey;
-  }
+  const startedFrom = parseStartedFromQueryParam(input.startedFrom);
 
   let usageType: UsageLedgerUsageType | undefined;
   const utRaw = input.usageType?.trim();

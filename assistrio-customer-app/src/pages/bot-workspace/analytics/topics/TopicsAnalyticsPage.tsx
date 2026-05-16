@@ -12,7 +12,7 @@ import { WorkspaceContentContainer } from '@/layout/workspace-layout';
 import { useBotWorkspace } from '../../BotWorkspaceContext';
 import { AnalyticsErrorState } from '../shared/AnalyticsErrorState';
 import { AnalyticsPageHeader } from '../shared/AnalyticsPageHeader';
-import { TopicsEmptyState } from './TopicsEmptyState';
+import { ANALYTICS_TWO_CHART_ROW_GRID_CLASS } from '../shared/analyticsChartTheme';
 import { TopicsAnalyticsFilterBar } from '../shared/AnalyticsInsightsFilterBars';
 import { TopicsPageSkeleton } from './TopicsPageSkeleton';
 import { TopicsTopicTrendsSection } from './TopicsTopicTrendsSection';
@@ -20,11 +20,6 @@ import { TopicsFastestGrowingSection } from './TopicsFastestGrowingSection';
 import { TopicsTopicBySentimentSection } from './TopicsTopicBySentimentSection';
 import { TopicsMetricModeTabs } from './TopicsMetricModeTabs';
 import { buildTopicRankingRows, type TopicsBreakdownBundle, type TopicsChartStyle } from './topicsChartHelpers';
-
-function hasTopicsSignal(data: CustomerTopicsAnalyticsResponse | null): boolean {
-  if (!data) return false;
-  return (data.summary.totalUserMessages ?? 0) > 0;
-}
 
 export function TopicsAnalyticsPage() {
   const { botId } = useBotWorkspace();
@@ -98,7 +93,6 @@ export function TopicsAnalyticsPage() {
   const showSkeleton = loadState === 'loading' && !data;
   const showError = loadState === 'error';
   const showBody = data != null && !showError;
-  const empty = loadState === 'ok' && data && !hasTopicsSignal(data);
   const growthRows =
     ui.metricMode === 'messages'
       ? (data?.fastestGrowingByMessages ?? data?.fastestGrowingTopics ?? [])
@@ -146,30 +140,24 @@ export function TopicsAnalyticsPage() {
 
             {showBody && data ? (
               <>
-                {empty ? (
-                  <TopicsEmptyState />
-                ) : (
-                  <>
-                    <TopicsTopicTrendsSection
-                      data={data}
-                      metricMode={ui.metricMode}
-                      chartStyle={chartStyle}
-                      onChartStyleChange={setChartStyle}
-                      hiddenSeriesIds={hiddenSeriesIds}
-                      onToggleSeries={toggleSeries}
-                      disabled={loadState === 'loading'}
-                    />
+                <TopicsTopicTrendsSection
+                  data={data}
+                  metricMode={ui.metricMode}
+                  chartStyle={chartStyle}
+                  onChartStyleChange={setChartStyle}
+                  hiddenSeriesIds={hiddenSeriesIds}
+                  onToggleSeries={toggleSeries}
+                  disabled={loadState === 'loading'}
+                />
 
-                    <div className="grid min-w-0 gap-6 lg:grid-cols-2">
-                      <div className="min-w-0">
-                        <TopicsFastestGrowingSection rows={growthRows} metricMode={ui.metricMode} />
-                      </div>
-                      <div className="min-w-0">
-                        <TopicsTopicBySentimentSection data={data} metricMode={ui.metricMode} />
-                      </div>
-                    </div>
-                  </>
-                )}
+                <div className={ANALYTICS_TWO_CHART_ROW_GRID_CLASS}>
+                  <div className="min-w-0">
+                    <TopicsFastestGrowingSection rows={growthRows} metricMode={ui.metricMode} />
+                  </div>
+                  <div className="min-w-0">
+                    <TopicsTopicBySentimentSection data={data} metricMode={ui.metricMode} />
+                  </div>
+                </div>
               </>
             ) : null}
           </div>

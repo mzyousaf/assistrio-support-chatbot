@@ -9,6 +9,7 @@ import {
   normalizeAnalyticsPageUrl,
   normalizeAnalyticsWebsiteOrigin,
   normalizeConversationStartedFrom,
+  parseStartedFromQueryParam,
   parseCustomerChatsAnalyticsQuery,
   startedFromLabel,
   utcDayStart,
@@ -147,5 +148,13 @@ describe('normalizeAnalyticsPageUrl', () => {
 describe('normalizeAnalyticsWebsiteOrigin', () => {
   it('returns host only without path or query', () => {
     expect(normalizeAnalyticsWebsiteOrigin('https://example.com/path?q=1')).toBe('example.com');
+  });
+});
+
+describe('parseStartedFromQueryParam', () => {
+  it('parses a single key and comma-separated keys (deduped)', () => {
+    expect(parseStartedFromQueryParam('RUNTIME_WIDGET')).toEqual(['runtime_widget']);
+    expect(parseStartedFromQueryParam('runtime_iframe,runtime_widget')).toEqual(['runtime_iframe', 'runtime_widget']);
+    expect(parseStartedFromQueryParam('runtime_widget,runtime_widget')).toEqual(['runtime_widget']);
   });
 });

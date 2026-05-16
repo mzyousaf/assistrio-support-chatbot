@@ -20,7 +20,7 @@ export type LeadsAnalyticsUiState = {
   customFrom: string;
   customTo: string;
   includePreview: boolean;
-  startedFrom: '' | CustomerChatsAnalyticsStartedFromKey;
+  startedFromKeys: CustomerChatsAnalyticsStartedFromKey[];
   countryCode: string;
   fieldCaptureStatus: LeadsFieldCaptureStatusFilter;
 };
@@ -30,7 +30,7 @@ export const LEADS_ANALYTICS_DEFAULTS: LeadsAnalyticsUiState = {
   customFrom: '',
   customTo: '',
   includePreview: true,
-  startedFrom: '',
+  startedFromKeys: [],
   countryCode: '',
   fieldCaptureStatus: '',
 };
@@ -45,7 +45,9 @@ export function buildLeadsAnalyticsApiParams(state: LeadsAnalyticsUiState): Cust
     granularity,
     includePreview: state.includePreview,
   };
-  if (state.startedFrom) params.startedFrom = state.startedFrom;
+  if (state.startedFromKeys.length > 0) {
+    params.startedFrom = [...state.startedFromKeys].sort().join(',');
+  }
   if (state.countryCode.trim()) params.countryCode = state.countryCode.trim().toUpperCase();
   return params;
 }

@@ -48,7 +48,7 @@ export function LeadsLocationPanel({ countries, cities }: Props) {
   const hasCities = rankedCities.length > 0;
 
   return (
-    <div className="grid gap-8 lg:grid-cols-2 lg:gap-10">
+    <div className="grid gap-8 xl:grid-cols-2 xl:gap-10">
       <div className="min-w-0">
         <h3 className="m-0 text-xs font-semibold uppercase tracking-wide text-slate-400">Leads by country</h3>
         <p className="mt-1 mb-0 text-[11px] leading-snug text-slate-500">Aggregate counts only (no precise location).</p>

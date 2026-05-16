@@ -45,7 +45,7 @@ describe('Topics analytics page structure', () => {
     expect(bar).toMatch(/export function TopicsAnalyticsFilterBar/);
     expect(bar).toMatch(/function AnalysisCapsule/);
     expect(bar).toMatch(/title="Topic tags"/);
-    expect(bar).toMatch(/title="Widget Source"/);
+    expect(bar).toMatch(/title="Widget Channel"/);
     expect(bar).toMatch(/state\.metricMode === 'messages'/);
     expect(bar).not.toMatch(/TopicCapsule/);
   });

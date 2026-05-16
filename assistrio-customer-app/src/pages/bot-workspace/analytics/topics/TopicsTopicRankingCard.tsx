@@ -4,8 +4,10 @@ import { formatAnalyticsInteger } from '@/lib/analyticsFormat';
 import type { TopicRankingRow, TopicsMetricMode } from './topicsChartHelpers';
 import { colorForSeriesInOrder, topicRankingRowsVisibleSlice } from './topicsChartHelpers';
 
-/** Visible topic rows in the Topic trends sidebar before "View all topics". */
+/** Default visible topic rows when metric is conversations (embedded sidebar). */
 export const TOPIC_RANKING_SIDEBAR_MAX_VISIBLE = 9;
+/** Visible topic rows when metric is messages — over this count, show “View all topics”. */
+export const TOPIC_RANKING_MESSAGES_SIDEBAR_MAX = 8;
 
 type Props = {
   rankingRows: TopicRankingRow[];
@@ -15,7 +17,7 @@ type Props = {
   onToggleSeries: (id: string) => void;
   /** Tighter copy when nested beside the chart (e.g. Topic trends). */
   embedded?: boolean;
-  /** When `embedded`, caps list length (default {@link TOPIC_RANKING_SIDEBAR_MAX_VISIBLE}). Ignored when not embedded. */
+  /** When `embedded`, caps list length (parent usually passes {@link TOPIC_RANKING_MESSAGES_SIDEBAR_MAX} or {@link TOPIC_RANKING_SIDEBAR_MAX_VISIBLE}). */
   maxVisible?: number;
   /** When not embedded, merged into the ranking `<ul>` (e.g. `max-h-none` so a parent modal owns scrolling). */
   rankingListClassName?: string;
@@ -79,7 +81,7 @@ export function TopicsTopicRankingCard({
                 ? cn('mt-2 space-y-0 overflow-y-auto overflow-x-hidden', rankingListClassName)
                 : rankingListClassName != null
                   ? cn('mt-4 space-y-1', rankingListClassName)
-                  : 'mt-4 max-h-[min(420px,55vh)] space-y-1 overflow-y-auto',
+                  : 'mt-4 max-h-[420px] space-y-1 overflow-y-auto',
           )}
         >
           {rowsToShow.map((row) => {
@@ -166,15 +168,11 @@ export function TopicsTopicRankingCard({
             );
           })}
         </ul>
-        {embedded && onViewAllTopics ? (
+        {embedded && onViewAllTopics && hasMoreThanCap ? (
           <button
             type="button"
             className="mt-1.5 inline-flex w-fit max-w-full shrink-0 cursor-pointer select-none items-center gap-1 self-center rounded-lg border border-slate-200/80 bg-slate-50/50 px-2.5 py-1.5 text-left text-[11px] font-semibold text-teal-700 transition-colors hover:border-teal-200/80 hover:bg-teal-50/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/25 sm:text-xs"
-            aria-label={
-              hasMoreThanCap
-                ? 'View all topics — open chart and full list in a larger view'
-                : 'View all topics — open chart and list in a larger view'
-            }
+            aria-label="View all topics — open chart and full list in a larger view"
             onClick={onViewAllTopics}
           >
             <span>View all topics</span>

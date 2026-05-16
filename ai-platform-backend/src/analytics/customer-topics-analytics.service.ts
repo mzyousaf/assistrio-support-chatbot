@@ -9,7 +9,9 @@ import {
 import {
   PREVIEW_STARTED_FROM_VALUES,
   alignBucketStart,
+  applyStartedFromToMessageLookup,
   bucketKeyIso,
+  buildStartedFromMatchClause,
   enumerateBucketStarts,
   mongoDateTruncUnit,
   type CustomerChatsGranularity,
@@ -665,21 +667,12 @@ export class CustomerTopicsAnalyticsService {
       });
     }
 
-    if (q.startedFrom) {
-      if (q.startedFrom === 'unknown') {
-        stages.push({
-          $match: {
-            $or: [
-              { startedFrom: { $exists: false } },
-              { startedFrom: null },
-              { startedFrom: '' },
-              { startedFrom: 'unknown' },
-            ],
-          },
-        });
-      } else {
-        stages.push({ $match: { startedFrom: q.startedFrom } });
-      }
+    if (q.startedFrom?.length) {
+      stages.push({
+        $match: buildStartedFromMatchClause('startedFrom', q.startedFrom, {
+          includeExplicitUnknownString: true,
+        }),
+      });
     }
 
     stages.push({
@@ -829,21 +822,7 @@ export class CustomerTopicsAnalyticsService {
     if (!q.includePreview) {
       matchParts['_conv.startedFrom'] = { $nin: [...PREVIEW_STARTED_FROM_VALUES] };
     }
-    if (q.startedFrom) {
-      if (q.startedFrom === 'unknown') {
-        stages.push({
-          $match: {
-            $or: [
-              { '_conv.startedFrom': { $exists: false } },
-              { '_conv.startedFrom': null },
-              { '_conv.startedFrom': '' },
-            ],
-          },
-        });
-      } else {
-        matchParts['_conv.startedFrom'] = q.startedFrom;
-      }
-    }
+    applyStartedFromToMessageLookup(matchParts, stages, '_conv.startedFrom', q.startedFrom);
     if (Object.keys(matchParts).length > 0) {
       stages.push({ $match: matchParts });
     }

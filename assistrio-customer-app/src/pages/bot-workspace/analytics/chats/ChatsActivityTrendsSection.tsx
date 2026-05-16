@@ -3,6 +3,11 @@ import type { CustomerChatsAnalyticsResponse } from '@/api/types';
 import { formatAnalyticsNumber } from '@/lib/analyticsFormat';
 import { cn } from '@/lib/utils';
 import { AnalyticsChartCard } from '../shared/AnalyticsChartCard';
+import {
+  ANALYTICS_SPLIT_CHART_MAIN_CLASS,
+  ANALYTICS_SPLIT_CHART_ROW_CLASS,
+  ANALYTICS_SPLIT_SIDEBAR_34_CLASS,
+} from '../shared/analyticsChartTheme';
 import { TOPICS_ANALYTICS_SECTION_CARD_CLASS } from '../topics/topicsAnalyticsSectionLayout';
 import { ChatsActivityOverTimeChart } from './ChatsActivityOverTimeChart';
 import {
@@ -64,31 +69,27 @@ export function ChatsActivityTrendsSection({ data }: Props) {
         TOPICS_ANALYTICS_SECTION_CARD_CLASS,
       )}
     >
-      <div className="flex min-h-0 flex-1 flex-col gap-6 p-3 sm:p-5 lg:flex-row lg:items-stretch lg:gap-0">
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:pr-6">
+      <div className={ANALYTICS_SPLIT_CHART_ROW_CLASS}>
+        <div className={ANALYTICS_SPLIT_CHART_MAIN_CLASS}>
           <ChatsActivityOverTimeChart
             timeSeries={data.timeSeries}
             granularity={data.range.granularity}
             hiddenSeriesIds={hiddenSeriesIds}
           />
         </div>
-        <aside className="flex w-full shrink-0 flex-col border-t border-slate-200/90 pt-6 lg:w-[34%] lg:max-w-[min(100%,24rem)] lg:flex-shrink-0 lg:self-start lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
-          <div className="shrink-0 rounded-lg border border-teal-100/90 bg-gradient-to-br from-teal-50/90 via-white to-white px-3.5 py-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-            <p className="m-0 text-[11px] font-semibold uppercase tracking-[0.06em] text-teal-800/75">
-              Avg messages / chat
-            </p>
-            <div className="mt-1.5 h-0.5 w-9 rounded-full bg-gradient-to-r from-teal-500/80 to-teal-200/50" aria-hidden />
-            <p className="m-0 mt-2 text-2xl font-semibold tabular-nums leading-none tracking-tight text-slate-900">
+        <aside className={ANALYTICS_SPLIT_SIDEBAR_34_CLASS}>
+          <div className="shrink-0 px-2 py-1.5">
+            <p className="m-0 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Avg messages / chat</p>
+            <p className="m-0 mt-2 text-xl font-semibold tabular-nums tracking-tight text-slate-900">
               {formatAnalyticsNumber(averageMessagesPerConversation, { maximumFractionDigits: 2 })}
             </p>
-            <p className="m-0 mt-1.5 text-[10px] leading-snug text-slate-500">Per conversation in this range</p>
           </div>
           <div className="mt-3 shrink-0 border-b border-slate-200/90" role="presentation" />
           <h3 className="m-0 mt-2 shrink-0 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
             Volume in range
           </h3>
           <p className="m-0 mt-1 shrink-0 max-w-full text-[10px] leading-snug text-slate-500">
-            Tap a row to show or hide that series on the chart. At least one stays visible.
+            Tap a row to show or hide that series on the chart
           </p>
           <div className="mt-2 w-full shrink-0 rounded-lg border border-slate-200/80 bg-slate-50/60 p-1">
             <ChatsActivityVolumeRankingCard

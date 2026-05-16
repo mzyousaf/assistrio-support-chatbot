@@ -88,6 +88,10 @@ import {
   mergeLeadFieldKeys,
 } from './conversation-turn-analytics.util';
 import {
+  mongoLeadCompleteExpr,
+  parseLeadCompletenessConfigFromBot,
+} from '../analytics/customer-leads-analytics-completeness.util';
+import {
   buildWorkspaceConversationListMatch,
   buildWorkspaceLeadsListFacetPipeline,
   collectCapturedLeadDataKeysUnionFromLeadRows,
@@ -2022,18 +2026,21 @@ export class ChatEngineService {
     totalMatching: number;
     page: number;
     hasNextPage: boolean;
-    matchingWithNameCount: number;
-    matchingWithEmailCount: number;
+    matchingCompleteLeadsCount: number;
+    matchingPartialLeadsCount: number;
     latestMatchingCapturedAt: string | null;
   }> {
     const limit = Math.min(50, Math.max(1, params.limit));
     const skip = Math.max(0, params.skip);
+    const completenessCfg = parseLeadCompletenessConfigFromBot({ leadCapture: params.leadCapture } as Record<string, unknown>);
+    const leadCompleteExpr = mongoLeadCompleteExpr(completenessCfg);
     const pipeline = buildWorkspaceLeadsListFacetPipeline({
       botOid: params.botOid,
       filters: params.filters ?? null,
       beforeSortAtIso: params.beforeSortAtIso ?? null,
       limit,
       skip,
+      leadCompleteExpr,
     });
     const rows = await this.conversationModel
       .aggregate<Record<string, unknown>>(pipeline as unknown as PipelineStage[])
@@ -2042,15 +2049,14 @@ export class ChatEngineService {
       | {
           pageRows?: Record<string, unknown>[];
           total?: { n?: number }[];
-          withName?: { n?: number }[];
-          withEmail?: { n?: number }[];
+          complete?: { n?: number }[];
           latest?: { d?: Date }[];
         }
       | undefined;
     const pageRows = bucket?.pageRows ?? [];
     const totalMatching = bucket?.total?.[0]?.n ?? 0;
-    const matchingWithNameCount = bucket?.withName?.[0]?.n ?? 0;
-    const matchingWithEmailCount = bucket?.withEmail?.[0]?.n ?? 0;
+    const matchingCompleteLeadsCount = Math.min(bucket?.complete?.[0]?.n ?? 0, totalMatching);
+    const matchingPartialLeadsCount = Math.max(0, totalMatching - matchingCompleteLeadsCount);
     const latestD = bucket?.latest?.[0]?.d;
     const latestMatchingCapturedAt =
       latestD instanceof Date && Number.isFinite(latestD.getTime()) ? latestD.toISOString() : null;
@@ -2081,8 +2087,8 @@ export class ChatEngineService {
       totalMatching,
       page: params.page,
       hasNextPage: hasMore,
-      matchingWithNameCount,
-      matchingWithEmailCount,
+      matchingCompleteLeadsCount,
+      matchingPartialLeadsCount,
       latestMatchingCapturedAt,
     };
   }

@@ -13,7 +13,7 @@ export type AgentResourcesDatePreset = ChatsAnalyticsDatePreset;
 
 export type AgentResourcesAnalyticsUiState = Pick<
   ChatsAnalyticsUiState,
-  'preset' | 'customFrom' | 'customTo' | 'includePreview' | 'startedFrom'
+  'preset' | 'customFrom' | 'customTo' | 'includePreview' | 'startedFromKeys'
 >;
 
 export const AGENT_RESOURCES_ANALYTICS_DEFAULTS: AgentResourcesAnalyticsUiState = {
@@ -21,7 +21,12 @@ export const AGENT_RESOURCES_ANALYTICS_DEFAULTS: AgentResourcesAnalyticsUiState 
   customFrom: '',
   customTo: '',
   includePreview: true,
-  startedFrom: '',
+  startedFromKeys: [],
+};
+
+/** KB item detail Source Usage chart — same default range as Agent Resources (`7d`). */
+export const KB_ITEM_PRIMARY_SOURCE_ANALYTICS_DEFAULTS: AgentResourcesAnalyticsUiState = {
+  ...AGENT_RESOURCES_ANALYTICS_DEFAULTS,
 };
 
 export function buildAgentResourcesAnalyticsApiParams(
@@ -35,7 +40,9 @@ export function buildAgentResourcesAnalyticsApiParams(
     granularity,
     includePreview: state.includePreview,
   };
-  if (state.startedFrom) params.startedFrom = state.startedFrom;
+  if (state.startedFromKeys.length > 0) {
+    params.startedFrom = [...state.startedFromKeys].sort().join(',');
+  }
   return params;
 }
 

@@ -43,7 +43,7 @@ export function AnalyticsLocationPanel({ countries, cities }: Props) {
   );
 
   return (
-    <div className="grid gap-6 lg:grid-cols-2">
+    <div className="grid gap-6 xl:grid-cols-2">
       <div className="min-w-0">
         <h3 className="m-0 text-xs font-semibold uppercase tracking-wide text-slate-400">Top countries</h3>
         {!hasCountries ? (

@@ -31,32 +31,71 @@ const DEVICE_OPTIONS: { value: string; label: string }[] = [
   { value: 'tablet', label: 'Tablet' },
 ];
 
-/** Widget Source filter: four product surfaces (matches analytics `startedFrom` keys). */
-const WIDGET_SOURCE_OPTIONS: { id: CustomerChatsAnalyticsStartedFromKey; label: string }[] = [
-  { id: 'runtime_widget', label: 'Runtime Widget' },
-  { id: 'runtime_iframe', label: 'Runtime IFrame' },
-  { id: 'playground_preview', label: 'Playground Preview' },
-  { id: 'shared_preview', label: 'Shared Preview' },
+const PREVIEW_CHANNEL_IDS: CustomerChatsAnalyticsStartedFromKey[] = ['shared_preview', 'playground_preview'];
+
+const WIDGET_CHANNEL_SECTIONS: {
+  title: string;
+  options: { id: CustomerChatsAnalyticsStartedFromKey; label: string }[];
+}[] = [
+  {
+    title: 'Live',
+    options: [
+      { id: 'runtime_iframe', label: 'Runtime IFrame' },
+      { id: 'runtime_widget', label: 'Runtime Widget' },
+    ],
+  },
+  {
+    title: 'Preview',
+    options: [
+      { id: 'shared_preview', label: 'Shared Preview' },
+      { id: 'playground_preview', label: 'Playground Preview' },
+    ],
+  },
 ];
 
-function widgetSourceValueLabel(v: StandardDateControlValues): string {
-  if (!v.includePreview && !v.startedFrom) return 'No preview traffic';
-  if (v.startedFrom) {
-    return (
-      WIDGET_SOURCE_OPTIONS.find((o) => o.id === v.startedFrom)?.label ??
-      (v.startedFrom === 'unknown' ? 'Unknown' : v.startedFrom.replace(/_/g, ' '))
-    );
+function channelOptionLabel(id: CustomerChatsAnalyticsStartedFromKey): string {
+  for (const s of WIDGET_CHANNEL_SECTIONS) {
+    const o = s.options.find((x) => x.id === id);
+    if (o) return o.label;
   }
-  return 'All sources';
+  return id === 'unknown' ? 'Unknown' : id.replace(/_/g, ' ');
 }
 
-function widgetSourceMatchesDefault(v: StandardDateControlValues, d: StandardDateControlValues): boolean {
-  const vs = v.startedFrom ?? '';
-  const ds = d.startedFrom ?? '';
-  return v.includePreview === d.includePreview && vs === ds;
+export function widgetChannelValueLabel(v: StandardDateControlValues): string {
+  if (!v.includePreview && v.startedFromKeys.length === 0) return 'No preview traffic';
+  if (v.startedFromKeys.length > 0) {
+    const labels = v.startedFromKeys.map((id) => channelOptionLabel(id));
+    if (labels.length <= 3) return labels.join(', ');
+    return `${labels.slice(0, 2).join(', ')} +${labels.length - 2}`;
+  }
+  return 'All channels';
 }
 
-function dateRangeMatchesDefault(v: StandardDateControlValues, d: StandardDateControlValues): boolean {
+function sortedChannelKeysSig(keys: CustomerChatsAnalyticsStartedFromKey[]): string {
+  return [...keys].sort().join('\0');
+}
+
+export function widgetChannelMatchesDefault(v: StandardDateControlValues, d: StandardDateControlValues): boolean {
+  return (
+    v.includePreview === d.includePreview &&
+    sortedChannelKeysSig(v.startedFromKeys) === sortedChannelKeysSig(d.startedFromKeys)
+  );
+}
+
+function toggleWidgetChannelSelection(
+  values: StandardDateControlValues,
+  id: CustomerChatsAnalyticsStartedFromKey,
+): StandardDateControlValues {
+  const has = values.startedFromKeys.includes(id);
+  const nextKeys = has ? values.startedFromKeys.filter((k) => k !== id) : [...values.startedFromKeys, id];
+  let includePreview = values.includePreview;
+  if (nextKeys.some((k) => PREVIEW_CHANNEL_IDS.includes(k))) {
+    includePreview = true;
+  }
+  return { ...values, startedFromKeys: nextKeys, includePreview };
+}
+
+export function dateRangeMatchesDefault(v: StandardDateControlValues, d: StandardDateControlValues): boolean {
   return (
     v.preset === d.preset &&
     v.customFrom.trim() === d.customFrom.trim() &&
@@ -67,7 +106,7 @@ function dateRangeMatchesDefault(v: StandardDateControlValues, d: StandardDateCo
 const dateInputCls =
   'h-9 w-full min-w-0 rounded-md border border-slate-200 bg-white px-2.5 text-sm text-slate-800 focus:border-[var(--color-teal-600)]/50 focus:outline-none focus:ring-2 focus:ring-[var(--color-teal-600)]/20';
 
-function CoreDateGranularityPreviewCapsules({
+export function CoreDateGranularityPreviewCapsules({
   values,
   onValuesChange,
   disabled,
@@ -93,16 +132,15 @@ function CoreDateGranularityPreviewCapsules({
   granularityPlacement?: 'capsule' | 'inDatePanel';
   /** When false, date / preview capsules use Plus only (no X reset). Default true. */
   capsuleClearable?: boolean;
-  /** `hidden`: omit Widget Source (e.g. reports whose API has no per-source filter). `full`: four widget sources. */
+  /** `hidden`: omit Widget Channel (e.g. reports whose API has no per-source filter). `full`: grouped channel pickers. */
   widgetSourceVariant?: 'full' | 'hidden';
   /**
    * Topics analytics only: “pristine” quiet chip at defaults until the user picks from the menu;
-   * explicit “All sources” row commits defaults with teal + X; X returns to pristine quiet defaults.
+   * capsule X returns to pristine quiet defaults (no “All channels” row — default is label-only).
    */
   widgetTopicsEngagement?: {
     quietValueRow: boolean;
     onEngagement: (engaged: boolean) => void;
-    showAllSourcesRow: boolean;
   };
   /**
    * Topics analytics only: quiet / engaged / X reset for the date capsule when it sits beside other topic filters.
@@ -136,8 +174,8 @@ function CoreDateGranularityPreviewCapsules({
 
   const viewCaption = formatAnalyticsGranularityViewCaption(resolvedGranularity);
 
-  const widgetSourceLabel = widgetSourceValueLabel(values);
-  const widgetAtDefault = widgetSourceMatchesDefault(values, defaults);
+  const widgetChannelLabel = widgetChannelValueLabel(values);
+  const widgetAtDefault = widgetChannelMatchesDefault(values, defaults);
   const widgetTopicsMode = widgetTopicsEngagement !== undefined;
   const widgetQuiet = Boolean(widgetTopicsMode && widgetTopicsEngagement.quietValueRow);
   const widgetChipHighlighted = widgetTopicsMode ? !widgetQuiet : !widgetAtDefault;
@@ -249,8 +287,8 @@ function CoreDateGranularityPreviewCapsules({
 
       {widgetSourceVariant !== 'hidden' ? (
       <FilterCapsule
-        title="Widget Source"
-        valueLabel={widgetSourceLabel}
+        title="Widget Channel"
+        valueLabel={widgetChannelLabel}
         applied={false}
         quietValueRow={widgetQuiet}
         selectionVisible={widgetChipHighlighted}
@@ -263,66 +301,45 @@ function CoreDateGranularityPreviewCapsules({
           onValuesChange({
             ...values,
             includePreview: defaults.includePreview,
-            startedFrom: defaults.startedFrom ?? '',
+            startedFromKeys: defaults.startedFromKeys ?? [],
           });
           closeAll();
         }}
       >
-        <ul className="m-0 max-h-[min(24rem,70vh)] min-w-[14rem] list-none space-y-0.5 overflow-y-auto p-0 py-0.5">
-          {widgetTopicsMode && widgetTopicsEngagement.showAllSourcesRow ? (
-            <li key="__all_sources">
-              <button
-                type="button"
-                role="option"
-                aria-selected={widgetAtDefault}
-                disabled={disabled}
-                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-slate-800 hover:bg-slate-50 disabled:opacity-50"
-                onClick={() => {
-                  onValuesChange({
-                    ...values,
-                    includePreview: defaults.includePreview,
-                    startedFrom: defaults.startedFrom ?? '',
-                  });
-                  widgetTopicsEngagement.onEngagement(true);
-                  closeAll();
-                }}
-              >
-                <span className="flex w-4 shrink-0 justify-center" aria-hidden>
-                  {widgetAtDefault ? (
-                    <Check className="h-3.5 w-3.5 text-[var(--color-teal-600)]" strokeWidth={2.5} />
-                  ) : null}
-                </span>
-                <span className="min-w-0 flex-1">All sources</span>
-              </button>
-            </li>
-          ) : null}
-          {WIDGET_SOURCE_OPTIONS.map((opt) => {
-            const selected = values.includePreview && values.startedFrom === opt.id;
-            return (
-              <li key={opt.id}>
-                <button
-                  type="button"
-                  role="option"
-                  aria-selected={selected}
-                  disabled={disabled}
-                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-slate-800 hover:bg-slate-50 disabled:opacity-50"
-                  onClick={() => {
-                    onValuesChange({ ...values, includePreview: true, startedFrom: opt.id });
-                    if (widgetTopicsMode) widgetTopicsEngagement.onEngagement(true);
-                    closeAll();
-                  }}
-                >
-                  <span className="flex w-4 shrink-0 justify-center" aria-hidden>
-                    {selected ? (
-                      <Check className="h-3.5 w-3.5 text-[var(--color-teal-600)]" strokeWidth={2.5} />
-                    ) : null}
-                  </span>
-                  <span className="min-w-0 flex-1">{opt.label}</span>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
+        <div className="m-0 max-h-[min(24rem,70vh)] min-w-[15rem] space-y-2 overflow-y-auto p-0 py-0.5">
+          {WIDGET_CHANNEL_SECTIONS.map((sec) => (
+            <div key={sec.title}>
+              <p className="m-0 px-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">{sec.title}</p>
+              <ul className="m-0 list-none space-y-0.5 p-0">
+                {sec.options.map((opt) => {
+                  const selected = values.startedFromKeys.includes(opt.id);
+                  return (
+                    <li key={opt.id}>
+                      <button
+                        type="button"
+                        role="checkbox"
+                        aria-checked={selected}
+                        disabled={disabled}
+                        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-slate-800 hover:bg-slate-50 disabled:opacity-50"
+                        onClick={() => {
+                          onValuesChange(toggleWidgetChannelSelection(values, opt.id));
+                          if (widgetTopicsMode) widgetTopicsEngagement.onEngagement(true);
+                        }}
+                      >
+                        <span className="flex w-4 shrink-0 justify-center" aria-hidden>
+                          {selected ? (
+                            <Check className="h-3.5 w-3.5 text-[var(--color-teal-600)]" strokeWidth={2.5} />
+                          ) : null}
+                        </span>
+                        <span className="min-w-0 flex-1">{opt.label}</span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
+        </div>
       </FilterCapsule>
       ) : null}
     </>
@@ -405,7 +422,7 @@ function FieldCaptureCapsule({
   );
 }
 
-function CountryCapsule({
+export function CountryCapsule({
   value,
   onChange,
   disabled,
@@ -742,16 +759,16 @@ export function ChatsAnalyticsFilterBar({
     customFrom: state.customFrom,
     customTo: state.customTo,
     includePreview: state.includePreview,
-    startedFrom: state.startedFrom,
+    startedFromKeys: state.startedFromKeys,
   };
   const coreDef: StandardDateControlValues = {
     preset: CHATS_ANALYTICS_DEFAULTS.preset,
     customFrom: CHATS_ANALYTICS_DEFAULTS.customFrom,
     customTo: CHATS_ANALYTICS_DEFAULTS.customTo,
     includePreview: CHATS_ANALYTICS_DEFAULTS.includePreview,
-    startedFrom: CHATS_ANALYTICS_DEFAULTS.startedFrom,
+    startedFromKeys: CHATS_ANALYTICS_DEFAULTS.startedFromKeys,
   };
-  const widgetAtDefault = widgetSourceMatchesDefault(values, coreDef);
+  const widgetAtDefault = widgetChannelMatchesDefault(values, coreDef);
   const widgetQuietValueRow = !widgetEngaged && widgetAtDefault;
   const dateAtDefault = dateRangeMatchesDefault(values, coreDef);
   const dateQuietValueRow = !dateEngaged && dateAtDefault;
@@ -775,7 +792,6 @@ export function ChatsAnalyticsFilterBar({
         widgetTopicsEngagement={{
           quietValueRow: widgetQuietValueRow,
           onEngagement: setWidgetEngaged,
-          showAllSourcesRow: true,
         }}
       />
       <DeviceCapsule
@@ -818,16 +834,16 @@ export function TopicsAnalyticsFilterBar({
     customFrom: state.customFrom,
     customTo: state.customTo,
     includePreview: state.includePreview,
-    startedFrom: state.startedFrom,
+    startedFromKeys: state.startedFromKeys,
   };
   const coreDef: StandardDateControlValues = {
     preset: TOPICS_ANALYTICS_DEFAULTS.preset,
     customFrom: TOPICS_ANALYTICS_DEFAULTS.customFrom,
     customTo: TOPICS_ANALYTICS_DEFAULTS.customTo,
     includePreview: TOPICS_ANALYTICS_DEFAULTS.includePreview,
-    startedFrom: TOPICS_ANALYTICS_DEFAULTS.startedFrom,
+    startedFromKeys: TOPICS_ANALYTICS_DEFAULTS.startedFromKeys,
   };
-  const widgetAtDefault = widgetSourceMatchesDefault(values, coreDef);
+  const widgetAtDefault = widgetChannelMatchesDefault(values, coreDef);
   const widgetQuietValueRow = !widgetEngaged && widgetAtDefault;
   const dateAtDefault = dateRangeMatchesDefault(values, coreDef);
   const dateQuietValueRow = !dateEngaged && dateAtDefault;
@@ -849,7 +865,6 @@ export function TopicsAnalyticsFilterBar({
         widgetTopicsEngagement={{
           quietValueRow: widgetQuietValueRow,
           onEngagement: setWidgetEngaged,
-          showAllSourcesRow: true,
         }}
       />
       {state.metricMode === 'messages' ? (
@@ -887,16 +902,16 @@ export function SentimentAnalyticsFilterBar({
     customFrom: state.customFrom,
     customTo: state.customTo,
     includePreview: state.includePreview,
-    startedFrom: state.startedFrom,
+    startedFromKeys: state.startedFromKeys,
   };
   const coreDef: StandardDateControlValues = {
     preset: SENTIMENT_ANALYTICS_DEFAULTS.preset,
     customFrom: SENTIMENT_ANALYTICS_DEFAULTS.customFrom,
     customTo: SENTIMENT_ANALYTICS_DEFAULTS.customTo,
     includePreview: SENTIMENT_ANALYTICS_DEFAULTS.includePreview,
-    startedFrom: SENTIMENT_ANALYTICS_DEFAULTS.startedFrom,
+    startedFromKeys: SENTIMENT_ANALYTICS_DEFAULTS.startedFromKeys,
   };
-  const widgetAtDefault = widgetSourceMatchesDefault(values, coreDef);
+  const widgetAtDefault = widgetChannelMatchesDefault(values, coreDef);
   const widgetQuietValueRow = !widgetEngaged && widgetAtDefault;
   const dateAtDefault = dateRangeMatchesDefault(values, coreDef);
   const dateQuietValueRow = !dateEngaged && dateAtDefault;
@@ -918,7 +933,6 @@ export function SentimentAnalyticsFilterBar({
         widgetTopicsEngagement={{
           quietValueRow: widgetQuietValueRow,
           onEngagement: setWidgetEngaged,
-          showAllSourcesRow: true,
         }}
       />
       <SentimentCapsule
@@ -953,16 +967,16 @@ export function AgentResourcesAnalyticsFilterBar({
     customFrom: state.customFrom,
     customTo: state.customTo,
     includePreview: state.includePreview,
-    startedFrom: state.startedFrom,
+    startedFromKeys: state.startedFromKeys,
   };
   const coreDef: StandardDateControlValues = {
     preset: AGENT_RESOURCES_ANALYTICS_DEFAULTS.preset,
     customFrom: AGENT_RESOURCES_ANALYTICS_DEFAULTS.customFrom,
     customTo: AGENT_RESOURCES_ANALYTICS_DEFAULTS.customTo,
     includePreview: AGENT_RESOURCES_ANALYTICS_DEFAULTS.includePreview,
-    startedFrom: AGENT_RESOURCES_ANALYTICS_DEFAULTS.startedFrom,
+    startedFromKeys: AGENT_RESOURCES_ANALYTICS_DEFAULTS.startedFromKeys,
   };
-  const widgetAtDefault = widgetSourceMatchesDefault(values, coreDef);
+  const widgetAtDefault = widgetChannelMatchesDefault(values, coreDef);
   const widgetQuietValueRow = !widgetEngaged && widgetAtDefault;
   const dateAtDefault = dateRangeMatchesDefault(values, coreDef);
   const dateQuietValueRow = !dateEngaged && dateAtDefault;
@@ -985,7 +999,6 @@ export function AgentResourcesAnalyticsFilterBar({
         widgetTopicsEngagement={{
           quietValueRow: widgetQuietValueRow,
           onEngagement: setWidgetEngaged,
-          showAllSourcesRow: true,
         }}
       />
     </div>
@@ -1011,16 +1024,16 @@ export function LeadsAnalyticsFilterBar({
     customFrom: state.customFrom,
     customTo: state.customTo,
     includePreview: state.includePreview,
-    startedFrom: state.startedFrom,
+    startedFromKeys: state.startedFromKeys,
   };
   const coreDef: StandardDateControlValues = {
     preset: LEADS_ANALYTICS_DEFAULTS.preset,
     customFrom: LEADS_ANALYTICS_DEFAULTS.customFrom,
     customTo: LEADS_ANALYTICS_DEFAULTS.customTo,
     includePreview: LEADS_ANALYTICS_DEFAULTS.includePreview,
-    startedFrom: LEADS_ANALYTICS_DEFAULTS.startedFrom,
+    startedFromKeys: LEADS_ANALYTICS_DEFAULTS.startedFromKeys,
   };
-  const widgetAtDefault = widgetSourceMatchesDefault(values, coreDef);
+  const widgetAtDefault = widgetChannelMatchesDefault(values, coreDef);
   const widgetQuietValueRow = !widgetEngaged && widgetAtDefault;
   const dateAtDefault = dateRangeMatchesDefault(values, coreDef);
   const dateQuietValueRow = !dateEngaged && dateAtDefault;
@@ -1042,8 +1055,6 @@ export function LeadsAnalyticsFilterBar({
         widgetTopicsEngagement={{
           quietValueRow: widgetQuietValueRow,
           onEngagement: setWidgetEngaged,
-          /** Leads: default is all sources (chip label only); list omits an explicit “All sources” row — reset via capsule X. */
-          showAllSourcesRow: false,
         }}
       />
       <FieldCaptureCapsule

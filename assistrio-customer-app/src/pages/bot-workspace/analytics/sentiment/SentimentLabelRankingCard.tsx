@@ -54,7 +54,7 @@ export function SentimentLabelRankingCard({
               ? cn('mt-2 space-y-0 overflow-y-auto overflow-x-hidden', rankingListClassName)
               : rankingListClassName != null
                 ? cn('mt-4 space-y-1', rankingListClassName)
-                : 'mt-4 max-h-[min(420px,55vh)] space-y-1 overflow-y-auto',
+                : 'mt-4 max-h-[420px] space-y-1 overflow-y-auto',
         )}
       >
         {rankingRows.map((row) => {

@@ -201,6 +201,6 @@ describe('ChatsWidgetSourceChart', () => {
       { key: 'unknown', label: 'Unknown', conversations: 0, messages: 0 },
     ];
     const html = renderToStaticMarkup(<ChatsWidgetSourceChart rows={rows} />);
-    expect(html).toContain('No widget source data yet.');
+    expect(html).toContain('No widget channel data yet.');
   });
 });

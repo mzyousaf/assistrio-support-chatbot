@@ -166,7 +166,7 @@ export function LeadsFieldCaptureChart({ rows, statusFilter = '' }: Props) {
   const chartWidth = containerWidthPx > 8 ? containerWidthPx : ('100%' as const);
 
   if (!chartRows.length) {
-    return <AnalyticsChartEmpty message="No captured fields yet." className="min-h-[200px]" />;
+    return <AnalyticsChartEmpty message="No captured fields yet." />;
   }
 
   return (

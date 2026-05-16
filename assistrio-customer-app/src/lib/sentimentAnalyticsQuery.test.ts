@@ -10,7 +10,7 @@ describe('buildSentimentAnalyticsApiParams', () => {
     const p = buildSentimentAnalyticsApiParams({
       ...SENTIMENT_ANALYTICS_DEFAULTS,
       sentiment: 'negative',
-      startedFrom: 'shared_preview',
+      startedFromKeys: ['shared_preview'],
     });
     expect(p.sentiment).toBe('negative');
     expect(p.startedFrom).toBe('shared_preview');

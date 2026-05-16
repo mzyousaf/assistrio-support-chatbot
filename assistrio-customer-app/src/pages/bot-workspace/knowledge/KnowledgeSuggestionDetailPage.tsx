@@ -54,6 +54,7 @@ import {
   suggestionKnowledgeItemStoredUtf8Bytes,
 } from './knowledgeViewTypes';
 import { KnowledgePipelineStuckEscalationCallout } from './KnowledgePipelineStuckEscalationCallout';
+import { KnowledgeItemPrimarySourceAnalytics } from './KnowledgeItemPrimarySourceAnalytics';
 import { KnowledgeFieldInfoIcon, KnowledgeHeadingInfoIcon } from './knowledgeFieldInfoIcon';
 import { SUGGESTION_DETAIL_TITLE_INFO } from './knowledgeSuggestionPageCopy';
 import {
@@ -339,7 +340,8 @@ export function KnowledgeSuggestionDetailPage() {
           </div>
         }
         analyticsContent={
-          <KnowledgeItemTrainingAnalytics
+          <>
+            <KnowledgeItemTrainingAnalytics
             status={displayCanon}
             lastTrainedAt={kbPollItem?.lastTrainedAt ?? row.lastTrainedAt}
             updatedAt={kbPollItem?.updatedAt ?? null}
@@ -384,6 +386,10 @@ export function KnowledgeSuggestionDetailPage() {
               </>
             }
           />
+            {botId ? (
+              <KnowledgeItemPrimarySourceAnalytics botId={botId} knowledgeItemId={knowledgeItemId || null} />
+            ) : null}
+          </>
         }
       />
       {trainingGateModal}

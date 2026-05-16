@@ -48,7 +48,7 @@ export function KbSourceTypeRankingCard({
           'list-none p-0',
           embedded
             ? 'mt-0 min-h-0 flex-1 space-y-1 overflow-y-auto overflow-x-hidden overscroll-y-contain py-0.5 pr-0.5 [scrollbar-gutter:stable]'
-            : 'mt-4 max-h-[min(420px,55vh)] space-y-1 overflow-y-auto',
+            : 'mt-4 max-h-[420px] space-y-1 overflow-y-auto',
         )}
       >
         {rankingRows.map((row) => {

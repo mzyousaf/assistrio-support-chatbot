@@ -16,6 +16,8 @@ import type {
   CustomerSentimentAnalyticsResponse,
   CustomerAgentResourcesAnalyticsResponse,
   CustomerBotAgentResourcesAnalyticsParams,
+  CustomerKnowledgeItemPrimarySourceAnalyticsParams,
+  CustomerKnowledgeItemPrimarySourceAnalyticsResponse,
   CustomerLeadsAnalyticsResponse,
   CustomerBotLeadsAnalyticsParams,
   CustomerBotListItem,
@@ -148,6 +150,24 @@ export function getCustomerBotAgentResourcesAnalytics(
   );
 }
 
+/** GET /api/customer/bots/:botId/knowledge/items/:itemId/primary-source-analytics */
+export function getCustomerBotKnowledgeItemPrimarySourceAnalytics(
+  botId: string,
+  itemId: string,
+  params?: CustomerKnowledgeItemPrimarySourceAnalyticsParams,
+) {
+  const q = new URLSearchParams();
+  if (params?.from?.trim()) q.set('from', params.from.trim());
+  if (params?.to?.trim()) q.set('to', params.to.trim());
+  if (params?.granularity) q.set('granularity', params.granularity);
+  if (params?.includePreview === false) q.set('includePreview', 'false');
+  if (params?.startedFrom) q.set('startedFrom', params.startedFrom);
+  const qs = q.toString();
+  return customerFetch<CustomerKnowledgeItemPrimarySourceAnalyticsResponse>(
+    `${P}/bots/${encodeURIComponent(botId)}/knowledge/items/${encodeURIComponent(itemId)}/primary-source-analytics${qs ? `?${qs}` : ''}`,
+  );
+}
+
 /** GET /api/customer/bots/:id/analytics/leads */
 export function getCustomerBotLeadsAnalytics(id: string, params?: CustomerBotLeadsAnalyticsParams) {
   const q = new URLSearchParams();
@@ -199,6 +219,10 @@ export function getCustomerBotLeads(botId: string, params?: CustomerBotLeadsList
   if (params?.countryCode?.trim()) q.set('countryCode', params.countryCode.trim().toUpperCase());
   if (params?.fieldKey?.trim()) q.set('fieldKey', params.fieldKey.trim());
   if (params?.search?.trim()) q.set('search', params.search.trim());
+  if (params?.includePreview === false) q.set('includePreview', 'false');
+  if (params?.leadCompletion === 'complete' || params?.leadCompletion === 'partial') {
+    q.set('leadCompletion', params.leadCompletion);
+  }
   const qs = q.toString();
   return customerFetch<CustomerLeadsListResponse>(
     `${P}/bots/${encodeURIComponent(botId)}/leads${qs ? `?${qs}` : ''}`,

@@ -206,6 +206,10 @@ export type CustomerBotLeadsListParams = {
   fieldKey?: string;
   /** Case-insensitive substring match on any string value in `capturedLeadData`. */
   search?: string;
+  /** Filter by analytics-parity complete vs partial lead quality. */
+  leadCompletion?: 'complete' | 'partial';
+  /** When false, excludes shared/playground preview channels (matches analytics). Omitted = true. */
+  includePreview?: boolean;
 };
 
 export type CustomerLeadsListResponse = {
@@ -219,10 +223,10 @@ export type CustomerLeadsListResponse = {
   page: number;
   /** True if at least one more row exists after this page. */
   hasNextPage: boolean;
-  /** Filtered-set rollup: rows with a non-empty name / full_name / fullname value. */
-  matchingWithNameCount: number;
-  /** Filtered-set rollup: rows with a non-empty email value. */
-  matchingWithEmailCount: number;
+  /** Filtered-set rollup: conversations qualifying as “complete” (same rules as Leads analytics). */
+  matchingCompleteLeadsCount: number;
+  /** Filtered-set rollup: leads that are not complete under the same rules. */
+  matchingPartialLeadsCount: number;
   /** ISO timestamp: max capture/sort time in the filtered set. */
   latestMatchingCapturedAt: string | null;
 };
@@ -1116,6 +1120,12 @@ export type CustomerChatsAnalyticsRange = {
 export type CustomerChatsAnalyticsSummary = {
   totalConversations: number;
   totalMessages: number;
+  /** User-role message count in range (newer API). */
+  totalUserMessages?: number;
+  /** User messages with text-like input (present on newer API builds). */
+  userTextMessages?: number;
+  /** User messages with voice or dictation input. */
+  userVoiceMessages?: number;
   totalThumbsUp: number;
   totalThumbsDown: number;
   averageMessagesPerConversation: number;
@@ -1125,6 +1135,14 @@ export type CustomerChatsAnalyticsTimeSeriesPoint = {
   date: string;
   conversations: number;
   messages: number;
+  /** Per-bucket user messages (role=user). */
+  userMessages?: number;
+  /** User text-like messages in this bucket. */
+  textMessages?: number;
+  /** User voice/dictation messages in this bucket. */
+  voiceMessages?: number;
+  thumbsUp: number;
+  thumbsDown: number;
 };
 
 export type CustomerChatsAnalyticsStartedFromKey =
@@ -1181,7 +1199,8 @@ export type CustomerBotChatsAnalyticsParams = {
   to?: string;
   granularity?: CustomerChatsAnalyticsGranularity;
   includePreview?: boolean;
-  startedFrom?: CustomerChatsAnalyticsStartedFromKey;
+  /** Comma-separated channel keys (OR filter). */
+  startedFrom?: string;
   countryCode?: string;
   deviceType?: string;
 };
@@ -1311,7 +1330,8 @@ export type CustomerTopicAnalyticsParams = {
   to?: string;
   granularity?: CustomerChatsAnalyticsGranularity;
   includePreview?: boolean;
-  startedFrom?: CustomerChatsAnalyticsStartedFromKey;
+  /** Comma-separated channel keys (OR filter). */
+  startedFrom?: string;
   topic?: CustomerTopicsAnalyticsTopicId;
   /** Message charts: `primary` = only `topics.primaryTopic`; `all` = labels when present else primary (default). */
   messageTopicScope?: 'all' | 'primary';
@@ -1402,7 +1422,8 @@ export type CustomerSentimentAnalyticsParams = {
   to?: string;
   granularity?: CustomerChatsAnalyticsGranularity;
   includePreview?: boolean;
-  startedFrom?: CustomerChatsAnalyticsStartedFromKey;
+  /** Comma-separated channel keys (OR filter). */
+  startedFrom?: string;
   sentiment?: CustomerSentimentLabelId;
 };
 
@@ -1429,7 +1450,8 @@ export type CustomerAgentResourcesAnalyticsRange = {
   to: string;
   granularity: CustomerChatsAnalyticsGranularity;
   includePreview: boolean;
-  startedFrom?: CustomerChatsAnalyticsStartedFromKey;
+  /** Comma-separated channel keys (OR filter). */
+  startedFrom?: string;
 };
 
 export type CustomerAgentResourcesUsageCreditRule = {
@@ -1550,7 +1572,45 @@ export type CustomerBotAgentResourcesAnalyticsParams = {
   to?: string;
   granularity?: CustomerChatsAnalyticsGranularity;
   includePreview?: boolean;
-  startedFrom?: CustomerChatsAnalyticsStartedFromKey;
+  /** Comma-separated channel keys (OR filter). */
+  startedFrom?: string;
+};
+
+/** GET /api/customer/bots/:botId/knowledge/items/:itemId/primary-source-analytics */
+export type CustomerKnowledgeItemPrimarySourceAnalyticsParams = {
+  from?: string;
+  to?: string;
+  granularity?: CustomerChatsAnalyticsGranularity;
+  includePreview?: boolean;
+  /** Comma-separated channel keys (OR filter). */
+  startedFrom?: string;
+};
+
+export type CustomerKnowledgeItemPrimarySourceAnalyticsSource = {
+  knowledgeBaseItemId: string;
+  sourceTitle: string | null;
+  sourceType: CustomerKnowledgeSourcesAnalyticsSourceType;
+  safeUrl: string | null;
+};
+
+export type CustomerKnowledgeItemPrimarySourceAnalyticsSummary = {
+  primarySourceUses: number;
+  conversations: number;
+  averagePrimarySourceScore: number | null;
+  lastUsedAt: string | null;
+};
+
+export type CustomerKnowledgeItemPrimarySourceAnalyticsTimeSeriesPoint = {
+  date: string;
+  primarySourceUses: number;
+  conversations: number;
+  averageScore: number | null;
+};
+
+export type CustomerKnowledgeItemPrimarySourceAnalyticsResponse = {
+  source: CustomerKnowledgeItemPrimarySourceAnalyticsSource;
+  summary: CustomerKnowledgeItemPrimarySourceAnalyticsSummary;
+  timeSeries: CustomerKnowledgeItemPrimarySourceAnalyticsTimeSeriesPoint[];
 };
 
 /** GET /api/customer/bots/:id/analytics/leads */
@@ -1624,7 +1684,8 @@ export type CustomerBotLeadsAnalyticsParams = {
   to?: string;
   granularity?: CustomerChatsAnalyticsGranularity;
   includePreview?: boolean;
-  startedFrom?: CustomerChatsAnalyticsStartedFromKey;
+  /** Comma-separated channel keys (OR filter). */
+  startedFrom?: string;
   countryCode?: string;
 };
 

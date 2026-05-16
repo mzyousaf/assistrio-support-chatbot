@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
 import type { CustomerLeadsStartedFromBreakdownItem } from '@/api/types';
 import { formatAnalyticsInteger, formatAnalyticsRatioAsPercent } from '@/lib/analyticsFormat';
+import { AnalyticsChartEmpty } from '@/pages/bot-workspace/analytics/shared/AnalyticsChartEmpty';
 import { cn } from '@/lib/utils';
 import { buildLeadsSourceChartRows } from './LeadsSourceChart';
 
@@ -35,12 +36,12 @@ export function LeadsWidgetSourceChart({ rows }: Props) {
 
   const hasData = hasLeadsSourceSignal(rows);
   if (!hasData) {
-    return <p className="m-0 py-6 text-center text-sm text-slate-500">No widget source data yet.</p>;
+    return <AnalyticsChartEmpty message="No widget channel data yet." />;
   }
 
   return (
-    <div className="flex min-h-[340px] w-full min-w-0 flex-col items-center justify-center gap-5 lg:flex-row lg:items-center lg:gap-6">
-      <div className="relative mx-auto flex h-[300px] w-full max-w-[360px] shrink-0 items-center justify-center lg:mx-0">
+    <div className="flex min-h-[340px] w-full min-w-0 flex-1 flex-row items-center gap-4 sm:gap-6">
+      <div className="relative mx-auto flex h-[300px] min-h-0 w-full min-w-[9rem] max-w-[360px] flex-[1_1_45%] items-center justify-center self-center">
         {pieData.length > 0 ? (
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
@@ -101,7 +102,7 @@ export function LeadsWidgetSourceChart({ rows }: Props) {
         ) : null}
       </div>
 
-      <div className="flex w-full min-w-0 flex-1 flex-col justify-center lg:min-h-0">
+      <div className="flex min-h-0 min-w-0 flex-[1_1_55%] flex-col justify-center">
         <ul className="m-0 flex min-w-0 list-none flex-col gap-0 divide-y divide-slate-100 p-0">
           {listRows.map((row) => {
             const unknown = row.key === 'unknown';
@@ -114,29 +115,29 @@ export function LeadsWidgetSourceChart({ rows }: Props) {
             return (
               <li
                 key={row.key}
-                className="flex flex-col gap-0.5 py-3 first:pt-0 last:pb-0 transition-colors hover:bg-slate-50/90"
+                className="flex min-h-[3.25rem] items-center justify-between gap-3 rounded-md px-3.5 py-1 transition-colors hover:bg-slate-50/90 sm:min-h-[3.5rem] sm:py-1.5"
               >
-                <div className="flex items-start justify-between gap-3">
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col justify-center gap-0.5">
                   <span
                     className={cn(
-                      'min-w-0 text-sm font-medium leading-snug',
+                      'block min-w-0 text-sm font-medium leading-snug',
                       unknown ? 'text-slate-400' : 'text-slate-800',
                     )}
                   >
                     {row.label}
                   </span>
-                  <span
-                    className={cn(
-                      'shrink-0 text-sm font-semibold leading-tight',
-                      unknown ? 'text-slate-400' : 'text-teal-800',
-                    )}
-                  >
-                    {formatAnalyticsInteger(row.leads)} leads
-                  </span>
+                  <div className={cn('text-xs leading-snug', unknown ? 'text-slate-400' : 'text-slate-500')}>
+                    {formatAnalyticsInteger(row.conversations)} chats · {cr} conversion
+                  </div>
                 </div>
-                <div className={cn('text-xs', unknown ? 'text-slate-400' : 'text-slate-500')}>
-                  {formatAnalyticsInteger(row.conversations)} chats · {cr} conversion
-                </div>
+                <span
+                  className={cn(
+                    'inline-flex min-w-0 shrink-0 items-center text-sm font-semibold leading-none',
+                    unknown ? 'text-slate-400' : 'text-teal-800',
+                  )}
+                >
+                  {formatAnalyticsInteger(row.leads)} leads
+                </span>
               </li>
             );
           })}

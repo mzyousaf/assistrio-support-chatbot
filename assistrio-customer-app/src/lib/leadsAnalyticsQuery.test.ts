@@ -9,7 +9,7 @@ describe('buildLeadsAnalyticsApiParams', () => {
   it('maps startedFrom and country', () => {
     const p = buildLeadsAnalyticsApiParams({
       ...LEADS_ANALYTICS_DEFAULTS,
-      startedFrom: 'runtime_widget',
+      startedFromKeys: ['runtime_widget'],
       countryCode: 'gb',
     });
     expect(p.startedFrom).toBe('runtime_widget');

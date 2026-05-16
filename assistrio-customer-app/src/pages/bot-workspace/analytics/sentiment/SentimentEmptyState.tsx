@@ -6,7 +6,7 @@ export function SentimentEmptyState() {
     <AnalyticsPageEmptyState
       Icon={SmilePlus}
       title="No sentiment data for this range."
-      hint="Sentiment appears after messages are classified. Try widening the date range or resetting Widget Source to all traffic."
+      hint="Sentiment appears after messages are classified. Try widening the date range or resetting Widget Channel to all traffic."
     />
   );
 }

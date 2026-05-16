@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { AdminLiveChatAdapter } from "./components/AdminLiveChatAdapter";
+import { EmbedInitFailureCard } from "./components/EmbedInitFailureCard";
 import { validateAndInitWidget } from "./api";
 import { normalizeEmbedConfig } from "./config";
+import { resolveEmbedInitFailurePresentation } from "./lib/embedInitFailurePresentation";
 import { createStablePreviewOverridesKey } from "./lib/stablePreviewOverridesKey";
 import { mergeWidgetStrings } from "./lib/widgetStrings";
 import { resolveWidgetDisplayModel } from "./lib/resolveWidgetDisplayModel";
@@ -254,35 +256,34 @@ export function EmbedWidgetRoot({ rawConfig }: EmbedWidgetRootProps) {
   }
 
   if (phase === "error") {
+    const pres = resolveEmbedInitFailurePresentation(initErrorMessage);
+    const err = initErrorMessage.trim();
+    const showDetail = Boolean(err && pres.icon !== "network" && err !== pres.description.trim());
+
     const errorCard = (
-      <div className="rounded-xl border border-gray-600/80 bg-gray-900 px-3 py-2.5 text-sm text-gray-100 shadow-lg dark:bg-gray-900">
-        <p className="font-medium leading-snug">{shellStrings.initErrorTitle}</p>
-        {initErrorMessage.trim() ? (
-          <p className="mt-1.5 text-xs leading-relaxed text-gray-400 break-words">{initErrorMessage}</p>
-        ) : null}
-        <button
-          type="button"
-          className="mt-2.5 w-full rounded-lg bg-gray-100 px-3 py-2 text-sm font-semibold text-gray-900 transition-colors hover:bg-white"
-          onClick={() => setRetryNonce((n) => n + 1)}
-        >
-          {shellStrings.initErrorRetry}
-        </button>
-      </div>
+      <EmbedInitFailureCard
+        icon={pres.icon}
+        title={pres.title}
+        description={pres.description}
+        detail={showDetail ? initErrorMessage : null}
+        primaryLabel={shellStrings.initErrorRetry}
+        onPrimary={() => setRetryNonce((n) => n + 1)}
+      />
     );
     if (contained) {
       return (
         <div
-          className="inline-flex max-w-full shrink-0 flex-col items-stretch p-1"
-          style={{ width: containedCollapsedW, minWidth: 0 }}
+          className="inline-flex max-w-full shrink-0 flex-col items-center justify-center overflow-hidden rounded-2xl border border-slate-200/90 bg-slate-50/80 p-2"
+          style={{ width: containedCollapsedW, minWidth: 0, minHeight: containedCollapsedH }}
           role="alert"
         >
-          {errorCard}
+          <div className="min-h-0 w-full min-w-0 overflow-auto">{errorCard}</div>
         </div>
       );
     }
     return (
       <div
-        className={`fixed z-[9999] max-w-[min(100vw-2rem,18rem)] ${loadingPositionClass}`}
+        className={`fixed z-[9999] w-[min(100vw-2rem,26rem)] max-w-[min(100vw-2rem,26rem)] ${loadingPositionClass}`}
         role="alert"
       >
         {errorCard}

@@ -8,8 +8,8 @@ export type StandardDateControlValues = {
   customFrom: string;
   customTo: string;
   includePreview: boolean;
-  /** Empty = all widget sources (default). Non-empty filters to that `startedFrom` (implies preview-capable sources when applicable). */
-  startedFrom: '' | CustomerChatsAnalyticsStartedFromKey;
+  /** Empty = all widget channels (default). Selected keys are OR‑ed in API `startedFrom`. */
+  startedFromKeys: CustomerChatsAnalyticsStartedFromKey[];
 };
 
 export const ANALYTICS_DATE_PRESET_OPTIONS: { id: ChatsAnalyticsDatePreset; label: string }[] = [

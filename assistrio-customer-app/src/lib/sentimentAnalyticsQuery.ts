@@ -23,7 +23,7 @@ export type SentimentAnalyticsUiState = {
   customFrom: string;
   customTo: string;
   includePreview: boolean;
-  startedFrom: '' | CustomerChatsAnalyticsStartedFromKey;
+  startedFromKeys: CustomerChatsAnalyticsStartedFromKey[];
   sentiment: '' | CustomerSentimentLabelId;
   metricMode: SentimentMetricMode;
 };
@@ -33,7 +33,7 @@ export const SENTIMENT_ANALYTICS_DEFAULTS: SentimentAnalyticsUiState = {
   customFrom: '',
   customTo: '',
   includePreview: true,
-  startedFrom: '',
+  startedFromKeys: [],
   sentiment: '',
   metricMode: 'messages',
 };
@@ -71,7 +71,9 @@ export function buildSentimentAnalyticsApiParams(
     granularity,
     includePreview: state.includePreview,
   };
-  if (state.startedFrom) params.startedFrom = state.startedFrom;
+  if (state.startedFromKeys.length > 0) {
+    params.startedFrom = [...state.startedFromKeys].sort().join(',');
+  }
   if (state.sentiment) params.sentiment = state.sentiment;
   return params;
 }

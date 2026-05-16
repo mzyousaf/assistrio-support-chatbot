@@ -3,6 +3,7 @@ import { Check, ChevronRight, Search } from 'lucide-react';
 import type { CustomerChatsAnalyticsTopPageRow } from '@/api/types';
 import { FilterCapsule, Input, Modal, Tooltip } from '@/components/ui';
 import { formatAnalyticsChatsCountWithUnit, formatAnalyticsInteger } from '@/lib/analyticsFormat';
+import { AnalyticsChartEmpty } from '@/pages/bot-workspace/analytics/shared/AnalyticsChartEmpty';
 import { cn } from '@/lib/utils';
 import {
   CHATS_TOP_PAGES_UNKNOWN_LABEL,
@@ -198,7 +199,7 @@ export function ChatsTopPagesPanel({ rows }: Props) {
   }, [viewAllOpen]);
 
   if (!hasData) {
-    return <p className="m-0 py-6 text-center text-sm text-slate-500">No page data yet.</p>;
+    return <AnalyticsChartEmpty message="No page data yet." />;
   }
 
   const sortAtDefault = modalSort === 'chats';
@@ -291,7 +292,7 @@ export function ChatsTopPagesPanel({ rows }: Props) {
             </FilterCapsule>
           </div>
         </div>
-        <div className="max-h-[min(55vh,22rem)] min-h-0 flex-1 overflow-y-auto overflow-x-hidden pr-0.5 [scrollbar-gutter:stable]">
+        <div className="max-h-[22rem] min-h-0 flex-1 overflow-y-auto overflow-x-hidden pr-0.5 [scrollbar-gutter:stable]">
           {modalListRows.length === 0 ? (
             <p className="m-0 py-6 text-center text-sm text-slate-500">No pages match your search.</p>
           ) : (

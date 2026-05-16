@@ -19,6 +19,7 @@ import { BotsModule } from '../bots/bots.module';
 import { DocumentsModule } from '../documents/documents.module';
 import { VisitorsModule } from '../visitors/visitors.module';
 import { WorkspacesModule } from '../workspaces/workspaces.module';
+import { KnowledgeModule } from '../knowledge/knowledge.module';
 import { AdminAnalyticsController } from './admin-analytics.controller';
 import { AnalyticsTrackController } from './analytics-track.controller';
 import { AnalyticsService } from './analytics.service';
@@ -27,6 +28,7 @@ import { CustomerLeadsAnalyticsService } from './customer-leads-analytics.servic
 import { CustomerTopicsAnalyticsService } from './customer-topics-analytics.service';
 import { CustomerSentimentAnalyticsService } from './customer-sentiment-analytics.service';
 import { CustomerAgentResourcesAnalyticsService } from './customer-agent-resources-analytics.service';
+import { CustomerKnowledgeItemPrimarySourceAnalyticsService } from './customer-knowledge-item-primary-source-analytics.service';
 import { CustomerUsageAnalyticsService } from './customer-usage-analytics.service';
 
 @Module({
@@ -44,6 +46,7 @@ import { CustomerUsageAnalyticsService } from './customer-usage-analytics.servic
       { name: UsageLedger.name, schema: UsageLedgerSchema },
     ]),
     VisitorsModule,
+    KnowledgeModule,
   ],
   controllers: [AnalyticsTrackController, AdminAnalyticsController],
   providers: [
@@ -54,6 +57,7 @@ import { CustomerUsageAnalyticsService } from './customer-usage-analytics.servic
     CustomerSentimentAnalyticsService,
     CustomerUsageAnalyticsService,
     CustomerAgentResourcesAnalyticsService,
+    CustomerKnowledgeItemPrimarySourceAnalyticsService,
   ],
   exports: [
     AnalyticsService,
@@ -63,6 +67,7 @@ import { CustomerUsageAnalyticsService } from './customer-usage-analytics.servic
     CustomerSentimentAnalyticsService,
     CustomerUsageAnalyticsService,
     CustomerAgentResourcesAnalyticsService,
+    CustomerKnowledgeItemPrimarySourceAnalyticsService,
   ],
 })
 export class AnalyticsModule { }

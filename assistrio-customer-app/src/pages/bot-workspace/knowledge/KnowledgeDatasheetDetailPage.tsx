@@ -46,6 +46,7 @@ import {
   type KnowledgePipelineStuckTimestamps,
 } from '@/lib/knowledgePipelineStuckEscalation';
 import { KnowledgePipelineStuckEscalationCallout } from './KnowledgePipelineStuckEscalationCallout';
+import { KnowledgeItemPrimarySourceAnalytics } from './KnowledgeItemPrimarySourceAnalytics';
 
 const PREVIEW_ROWS = 10;
 
@@ -388,7 +389,8 @@ export function KnowledgeDatasheetDetailPage() {
           </div>
         }
         analyticsContent={
-          <KnowledgeItemTrainingAnalytics
+          <>
+            <KnowledgeItemTrainingAnalytics
             status={displayCanon}
             lastTrainedAt={kbPollItem?.lastTrainedAt ?? table.lastTrainedAt}
             updatedAt={kbPollItem?.updatedAt ?? null}
@@ -432,6 +434,10 @@ export function KnowledgeDatasheetDetailPage() {
               </>
             }
           />
+            {botId ? (
+              <KnowledgeItemPrimarySourceAnalytics botId={botId} knowledgeItemId={knowledgeItemId || null} />
+            ) : null}
+          </>
         }
       />
       {trainingGateModal}

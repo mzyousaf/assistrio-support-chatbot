@@ -550,6 +550,12 @@ describe('customer leads API helpers', () => {
     expect(f.search).toBe('acme');
   });
 
+  it('parseWorkspaceLeadsListFilters accepts leadCompletion complete or partial only', () => {
+    expect(parseWorkspaceLeadsListFilters({ leadCompletion: 'complete' }).leadCompletion).toBe('complete');
+    expect(parseWorkspaceLeadsListFilters({ leadCompletion: 'PARTIAL' }).leadCompletion).toBe('partial');
+    expect(parseWorkspaceLeadsListFilters({ leadCompletion: 'nope' }).leadCompletion).toBeNull();
+  });
+
   it('serializeCustomerWorkspaceLeadListRow omits ipHash and keeps flexible capturedLeadData', () => {
     const id = new Types.ObjectId();
     const row = serializeCustomerWorkspaceLeadListRow(

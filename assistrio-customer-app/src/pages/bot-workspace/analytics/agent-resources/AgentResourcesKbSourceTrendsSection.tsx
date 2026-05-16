@@ -13,6 +13,11 @@ import {
   KB_SOURCE_LABEL,
 } from '@/pages/bot-workspace/analytics/agent-resources/agentResourcesKbSourceSeries';
 import { AnalyticsChartCard } from '../shared/AnalyticsChartCard';
+import {
+  ANALYTICS_SPLIT_CHART_MAIN_CLASS,
+  ANALYTICS_SPLIT_CHART_ROW_CLASS,
+  ANALYTICS_SPLIT_SIDEBAR_34_CLASS,
+} from '../shared/analyticsChartTheme';
 import { AnalyticsTrendDistributionTabs } from '../shared/AnalyticsTrendDistributionTabs';
 import { TOPICS_ANALYTICS_SECTION_CARD_CLASS } from '../topics/topicsAnalyticsSectionLayout';
 import { AgentResourcesKbSourceDistributionPieChart } from './AgentResourcesKbSourceDistributionPieChart';
@@ -169,9 +174,9 @@ export function AgentResourcesKbSourceTrendsSection({
         TOPICS_ANALYTICS_SECTION_CARD_CLASS,
       )}
     >
-      <div className="flex min-h-0 flex-1 flex-col gap-6 p-3 sm:p-5 lg:flex-row lg:items-stretch lg:gap-0">
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:pr-6">{chartBlock}</div>
-        <aside className="flex min-h-0 w-full shrink-0 flex-col overflow-hidden border-t border-slate-200/90 pt-6 lg:h-full lg:max-w-[min(100%,24rem)] lg:w-[34%] lg:flex-shrink-0 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
+      <div className={ANALYTICS_SPLIT_CHART_ROW_CLASS}>
+        <div className={ANALYTICS_SPLIT_CHART_MAIN_CLASS}>{chartBlock}</div>
+        <aside className={ANALYTICS_SPLIT_SIDEBAR_34_CLASS}>
           <button
             type="button"
             onClick={toggleKbAreaChart}
@@ -198,7 +203,7 @@ export function AgentResourcesKbSourceTrendsSection({
           <h3 className="m-0 mt-4 shrink-0 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
             {rankingTitle}
           </h3>
-          <div className="mt-2 flex min-h-[10.5rem] min-w-0 flex-1 flex-col overflow-hidden lg:min-h-0">
+          <div className="mt-2 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
             <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-slate-50 p-1">
               <KbSourceTypeRankingCard
                 rankingRows={rankingRows}

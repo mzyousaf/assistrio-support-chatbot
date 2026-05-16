@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import type {
   CustomerChatsAnalyticsGranularity,
   CustomerLeadsAnalyticsSummary,
@@ -11,6 +12,15 @@ import {
 import { LeadsCountKpiMiniChart } from './LeadsCountKpiMiniChart';
 import { LeadsConversionKpiMiniChart } from './LeadsConversionKpiMiniChart';
 
+function leadsCardTooltip(title: string, body: ReactNode): ReactNode {
+  return (
+    <div className="space-y-1 text-left">
+      <p className="m-0 text-[11px] font-semibold uppercase tracking-wide text-slate-300">{title}</p>
+      <div className="m-0 max-w-[18rem] text-[0.75rem] font-medium leading-snug text-slate-50">{body}</div>
+    </div>
+  );
+}
+
 type Props = {
   summary: CustomerLeadsAnalyticsSummary;
   timeSeries: CustomerLeadsTimeSeriesPoint[];
@@ -18,22 +28,31 @@ type Props = {
 };
 
 export function LeadsSummaryCards({ summary, timeSeries, granularity }: Props) {
-  const convRate = formatAnalyticsRatioAsPercent(summary.conversionRate, 1);
+  const convRate = formatAnalyticsRatioAsPercent(summary.conversionRate ?? 0, 1);
 
   const cards: AnalyticsKpiItem[] = [
     {
       label: 'Conversion rate',
       value: convRate,
-      infoTooltip: 'Leads ÷ conversations',
       headerInline: true,
+      tileTooltip: leadsCardTooltip(
+        'Conversion rate',
+        <>
+          Share of conversations that produced at least one lead, calculated as leads ÷ conversations.
+        </>,
+      ),
       footer: <LeadsConversionKpiMiniChart points={timeSeries} granularity={granularity} />,
     },
     {
       label: 'Complete leads',
       value: formatAnalyticsInteger(summary.completeLeads),
-      infoTooltip:
-        'Complete leads — qualified captures where every active required lead field has a non-empty value (current bot rules).',
       headerInline: true,
+      tileTooltip: leadsCardTooltip(
+        'Complete leads',
+        <>
+          Qualified captures where every active required lead field has a non-empty value, using your bot’s current lead rules.
+        </>,
+      ),
       footer: (
         <LeadsCountKpiMiniChart points={timeSeries} granularity={granularity} seriesKey="completeLeads" />
       ),
@@ -41,8 +60,11 @@ export function LeadsSummaryCards({ summary, timeSeries, granularity }: Props) {
     {
       label: 'Partial leads',
       value: formatAnalyticsInteger(summary.partialLeads),
-      infoTooltip: 'Partial leads — captured lead data that does not yet meet complete-lead rules.',
       headerInline: true,
+      tileTooltip: leadsCardTooltip(
+        'Partial leads',
+        <>Captured lead details that don’t yet pass your bot’s “complete lead” checks (missing or empty required fields).</>,
+      ),
       footer: (
         <LeadsCountKpiMiniChart points={timeSeries} granularity={granularity} seriesKey="partialLeads" />
       ),

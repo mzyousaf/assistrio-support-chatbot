@@ -58,12 +58,20 @@ describe('buildTopicsAnalyticsApiParams', () => {
     expect(p.messageTopicScope).toBeUndefined();
   });
 
-  it('sends startedFrom when a widget source is selected', () => {
+  it('sends startedFrom when widget channels are selected', () => {
     const p = buildTopicsAnalyticsApiParams({
       ...TOPICS_ANALYTICS_DEFAULTS,
-      startedFrom: 'playground_preview',
+      startedFromKeys: ['playground_preview'],
     });
     expect(p.startedFrom).toBe('playground_preview');
+  });
+
+  it('joins multiple widget channels for the API', () => {
+    const p = buildTopicsAnalyticsApiParams({
+      ...TOPICS_ANALYTICS_DEFAULTS,
+      startedFromKeys: ['runtime_widget', 'runtime_iframe'],
+    });
+    expect(p.startedFrom).toBe('runtime_iframe,runtime_widget');
   });
 
   it('uses today range when preset is today', () => {

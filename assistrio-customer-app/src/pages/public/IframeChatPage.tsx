@@ -11,6 +11,8 @@ import type { BotChatUI } from '@acw/models/botChatUI';
 import { getCustomerApiOrigin } from '@/api/client';
 import { postWidgetIframeInit } from '@/api/customerApi';
 import type { WidgetIframeInitPayload } from '@/api/types';
+import { WorkspaceLoadFailureCard } from '@/components/WorkspaceLoadFailureCard';
+import { resolveIframeChatFailurePresentation } from '@/lib/workspaceLoadFailurePresentation';
 
 function normalizeParentOriginInput(raw: string): string {
   const t = raw.trim();
@@ -30,17 +32,6 @@ function resolveParentOrigin(searchParams: URLSearchParams): string {
     /* fall through */
   }
   return normalizeParentOriginInput(searchParams.get('parentOrigin') ?? '');
-}
-
-function Unavailable({ title, message }: { title: string; message: string }) {
-  return (
-    <div className="flex h-dvh min-h-dvh w-full flex-col items-center justify-center overflow-hidden bg-slate-50 px-4">
-      <div className="max-w-md rounded-2xl border border-slate-200/90 bg-white px-6 py-8 text-center shadow-sm">
-        <h1 className="m-0 text-lg font-semibold text-slate-900">{title}</h1>
-        <p className="mt-2 text-sm leading-relaxed text-slate-600">{message}</p>
-      </div>
-    </div>
-  );
 }
 
 export function IframeChatPage() {
@@ -132,15 +123,25 @@ export function IframeChatPage() {
   }
 
   if (phase === 'error' || !init) {
-    const blocked = /not allowed|allowed on this site/i.test(errorText);
+    const isOriginBlocked = /not allowed|forbidden|origin|referer|invalid/i.test(errorText);
+    const pres = resolveIframeChatFailurePresentation(errorText, isOriginBlocked);
+    const err = errorText.trim();
+    const showDetail =
+      Boolean(err) && pres.icon !== 'network' && err !== pres.description.trim();
+
     return (
-      <Unavailable
-        title={blocked ? 'This chatbot is not allowed on this site' : 'This chat isn’t available'}
-        message={
-          errorText.trim() ||
-          'Check that the agent is published and that your access key is correct.'
-        }
-      />
+      <div className="flex h-dvh min-h-dvh w-full flex-col items-center justify-center overflow-hidden bg-slate-50 px-4">
+        <WorkspaceLoadFailureCard
+          icon={pres.icon}
+          title={pres.title}
+          description={pres.description}
+          detail={showDetail ? errorText : null}
+          onPrimary={() => {
+            window.location.reload();
+          }}
+          secondary={null}
+        />
+      </div>
     );
   }
 

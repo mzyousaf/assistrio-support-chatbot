@@ -41,6 +41,14 @@ describe('CustomerChatsAnalyticsService', () => {
 
   it('summary exposes thumb counts from assistant feedback aggregation only', async () => {
     messageModel.aggregate.mockImplementation((pipeline: unknown[]) => {
+      const groupStages = pipeline.filter(
+        (s): s is { $group: { _id: unknown } } =>
+          typeof s === 'object' && s !== null && '$group' in s,
+      );
+      const groupId = groupStages[groupStages.length - 1]?.$group?._id;
+      if (typeof groupId === 'object' && groupId !== null && groupId !== undefined && 'b' in groupId) {
+        return Promise.resolve([]);
+      }
       const m0 = pipeline[0] as { $match?: Record<string, unknown> };
       if (m0?.$match?.role === 'assistant' && m0?.$match?.['feedback.rating']) {
         return Promise.resolve([
@@ -72,6 +80,14 @@ describe('CustomerChatsAnalyticsService', () => {
   it('feedback aggregate pipeline applies preview exclusion when includePreview is false', async () => {
     let feedbackPipeline: unknown[] | null = null;
     messageModel.aggregate.mockImplementation((pipeline: unknown[]) => {
+      const groupStages = pipeline.filter(
+        (s): s is { $group: { _id: unknown } } =>
+          typeof s === 'object' && s !== null && '$group' in s,
+      );
+      const groupId = groupStages[groupStages.length - 1]?.$group?._id;
+      if (typeof groupId === 'object' && groupId !== null && groupId !== undefined && 'b' in groupId) {
+        return Promise.resolve([]);
+      }
       const m0 = pipeline[0] as { $match?: Record<string, unknown> };
       if (m0?.$match?.role === 'assistant' && m0?.$match?.['feedback.rating']) {
         feedbackPipeline = pipeline;

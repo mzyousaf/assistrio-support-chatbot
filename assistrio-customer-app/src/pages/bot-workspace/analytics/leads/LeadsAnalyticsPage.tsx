@@ -9,9 +9,9 @@ import { useBotWorkspace } from '../../BotWorkspaceContext';
 import { AnalyticsChartCard } from '../shared/AnalyticsChartCard';
 import { AnalyticsErrorState } from '../shared/AnalyticsErrorState';
 import { AnalyticsPageHeader } from '../shared/AnalyticsPageHeader';
+import { ANALYTICS_TWO_CHART_ROW_GRID_CLASS } from '../shared/analyticsChartTheme';
 import { LeadsAnalyticsFilterBar } from '../shared/AnalyticsInsightsFilterBars';
 import { ChatsByCountrySection } from '../chats/ChatsByCountrySection';
-import { LeadsEmptyState } from './LeadsEmptyState';
 import { LeadsFieldCaptureChart } from './LeadsFieldCaptureChart';
 import { LeadsPageSkeleton } from './LeadsPageSkeleton';
 import { LeadsSummaryCards } from './LeadsSummaryCards';
@@ -27,11 +27,6 @@ function leadsCountriesAsChatsRows(
     conversations: Math.max(0, Math.trunc(r.conversations ?? 0)),
     messages: 0,
   }));
-}
-
-function hasLeadsAnalyticsSignal(data: CustomerLeadsAnalyticsResponse | null): boolean {
-  if (!data) return false;
-  return (data.summary.totalConversations ?? 0) > 0;
 }
 
 export function LeadsAnalyticsPage() {
@@ -67,7 +62,6 @@ export function LeadsAnalyticsPage() {
   const showSkeleton = loadState === 'loading' && !data;
   const showError = loadState === 'error';
   const showBody = data != null && !showError;
-  const empty = loadState === 'ok' && data && !hasLeadsAnalyticsSignal(data);
 
   return (
     <WorkspaceContentContainer size="full">
@@ -86,49 +80,43 @@ export function LeadsAnalyticsPage() {
 
             {showBody && data ? (
               <>
-                {empty ? (
-                  <LeadsEmptyState />
-                ) : (
-                  <>
-                    <LeadsSummaryCards
-                      summary={data.summary}
-                      timeSeries={data.timeSeries}
-                      granularity={data.range.granularity}
+                <LeadsSummaryCards
+                  summary={data.summary}
+                  timeSeries={data.timeSeries}
+                  granularity={data.range.granularity}
+                />
+                <LeadsTrendsSection data={data} />
+                <div className={ANALYTICS_TWO_CHART_ROW_GRID_CLASS}>
+                  <AnalyticsChartCard
+                    className="h-full min-w-0 w-full border-slate-100"
+                    fillVertical
+                    noMaxHeight
+                    bodyClassName="flex w-full min-h-0 flex-1 flex-col justify-center"
+                    title="Widget Channel"
+                    description="Where conversations are coming from."
+                  >
+                    <LeadsWidgetSourceChart rows={data.startedFromBreakdown} />
+                  </AnalyticsChartCard>
+                  <AnalyticsChartCard
+                    className="h-full min-w-0 w-full border-slate-100"
+                    fillVertical
+                    noMaxHeight
+                    bodyClassName="flex min-h-0 w-full min-w-0 flex-1 flex-col"
+                    title="Captured fields"
+                    description="Per-field fill counts for configured lead forms — values are never listed."
+                  >
+                    <LeadsFieldCaptureChart
+                      rows={data.fieldCaptureBreakdown}
+                      statusFilter={ui.fieldCaptureStatus}
                     />
-                    <LeadsTrendsSection data={data} />
-                    <div className="grid min-w-0 gap-6 lg:grid-cols-2 lg:items-stretch">
-                      <AnalyticsChartCard
-                        className="h-full min-w-0 w-full border-slate-100"
-                        fillVertical
-                        noMaxHeight
-                        bodyClassName="justify-center"
-                        title="Widget Source"
-                        description="Where conversations are coming from."
-                      >
-                        <LeadsWidgetSourceChart rows={data.startedFromBreakdown} />
-                      </AnalyticsChartCard>
-                      <AnalyticsChartCard
-                        className="h-full min-w-0 w-full border-slate-100"
-                        fillVertical
-                        noMaxHeight
-                        bodyClassName="flex min-h-0 w-full min-w-0 flex-1 flex-col"
-                        title="Captured fields"
-                        description="Per-field fill counts for configured lead forms — values are never listed."
-                      >
-                        <LeadsFieldCaptureChart
-                          rows={data.fieldCaptureBreakdown}
-                          statusFilter={ui.fieldCaptureStatus}
-                        />
-                      </AnalyticsChartCard>
-                    </div>
-                    <ChatsByCountrySection
-                      countries={leadsCountriesAsChatsRows(data.locationBreakdown.countries)}
-                      sectionTitle="Leads by Country"
-                      modalTitle="Leads by Country"
-                      sectionDescription="Where conversations are coming from."
-                    />
-                  </>
-                )}
+                  </AnalyticsChartCard>
+                </div>
+                <ChatsByCountrySection
+                  countries={leadsCountriesAsChatsRows(data.locationBreakdown.countries)}
+                  sectionTitle="Leads by Country"
+                  modalTitle="Leads by Country"
+                  sectionDescription="Where conversations are coming from."
+                />
               </>
             ) : null}
           </div>

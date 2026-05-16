@@ -50,6 +50,7 @@ import {
   workspaceQaPrimaryLabel,
 } from './knowledgeViewTypes';
 import { KnowledgePipelineStuckEscalationCallout } from './KnowledgePipelineStuckEscalationCallout';
+import { KnowledgeItemPrimarySourceAnalytics } from './KnowledgeItemPrimarySourceAnalytics';
 
 import {
   QaFieldInfoIcon,
@@ -302,7 +303,8 @@ export function QaDetailPage() {
           </div>
         }
         analyticsContent={
-          <KnowledgeItemTrainingAnalytics
+          <>
+            <KnowledgeItemTrainingAnalytics
             status={displayCanon}
             lastTrainedAt={kbPollItem?.lastTrainedAt ?? row.lastTrainedAt}
             updatedAt={kbPollItem?.updatedAt ?? null}
@@ -345,6 +347,10 @@ export function QaDetailPage() {
               </>
             }
           />
+            {botId ? (
+              <KnowledgeItemPrimarySourceAnalytics botId={botId} knowledgeItemId={knowledgeItemId || null} />
+            ) : null}
+          </>
         }
       />
       {trainingGateModal}

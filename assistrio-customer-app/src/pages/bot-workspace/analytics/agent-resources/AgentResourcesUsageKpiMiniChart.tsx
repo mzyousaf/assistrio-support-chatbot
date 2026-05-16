@@ -73,7 +73,7 @@ export function AgentResourcesUsageKpiMiniChart({
   granularity,
   seriesKey,
   stroke,
-  chartHeight = 76,
+  chartHeight = 88,
   className,
 }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);

@@ -16,6 +16,6 @@ describe('parseCustomerAgentResourcesAnalyticsQuery', () => {
 
   it('parses runtime_widget startedFrom', () => {
     const q = parseCustomerAgentResourcesAnalyticsQuery({ startedFrom: 'RUNTIME_WIDGET' });
-    expect(q.startedFrom).toBe('runtime_widget');
+    expect(q.startedFrom).toEqual(['runtime_widget']);
   });
 });

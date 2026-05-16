@@ -127,8 +127,8 @@ export function TopicsFastestGrowingSection({ rows, metricMode }: Props) {
       noMaxHeight
       bodyClassName="flex min-h-0 flex-1 flex-col !overflow-y-auto"
     >
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 lg:flex-row lg:gap-5">
-        <div className="min-h-[220px] min-w-0 flex-1">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-row gap-4 sm:gap-5">
+        <div className="min-h-[220px] min-w-0 flex-1 basis-0">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart
               data={chartData}
@@ -200,7 +200,7 @@ export function TopicsFastestGrowingSection({ rows, metricMode }: Props) {
           </ResponsiveContainer>
         </div>
 
-        <div className="w-full shrink-0 border-t border-slate-100 pt-3 lg:w-[min(100%,280px)] lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0">
+        <div className="flex min-h-0 min-w-[10rem] w-[min(36%,280px)] max-w-[280px] shrink-0 flex-col border-l border-slate-100 pl-4 pt-0">
           <p className="m-0 mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Top {TOP_N}</p>
           <ol className="m-0 list-none space-y-2.5 p-0">
             {top.map((r, i) => (

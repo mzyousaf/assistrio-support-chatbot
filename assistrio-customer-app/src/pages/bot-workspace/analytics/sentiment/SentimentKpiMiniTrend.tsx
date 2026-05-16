@@ -1,11 +1,10 @@
-import { useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Area, AreaChart, YAxis } from 'recharts';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { CartesianGrid, Line, LineChart, YAxis } from 'recharts';
 import type { CustomerChatsAnalyticsGranularity, CustomerSentimentAnalyticsTimeSeriesPoint } from '@/api/types';
-import { formatAnalyticsDateLabel } from '@/lib/analyticsFormat';
 import { cn } from '@/lib/utils';
 import { CHART } from '../shared/analyticsChartTheme';
 
-type Point = { label: string; score: number };
+type Row = { score: number };
 
 type Props = {
   points: CustomerSentimentAnalyticsTimeSeriesPoint[];
@@ -20,15 +19,22 @@ function finiteScore(v: unknown): number | null {
   return null;
 }
 
-/** Chart uses 0 for missing scores so the area renders a flat neutral baseline. */
-function chartScore(v: unknown): number {
-  return finiteScore(v) ?? 0;
+/** Match Chats KPI mini charts: missing bucket scores flatten to 0 so the line stays defined. */
+function rowScore(p: CustomerSentimentAnalyticsTimeSeriesPoint): number {
+  return finiteScore(p.averageSentimentScore) ?? 0;
 }
 
-export function SentimentKpiMiniTrend({ points, granularity, className, chartHeight = 52 }: Props) {
+function buildRows(points: CustomerSentimentAnalyticsTimeSeriesPoint[]): Row[] {
+  return points.map((p) => ({ score: rowScore(p) }));
+}
+
+/**
+ * Sparkline for average sentiment over time — same layout as {@link ChatsSummaryKpiMiniChart}
+ * (line + horizontal grid, no area fill).
+ */
+export function SentimentKpiMiniTrend({ points, granularity: _granularity, className, chartHeight = 88 }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(120);
-  const gradientId = `sentimentMiniTrendFill-${useId().replace(/:/g, '')}`;
 
   useLayoutEffect(() => {
     const el = wrapRef.current;
@@ -40,51 +46,48 @@ export function SentimentKpiMiniTrend({ points, granularity, className, chartHei
     return () => ro.disconnect();
   }, []);
 
-  const data = useMemo<Point[]>(() => {
-    if (points.length > 0) {
-      return points.map((p) => ({
-        label: formatAnalyticsDateLabel(p.date, granularity),
-        score: chartScore(p.averageSentimentScore),
-      }));
-    }
-    return [
-      { label: '', score: 0 },
-      { label: '', score: 0 },
-    ];
-  }, [points, granularity]);
+  const chartData = useMemo(() => buildRows(points), [points]);
+
+  if (!points.length) {
+    return (
+      <div
+        ref={wrapRef}
+        className={cn(
+          'flex w-full items-center justify-center rounded-md border border-dashed border-slate-200/90 bg-slate-50/50 text-[11px] text-slate-400',
+          className,
+        )}
+        style={{ height: chartHeight }}
+      >
+        No trend data
+      </div>
+    );
+  }
 
   return (
     <div
       ref={wrapRef}
-      className={cn(
-        'mt-2 w-full min-w-0 transition-opacity duration-200 ease-out hover:opacity-95',
-        className,
-      )}
+      className={cn('w-full min-w-0', className)}
       style={{ height: chartHeight }}
       aria-hidden
     >
-      <AreaChart width={width} height={chartHeight} data={data} margin={{ top: 2, right: 2, left: 0, bottom: 0 }}>
-        <defs>
-          <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={CHART.teal600} stopOpacity={0.22} />
-            <stop offset="100%" stopColor={CHART.teal600} stopOpacity={0.02} />
-          </linearGradient>
-        </defs>
+      <LineChart width={width} height={chartHeight} data={chartData} margin={{ top: 4, right: 4, left: 0, bottom: 2 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
         <YAxis domain={[-1, 1]} hide width={0} />
-        <Area
-          type="linear"
+        <Line
+          type="monotone"
           dataKey="score"
-          baseLine={0}
           stroke={CHART.teal600}
-          strokeWidth={1.5}
-          fill={`url(#${gradientId})`}
-          connectNulls
+          strokeWidth={2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
           dot={false}
+          activeDot={false}
+          connectNulls
           isAnimationActive
           animationDuration={420}
           animationEasing="ease-out"
         />
-      </AreaChart>
+      </LineChart>
     </div>
   );
 }

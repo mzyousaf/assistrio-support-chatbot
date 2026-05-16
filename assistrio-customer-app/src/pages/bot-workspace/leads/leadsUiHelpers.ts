@@ -12,8 +12,8 @@ import { formatCountryCodeWithNameLabel } from './leadsFilterCountryOptions';
  */
 export const leadDetailSheetSectionClassName = 'px-0 py-3.5';
 
-/** Leads list table: cap how wide the Lead column can grow on large viewports (px). */
-export const LEADS_TABLE_LEAD_COL_MAX_PX = 220;
+/** Leads list table: primary “Lead” column (identity headline + subline) max width (px). */
+export const LEADS_TABLE_LEAD_IDENTITY_COL_MAX_PX = 220;
 
 /** Dynamic “Name” (and name-like) field columns: never wider than this (px). */
 export const LEADS_TABLE_NAME_FIELD_COL_MAX_PX = 200;
@@ -50,6 +50,143 @@ export function visibleLeadFieldDefinitions(defs: CustomerLeadFieldDefinition[])
 /** Plain label for drawer rows and table headers (badges carry inactive/deleted). */
 export function leadDetailFieldLabel(d: CustomerLeadFieldDefinition): string {
   return (d.label?.trim() || d.key?.trim() || '').trim() || d.key;
+}
+
+/** Fixed inbox columns (Insights → Leads table): Lead identity, Captured At, Status, Name, then Email / Phone / Company; Captured Fields tags list all captured keys. */
+export type LeadsInboxTableColumn = {
+  headerLabel: string;
+  field: CustomerLeadFieldDefinition;
+};
+
+function leadsInboxSyntheticField(key: string, label: string, type: string): CustomerLeadFieldDefinition {
+  return {
+    key,
+    label,
+    type,
+    required: false,
+    order: 0,
+    fieldStatus: 'active',
+  };
+}
+
+/**
+ * Maps merged lead field definitions to Name + Email, Phone, Company column resolution (table also has Lead, Captured At, Status before Name).
+ */
+export function leadsInboxTableColumns(defs: CustomerLeadFieldDefinition[]): LeadsInboxTableColumn[] {
+  const visible = visibleLeadFieldDefinitions(defs);
+  const nameDef =
+    visible.find((d) => isLeadsTableNameFieldColumn(d)) ??
+    visible.find((d) => ['name', 'full_name', 'fullname'].includes(d.key.trim().toLowerCase()));
+  const emailDef =
+    visible.find((d) => d.type?.toLowerCase() === 'email' || d.key.trim().toLowerCase() === 'email');
+  const phoneDef = visible.find((d) => {
+    const k = d.key.trim().toLowerCase();
+    const t = d.type?.toLowerCase();
+    return t === 'tel' || t === 'phone' || k === 'phone' || k === 'mobile';
+  });
+  const companyDef =
+    visible.find((d) => d.key.trim().toLowerCase() === 'company') ??
+    visible.find((d) => (d.label?.trim().toLowerCase() ?? '') === 'company');
+
+  return [
+    { headerLabel: 'Name', field: nameDef ?? leadsInboxSyntheticField('name', 'Name', 'text') },
+    { headerLabel: 'Email', field: emailDef ?? leadsInboxSyntheticField('email', 'Email', 'email') },
+    { headerLabel: 'Phone', field: phoneDef ?? leadsInboxSyntheticField('phone', 'Phone', 'tel') },
+    { headerLabel: 'Company', field: companyDef ?? leadsInboxSyntheticField('company', 'Company', 'text') },
+  ];
+}
+
+/** Max field labels shown as tags in the leads table “Captured Fields” column; additional fields are summarized as +N. */
+export const LEADS_CAPTURED_FIELD_TAG_DISPLAY_MAX = 5;
+
+export type LeadCapturedFieldTagItem = {
+  key: string;
+  label: string;
+  status: LeadFieldStatusUi;
+};
+
+/**
+ * Non-empty captured fields for one row (definition order). Pass `excludeFieldKeys` to omit specific keys from the tag list (e.g. tests); the leads table passes none so tags mirror every captured field.
+ */
+export function leadCapturedFieldTagItemsForRow(
+  data: Record<string, string> | undefined,
+  defs: CustomerLeadFieldDefinition[],
+  excludeFieldKeys: string[],
+): LeadCapturedFieldTagItem[] {
+  const exclude = new Set(
+    excludeFieldKeys.map((k) => k.trim().toLowerCase()).filter(Boolean),
+  );
+  const out: LeadCapturedFieldTagItem[] = [];
+  for (const d of visibleLeadFieldDefinitions(defs)) {
+    const k = d.key.trim();
+    if (!k) continue;
+    if (exclude.has(k.toLowerCase())) continue;
+    if (!formatLeadCellValue(data, k)) continue;
+    out.push({ key: k, label: leadDetailFieldLabel(d), status: inferLeadFieldStatus(d) });
+  }
+  return out;
+}
+
+type LeadCompletenessConfigRollup = {
+  requiredKeys: string[];
+  emailKeys: string[];
+  phoneKeys: string[];
+};
+
+function leadCompletenessConfigFromMergedDefinitions(defs: CustomerLeadFieldDefinition[]): LeadCompletenessConfigRollup {
+  const requiredKeys: string[] = [];
+  const emailKeys: string[] = [];
+  const phoneKeys: string[] = [];
+  for (const f of activeLeadFieldDefinitions(defs)) {
+    if (f.disabled === true) continue;
+    const k = String(f.key ?? '').trim();
+    if (!k) continue;
+    if (f.required !== false) requiredKeys.push(k);
+    const t = String(f.type ?? 'text').toLowerCase();
+    const kl = k.toLowerCase();
+    if (t === 'email' || kl === 'email') emailKeys.push(k);
+    if (t === 'phone' || kl === 'phone' || kl === 'mobile' || kl === 'tel') phoneKeys.push(k);
+  }
+  return { requiredKeys, emailKeys, phoneKeys };
+}
+
+function nonEmptyLocal(val: unknown): boolean {
+  if (val == null) return false;
+  return String(val).trim().length > 0;
+}
+
+/** Mirrors GET …/analytics/leads “complete” for client-side fallbacks (server rollup is authoritative). */
+export function evaluateLeadAnalyticsCompleteFromCaptured(
+  data: Record<string, string> | undefined,
+  defs: CustomerLeadFieldDefinition[],
+): boolean {
+  const cfg = leadCompletenessConfigFromMergedDefinitions(defs);
+  const d = data && typeof data === 'object' && !Array.isArray(data) ? data : {};
+
+  if (cfg.requiredKeys.length > 0) {
+    return cfg.requiredKeys.every((k) => nonEmptyLocal(d[k]));
+  }
+
+  if (cfg.emailKeys.length > 0 || cfg.phoneKeys.length > 0) {
+    const emailOk = cfg.emailKeys.length > 0 && cfg.emailKeys.some((k) => nonEmptyLocal(d[k]));
+    const phoneOk = cfg.phoneKeys.length > 0 && cfg.phoneKeys.some((k) => nonEmptyLocal(d[k]));
+    return Boolean(emailOk || phoneOk);
+  }
+
+  let n = 0;
+  for (const v of Object.values(d)) {
+    if (nonEmptyLocal(v)) n++;
+  }
+  return n >= 2;
+}
+
+export function countLoadedLeadsAnalyticsComplete(
+  leads: CustomerLeadListItem[],
+  defs: CustomerLeadFieldDefinition[],
+): number {
+  return leads.filter((lead) =>
+    evaluateLeadAnalyticsCompleteFromCaptured(lead.capturedLeadData, defs),
+  ).length;
 }
 
 /** CSV header cells — suffix for historical columns (inactive vs deleted). */
@@ -118,7 +255,15 @@ function primaryIdentitySublineConversationRef(conversationId: string): string {
   return t || '—';
 }
 
-const PRIMARY_KEY_PRIORITY = ['name', 'full_name', 'fullname', 'email', 'phone', 'mobile'] as const;
+const PRIMARY_KEY_PRIORITY = [
+  'name',
+  'full_name',
+  'fullname',
+  'email',
+  'phone',
+  'mobile',
+  'company',
+] as const;
 
 function findCapturedKey(data: Record<string, string>, canonical: string): string | undefined {
   const c = canonical.toLowerCase();
@@ -132,10 +277,11 @@ export type LeadPrimaryIdentity = {
   headlineKey: string | null;
 };
 
-/** Headline for list/detail: best available name-like / email / phone; fallback “Unknown lead”. */
+/** Headline for list/detail: best available name-like / email / phone; else first non-empty captured field in definition order (matches Captured Fields tags, including inactive/deleted); fallback “Unknown lead”. */
 export function leadPrimaryIdentity(
   capturedLeadData: Record<string, string> | undefined,
   conversationId: string,
+  fieldDefinitions?: CustomerLeadFieldDefinition[],
 ): LeadPrimaryIdentity {
   const data = capturedLeadData ?? {};
   for (const canon of PRIMARY_KEY_PRIORITY) {
@@ -146,11 +292,53 @@ export function leadPrimaryIdentity(
     const sub = primaryIdentitySubline(data, k, conversationId);
     return { headline: v, subline: sub, headlineKey: k };
   }
+  if (fieldDefinitions?.length) {
+    const items = leadCapturedFieldTagItemsForRow(capturedLeadData, fieldDefinitions, []);
+    if (items.length > 0) {
+      const firstKey = items[0].key;
+      const v = formatLeadCellValue(data, firstKey);
+      if (v) {
+        const sub = primaryIdentitySubline(data, firstKey, conversationId);
+        return { headline: v, subline: sub, headlineKey: firstKey };
+      }
+    }
+  }
   return {
     headline: 'Unknown lead',
     subline: primaryIdentitySublineConversationRef(conversationId),
     headlineKey: null,
   };
+}
+
+/**
+ * Short label for the Lead column: Unknown, Name, Email, Phone, Company, or the configured field label.
+ */
+export function leadPrimaryIdentityKindLabel(
+  headlineKey: string | null,
+  headline: string,
+  defs: CustomerLeadFieldDefinition[],
+): string {
+  if (!headlineKey || headline === 'Unknown lead') {
+    return 'Unknown';
+  }
+  const kl = headlineKey.trim().toLowerCase();
+  const def = defs.find((d) => d.key.trim().toLowerCase() === kl);
+  if (def) {
+    if (isLeadsTableNameFieldColumn(def)) return 'Name';
+    const t = def.type?.trim().toLowerCase() ?? '';
+    const dk = def.key.trim().toLowerCase();
+    if (t === 'email' || dk === 'email') return 'Email';
+    if (t === 'tel' || t === 'phone' || dk === 'phone' || dk === 'mobile') return 'Phone';
+    if (dk === 'company') return 'Company';
+    return leadDetailFieldLabel(def);
+  }
+  if (kl === 'name' || kl === 'full_name' || kl === 'fullname') return 'Name';
+  if (kl === 'email') return 'Email';
+  if (kl === 'phone' || kl === 'mobile') return 'Phone';
+  if (kl === 'company') return 'Company';
+  const words = headlineKey.replace(/[_-]+/g, ' ').trim();
+  if (!words) return headlineKey;
+  return words.replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 function primaryIdentitySubline(data: Record<string, string>, headlineKey: string, conversationId: string): string {
@@ -166,11 +354,16 @@ function primaryIdentitySubline(data: Record<string, string>, headlineKey: strin
     const v = formatLeadCellValue(data, phoneK);
     if (v) parts.push(v);
   }
+  const companyK = findCapturedKey(data, 'company');
+  if (companyK && companyK.toLowerCase() !== hl) {
+    const v = formatLeadCellValue(data, companyK);
+    if (v) parts.push(v);
+  }
   if (parts.length) return parts.join(' · ');
   return primaryIdentitySublineConversationRef(conversationId);
 }
 
-/** Dynamic columns: same as visible defs (Lead cell may repeat headline for context). */
+/** Dynamic columns: same as visible defs (table has separate “Lead” identity and “Name” columns). */
 export function leadTableDynamicDefinitions(
   defs: CustomerLeadFieldDefinition[],
   _headlineKey: string | null,

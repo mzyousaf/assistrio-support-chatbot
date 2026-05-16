@@ -13,9 +13,15 @@ type Props = {
 };
 
 export function LeadDetailHeader({ detail, fieldDefinitions, onOpenConversation }: Props) {
-  const identity = leadPrimaryIdentity(detail.capturedLeadData, detail.conversationId);
+  const identity = leadPrimaryIdentity(detail.capturedLeadData, detail.conversationId, fieldDefinitions);
   const q = leadQualityFromCaptured(detail.capturedLeadData, fieldDefinitions);
   const unknown = identity.headline === 'Unknown lead';
+  const conversationIdTrim = detail.conversationId?.trim() ?? '';
+  const sublineTrim = identity.subline.trim();
+  const showIdentitySubline =
+    sublineTrim.length > 0 &&
+    sublineTrim !== '—' &&
+    sublineTrim !== conversationIdTrim;
 
   return (
     <div className="flex flex-col gap-2.5">
@@ -36,12 +42,14 @@ export function LeadDetailHeader({ detail, fieldDefinitions, onOpenConversation 
             </span>
           </Tooltip>
         )}
-        <p
-          className="m-0 mt-1 min-w-0 text-sm leading-snug text-slate-600 [overflow-wrap:anywhere]"
-          title={identity.subline}
-        >
-          {identity.subline}
-        </p>
+        {showIdentitySubline ? (
+          <p
+            className="m-0 mt-1 min-w-0 text-sm leading-snug text-slate-600 [overflow-wrap:anywhere]"
+            title={identity.subline}
+          >
+            {identity.subline}
+          </p>
+        ) : null}
       </div>
 
       <div className="flex flex-wrap items-center gap-2">

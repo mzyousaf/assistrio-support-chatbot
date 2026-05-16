@@ -13,6 +13,8 @@ import {
   normalizeAnalyticsPageUrl,
   normalizeAnalyticsWebsiteOrigin,
   normalizeConversationStartedFrom,
+  applyStartedFromToMessageLookup,
+  buildStartedFromMatchClause,
   parseCustomerChatsAnalyticsQuery,
   sortStartedFromKeys,
   startedFromGroupId,
@@ -32,6 +34,12 @@ export type CustomerChatsAnalyticsResponse = {
   summary: {
     totalConversations: number;
     totalMessages: number;
+    /** All user-role messages in range (for charts that exclude assistant replies). */
+    totalUserMessages: number;
+    /** User-role messages typed or sent as text / quick reply / suggested question (excludes voice-like). */
+    userTextMessages: number;
+    /** User-role messages sent as voice or dictation input. */
+    userVoiceMessages: number;
     totalThumbsUp: number;
     totalThumbsDown: number;
     averageMessagesPerConversation: number;
@@ -40,6 +48,14 @@ export type CustomerChatsAnalyticsResponse = {
     date: string;
     conversations: number;
     messages: number;
+    /** Per-bucket user messages (role=user). */
+    userMessages: number;
+    /** Per-bucket user messages with text-like input (see summary userTextMessages). */
+    textMessages: number;
+    /** Per-bucket user messages with voice or dictation input. */
+    voiceMessages: number;
+    thumbsUp: number;
+    thumbsDown: number;
   }>;
   locationBreakdown: {
     countries: Array<{
@@ -118,6 +134,9 @@ export class CustomerChatsAnalyticsService {
       sfConv,
       sfMsg,
       feedbackTotals,
+      feedbackTimeSeries,
+      tsUserTextVoice,
+      userTextVoiceTotals,
     ] = await Promise.all([
       this.conversationModel.countDocuments(convMatch),
       this.aggregateMessageRoleTotals(oid, q, convMatch),
@@ -132,16 +151,27 @@ export class CustomerChatsAnalyticsService {
       this.aggregateStartedFromConversations(convMatch),
       this.aggregateStartedFromMessages(oid, q, convMatch),
       this.aggregateAssistantFeedbackCounts(oid, q),
+      this.aggregateAssistantFeedbackTimeSeries(oid, q, q.granularity),
+      this.aggregateUserTextVoiceTimeSeries(oid, q, q.granularity),
+      this.aggregateUserTextVoiceTotals(oid, q),
     ]);
 
     const bucketStarts = enumerateBucketStarts(q.from, q.to, q.granularity);
 
     const timeSeries = bucketStarts.map((bucketStart) => {
       const key = bucketKeyIso(bucketStart);
+      const fb = feedbackTimeSeries.get(key);
+      const tv = tsUserTextVoice.get(key) ?? { text: 0, voice: 0 };
+      const msgBucket = tsMessages.get(key);
       return {
         date: key,
         conversations: tsConversations.get(key) ?? 0,
-        messages: tsMessages.get(key)?.total ?? 0,
+        messages: msgBucket?.total ?? 0,
+        userMessages: msgBucket?.user ?? 0,
+        textMessages: tv.text,
+        voiceMessages: tv.voice,
+        thumbsUp: fb?.up ?? 0,
+        thumbsDown: fb?.down ?? 0,
       };
     });
 
@@ -157,6 +187,9 @@ export class CustomerChatsAnalyticsService {
       summary: {
         totalConversations,
         totalMessages,
+        totalUserMessages: msgTotals.user,
+        userTextMessages: userTextVoiceTotals.text,
+        userVoiceMessages: userTextVoiceTotals.voice,
         totalThumbsUp: feedbackTotals.up,
         totalThumbsDown: feedbackTotals.down,
         averageMessagesPerConversation: round4(avgMsgPerConv),
@@ -211,6 +244,62 @@ export class CustomerChatsAnalyticsService {
     return { up, down };
   }
 
+  private async aggregateAssistantFeedbackTimeSeries(
+    botId: Types.ObjectId,
+    q: ParsedCustomerChatsAnalyticsQuery,
+    granularity: CustomerChatsGranularity,
+  ): Promise<Map<string, { up: number; down: number }>> {
+    const pipeline: PipelineStage[] = [
+      {
+        $match: {
+          botId,
+          role: 'assistant',
+          'feedback.rating': { $in: ['up', 'down'] },
+        },
+      },
+      ...this.messageLookupPipeline(q),
+      {
+        $addFields: {
+          feedbackAt: { $ifNull: ['$feedback.createdAt', '$createdAt'] },
+        },
+      },
+      {
+        $match: {
+          $expr: {
+            $and: [
+              { $gte: ['$feedbackAt', q.from] },
+              { $lte: ['$feedbackAt', q.to] },
+            ],
+          },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            b: dateTruncStage('feedbackAt', granularity),
+            rating: '$feedback.rating',
+          },
+          n: { $sum: 1 },
+        },
+      },
+    ];
+    const rows = await this.messageModel.aggregate<{
+      _id: { b: Date; rating: 'up' | 'down' };
+      n: number;
+    }>(pipeline);
+
+    const out = new Map<string, { up: number; down: number }>();
+    for (const r of rows) {
+      if (!r._id?.b) continue;
+      const key = bucketKeyIso(alignBucketStart(r._id.b, granularity));
+      const cur = out.get(key) ?? { up: 0, down: 0 };
+      if (r._id.rating === 'up') cur.up += r.n;
+      if (r._id.rating === 'down') cur.down += r.n;
+      out.set(key, cur);
+    }
+    return out;
+  }
+
   private buildConversationMatch(
     botId: Types.ObjectId,
     q: ParsedCustomerChatsAnalyticsQuery,
@@ -222,16 +311,8 @@ export class CustomerChatsAnalyticsService {
     if (!q.includePreview) {
       and.push({ startedFrom: { $nin: [...PREVIEW_STARTED_FROM_VALUES] } });
     }
-    if (q.startedFrom && q.startedFrom !== 'unknown') {
-      and.push({ startedFrom: q.startedFrom });
-    } else if (q.startedFrom === 'unknown') {
-      and.push({
-        $or: [
-          { startedFrom: { $exists: false } },
-          { startedFrom: null },
-          { startedFrom: '' },
-        ],
-      });
+    if (q.startedFrom?.length) {
+      and.push(buildStartedFromMatchClause('startedFrom', q.startedFrom));
     }
     if (q.countryCode) {
       and.push({ 'location.countryCode': q.countryCode });
@@ -259,21 +340,7 @@ export class CustomerChatsAnalyticsService {
     if (!q.includePreview) {
       matchParts['_conv.startedFrom'] = { $nin: [...PREVIEW_STARTED_FROM_VALUES] };
     }
-    if (q.startedFrom) {
-      if (q.startedFrom === 'unknown') {
-        stages.push({
-          $match: {
-            $or: [
-              { '_conv.startedFrom': { $exists: false } },
-              { '_conv.startedFrom': null },
-              { '_conv.startedFrom': '' },
-            ],
-          },
-        });
-      } else {
-        matchParts['_conv.startedFrom'] = q.startedFrom;
-      }
-    }
+    applyStartedFromToMessageLookup(matchParts, stages, '_conv.startedFrom', q.startedFrom);
     if (q.countryCode) {
       matchParts['_conv.location.countryCode'] = q.countryCode;
     }
@@ -371,6 +438,89 @@ export class CustomerChatsAnalyticsService {
       out.set(key, cur);
     }
     return out;
+  }
+
+  /**
+   * User messages per time bucket: text-like vs voice-like (voice + dictation `inputType`).
+   */
+  private async aggregateUserTextVoiceTimeSeries(
+    botId: Types.ObjectId,
+    q: ParsedCustomerChatsAnalyticsQuery,
+    granularity: CustomerChatsGranularity,
+  ): Promise<Map<string, { text: number; voice: number }>> {
+    const pipeline: PipelineStage[] = [
+      {
+        $match: {
+          botId,
+          role: 'user',
+          createdAt: { $gte: q.from, $lte: q.to },
+        },
+      },
+      ...this.messageLookupPipeline(q),
+      {
+        $addFields: {
+          _voiceLike: { $in: ['$inputType', ['voice', 'dictation']] },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            b: dateTruncStage('createdAt', granularity),
+            kind: { $cond: [{ $eq: ['$_voiceLike', true] }, 'voice', 'text'] },
+          },
+          n: { $sum: 1 },
+        },
+      },
+    ];
+    const rows = await this.messageModel.aggregate<{
+      _id: { b: Date; kind: 'text' | 'voice' };
+      n: number;
+    }>(pipeline);
+    const out = new Map<string, { text: number; voice: number }>();
+    for (const r of rows) {
+      if (!r._id?.b) continue;
+      const key = bucketKeyIso(alignBucketStart(r._id.b, granularity));
+      const cur = out.get(key) ?? { text: 0, voice: 0 };
+      if (r._id.kind === 'voice') cur.voice += r.n;
+      else cur.text += r.n;
+      out.set(key, cur);
+    }
+    return out;
+  }
+
+  private async aggregateUserTextVoiceTotals(
+    botId: Types.ObjectId,
+    q: ParsedCustomerChatsAnalyticsQuery,
+  ): Promise<{ text: number; voice: number }> {
+    const pipeline: PipelineStage[] = [
+      {
+        $match: {
+          botId,
+          role: 'user',
+          createdAt: { $gte: q.from, $lte: q.to },
+        },
+      },
+      ...this.messageLookupPipeline(q),
+      {
+        $addFields: {
+          _voiceLike: { $in: ['$inputType', ['voice', 'dictation']] },
+        },
+      },
+      {
+        $group: {
+          _id: { $cond: [{ $eq: ['$_voiceLike', true] }, 'voice', 'text'] },
+          n: { $sum: 1 },
+        },
+      },
+    ];
+    const rows = await this.messageModel.aggregate<{ _id: 'text' | 'voice'; n: number }>(pipeline);
+    let text = 0;
+    let voice = 0;
+    for (const r of rows) {
+      if (r._id === 'voice') voice += r.n;
+      else text += r.n;
+    }
+    return { text, voice };
   }
 
   private async aggregateLocationCountriesConversations(

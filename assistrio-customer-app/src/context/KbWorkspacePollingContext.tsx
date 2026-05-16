@@ -35,7 +35,7 @@ import {
 } from '@/lib/knowledgeStatusPollUtils';
 import { redirectCustomerWorkspacePollGone } from '@/lib/customerResourceUnavailable';
 
-/** Coordinator cadence for `GET …/knowledge/training/status` (includes `knowledgeUsage` for the storage bar). */
+/** Coordinator tick interval; `GET …/knowledge/training/status` runs only when {@link isKnowledgePipelinePollingActive} (or initial seed). */
 const POLL_MS = 5000;
 /** After agent pipeline goes busy → idle, keep fetching typed `GET …/knowledge/status` this many ticks so rows catch up. */
 const KB_SECTION_STATUS_TRAILING_TICKS = 3;
@@ -248,8 +248,12 @@ export function KbWorkspacePollingProvider({ botId, children }: { botId: string;
       try {
         const snapshot = trainingStatusRef.current;
         const pipelineActiveBefore = isKnowledgePipelinePollingActive(snapshot);
-        /** Always refetch training/status so `knowledgeUsage` stays current (documents/datasheets can change storage while pipeline looks idle). */
-        await refreshTrainingStatus();
+        /** Poll agent training/status only while the pipeline may be moving (or once to seed state). Other refreshes come from workspace events / `refreshTrainingStatus()`. */
+        const shouldFetchAgentTrainingStatus =
+          snapshot == null || isKnowledgePipelinePollingActive(snapshot);
+        if (shouldFetchAgentTrainingStatus) {
+          await refreshTrainingStatus();
+        }
 
         const peek = trainingStatusPeekRef.current ?? trainingStatusRef.current;
         const pipelineActiveAfter = isKnowledgePipelinePollingActive(peek);

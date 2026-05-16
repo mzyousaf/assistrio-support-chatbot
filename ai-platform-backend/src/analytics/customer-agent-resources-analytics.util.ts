@@ -1,11 +1,9 @@
 import { BadRequestException } from '@nestjs/common';
+import { DEFAULT_OVERVIEW_RANGE_DAYS, parseOverviewDateRange } from './analytics-date-range.util';
 import {
-  DEFAULT_OVERVIEW_RANGE_DAYS,
-  parseOverviewDateRange,
-} from './analytics-date-range.util';
-import type {
-  ConversationStartedFromKey,
-  CustomerChatsGranularity,
+  parseStartedFromQueryParam,
+  type ConversationStartedFromKey,
+  type CustomerChatsGranularity,
 } from './customer-chats-analytics.util';
 
 export type CustomerAgentResourcesAnalyticsQueryInput = {
@@ -21,18 +19,10 @@ export type ParsedCustomerAgentResourcesAnalyticsQuery = {
   to: Date;
   granularity: CustomerChatsGranularity;
   includePreview: boolean;
-  startedFrom?: ConversationStartedFromKey;
+  startedFrom?: ConversationStartedFromKey[];
 };
 
 const GRANULARITY_SET = new Set<string>(['hour', 'day', 'week', 'month']);
-
-const STARTED_FROM_SET = new Set<string>([
-  'playground_preview',
-  'shared_preview',
-  'runtime_widget',
-  'runtime_iframe',
-  'unknown',
-]);
 
 export function parseCustomerAgentResourcesAnalyticsQuery(
   input: CustomerAgentResourcesAnalyticsQueryInput,
@@ -51,17 +41,7 @@ export function parseCustomerAgentResourcesAnalyticsQuery(
   const ipRaw = input.includePreview?.trim().toLowerCase();
   const includePreview = ipRaw !== 'false' && ipRaw !== '0';
 
-  let startedFrom: ConversationStartedFromKey | undefined;
-  const sfRaw = input.startedFrom?.trim().toLowerCase();
-  if (sfRaw) {
-    if (!STARTED_FROM_SET.has(sfRaw)) {
-      throw new BadRequestException({
-        error: 'Invalid startedFrom filter.',
-        errorCode: 'INVALID_STARTED_FROM',
-      });
-    }
-    startedFrom = sfRaw as ConversationStartedFromKey;
-  }
+  const startedFrom = parseStartedFromQueryParam(input.startedFrom);
 
   return { from, to, granularity, includePreview, startedFrom };
 }

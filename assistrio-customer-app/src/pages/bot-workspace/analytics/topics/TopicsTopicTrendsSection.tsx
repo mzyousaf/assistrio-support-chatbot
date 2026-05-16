@@ -4,10 +4,16 @@ import { Button, Modal } from '@/components/ui';
 import { formatAnalyticsInteger } from '@/lib/analyticsFormat';
 import { cn } from '@/lib/utils';
 import { AnalyticsChartCard } from '../shared/AnalyticsChartCard';
+import {
+  ANALYTICS_SPLIT_CHART_MAIN_CLASS,
+  ANALYTICS_SPLIT_CHART_ROW_CLASS,
+  ANALYTICS_SPLIT_SIDEBAR_32_CLASS,
+  ANALYTICS_SPLIT_SIDEBAR_34_CLASS,
+} from '../shared/analyticsChartTheme';
 import { TopicsChartStyleTabs } from './TopicsChartStyleTabs';
 import { TopicsDonutChart } from './TopicsDonutChart';
 import { TopicsOverTimeChart } from './TopicsOverTimeChart';
-import { TopicsTopicRankingCard } from './TopicsTopicRankingCard';
+import { TopicsTopicRankingCard, TOPIC_RANKING_MESSAGES_SIDEBAR_MAX, TOPIC_RANKING_SIDEBAR_MAX_VISIBLE } from './TopicsTopicRankingCard';
 import {
   buildTopicRankingRows,
   topicsTrendChartTitle,
@@ -87,6 +93,9 @@ export function TopicsTopicTrendsSection({
       ? 'Volume by time bucket (topic mentions). Unclassified counts user messages without topic labels.'
       : 'Distinct chats per time bucket by conversation primary topic.';
 
+  const rankingListMaxVisible =
+    metricMode === 'messages' ? TOPIC_RANKING_MESSAGES_SIDEBAR_MAX : TOPIC_RANKING_SIDEBAR_MAX_VISIBLE;
+
   const chartBlock =
     chartStyle === 'donut' ? (
       <TopicsDonutChart rankingRows={visibleRankingRows} seriesOrder={seriesOrder} metricMode={metricMode} />
@@ -119,9 +128,9 @@ export function TopicsTopicTrendsSection({
         TOPICS_ANALYTICS_SECTION_CARD_CLASS,
       )}
     >
-      <div className="flex min-h-0 flex-1 flex-col gap-6 p-3 sm:p-5 lg:flex-row lg:items-stretch lg:gap-0">
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:pr-6">{chartBlock}</div>
-        <aside className="flex min-h-0 w-full shrink-0 flex-col overflow-hidden border-t border-slate-200/90 pt-6 lg:h-full lg:max-w-[min(100%,22rem)] lg:w-[32%] lg:flex-shrink-0 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
+      <div className={ANALYTICS_SPLIT_CHART_ROW_CLASS}>
+        <div className={ANALYTICS_SPLIT_CHART_MAIN_CLASS}>{chartBlock}</div>
+        <aside className={ANALYTICS_SPLIT_SIDEBAR_32_CLASS}>
           <div className="shrink-0">
             <p className="m-0 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Total topics</p>
             <p className="m-0 mt-0.5 text-xl font-semibold tabular-nums tracking-tight text-slate-900">
@@ -135,7 +144,10 @@ export function TopicsTopicTrendsSection({
           {rankingHelper ? (
             <p className="m-0 mt-1 max-w-full text-[10px] leading-snug text-slate-500">{rankingHelper}</p>
           ) : null}
-          <div className={cn('flex min-h-0 min-w-0 flex-1 flex-col', rankingHelper ? 'mt-2' : 'mt-1')}>
+          <p className="m-0 mt-1 max-w-full text-[10px] leading-snug text-slate-500">
+            Tap a row to show or hide that series on the chart
+          </p>
+          <div className="mt-2 flex min-h-0 min-w-0 flex-1 flex-col">
             <TopicsTopicRankingCard
               rankingRows={rankingRows}
               seriesOrder={seriesOrder}
@@ -143,6 +155,7 @@ export function TopicsTopicTrendsSection({
               hiddenSeriesIds={hiddenSeriesIds}
               onToggleSeries={onToggleSeries}
               embedded
+              maxVisible={rankingListMaxVisible}
               onViewAllTopics={() => setTopicTrendsExpandedOpen(true)}
             />
           </div>
@@ -154,7 +167,7 @@ export function TopicsTopicTrendsSection({
         title={sectionTitle}
         description={description}
         size="lg"
-        className="max-h-[min(94vh,56rem)] max-w-6xl"
+        className="max-h-[56rem] max-w-6xl"
         closeOnBackdropClick
         bodyClassName="min-h-0 px-4 py-4 sm:px-5 sm:py-5"
         footer={
@@ -167,9 +180,9 @@ export function TopicsTopicTrendsSection({
           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
             <TopicsChartStyleTabs value={chartStyle} onChange={onChartStyleChange} disabled={disabled} />
           </div>
-          <div className="flex min-h-0 flex-col gap-6 lg:flex-row lg:items-stretch lg:gap-0">
-            <div className="flex h-[350px] max-h-[350px] min-h-0 min-w-0 flex-1 flex-col lg:pr-6">{chartBlock}</div>
-            <aside className="flex min-h-0 w-full max-h-[min(52vh,24rem)] shrink-0 flex-col overflow-hidden border-t border-slate-200/90 pt-5 lg:h-[350px] lg:max-h-[350px] lg:max-w-[min(100%,24rem)] lg:w-[34%] lg:flex-shrink-0 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
+          <div className="flex min-h-0 flex-row items-stretch gap-4 sm:gap-6">
+            <div className="flex h-[350px] max-h-[350px] min-h-0 min-w-0 flex-1 flex-col">{chartBlock}</div>
+            <aside className={cn(ANALYTICS_SPLIT_SIDEBAR_34_CLASS, 'h-[350px] max-h-[350px]')}>
               <div className="shrink-0">
                 <p className="m-0 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Total topics</p>
                 <p className="m-0 mt-0.5 text-xl font-semibold tabular-nums tracking-tight text-slate-900">
@@ -183,12 +196,10 @@ export function TopicsTopicTrendsSection({
               {rankingHelper ? (
                 <p className="m-0 mt-1 max-w-full text-[10px] leading-snug text-slate-500">{rankingHelper}</p>
               ) : null}
-              <div
-                className={cn(
-                  'flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overflow-x-hidden overscroll-y-contain pr-0.5 [scrollbar-gutter:stable]',
-                  rankingHelper ? 'mt-2' : 'mt-1',
-                )}
-              >
+              <p className="m-0 mt-1 max-w-full text-[10px] leading-snug text-slate-500">
+                Tap a row to show or hide that series on the chart
+              </p>
+              <div className="mt-2 flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overflow-x-hidden overscroll-y-contain pr-0.5 [scrollbar-gutter:stable]">
                 <TopicsTopicRankingCard
                   rankingRows={rankingRows}
                   seriesOrder={seriesOrder}

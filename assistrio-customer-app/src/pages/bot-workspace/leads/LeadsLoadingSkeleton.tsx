@@ -6,7 +6,13 @@ export function LeadsLoadingSkeleton() {
           <div className="h-4 w-28 max-w-[22%] shrink-0 animate-pulse rounded-md bg-slate-200/75" />
           <div className="mx-3 h-4 w-20 shrink-0 animate-pulse rounded-md bg-slate-200/75" />
           <div className="mx-3 h-4 w-24 shrink-0 animate-pulse rounded-md bg-slate-200/75" />
-          <div className="h-4 min-w-0 flex-1 animate-pulse rounded-md bg-slate-200/75" />
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div
+              key={`hf-${i}`}
+              className="mx-2 h-4 w-20 shrink-0 animate-pulse rounded-md bg-slate-200/75"
+            />
+          ))}
+          <div className="mx-3 h-4 w-20 shrink-0 animate-pulse rounded-md bg-slate-200/75" />
           <div className="mx-3 h-4 w-20 shrink-0 animate-pulse rounded-md bg-slate-200/75" />
           <div className="ml-auto h-4 w-36 shrink-0 animate-pulse rounded-md bg-slate-200/75" />
         </div>
@@ -27,8 +33,15 @@ export function LeadsLoadingSkeleton() {
               className="h-4 w-24 shrink-0 animate-pulse rounded-md bg-slate-100"
               style={{ animationDelay: `${i * 35}ms` }}
             />
+            {Array.from({ length: 4 }).map((_, j) => (
+              <div
+                key={j}
+                className="h-4 w-20 shrink-0 animate-pulse rounded-md bg-slate-100/90"
+                style={{ animationDelay: `${i * 35}ms` }}
+              />
+            ))}
             <div
-              className="h-4 min-w-0 flex-1 animate-pulse rounded-md bg-slate-100/90"
+              className="h-5 w-24 shrink-0 animate-pulse rounded-md bg-slate-100"
               style={{ animationDelay: `${i * 35}ms` }}
             />
             <div
