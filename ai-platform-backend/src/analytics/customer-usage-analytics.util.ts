@@ -27,6 +27,14 @@ export type ParsedCustomerUsageQuery = {
 
 const GRANULARITY_SET = new Set<string>(['hour', 'day', 'week', 'month']);
 
+const STARTED_FROM_SET = new Set<string>([
+  'playground_preview',
+  'shared_preview',
+  'runtime_widget',
+  'runtime_iframe',
+  'unknown',
+]);
+
 const USAGE_LEDGER_USAGE_TYPES = new Set<string>([
   'text_message',
   'voice_message',
