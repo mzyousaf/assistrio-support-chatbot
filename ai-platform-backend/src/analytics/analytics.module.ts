@@ -23,10 +23,10 @@ import { AdminAnalyticsController } from './admin-analytics.controller';
 import { AnalyticsTrackController } from './analytics-track.controller';
 import { AnalyticsService } from './analytics.service';
 import { CustomerChatsAnalyticsService } from './customer-chats-analytics.service';
-import { CustomerKnowledgeSourcesAnalyticsService } from './customer-knowledge-sources-analytics.service';
 import { CustomerLeadsAnalyticsService } from './customer-leads-analytics.service';
 import { CustomerTopicsAnalyticsService } from './customer-topics-analytics.service';
 import { CustomerSentimentAnalyticsService } from './customer-sentiment-analytics.service';
+import { CustomerAgentResourcesAnalyticsService } from './customer-agent-resources-analytics.service';
 import { CustomerUsageAnalyticsService } from './customer-usage-analytics.service';
 
 @Module({
@@ -49,20 +49,20 @@ import { CustomerUsageAnalyticsService } from './customer-usage-analytics.servic
   providers: [
     AnalyticsService,
     CustomerChatsAnalyticsService,
-    CustomerKnowledgeSourcesAnalyticsService,
     CustomerLeadsAnalyticsService,
     CustomerTopicsAnalyticsService,
     CustomerSentimentAnalyticsService,
     CustomerUsageAnalyticsService,
+    CustomerAgentResourcesAnalyticsService,
   ],
   exports: [
     AnalyticsService,
     CustomerChatsAnalyticsService,
-    CustomerKnowledgeSourcesAnalyticsService,
     CustomerLeadsAnalyticsService,
     CustomerTopicsAnalyticsService,
     CustomerSentimentAnalyticsService,
     CustomerUsageAnalyticsService,
+    CustomerAgentResourcesAnalyticsService,
   ],
 })
 export class AnalyticsModule { }

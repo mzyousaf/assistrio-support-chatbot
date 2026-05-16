@@ -431,8 +431,6 @@ export function FeStackTags({ embedInstallMode }: { embedInstallMode: EmbedInsta
     'm-0 list-disc space-y-1.5 pl-4 text-slate-800/95',
   );
 
-  const codeChip = 'rounded bg-blue-100/90 px-1 py-0.5 font-mono text-[0.6875rem] text-slate-900';
-
   return (
     <div className="w-full min-w-0 border-t border-slate-200/80 pt-5">
       <div
@@ -496,11 +494,8 @@ export function FeStackTags({ embedInstallMode }: { embedInstallMode: EmbedInsta
               <span className="font-semibold text-slate-900">Embed Agent</span> in the page header.
             </li>
             <li>
-              Include it in the <span className="font-semibold text-slate-900">one global place</span> your stack uses for site-wide scripts so
-              it loads on every page where chat should appear. Static HTML is usually just before{' '}
-              <code className={codeChip}>{'</body>'}</code>. SPAs, CMSs, and headless sites use a root layout, master template, theme footer,
-              hub custom-code field, or script manager instead—follow the{' '}
-              <span className="font-semibold text-slate-900">{active.label}</span> steps below for the exact option.
+              Add it once in your site-wide scripts or layout so it loads on every page where chat should appear—see{' '}
+              <span className="font-semibold text-slate-900">{active.label}</span> below for the exact spot.
             </li>
             <li>
               The page must be served from a URL that matches one of your <span className="font-semibold text-slate-900">Allowed websites</span>{' '}

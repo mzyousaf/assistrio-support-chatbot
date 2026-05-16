@@ -1,22 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Check, Search } from 'lucide-react';
-import type {
-  CustomerChatsAnalyticsStartedFromKey,
-  CustomerKnowledgeSourcesAnalyticsSourceType,
-  CustomerSentimentLabelId,
-} from '@/api/types';
+import type { CustomerChatsAnalyticsStartedFromKey, CustomerSentimentLabelId } from '@/api/types';
 import { FieldRow, FilterCapsule, Input } from '@/components/ui';
 import { CHATS_ANALYTICS_DEFAULTS, type ChatsAnalyticsUiState } from '@/lib/chatsAnalyticsQuery';
-import type { KnowledgeSourcesAnalyticsUiState } from '@/lib/knowledgeSourcesAnalyticsQuery';
-import { KNOWLEDGE_SOURCES_ANALYTICS_DEFAULTS } from '@/lib/knowledgeSourcesAnalyticsQuery';
-import type { LeadsAnalyticsUiState } from '@/lib/leadsAnalyticsQuery';
+import type { LeadsAnalyticsUiState, LeadsFieldCaptureStatusFilter } from '@/lib/leadsAnalyticsQuery';
 import { LEADS_ANALYTICS_DEFAULTS } from '@/lib/leadsAnalyticsQuery';
 import type { SentimentAnalyticsUiState } from '@/lib/sentimentAnalyticsQuery';
 import { SENTIMENT_ANALYTICS_DEFAULTS } from '@/lib/sentimentAnalyticsQuery';
 import type { TopicsAnalyticsUiState, TopicsMessageTopicScope } from '@/lib/topicsAnalyticsQuery';
 import { TOPICS_ANALYTICS_DEFAULTS } from '@/lib/topicsAnalyticsQuery';
-import type { UsageAnalyticsUiState } from '@/lib/usageAnalyticsQuery';
-import { USAGE_ANALYTICS_DEFAULTS, USAGE_TYPE_FILTER_OPTIONS } from '@/lib/usageAnalyticsQuery';
+import type { AgentResourcesAnalyticsUiState } from '@/lib/agentResourcesAnalyticsQuery';
+import { AGENT_RESOURCES_ANALYTICS_DEFAULTS } from '@/lib/agentResourcesAnalyticsQuery';
 import { customYmdRangeIsValid } from '@/lib/analyticsQueryDates';
 import { formatAnalyticsGranularityViewCaption, resolveAnalyticsGranularity } from '@/lib/analyticsGranularity';
 import { computeDateRangeFromAnalyticsPreset } from '@/lib/chatsAnalyticsQuery';
@@ -69,17 +63,6 @@ function dateRangeMatchesDefault(v: StandardDateControlValues, d: StandardDateCo
     v.customTo.trim() === d.customTo.trim()
   );
 }
-
-const SOURCE_TYPE_OPTIONS: { value: CustomerKnowledgeSourcesAnalyticsSourceType; label: string }[] = [
-  { value: 'document', label: 'Document' },
-  { value: 'faq', label: 'FAQ' },
-  { value: 'note', label: 'Note' },
-  { value: 'datasheet', label: 'Datasheet' },
-  { value: 'website', label: 'Website' },
-  { value: 'suggestion', label: 'Suggestion' },
-  { value: 'manual_text', label: 'Manual text' },
-  { value: 'unknown', label: 'Unknown' },
-];
 
 const dateInputCls =
   'h-9 w-full min-w-0 rounded-md border border-slate-200 bg-white px-2.5 text-sm text-slate-800 focus:border-[var(--color-teal-600)]/50 focus:outline-none focus:ring-2 focus:ring-[var(--color-teal-600)]/20';
@@ -343,6 +326,82 @@ function CoreDateGranularityPreviewCapsules({
       </FilterCapsule>
       ) : null}
     </>
+  );
+}
+
+function fieldCaptureFilterChipLabel(v: LeadsFieldCaptureStatusFilter): string {
+  switch (v) {
+    case 'active':
+      return 'Active';
+    case 'inactive':
+      return 'Inactive';
+    case 'deleted':
+      return 'Deleted';
+    default:
+      return 'All';
+  }
+}
+
+/** Mirrors {@link SentimentCapsule}: default shows “All” on the chip only; menu lists concrete statuses (no “All” row). */
+function FieldCaptureCapsule({
+  value,
+  onChange,
+  disabled,
+  open,
+  setOpen,
+  closeAll,
+}: {
+  value: LeadsFieldCaptureStatusFilter;
+  onChange: (v: LeadsFieldCaptureStatusFilter) => void;
+  disabled?: boolean;
+  open: CapsuleKey;
+  setOpen: (k: CapsuleKey) => void;
+  closeAll: () => void;
+}) {
+  const applied = Boolean(value);
+  const valueLabel = fieldCaptureFilterChipLabel(value);
+  const captureStatuses: Exclude<LeadsFieldCaptureStatusFilter, ''>[] = ['active', 'inactive', 'deleted'];
+  return (
+    <FilterCapsule
+      title="Captured fields"
+      valueLabel={valueLabel}
+      applied={applied}
+      quietValueRow={!applied}
+      open={open === 'fieldCapture'}
+      onToggle={() => setOpen(open === 'fieldCapture' ? null : 'fieldCapture')}
+      onClose={closeAll}
+      onClear={() => {
+        onChange('');
+        closeAll();
+      }}
+    >
+      <ul className="m-0 max-h-52 min-w-[12rem] list-none space-y-0.5 overflow-y-auto p-0 py-0.5">
+        {captureStatuses.map((id) => {
+          const selected = value === id;
+          const lb = fieldCaptureFilterChipLabel(id);
+          return (
+            <li key={id}>
+              <button
+                type="button"
+                role="option"
+                aria-selected={selected}
+                disabled={disabled}
+                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-slate-800 hover:bg-slate-50 disabled:opacity-50"
+                onClick={() => {
+                  onChange(id);
+                  closeAll();
+                }}
+              >
+                <span className="flex w-4 shrink-0 justify-center" aria-hidden>
+                  {selected ? <Check className="h-3.5 w-3.5 text-[var(--color-teal-600)]" strokeWidth={2.5} /> : null}
+                </span>
+                <span className="min-w-0 flex-1">{lb}</span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </FilterCapsule>
   );
 }
 
@@ -664,173 +723,6 @@ function SentimentCapsule({
   );
 }
 
-function SourceTypeCapsule({
-  value,
-  onChange,
-  disabled,
-  open,
-  setOpen,
-  closeAll,
-}: {
-  value: '' | CustomerKnowledgeSourcesAnalyticsSourceType;
-  onChange: (v: '' | CustomerKnowledgeSourcesAnalyticsSourceType) => void;
-  disabled?: boolean;
-  open: CapsuleKey;
-  setOpen: (k: CapsuleKey) => void;
-  closeAll: () => void;
-}) {
-  const applied = Boolean(value);
-  const label = applied ? SOURCE_TYPE_OPTIONS.find((o) => o.value === value)?.label ?? value : '';
-  return (
-    <FilterCapsule
-      title="Source type"
-      valueLabel={label}
-      applied={applied}
-      open={open === 'sourceType'}
-      onToggle={() => setOpen(open === 'sourceType' ? null : 'sourceType')}
-      onClose={closeAll}
-      onClear={() => {
-        onChange('');
-        closeAll();
-      }}
-    >
-      <ul className="m-0 max-h-52 min-w-[12rem] list-none space-y-0.5 overflow-y-auto p-0 py-0.5">
-        <li key="__all">
-          <button
-            type="button"
-            role="option"
-            aria-selected={!value}
-            disabled={disabled}
-            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-slate-800 hover:bg-slate-50 disabled:opacity-50"
-            onClick={() => {
-              onChange('');
-              closeAll();
-            }}
-          >
-            <span className="flex w-4 shrink-0 justify-center" aria-hidden>
-              {!value ? <Check className="h-3.5 w-3.5 text-[var(--color-teal-600)]" strokeWidth={2.5} /> : null}
-            </span>
-            <span className="min-w-0 flex-1">All types</span>
-          </button>
-        </li>
-        {SOURCE_TYPE_OPTIONS.map((opt) => {
-          const selected = value === opt.value;
-          return (
-            <li key={opt.value}>
-              <button
-                type="button"
-                role="option"
-                aria-selected={selected}
-                disabled={disabled}
-                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-slate-800 hover:bg-slate-50 disabled:opacity-50"
-                onClick={() => {
-                  onChange(opt.value);
-                  closeAll();
-                }}
-              >
-                <span className="flex w-4 shrink-0 justify-center" aria-hidden>
-                  {selected ? <Check className="h-3.5 w-3.5 text-[var(--color-teal-600)]" strokeWidth={2.5} /> : null}
-                </span>
-                <span className="min-w-0 flex-1">{opt.label}</span>
-              </button>
-            </li>
-          );
-        })}
-      </ul>
-    </FilterCapsule>
-  );
-}
-
-function UsageTypeCapsule({
-  value,
-  onChange,
-  disabled,
-  open,
-  setOpen,
-  closeAll,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  disabled?: boolean;
-  open: CapsuleKey;
-  setOpen: (k: CapsuleKey) => void;
-  closeAll: () => void;
-}) {
-  const applied = Boolean(value.trim());
-  const label = applied ? USAGE_TYPE_FILTER_OPTIONS.find((o) => o.value === value)?.label ?? value : '';
-  return (
-    <FilterCapsule
-      title="Usage type"
-      valueLabel={label}
-      applied={applied}
-      open={open === 'usageType'}
-      onToggle={() => setOpen(open === 'usageType' ? null : 'usageType')}
-      onClose={closeAll}
-      onClear={() => {
-        onChange('');
-        closeAll();
-      }}
-    >
-      <ul className="m-0 max-h-60 min-w-[14rem] list-none space-y-0.5 overflow-y-auto p-0 py-0.5">
-        <li key="__all">
-          <button
-            type="button"
-            role="option"
-            aria-selected={!value.trim()}
-            disabled={disabled}
-            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-slate-800 hover:bg-slate-50 disabled:opacity-50"
-            onClick={() => {
-              onChange('');
-              closeAll();
-            }}
-          >
-            <span className="flex w-4 shrink-0 justify-center" aria-hidden>
-              {!value.trim() ? <Check className="h-3.5 w-3.5 text-[var(--color-teal-600)]" strokeWidth={2.5} /> : null}
-            </span>
-            <span className="min-w-0 flex-1">All usage types</span>
-          </button>
-        </li>
-        {USAGE_TYPE_FILTER_OPTIONS.filter((o) => o.value).map((opt) => {
-          const selected = value === opt.value;
-          return (
-            <li key={opt.value}>
-              <button
-                type="button"
-                role="option"
-                aria-selected={selected}
-                disabled={disabled}
-                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-slate-800 hover:bg-slate-50 disabled:opacity-50"
-                onClick={() => {
-                  onChange(opt.value);
-                  closeAll();
-                }}
-              >
-                <span className="flex w-4 shrink-0 justify-center" aria-hidden>
-                  {selected ? <Check className="h-3.5 w-3.5 text-[var(--color-teal-600)]" strokeWidth={2.5} /> : null}
-                </span>
-                <span className="min-w-0 flex-1">{opt.label}</span>
-              </button>
-            </li>
-          );
-        })}
-      </ul>
-    </FilterCapsule>
-  );
-}
-
-function ClearAllButton({ show, onClear }: { show: boolean; onClear: () => void }) {
-  if (!show) return null;
-  return (
-    <button
-      type="button"
-      className="h-9 shrink-0 border-0 bg-transparent px-0.5 text-left text-xs font-medium text-slate-600 underline decoration-slate-400/80 underline-offset-[0.2em] transition-[color,text-decoration-color] hover:bg-transparent hover:text-slate-900 hover:decoration-slate-600 focus-visible:rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-teal-600)]/35"
-      onClick={onClear}
-    >
-      Clear filters
-    </button>
-  );
-}
-
 export function ChatsAnalyticsFilterBar({
   state,
   onChange,
@@ -1042,17 +934,20 @@ export function SentimentAnalyticsFilterBar({
   );
 }
 
-export function KnowledgeSourcesAnalyticsFilterBar({
+export function AgentResourcesAnalyticsFilterBar({
   state,
   onChange,
   disabled,
 }: {
-  state: KnowledgeSourcesAnalyticsUiState;
-  onChange: (next: KnowledgeSourcesAnalyticsUiState) => void;
+  state: AgentResourcesAnalyticsUiState;
+  onChange: (next: AgentResourcesAnalyticsUiState) => void;
   disabled?: boolean;
 }) {
   const [open, setOpen] = useState<CapsuleKey>(null);
   const closeAll = useCallback(() => setOpen(null), []);
+  const [widgetEngaged, setWidgetEngaged] = useState(false);
+  const [dateEngaged, setDateEngaged] = useState(false);
+
   const values: StandardDateControlValues = {
     preset: state.preset,
     customFrom: state.customFrom,
@@ -1061,22 +956,17 @@ export function KnowledgeSourcesAnalyticsFilterBar({
     startedFrom: state.startedFrom,
   };
   const coreDef: StandardDateControlValues = {
-    preset: KNOWLEDGE_SOURCES_ANALYTICS_DEFAULTS.preset,
-    customFrom: KNOWLEDGE_SOURCES_ANALYTICS_DEFAULTS.customFrom,
-    customTo: KNOWLEDGE_SOURCES_ANALYTICS_DEFAULTS.customTo,
-    includePreview: KNOWLEDGE_SOURCES_ANALYTICS_DEFAULTS.includePreview,
-    startedFrom: KNOWLEDGE_SOURCES_ANALYTICS_DEFAULTS.startedFrom,
+    preset: AGENT_RESOURCES_ANALYTICS_DEFAULTS.preset,
+    customFrom: AGENT_RESOURCES_ANALYTICS_DEFAULTS.customFrom,
+    customTo: AGENT_RESOURCES_ANALYTICS_DEFAULTS.customTo,
+    includePreview: AGENT_RESOURCES_ANALYTICS_DEFAULTS.includePreview,
+    startedFrom: AGENT_RESOURCES_ANALYTICS_DEFAULTS.startedFrom,
   };
-  const dirty = useMemo(() => {
-    const d = KNOWLEDGE_SOURCES_ANALYTICS_DEFAULTS;
-    return (
-      state.preset !== d.preset ||
-      state.customFrom.trim() !== d.customFrom.trim() ||
-      state.customTo.trim() !== d.customTo.trim() ||
-      state.includePreview !== d.includePreview ||
-      state.sourceType !== d.sourceType
-    );
-  }, [state]);
+  const widgetAtDefault = widgetSourceMatchesDefault(values, coreDef);
+  const widgetQuietValueRow = !widgetEngaged && widgetAtDefault;
+  const dateAtDefault = dateRangeMatchesDefault(values, coreDef);
+  const dateQuietValueRow = !dateEngaged && dateAtDefault;
+
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-2">
       <CoreDateGranularityPreviewCapsules
@@ -1087,17 +977,17 @@ export function KnowledgeSourcesAnalyticsFilterBar({
         setOpen={setOpen}
         closeAll={closeAll}
         defaults={coreDef}
-        widgetSourceVariant="hidden"
+        topicsDateEngagement={{
+          quietValueRow: dateQuietValueRow,
+          onEngagement: setDateEngaged,
+        }}
+        autoGranularityRangeFallbackDays={30}
+        widgetTopicsEngagement={{
+          quietValueRow: widgetQuietValueRow,
+          onEngagement: setWidgetEngaged,
+          showAllSourcesRow: true,
+        }}
       />
-      <SourceTypeCapsule
-        value={state.sourceType}
-        onChange={(v) => onChange({ ...state, sourceType: v })}
-        disabled={disabled}
-        open={open}
-        setOpen={setOpen}
-        closeAll={closeAll}
-      />
-      <ClearAllButton show={dirty} onClear={() => { closeAll(); onChange({ ...KNOWLEDGE_SOURCES_ANALYTICS_DEFAULTS }); }} />
     </div>
   );
 }
@@ -1113,6 +1003,8 @@ export function LeadsAnalyticsFilterBar({
 }) {
   const [open, setOpen] = useState<CapsuleKey>(null);
   const closeAll = useCallback(() => setOpen(null), []);
+  const [widgetEngaged, setWidgetEngaged] = useState(false);
+  const [dateEngaged, setDateEngaged] = useState(false);
   const countryOptions = useMemo(() => getLeadsFilterCountryOptions(), []);
   const values: StandardDateControlValues = {
     preset: state.preset,
@@ -1128,17 +1020,10 @@ export function LeadsAnalyticsFilterBar({
     includePreview: LEADS_ANALYTICS_DEFAULTS.includePreview,
     startedFrom: LEADS_ANALYTICS_DEFAULTS.startedFrom,
   };
-  const dirty = useMemo(() => {
-    const d = LEADS_ANALYTICS_DEFAULTS;
-    return (
-      state.preset !== d.preset ||
-      state.customFrom.trim() !== d.customFrom.trim() ||
-      state.customTo.trim() !== d.customTo.trim() ||
-      state.includePreview !== d.includePreview ||
-      state.startedFrom !== d.startedFrom ||
-      state.countryCode.trim() !== d.countryCode.trim()
-    );
-  }, [state]);
+  const widgetAtDefault = widgetSourceMatchesDefault(values, coreDef);
+  const widgetQuietValueRow = !widgetEngaged && widgetAtDefault;
+  const dateAtDefault = dateRangeMatchesDefault(values, coreDef);
+  const dateQuietValueRow = !dateEngaged && dateAtDefault;
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-2">
       <CoreDateGranularityPreviewCapsules
@@ -1149,6 +1034,25 @@ export function LeadsAnalyticsFilterBar({
         setOpen={setOpen}
         closeAll={closeAll}
         defaults={coreDef}
+        topicsDateEngagement={{
+          quietValueRow: dateQuietValueRow,
+          onEngagement: setDateEngaged,
+        }}
+        autoGranularityRangeFallbackDays={7}
+        widgetTopicsEngagement={{
+          quietValueRow: widgetQuietValueRow,
+          onEngagement: setWidgetEngaged,
+          /** Leads: default is all sources (chip label only); list omits an explicit “All sources” row — reset via capsule X. */
+          showAllSourcesRow: false,
+        }}
+      />
+      <FieldCaptureCapsule
+        value={state.fieldCaptureStatus}
+        onChange={(fieldCaptureStatus) => onChange({ ...state, fieldCaptureStatus })}
+        disabled={disabled}
+        open={open}
+        setOpen={setOpen}
+        closeAll={closeAll}
       />
       <CountryCapsule
         value={state.countryCode}
@@ -1159,67 +1063,6 @@ export function LeadsAnalyticsFilterBar({
         closeAll={closeAll}
         countryOptions={countryOptions}
       />
-      <ClearAllButton show={dirty} onClear={() => { closeAll(); onChange({ ...LEADS_ANALYTICS_DEFAULTS }); }} />
-    </div>
-  );
-}
-
-export function UsageAnalyticsFilterBar({
-  state,
-  onChange,
-  disabled,
-}: {
-  state: UsageAnalyticsUiState;
-  onChange: (next: UsageAnalyticsUiState) => void;
-  disabled?: boolean;
-}) {
-  const [open, setOpen] = useState<CapsuleKey>(null);
-  const closeAll = useCallback(() => setOpen(null), []);
-  const values: StandardDateControlValues = {
-    preset: state.preset,
-    customFrom: state.customFrom,
-    customTo: state.customTo,
-    includePreview: state.includePreview,
-    startedFrom: state.startedFrom,
-  };
-  const coreDef: StandardDateControlValues = {
-    preset: USAGE_ANALYTICS_DEFAULTS.preset,
-    customFrom: USAGE_ANALYTICS_DEFAULTS.customFrom,
-    customTo: USAGE_ANALYTICS_DEFAULTS.customTo,
-    includePreview: USAGE_ANALYTICS_DEFAULTS.includePreview,
-    startedFrom: USAGE_ANALYTICS_DEFAULTS.startedFrom,
-  };
-  const dirty = useMemo(() => {
-    const d = USAGE_ANALYTICS_DEFAULTS;
-    return (
-      state.preset !== d.preset ||
-      state.customFrom.trim() !== d.customFrom.trim() ||
-      state.customTo.trim() !== d.customTo.trim() ||
-      state.includePreview !== d.includePreview ||
-      state.usageTypeFilter.trim() !== d.usageTypeFilter.trim()
-    );
-  }, [state]);
-  return (
-    <div className="flex min-w-0 flex-wrap items-center gap-2">
-      <CoreDateGranularityPreviewCapsules
-        values={values}
-        onValuesChange={(v) => onChange({ ...state, ...v })}
-        disabled={disabled}
-        open={open}
-        setOpen={setOpen}
-        closeAll={closeAll}
-        defaults={coreDef}
-        widgetSourceVariant="hidden"
-      />
-      <UsageTypeCapsule
-        value={state.usageTypeFilter}
-        onChange={(v) => onChange({ ...state, usageTypeFilter: v })}
-        disabled={disabled}
-        open={open}
-        setOpen={setOpen}
-        closeAll={closeAll}
-      />
-      <ClearAllButton show={dirty} onClear={() => { closeAll(); onChange({ ...USAGE_ANALYTICS_DEFAULTS }); }} />
     </div>
   );
 }

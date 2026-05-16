@@ -98,13 +98,12 @@ export function hasAnyLeadsFilters(d: LeadsFiltersDraft): boolean {
   return countActiveLeadsFilters(d) > 0;
 }
 
-/** Field keys available in filter dropdown (enabled definitions only). */
+/** Field keys available in filter dropdown (includes inactive/removed keys present on loaded/inferred definitions). */
 export function leadsFilterFieldKeyOptions(defs: CustomerLeadFieldDefinition[]): string[] {
   const out: string[] = [];
   const seen = new Set<string>();
   const sorted = [...defs].sort((a, b) => a.order - b.order);
   for (const d of sorted) {
-    if (d.disabled) continue;
     const k = d.key?.trim();
     if (!k || seen.has(k)) continue;
     seen.add(k);

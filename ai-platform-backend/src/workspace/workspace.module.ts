@@ -20,11 +20,10 @@ import { CustomerKnowledgeController } from './customer-knowledge.controller';
 import { CustomerBotsController } from './customer-bots.controller';
 import { CustomerBotInsightsController } from './customer-bot-insights.controller';
 import { CustomerBotChatsAnalyticsController } from './customer-bot-chats-analytics.controller';
-import { CustomerBotKnowledgeSourcesAnalyticsController } from './customer-bot-knowledge-sources-analytics.controller';
 import { CustomerBotLeadsAnalyticsController } from './customer-bot-leads-analytics.controller';
 import { CustomerBotTopicsAnalyticsController } from './customer-bot-topics-analytics.controller';
 import { CustomerBotSentimentAnalyticsController } from './customer-bot-sentiment-analytics.controller';
-import { CustomerBotUsageController } from './customer-bot-usage.controller';
+import { CustomerBotAgentResourcesAnalyticsController } from './customer-bot-agent-resources-analytics.controller';
 import { CustomerBotConversationsController } from './customer-bot-conversations.controller';
 import { CustomerBotLeadsController } from './customer-bot-leads.controller';
 import { CustomerBotShareController } from './customer-bot-share.controller';
@@ -68,11 +67,10 @@ import { KnowledgeItemManualRetryService } from './knowledge-item-manual-retry.s
     CustomerKnowledgeController,
     CustomerBotInsightsController,
     CustomerBotChatsAnalyticsController,
-    CustomerBotKnowledgeSourcesAnalyticsController,
     CustomerBotLeadsAnalyticsController,
     CustomerBotTopicsAnalyticsController,
     CustomerBotSentimentAnalyticsController,
-    CustomerBotUsageController,
+    CustomerBotAgentResourcesAnalyticsController,
     CustomerBotConversationsController,
     CustomerBotLeadsController,
     CustomerBotShareController,

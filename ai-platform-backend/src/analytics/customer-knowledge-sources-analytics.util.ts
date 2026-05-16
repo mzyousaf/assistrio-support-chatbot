@@ -1,10 +1,3 @@
-import { BadRequestException } from '@nestjs/common';
-import {
-  DEFAULT_OVERVIEW_RANGE_DAYS,
-  parseOverviewDateRange,
-} from './analytics-date-range.util';
-import type { CustomerChatsGranularity } from './customer-chats-analytics.util';
-
 export type KnowledgeMessageSourceType =
   | 'document'
   | 'faq'
@@ -14,24 +7,6 @@ export type KnowledgeMessageSourceType =
   | 'website'
   | 'manual_text'
   | 'unknown';
-
-export type CustomerKnowledgeSourcesAnalyticsQueryInput = {
-  from?: string;
-  to?: string;
-  granularity?: string;
-  sourceType?: string;
-  includePreview?: string;
-};
-
-export type ParsedCustomerKnowledgeSourcesAnalyticsQuery = {
-  from: Date;
-  to: Date;
-  granularity: CustomerChatsGranularity;
-  includePreview: boolean;
-  sourceType?: KnowledgeMessageSourceType;
-};
-
-const GRANULARITY_SET = new Set<string>(['hour', 'day', 'week', 'month']);
 
 const SOURCE_TYPE_SET = new Set<string>([
   'document',
@@ -54,38 +29,6 @@ const SOURCE_TYPE_ORDER: KnowledgeMessageSourceType[] = [
   'manual_text',
   'unknown',
 ];
-
-export function parseCustomerKnowledgeSourcesAnalyticsQuery(
-  input: CustomerKnowledgeSourcesAnalyticsQueryInput,
-): ParsedCustomerKnowledgeSourcesAnalyticsQuery {
-  const { from, to } = parseOverviewDateRange({ from: input.from, to: input.to });
-
-  const gRaw = input.granularity?.trim().toLowerCase();
-  const granularity = (gRaw && gRaw.length > 0 ? gRaw : 'day') as CustomerChatsGranularity;
-  if (!GRANULARITY_SET.has(granularity)) {
-    throw new BadRequestException({
-      error: 'Invalid granularity. Use hour, day, week, or month.',
-      errorCode: 'INVALID_GRANULARITY',
-    });
-  }
-
-  const ipRaw = input.includePreview?.trim().toLowerCase();
-  const includePreview = ipRaw !== 'false' && ipRaw !== '0';
-
-  let sourceType: KnowledgeMessageSourceType | undefined;
-  const stRaw = input.sourceType?.trim().toLowerCase();
-  if (stRaw) {
-    if (!SOURCE_TYPE_SET.has(stRaw)) {
-      throw new BadRequestException({
-        error: 'Invalid sourceType filter.',
-        errorCode: 'INVALID_SOURCE_TYPE',
-      });
-    }
-    sourceType = stRaw as KnowledgeMessageSourceType;
-  }
-
-  return { from, to, granularity, includePreview, sourceType };
-}
 
 export function knowledgeSourceTypeLabel(t: KnowledgeMessageSourceType): string {
   switch (t) {
@@ -148,4 +91,3 @@ export function divideOrNull(sum: number, count: number): number | null {
   return sum / count;
 }
 
-export { DEFAULT_OVERVIEW_RANGE_DAYS };

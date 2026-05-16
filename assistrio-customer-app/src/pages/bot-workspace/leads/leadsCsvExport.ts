@@ -1,6 +1,6 @@
 import type { CustomerLeadFieldDefinition, CustomerLeadListItem } from '@/api/types';
 import { formatStartedFromLabel } from '../conversations/ConversationStartedFromBadge';
-import { formatLeadSourcePage, formatLeadCellValue, leadColumnHeaderLabel } from './leadsUiHelpers';
+import { formatLeadSourcePage, formatLeadCellValue, leadCsvColumnHeaderLabel } from './leadsUiHelpers';
 
 /** RFC 4180–style CSV cell: quote if needed, escape embedded quotes. */
 export function escapeCsvCell(value: string): string {
@@ -20,11 +20,11 @@ export function buildLeadsCsvLines(
   leads: CustomerLeadListItem[],
   fieldDefinitions: CustomerLeadFieldDefinition[],
 ): string[] {
-  const defs = [...fieldDefinitions].filter((d) => !d.disabled && String(d.key ?? '').trim()).sort((a, b) => a.order - b.order);
+  const defs = [...fieldDefinitions].filter((d) => String(d.key ?? '').trim()).sort((a, b) => a.order - b.order);
 
   const headers = [
     'Captured at',
-    ...defs.map((d) => leadColumnHeaderLabel(d)),
+    ...defs.map((d) => leadCsvColumnHeaderLabel(d)),
     'Started from',
     'Country',
     'City',

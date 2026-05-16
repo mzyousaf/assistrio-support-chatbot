@@ -12,6 +12,9 @@ import {
 
 export type { ChatsAnalyticsDatePreset };
 
+/** Client-side filter for Captured fields chart only (`''` = every status; not sent to API). */
+export type LeadsFieldCaptureStatusFilter = '' | 'active' | 'inactive' | 'deleted';
+
 export type LeadsAnalyticsUiState = {
   preset: ChatsAnalyticsDatePreset;
   customFrom: string;
@@ -19,19 +22,21 @@ export type LeadsAnalyticsUiState = {
   includePreview: boolean;
   startedFrom: '' | CustomerChatsAnalyticsStartedFromKey;
   countryCode: string;
+  fieldCaptureStatus: LeadsFieldCaptureStatusFilter;
 };
 
 export const LEADS_ANALYTICS_DEFAULTS: LeadsAnalyticsUiState = {
-  preset: '30d',
+  preset: '7d',
   customFrom: '',
   customTo: '',
   includePreview: true,
   startedFrom: '',
   countryCode: '',
+  fieldCaptureStatus: '',
 };
 
 export function buildLeadsAnalyticsApiParams(state: LeadsAnalyticsUiState): CustomerBotLeadsAnalyticsParams {
-  const { from, to } = computeDateRangeFromAnalyticsPreset(state);
+  const { from, to } = computeDateRangeFromAnalyticsPreset(state, { invalidCustomFallbackLastDays: 7 });
   const granularity: CustomerChatsAnalyticsGranularity = resolveAnalyticsGranularity(from, to);
 
   const params: CustomerBotLeadsAnalyticsParams = {

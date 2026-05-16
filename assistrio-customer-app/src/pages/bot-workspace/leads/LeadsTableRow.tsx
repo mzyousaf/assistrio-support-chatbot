@@ -1,7 +1,8 @@
 import type { CustomerLeadFieldDefinition, CustomerLeadListItem } from '@/api/types';
 import { Button, Tooltip } from '@/components/ui';
+import { cn } from '@/lib/utils';
 import { formatConversationAbsolute, formatConversationRelative } from '@/lib/conversationDateFormat';
-import { formatLeadLocationShort, isLeadsTableNameFieldColumn, LEADS_TABLE_LEAD_COL_MAX_PX, LEADS_TABLE_NAME_FIELD_COL_MAX_PX } from './leadsUiHelpers';
+import { formatLeadLocationShort, inferLeadFieldStatus, isLeadsTableNameFieldColumn, LEADS_TABLE_LEAD_COL_MAX_PX, LEADS_TABLE_NAME_FIELD_COL_MAX_PX } from './leadsUiHelpers';
 import { customerConversationInsightsPath } from './conversationInsightsDeepLink';
 import { LeadIdentityCell } from './LeadIdentityCell';
 import { LeadStatusCell } from './LeadStatusCell';
@@ -65,7 +66,10 @@ export function LeadsTableRow({ botId, lead, columnDefs, onOpenDetail, onOpenCha
       {columnDefs.map((d) => (
         <td
           key={d.key}
-          className="min-w-0 px-2 py-2.5 align-middle sm:px-3"
+          className={cn(
+            'min-w-0 px-2 py-2.5 align-middle sm:px-3',
+            inferLeadFieldStatus(d) !== 'active' && 'text-slate-500',
+          )}
           style={
             isLeadsTableNameFieldColumn(d)
               ? { maxWidth: LEADS_TABLE_NAME_FIELD_COL_MAX_PX }

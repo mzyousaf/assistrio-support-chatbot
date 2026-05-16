@@ -1,8 +1,9 @@
-﻿import { useMemo } from 'react';
+import { useMemo } from 'react';
 import type { ReactNode } from 'react';
 import type { CustomerConversationMessage, CustomerConversationMessageCreditBreakdownRow } from '@/api/types';
 import { Modal } from '@/components/ui';
 import { formatConversationDateTimeDetailed } from '@/lib/conversationDateFormat';
+import { breakdownRowVisitorLabel } from './creditBreakdownDisplay';
 import { chargedKindDisplay } from './conversationCreditBreakdown';
 import { formatCreditAmount } from './conversationDisplayFormat';
 
@@ -43,7 +44,7 @@ export function MessageCreditBreakdownModal({ open, onClose, message }: Props) {
 
   const summaryRows: Array<{ label: string; value: ReactNode }> = body
     ? [
-        { label: 'Total charged', value: <span className="tabular-nums">{formatCreditAmount(body.creditCost)}</span> },
+        { label: 'Total credits', value: <span className="tabular-nums">{formatCreditAmount(body.creditCost)}</span> },
         {
           label: 'Reason',
           value: chargedKindDisplay(body.creditReason),
@@ -114,7 +115,7 @@ export function MessageCreditBreakdownModal({ open, onClose, message }: Props) {
                   <tbody>
                     {rows.map((r) => (
                       <tr key={r.key} className="border-b border-slate-100 last:border-b-0">
-                        <td className="max-w-[10rem] break-words px-2 py-1.5 text-slate-900">{r.label}</td>
+                        <td className="max-w-[10rem] break-words px-2 py-1.5 text-slate-900">{breakdownRowVisitorLabel(r)}</td>
                         <td className="px-2 py-1.5 text-right tabular-nums text-slate-900">{r.count}</td>
                         <td className="px-2 py-1.5 text-right tabular-nums text-slate-900">{formatCreditAmount(r.creditsEach)}</td>
                         <td className="px-2 py-1.5 text-right tabular-nums text-slate-900">{formatCreditAmount(r.creditsUsed)}</td>

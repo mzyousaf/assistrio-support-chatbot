@@ -13,7 +13,7 @@ describe('leadsCsvExport', () => {
   it('buildLeadsCsvLines matches column order', () => {
     const defs: CustomerLeadFieldDefinition[] = [
       { key: 'email', label: 'Email', type: 'text', required: false, order: 0 },
-      { key: 'name', label: 'Full name', type: 'text', required: false, order: 1, disabled: true },
+      { key: 'name', label: 'Full name', type: 'text', required: false, order: 1, disabled: true, fieldStatus: 'inactive', archived: true },
     ];
     const leads: CustomerLeadListItem[] = [
       {
@@ -38,6 +38,7 @@ describe('leadsCsvExport', () => {
     const header = lines[0].split(',');
     expect(header[0]).toBe('Captured at');
     expect(header[1]).toBe('Email');
+    expect(header[2]).toBe('Full name (Inactive)');
     expect(header[header.length - 1]).toBe('Conversation ID');
   });
 

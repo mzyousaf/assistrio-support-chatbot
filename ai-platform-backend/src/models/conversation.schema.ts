@@ -241,6 +241,12 @@ export class Conversation {
   /** Lead capture: field key -> value collected from this conversation. */
   @Prop({ type: Object, default: undefined })
   capturedLeadData?: CapturedLeadData;
+  /**
+   * Snapshot of field labels/types at capture time (future-safe when bot fields are renamed/removed).
+   * Keys align with `capturedLeadData`; optional on legacy rows.
+   */
+  @Prop({ type: Object, default: undefined })
+  capturedLeadFieldMeta?: Record<string, { label?: string; type?: string }>;
   /** Lead capture repetition control; optional, backward-compatible. */
   @Prop({ type: Object, default: undefined })
   leadCaptureMeta?: LeadCaptureMeta;

@@ -38,7 +38,9 @@ export function buildChatCreditRuleFingerprint(
     const r = rules[k];
     const short =
       k === 'dictation_session' ? 'dict_session' : k.endsWith('_message') ? k.replace(/_message$/, '') : k;
-    return r.enabled ? `${short}=${r.credits}` : `${short}=disabled`;
+    if (!r.enabled) return `${short}=disabled`;
+    if (!r.includeInTotalCredits) return `${short}=${r.credits}!excluded`;
+    return `${short}=${r.credits}`;
   });
   return `${version}:${parts.join(',')}`;
 }
@@ -104,7 +106,8 @@ function ruleRow(
   if (typeof count !== 'number' || !Number.isFinite(count) || count <= 0) return null;
   const rule = rules[key];
   const creditsEachRaw = typeof rule.credits === 'number' && Number.isFinite(rule.credits) ? rule.credits : 0;
-  const billable = rule.enabled === true;
+  const billable =
+    rule.enabled === true && (rule.includeInTotalCredits ?? true) === true;
   const creditsUsed = billable ? creditsEachRaw * count : 0;
   const label = CHAT_MESSAGE_CREDIT_BREAKDOWN_LABELS[key] ?? key;
   return { key, label, count, creditsEach: creditsEachRaw, creditsUsed, billable };
@@ -122,7 +125,10 @@ export function resolvedDictationSessionCount(isDictation: boolean, voiceMeta?: 
   return 1;
 }
 
-function buildCreditReasonFromBreakdown(breakdown: MessageCreditBreakdownRow[]): {
+function buildCreditReasonFromBreakdown(
+  breakdown: MessageCreditBreakdownRow[],
+  rules: Readonly<Record<ChatMessageCreditRuleKey, ChatMessageCreditRule>>,
+): {
   creditReason: string;
   billable: boolean;
   creditsUsed: number;
@@ -132,7 +138,16 @@ function buildCreditReasonFromBreakdown(breakdown: MessageCreditBreakdownRow[]):
   const configuredCredits = breakdown.reduce((a, k) => a + Math.max(0, k.count) * k.creditsEach, 0);
   const billable = breakdown.some((b) => b.billable && b.creditsUsed > 0);
 
-  const keys = [...new Set(breakdown.filter((b) => b.billable && b.creditsUsed > 0).map((b) => b.key))].sort();
+  const keys = [
+    ...new Set(
+      breakdown
+        .filter((b) => {
+          const r = rules[b.key];
+          return b.count > 0 && r?.enabled === true;
+        })
+        .map((b) => b.key),
+    ),
+  ].sort();
   const attachmentOnlyTransparency =
     breakdown.length === 1 && breakdown[0].key === 'attachment_message' && !breakdown[0].billable;
 
@@ -195,7 +210,7 @@ export function calculateMessageCreditUsage(
     push('unknown_message', 1);
   }
 
-  const { creditReason, billable, creditsUsed, configuredCredits } = buildCreditReasonFromBreakdown(breakdown);
+  const { creditReason, billable, creditsUsed, configuredCredits } = buildCreditReasonFromBreakdown(breakdown, rules);
   const usageType = resolveLedgerPrimaryUsageType(input);
 
   return {

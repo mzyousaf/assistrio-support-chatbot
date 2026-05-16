@@ -5,6 +5,7 @@ import {
   extractCapturedLeadFieldMessageIdsForWorkspace,
   isSafeCustomerAttachmentHttpUrl,
   maskChatVisitorIdForList,
+  mergeCustomerLeadFieldDefinitions,
   parseWorkspaceLeadsListFilters,
   sanitizeLeadFieldKeyFilter,
   serializeCustomerWorkspaceLeadDetail,
@@ -457,6 +458,7 @@ describe('customer leads API helpers', () => {
     expect(defs[0].label).toBe('Budget');
     expect(defs[0].order).toBe(0);
     expect(defs[1].type).toBe('email');
+    expect(defs.every((d) => d.fieldStatus === 'active')).toBe(true);
   });
 
   it('buildWorkspaceLeadsAggregationPipeline matches hasLead and botId', () => {
@@ -475,6 +477,71 @@ describe('customer leads API helpers', () => {
   it('sanitizeLeadFieldKeyFilter rejects dotted keys', () => {
     expect(sanitizeLeadFieldKeyFilter('a.b')).toBeUndefined();
     expect(sanitizeLeadFieldKeyFilter('email')).toBe('email');
+  });
+
+  describe('mergeCustomerLeadFieldDefinitions', () => {
+    it('adds archived defs for captured keys not in active bot fields', () => {
+      const defs = mergeCustomerLeadFieldDefinitions(
+        {
+          enabled: true,
+          fields: [
+            { key: 'name', label: 'Name', type: 'text', required: false },
+            { key: 'email', label: 'Email', type: 'email', required: false },
+          ],
+        },
+        ['company_size'],
+      );
+      const arch = defs.find((d) => d.key === 'company_size');
+      expect(arch?.archived).toBe(true);
+      expect(arch?.fieldStatus).toBe('deleted');
+      expect(arch?.source).toBe('captured_data');
+      expect(String(arch?.label)).toMatch(/company/i);
+    });
+
+    it('prefers current bot label when key remains configured', () => {
+      const defs = mergeCustomerLeadFieldDefinitions(
+        {
+          enabled: true,
+          fields: [{ key: 'budget', label: 'Quarterly budget', type: 'number', required: false }],
+        },
+        ['budget'],
+      );
+      expect(defs[0]?.label).toBe('Quarterly budget');
+      expect(defs[0]?.archived).toBe(false);
+      expect(defs[0]?.fieldStatus).toBe('active');
+    });
+
+    it('marks disabled bot fields with captured values as archived', () => {
+      const defs = mergeCustomerLeadFieldDefinitions(
+        {
+          enabled: true,
+          fields: [
+            { key: 'legacy', label: 'Legacy field', type: 'text', disabled: true },
+            { key: 'email', label: 'Email', type: 'email', required: false },
+          ],
+        },
+        ['legacy'],
+      );
+      const legacy = defs.find((d) => d.key === 'legacy');
+      expect(legacy?.archived).toBe(true);
+      expect(legacy?.fieldStatus).toBe('inactive');
+      expect(legacy?.label).toBe('Legacy field');
+    });
+
+    it('uses capturedLeadFieldMeta label over humanized key for unknown keys', () => {
+      const defs = mergeCustomerLeadFieldDefinitions(
+        {
+          enabled: true,
+          fields: [{ key: 'email', label: 'Email', type: 'email', required: false }],
+        },
+        ['budget'],
+        { budget: { label: 'Marketing budget', type: 'text' } },
+      );
+      const row = defs.find((d) => d.key === 'budget');
+      expect(row?.label).toBe('Marketing budget');
+      expect(row?.type).toBe('text');
+      expect(row?.fieldStatus).toBe('deleted');
+    });
   });
 
   it('parseWorkspaceLeadsListFilters passes safe fieldKey only', () => {

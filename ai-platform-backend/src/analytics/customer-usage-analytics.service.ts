@@ -5,11 +5,21 @@ import { Message, UsageLedger } from '../models';
 import type { UsageLedgerUsageType } from '../models/usage-ledger.schema';
 import {
   PREVIEW_STARTED_FROM_VALUES,
+  alignBucketStart,
   bucketKeyIso,
   enumerateBucketStarts,
   mongoDateTruncUnit,
   type CustomerChatsGranularity,
 } from './customer-chats-analytics.util';
+import {
+  accumulateCreditBreakdownLinesInto,
+  buildCustomerUsageCreditRulesPayload,
+  emptyComponentAccumulator,
+  mongoEffectiveCreditBreakdownLinesFromMessageExpr,
+  mongoLedgerResolvedCreditBreakdownLinesExpr,
+  normalizeCreditBreakdownLinesFromUnknown,
+  type ComponentBreakdownAccumulator,
+} from './customer-usage-credit-breakdown-lines.util';
 import {
   messageInputTypeToUsageLabel,
   parseCustomerUsageQuery,
@@ -30,6 +40,7 @@ export type CustomerUsageAnalyticsResponse = {
     voiceMessages: number;
     dictationMessages: number;
     attachmentMessages: number;
+    /** Analytics-only: suggested_question counts merged into `textMessages`; kept `0` in API responses. */
     suggestedQuestionMessages: number;
     averageCreditsPerMessage: number | null;
   };
@@ -69,6 +80,44 @@ export type CustomerUsageAnalyticsResponse = {
     totalSpeechCharacters: number;
     totalAudioDurationSeconds: number;
   };
+  /** Mirrors billing rule keys + customer-facing labels (not persisted billing strings). */
+  usageCreditRules: ReturnType<typeof buildCustomerUsageCreditRulesPayload>;
+  /** Strict counts/credits from persisted line-items (`creditBreakdown`), aligned with billed totals. */
+  componentBreakdownSummary: {
+    totalCreditsUsed: number;
+    textMessages: number;
+    textCredits: number;
+    voiceMessages: number;
+    voiceCredits: number;
+    dictationSessions: number;
+    dictationCredits: number;
+    attachmentMessages: number;
+    attachmentCredits: number;
+    /** Always `0` in API responses — merged into `textMessages` / `textCredits`. */
+    suggestedQuestionMessages: number;
+    /** Always `0` in API responses — merged into `textCredits`. */
+    suggestedQuestionCredits: number;
+    quickReplyMessages: number;
+    unknownMessages: number;
+  };
+  componentBreakdownTimeSeries: Array<{
+    date: string;
+    totalCreditsUsed: number;
+    textMessages: number;
+    textCredits: number;
+    voiceMessages: number;
+    voiceCredits: number;
+    dictationSessions: number;
+    dictationCredits: number;
+    attachmentMessages: number;
+    attachmentCredits: number;
+    /** Always `0` in API responses — merged into `textMessages` / `textCredits`. */
+    suggestedQuestionMessages: number;
+    /** Always `0` in API responses — merged into `textCredits`. */
+    suggestedQuestionCredits: number;
+    quickReplyMessages: number;
+    unknownMessages: number;
+  }>;
 };
 
 const USER_MESSAGE_USAGE_TYPES: UsageLedgerUsageType[] = [
@@ -132,15 +181,166 @@ export class CustomerUsageAnalyticsService {
     const oid = new Types.ObjectId(botId);
     const ledgerMatch = this.buildLedgerMatch(oid, q);
 
-    const [ledgerCount, speechAgg] = await Promise.all([
-      this.usageLedgerModel.countDocuments(ledgerMatch).exec(),
+    const ledgerCount = await this.usageLedgerModel.countDocuments(ledgerMatch).exec();
+
+    const [speechAgg, componentPair] = await Promise.all([
       this.aggregateSpeechFromMessages(oid, q),
+      ledgerCount > 0
+        ? this.aggregateLedgerCreditComponents(ledgerMatch, q)
+        : this.aggregateMessageCreditComponents(oid, q),
     ]);
 
     if (ledgerCount > 0) {
-      return this.buildFromLedger(q, ledgerMatch, speechAgg);
+      return this.buildFromLedger(q, ledgerMatch, speechAgg, componentPair);
     }
-    return this.buildFromMessages(q, speechAgg, oid);
+    return this.buildFromMessages(q, speechAgg, oid, componentPair);
+  }
+
+  private async aggregateLedgerCreditComponents(
+    ledgerMatch: Record<string, unknown>,
+    q: ParsedCustomerUsageQuery,
+  ): Promise<{ summary: ComponentBreakdownAccumulator; byBucket: Map<string, ComponentBreakdownAccumulator> }> {
+    const trunc = chargedAtTruncExpr(q.granularity);
+    const pipeline: PipelineStage[] = [
+      { $match: ledgerMatch },
+      { $match: { usageType: { $in: USER_MESSAGE_USAGE_TYPES } } },
+      {
+        $lookup: {
+          from: 'messages',
+          let: { mid: '$messageId' },
+          pipeline: [
+            { $match: { $expr: { $eq: ['$_id', '$$mid'] } } },
+            { $project: { creditBreakdown: 1, creditCost: 1, inputType: 1 } },
+          ],
+          as: '_msg',
+        },
+      },
+      {
+        $project: {
+          bucket: trunc,
+          lines: mongoLedgerResolvedCreditBreakdownLinesExpr(),
+        },
+      },
+    ];
+
+    const docs = (await this.usageLedgerModel.aggregate(pipeline).exec()) as Array<{ bucket: Date; lines: unknown }>;
+    return this.accumulatorsFromBucketDocs(docs, q);
+  }
+
+  private async aggregateMessageCreditComponents(
+    oid: Types.ObjectId,
+    q: ParsedCustomerUsageQuery,
+  ): Promise<{ summary: ComponentBreakdownAccumulator; byBucket: Map<string, ComponentBreakdownAccumulator> }> {
+    const trunc = createdAtTruncExpr(q.granularity);
+    const baseMatch: Record<string, unknown> = {
+      botId: oid,
+      role: 'user',
+      createdAt: { $gte: q.from, $lte: q.to },
+    };
+    if (q.usageType) {
+      const map: Partial<Record<string, string>> = {
+        text_message: 'text',
+        voice_message: 'voice',
+        dictation_message: 'dictation',
+        attachment_message: 'attachment',
+        suggested_question_message: 'suggested_question',
+        quick_reply_message: 'quick_reply',
+        unknown_message: 'unknown',
+      };
+      const it = map[q.usageType];
+      if (it) baseMatch.inputType = it;
+    }
+
+    const pipeline: PipelineStage[] = [
+      { $match: baseMatch },
+      ...this.messagePreviewPipeline(q),
+      {
+        $project: {
+          bucket: trunc,
+          lines: mongoEffectiveCreditBreakdownLinesFromMessageExpr(),
+        },
+      },
+    ];
+
+    const docs = (await this.messageModel.aggregate(pipeline).exec()) as Array<{ bucket: Date; lines: unknown }>;
+    return this.accumulatorsFromBucketDocs(docs, q);
+  }
+
+  private accumulatorsFromBucketDocs(
+    docs: Array<{ bucket: Date; lines: unknown }>,
+    q: ParsedCustomerUsageQuery,
+  ): { summary: ComponentBreakdownAccumulator; byBucket: Map<string, ComponentBreakdownAccumulator> } {
+    const summary = emptyComponentAccumulator();
+    const byBucket = new Map<string, ComponentBreakdownAccumulator>();
+
+    for (const doc of docs) {
+      const lines = normalizeCreditBreakdownLinesFromUnknown(doc.lines);
+      accumulateCreditBreakdownLinesInto(summary, lines);
+
+      const b = doc.bucket instanceof Date && !Number.isNaN(doc.bucket.getTime()) ? doc.bucket : null;
+      if (!b) continue;
+      const aligned = alignBucketStart(b, q.granularity);
+      const key = bucketKeyIso(aligned);
+
+      let slot = byBucket.get(key);
+      if (!slot) {
+        slot = emptyComponentAccumulator();
+        byBucket.set(key, slot);
+      }
+      accumulateCreditBreakdownLinesInto(slot, lines);
+    }
+
+    return { summary, byBucket };
+  }
+
+  private zipComponentBreakdownTimeSeries(
+    timeSeries: CustomerUsageAnalyticsResponse['timeSeries'],
+    byBucket: Map<string, ComponentBreakdownAccumulator>,
+  ): CustomerUsageAnalyticsResponse['componentBreakdownTimeSeries'] {
+    return timeSeries.map((row) => {
+      const acc = byBucket.get(row.date) ?? emptyComponentAccumulator();
+      const sugN = Math.trunc(acc.suggestedQuestionMessages ?? 0);
+      const sugC = roundUsageCredits(acc.suggestedQuestionCredits);
+      return {
+        date: row.date,
+        totalCreditsUsed: row.creditsUsed,
+        textMessages: Math.trunc(acc.textMessages) + sugN,
+        textCredits: roundUsageCredits(acc.textCredits + sugC),
+        voiceMessages: acc.voiceMessages,
+        voiceCredits: roundUsageCredits(acc.voiceCredits),
+        dictationSessions: acc.dictationSessions,
+        dictationCredits: roundUsageCredits(acc.dictationCredits),
+        attachmentMessages: acc.attachmentMessages,
+        attachmentCredits: roundUsageCredits(acc.attachmentCredits),
+        suggestedQuestionMessages: 0,
+        suggestedQuestionCredits: 0,
+        quickReplyMessages: acc.quickReplyMessages,
+        unknownMessages: acc.unknownMessages,
+      };
+    });
+  }
+
+  private mergeComponentSummary(
+    totalCreditsRounded: number,
+    acc: ComponentBreakdownAccumulator,
+  ): CustomerUsageAnalyticsResponse['componentBreakdownSummary'] {
+    const sugN = Math.trunc(acc.suggestedQuestionMessages ?? 0);
+    const sugC = roundUsageCredits(acc.suggestedQuestionCredits);
+    return {
+      totalCreditsUsed: totalCreditsRounded,
+      textMessages: Math.trunc(acc.textMessages) + sugN,
+      textCredits: roundUsageCredits(acc.textCredits + sugC),
+      voiceMessages: acc.voiceMessages,
+      voiceCredits: roundUsageCredits(acc.voiceCredits),
+      dictationSessions: acc.dictationSessions,
+      dictationCredits: roundUsageCredits(acc.dictationCredits),
+      attachmentMessages: acc.attachmentMessages,
+      attachmentCredits: roundUsageCredits(acc.attachmentCredits),
+      suggestedQuestionMessages: 0,
+      suggestedQuestionCredits: 0,
+      quickReplyMessages: acc.quickReplyMessages,
+      unknownMessages: acc.unknownMessages,
+    };
   }
 
   private buildLedgerMatch(botId: Types.ObjectId, q: ParsedCustomerUsageQuery): Record<string, unknown> {
@@ -160,6 +360,19 @@ export class CustomerUsageAnalyticsService {
     }
     if (q.usageType) {
       and.push({ usageType: q.usageType });
+    }
+    if (q.startedFrom) {
+      if (q.startedFrom === 'unknown') {
+        and.push({
+          $or: [
+            { 'metadata.startedFrom': { $exists: false } },
+            { 'metadata.startedFrom': null },
+            { 'metadata.startedFrom': '' },
+          ],
+        });
+      } else {
+        and.push({ 'metadata.startedFrom': q.startedFrom });
+      }
     }
     return { $and: and };
   }
@@ -182,6 +395,21 @@ export class CustomerUsageAnalyticsService {
           '_conv.startedFrom': { $nin: [...PREVIEW_STARTED_FROM_VALUES] },
         },
       });
+    }
+    if (q.startedFrom) {
+      if (q.startedFrom === 'unknown') {
+        stages.push({
+          $match: {
+            $or: [
+              { '_conv.startedFrom': { $exists: false } },
+              { '_conv.startedFrom': null },
+              { '_conv.startedFrom': '' },
+            ],
+          },
+        });
+      } else {
+        stages.push({ $match: { '_conv.startedFrom': q.startedFrom } });
+      }
     }
     if (q.usageType) {
       const mapLedgerToInput: Partial<Record<string, string>> = {
@@ -308,6 +536,7 @@ export class CustomerUsageAnalyticsService {
     q: ParsedCustomerUsageQuery,
     ledgerMatch: Record<string, unknown>,
     speechFromMessages: CustomerUsageAnalyticsResponse['dictationVoiceSummary'],
+    componentPair: { summary: ComponentBreakdownAccumulator; byBucket: Map<string, ComponentBreakdownAccumulator> },
   ): Promise<CustomerUsageAnalyticsResponse> {
     const trunc = chargedAtTruncExpr(q.granularity);
     const userMsgCond = { $in: ['$usageType', USER_MESSAGE_USAGE_TYPES] };
@@ -317,11 +546,26 @@ export class CustomerUsageAnalyticsService {
     const attCond = { $eq: ['$usageType', 'attachment_message'] };
     const sugCond = { $eq: ['$usageType', 'suggested_question_message'] };
 
-    const billableExpr = {
-      $cond: [{ $eq: ['$metadata.billable', false] }, 0, { $ifNull: ['$creditsUsed', 0] }],
+    const billableCreditsDocExpr = {
+      $cond: [
+        { $in: ['$usageType', USER_MESSAGE_USAGE_TYPES] },
+        {
+          $cond: [{ $eq: ['$metadata.billable', false] }, 0, { $ifNull: ['$creditsUsed', 0] }],
+        },
+        0,
+      ],
     };
-    const nonBillableExpr = {
-      $cond: [{ $eq: ['$metadata.billable', false] }, { $ifNull: ['$creditsUsed', 0] }, 0],
+    const nonBillableCreditsDocExpr = {
+      $cond: [
+        { $in: ['$usageType', USER_MESSAGE_USAGE_TYPES] },
+        {
+          $cond: [{ $eq: ['$metadata.billable', false] }, { $ifNull: ['$creditsUsed', 0] }, 0],
+        },
+        0,
+      ],
+    };
+    const userCreditsExpr = {
+      $cond: [{ $in: ['$usageType', USER_MESSAGE_USAGE_TYPES] }, { $ifNull: ['$creditsUsed', 0] }, 0],
     };
 
     const facet = await this.usageLedgerModel
@@ -333,10 +577,10 @@ export class CustomerUsageAnalyticsService {
               {
                 $group: {
                   _id: null,
-                  totalCreditsUsed: { $sum: { $ifNull: ['$creditsUsed', 0] } },
-                  totalBillableCredits: { $sum: billableExpr },
-                  totalNonBillableCredits: { $sum: nonBillableExpr },
-                  totalUsageEvents: { $sum: 1 },
+                  totalCreditsUsed: { $sum: userCreditsExpr },
+                  totalBillableCredits: { $sum: billableCreditsDocExpr },
+                  totalNonBillableCredits: { $sum: nonBillableCreditsDocExpr },
+                  totalUsageEvents: { $sum: { $cond: [userMsgCond, 1, 0] } },
                   totalMessages: { $sum: { $cond: [userMsgCond, 1, 0] } },
                   textMessages: { $sum: { $cond: [textCond, 1, 0] } },
                   voiceMessages: { $sum: { $cond: [voiceCond, 1, 0] } },
@@ -375,10 +619,10 @@ export class CustomerUsageAnalyticsService {
               {
                 $group: {
                   _id: trunc,
-                  creditsUsed: { $sum: { $ifNull: ['$creditsUsed', 0] } },
-                  billableCredits: { $sum: billableExpr },
-                  nonBillableCredits: { $sum: nonBillableExpr },
-                  usageEvents: { $sum: 1 },
+                  creditsUsed: { $sum: userCreditsExpr },
+                  billableCredits: { $sum: billableCreditsDocExpr },
+                  nonBillableCredits: { $sum: nonBillableCreditsDocExpr },
+                  usageEvents: { $sum: { $cond: [userMsgCond, 1, 0] } },
                   messages: { $sum: { $cond: [userMsgCond, 1, 0] } },
                   textMessages: { $sum: { $cond: [textCond, 1, 0] } },
                   voiceMessages: { $sum: { $cond: [voiceCond, 1, 0] } },
@@ -392,10 +636,10 @@ export class CustomerUsageAnalyticsService {
               {
                 $group: {
                   _id: '$usageType',
-                  events: { $sum: 1 },
-                  creditsUsed: { $sum: { $ifNull: ['$creditsUsed', 0] } },
-                  billableCredits: { $sum: billableExpr },
-                  nonBillableCredits: { $sum: nonBillableExpr },
+                  events: { $sum: { $cond: [userMsgCond, 1, 0] } },
+                  creditsUsed: { $sum: userCreditsExpr },
+                  billableCredits: { $sum: billableCreditsDocExpr },
+                  nonBillableCredits: { $sum: nonBillableCreditsDocExpr },
                 },
               },
               { $sort: { creditsUsed: -1 as const } },
@@ -404,8 +648,8 @@ export class CustomerUsageAnalyticsService {
               {
                 $group: {
                   _id: '$creditRule',
-                  events: { $sum: 1 },
-                  creditsUsed: { $sum: { $ifNull: ['$creditsUsed', 0] } },
+                  events: { $sum: { $cond: [userMsgCond, 1, 0] } },
+                  creditsUsed: { $sum: userCreditsExpr },
                 },
               },
               { $sort: { creditsUsed: -1 as const } },
@@ -425,17 +669,19 @@ export class CustomerUsageAnalyticsService {
         ? roundUsageCredits(totalCreditsUsed / totalMessages)
         : null;
 
+    const cs = componentPair.summary;
+
     const summary: CustomerUsageAnalyticsResponse['summary'] = {
       totalCreditsUsed,
       totalBillableCredits: roundUsageCredits(Number(t.totalBillableCredits ?? 0)),
       totalNonBillableCredits: roundUsageCredits(Number(t.totalNonBillableCredits ?? 0)),
       totalUsageEvents: Math.trunc(t.totalUsageEvents ?? 0),
       totalMessages,
-      textMessages: Math.trunc(t.textMessages ?? 0),
-      voiceMessages: Math.trunc(t.voiceMessages ?? 0),
-      dictationMessages: Math.trunc(t.dictationMessages ?? 0),
-      attachmentMessages: Math.trunc(t.attachmentMessages ?? 0),
-      suggestedQuestionMessages: Math.trunc(t.suggestedQuestionMessages ?? 0),
+      textMessages: Math.trunc(cs.textMessages + cs.suggestedQuestionMessages),
+      voiceMessages: Math.trunc(cs.voiceMessages),
+      dictationMessages: Math.trunc(cs.dictationSessions),
+      attachmentMessages: Math.trunc(cs.attachmentMessages),
+      suggestedQuestionMessages: 0,
       averageCreditsPerMessage: avg,
     };
 
@@ -443,18 +689,19 @@ export class CustomerUsageAnalyticsService {
 
     for (const row of f.byBucket ?? []) {
       const d = row._id as Date;
-      const key = bucketKeyIso(d);
+      const key = bucketKeyIso(alignBucketStart(d, q.granularity));
       bucketMap.set(key, {
         creditsUsed: roundUsageCredits(Number(row.creditsUsed ?? 0)),
         billableCredits: roundUsageCredits(Number(row.billableCredits ?? 0)),
         nonBillableCredits: roundUsageCredits(Number(row.nonBillableCredits ?? 0)),
         usageEvents: Math.trunc(row.usageEvents ?? 0),
         messages: Math.trunc(row.messages ?? 0),
-        textMessages: Math.trunc(row.textMessages ?? 0),
+        textMessages:
+          Math.trunc(row.textMessages ?? 0) + Math.trunc(row.suggestedQuestionMessages ?? 0),
         voiceMessages: Math.trunc(row.voiceMessages ?? 0),
         dictationMessages: Math.trunc(row.dictationMessages ?? 0),
         attachmentMessages: Math.trunc(row.attachmentMessages ?? 0),
-        suggestedQuestionMessages: Math.trunc(row.suggestedQuestionMessages ?? 0),
+        suggestedQuestionMessages: 0,
       });
     }
 
@@ -473,9 +720,23 @@ export class CustomerUsageAnalyticsService {
         attachmentMessages: 0,
         suggestedQuestionMessages: 0,
       };
-      return { date: key, ...z };
+      const comp = componentPair.byBucket.get(key) ?? emptyComponentAccumulator();
+      return {
+        date: key,
+        creditsUsed: z.creditsUsed,
+        billableCredits: z.billableCredits,
+        nonBillableCredits: z.nonBillableCredits,
+        usageEvents: z.usageEvents,
+        messages: z.messages,
+        textMessages: Math.trunc(comp.textMessages + comp.suggestedQuestionMessages),
+        voiceMessages: Math.trunc(comp.voiceMessages),
+        dictationMessages: Math.trunc(comp.dictationSessions),
+        attachmentMessages: Math.trunc(comp.attachmentMessages),
+        suggestedQuestionMessages: 0,
+      };
     });
 
+    const componentBreakdownTimeSeries = this.zipComponentBreakdownTimeSeries(timeSeries, componentPair.byBucket);
     const usageTypeBreakdown: CustomerUsageAnalyticsResponse['usageTypeBreakdown'] = (f.byUsageType ?? []).map(
       (row: { _id: string; events: number; creditsUsed: number; billableCredits: number; nonBillableCredits: number }) => ({
         usageType: String(row._id ?? 'unknown'),
@@ -504,14 +765,13 @@ export class CustomerUsageAnalyticsService {
       dictationCreditsUsed: roundUsageCredits(
         Math.max(Number(t.dictationCreditsLedger ?? 0), speechFromMessages.dictationCreditsUsed),
       ),
-      dictationSessions: Math.max(
-        Math.trunc(t.dictationSessionsLedger ?? 0),
-        speechFromMessages.dictationSessions,
-      ),
+      dictationSessions: Math.max(Math.trunc(cs.dictationSessions), speechFromMessages.dictationSessions),
       totalSpeechWords: speechFromMessages.totalSpeechWords,
       totalSpeechCharacters: speechFromMessages.totalSpeechCharacters,
       totalAudioDurationSeconds: speechFromMessages.totalAudioDurationSeconds,
     };
+
+    const componentBreakdownSummary = this.mergeComponentSummary(totalCreditsUsed, cs);
 
     return {
       range: {
@@ -524,6 +784,9 @@ export class CustomerUsageAnalyticsService {
       usageTypeBreakdown,
       creditReasonBreakdown,
       dictationVoiceSummary,
+      usageCreditRules: buildCustomerUsageCreditRulesPayload(),
+      componentBreakdownSummary,
+      componentBreakdownTimeSeries,
     };
   }
 
@@ -531,6 +794,7 @@ export class CustomerUsageAnalyticsService {
     q: ParsedCustomerUsageQuery,
     speechFromMessages: CustomerUsageAnalyticsResponse['dictationVoiceSummary'],
     oid: Types.ObjectId,
+    componentPair: { summary: ComponentBreakdownAccumulator; byBucket: Map<string, ComponentBreakdownAccumulator> },
   ): Promise<CustomerUsageAnalyticsResponse> {
     const trunc = createdAtTruncExpr(q.granularity);
 
@@ -648,24 +912,26 @@ export class CustomerUsageAnalyticsService {
         ? roundUsageCredits(totalCreditsUsed / totalMessages)
         : null;
 
+    const cs = componentPair.summary;
+
     const summary: CustomerUsageAnalyticsResponse['summary'] = {
       totalCreditsUsed,
       totalBillableCredits: totalCreditsUsed,
       totalNonBillableCredits: 0,
       totalUsageEvents: totalMessages,
       totalMessages,
-      textMessages: Math.trunc(t.textMessages ?? 0),
-      voiceMessages: Math.trunc(t.voiceMessages ?? 0),
-      dictationMessages: Math.trunc(t.dictationMessages ?? 0),
-      attachmentMessages: Math.trunc(t.attachmentMessages ?? 0),
-      suggestedQuestionMessages: Math.trunc(t.suggestedQuestionMessages ?? 0),
+      textMessages: Math.trunc(cs.textMessages + cs.suggestedQuestionMessages),
+      voiceMessages: Math.trunc(cs.voiceMessages),
+      dictationMessages: Math.trunc(cs.dictationSessions),
+      attachmentMessages: Math.trunc(cs.attachmentMessages),
+      suggestedQuestionMessages: 0,
       averageCreditsPerMessage: avg,
     };
 
     const bucketMap = new Map<string, CustomerUsageAnalyticsResponse['timeSeries'][0]>();
     for (const row of f.byBucket ?? []) {
       const d = row._id as Date;
-      const key = bucketKeyIso(d);
+      const key = bucketKeyIso(alignBucketStart(d, q.granularity));
       bucketMap.set(key, {
         date: key,
         creditsUsed: roundUsageCredits(Number(row.creditsUsed ?? 0)),
@@ -673,19 +939,21 @@ export class CustomerUsageAnalyticsService {
         nonBillableCredits: roundUsageCredits(Number(row.nonBillableCredits ?? 0)),
         usageEvents: Math.trunc(row.usageEvents ?? 0),
         messages: Math.trunc(row.messages ?? 0),
-        textMessages: Math.trunc(row.textMessages ?? 0),
+        textMessages:
+          Math.trunc(row.textMessages ?? 0) + Math.trunc(row.suggestedQuestionMessages ?? 0),
         voiceMessages: Math.trunc(row.voiceMessages ?? 0),
         dictationMessages: Math.trunc(row.dictationMessages ?? 0),
         attachmentMessages: Math.trunc(row.attachmentMessages ?? 0),
-        suggestedQuestionMessages: Math.trunc(row.suggestedQuestionMessages ?? 0),
+        suggestedQuestionMessages: 0,
       });
     }
 
     const bucketStarts = enumerateBucketStarts(q.from, q.to, q.granularity);
     const timeSeries: CustomerUsageAnalyticsResponse['timeSeries'] = bucketStarts.map((d) => {
       const key = bucketKeyIso(d);
-      return (
-        bucketMap.get(key) ?? {
+      const z =
+        bucketMap.get(key) ??
+        ({
           date: key,
           creditsUsed: 0,
           billableCredits: 0,
@@ -697,10 +965,24 @@ export class CustomerUsageAnalyticsService {
           dictationMessages: 0,
           attachmentMessages: 0,
           suggestedQuestionMessages: 0,
-        }
-      );
+        } satisfies CustomerUsageAnalyticsResponse['timeSeries'][0]);
+      const comp = componentPair.byBucket.get(key) ?? emptyComponentAccumulator();
+      return {
+        date: key,
+        creditsUsed: z.creditsUsed,
+        billableCredits: z.billableCredits,
+        nonBillableCredits: z.nonBillableCredits,
+        usageEvents: z.usageEvents,
+        messages: z.messages,
+        textMessages: Math.trunc(comp.textMessages + comp.suggestedQuestionMessages),
+        voiceMessages: Math.trunc(comp.voiceMessages),
+        dictationMessages: Math.trunc(comp.dictationSessions),
+        attachmentMessages: Math.trunc(comp.attachmentMessages),
+        suggestedQuestionMessages: 0,
+      };
     });
 
+    const componentBreakdownTimeSeries = this.zipComponentBreakdownTimeSeries(timeSeries, componentPair.byBucket);
     const keyToUsageType = (inputType: string): string => {
       switch (inputType) {
         case 'text':
@@ -743,6 +1025,13 @@ export class CustomerUsageAnalyticsService {
       }))
       .filter((x: { events: number; creditsUsed: number }) => x.events > 0 || x.creditsUsed > 0);
 
+    const dictationVoiceSummary: CustomerUsageAnalyticsResponse['dictationVoiceSummary'] = {
+      ...speechFromMessages,
+      dictationSessions: Math.max(Math.trunc(cs.dictationSessions), speechFromMessages.dictationSessions),
+    };
+
+    const componentBreakdownSummary = this.mergeComponentSummary(totalCreditsUsed, cs);
+
     return {
       range: {
         from: q.from.toISOString(),
@@ -753,7 +1042,10 @@ export class CustomerUsageAnalyticsService {
       timeSeries,
       usageTypeBreakdown,
       creditReasonBreakdown,
-      dictationVoiceSummary: speechFromMessages,
+      dictationVoiceSummary,
+      usageCreditRules: buildCustomerUsageCreditRulesPayload(),
+      componentBreakdownSummary,
+      componentBreakdownTimeSeries,
     };
   }
 }

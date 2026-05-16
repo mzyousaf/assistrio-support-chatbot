@@ -801,22 +801,198 @@ function escapeRegexForMongo(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-export function customerLeadFieldDefinitionsFromBot(leadCapture: unknown): Array<Record<string, unknown>> {
+/** Title-case style fallback when a captured key has no bot label (deleted custom field). */
+export function humanizeCustomerLeadFieldKey(key: string): string {
+  const s = String(key ?? '').trim();
+  if (!s) return 'Unknown';
+  return s
+    .replace(/[_-]+/g, ' ')
+    .split(' ')
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(' ');
+}
+
+/** Keys in capturedLeadData that have a non-empty string value (workspace-safe). */
+export function collectCapturedLeadDataKeysWithValues(capturedLeadData: Record<string, unknown> | undefined | null): string[] {
+  if (!capturedLeadData || typeof capturedLeadData !== 'object') return [];
+  const keys: string[] = [];
+  for (const k of Object.keys(capturedLeadData)) {
+    const t = String(k ?? '').trim();
+    if (!t) continue;
+    const v = capturedLeadData[k];
+    if (v != null && String(v).trim() !== '') keys.push(t);
+  }
+  return keys;
+}
+
+/** Union of keys that have values across many lead rows (customer inbox page). */
+export function collectCapturedLeadDataKeysUnionFromLeadRows(
+  leads: Array<{ capturedLeadData?: Record<string, unknown> }>,
+): string[] {
+  const s = new Set<string>();
+  for (const row of leads) {
+    for (const k of collectCapturedLeadDataKeysWithValues(row.capturedLeadData)) {
+      s.add(k);
+    }
+  }
+  return [...s];
+}
+
+export type CapturedLeadFieldMetaRow = { label?: string; type?: string };
+
+function extractCapturedLeadFieldMetaLean(c: Record<string, unknown>): Record<string, { label: string; type: string }> | undefined {
+  const raw = c.capturedLeadFieldMeta as unknown;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const out: Record<string, { label: string; type: string }> = {};
+  for (const [k, v] of Object.entries(raw)) {
+    const kk = String(k ?? '').trim();
+    if (!kk || !v || typeof v !== 'object' || Array.isArray(v)) continue;
+    const vr = v as Record<string, unknown>;
+    const labelRaw = str(vr.label);
+    const typeRaw = str(vr.type);
+    const label = (labelRaw?.trim() || humanizeCustomerLeadFieldKey(kk)).trim();
+    const type = (typeRaw?.trim() || 'text').trim();
+    out[kk] = { label, type };
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
+/** Matches runtime normalization: explicit boolean `enabled`, else true when any fields exist. */
+export function leadCaptureGloballyEnabledFromRaw(leadCapture: unknown): boolean {
+  if (!leadCapture || typeof leadCapture !== 'object') return false;
+  const lc = leadCapture as { enabled?: boolean; fields?: unknown[] };
+  if (typeof lc.enabled === 'boolean') return lc.enabled;
+  return Array.isArray(lc.fields) && lc.fields.length > 0;
+}
+
+/**
+ * Merge bot leadCapture.fields with historical capturedLeadData keys.
+ * Enabled configured fields first (bot order); then inactive/disabled or deleted-only keys.
+ */
+export function mergeCustomerLeadFieldDefinitions(
+  leadCapture: unknown,
+  capturedKeysWithValues: string[],
+  capturedLeadFieldMeta?: Record<string, CapturedLeadFieldMetaRow> | null,
+): Array<Record<string, unknown>> {
   const cfg = normalizeLeadCaptureConfig(leadCapture as Parameters<typeof normalizeLeadCaptureConfig>[0]);
-  return cfg.fields.map((f, order) => {
+  const captureOn = leadCaptureGloballyEnabledFromRaw(leadCapture);
+  const byKey = new Map(
+    cfg.fields
+      .map((f) => [String(f.key ?? '').trim(), f] as const)
+      .filter(([key]) => Boolean(key)),
+  );
+
+  const activeKeySet = new Set<string>();
+  for (const f of cfg.fields) {
+    if (f.disabled) continue;
+    const k = String(f.key ?? '').trim();
+    if (k) activeKeySet.add(k);
+  }
+
+  const defs: Array<Record<string, unknown>> = [];
+  let order = 0;
+
+  for (const f of cfg.fields) {
+    const k = String(f.key ?? '').trim();
+    if (!k || f.disabled) continue;
     const row: Record<string, unknown> = {
-      key: f.key,
-      label: f.label,
+      key: k,
+      label: String(f.label ?? '').trim() || humanizeCustomerLeadFieldKey(k),
       type: f.type ?? 'text',
-      required: f.required,
-      order,
+      required: !!f.required,
+      order: order++,
+      disabled: false,
+      archived: !captureOn,
+      fieldStatus: captureOn ? 'active' : 'inactive',
+      source: 'current',
+      enabled: captureOn,
     };
-    if (f.disabled) row.disabled = true;
     if (f.placeholder) row.placeholder = f.placeholder;
     if (f.options?.length) row.options = f.options;
     if (f.aliases?.length) row.aliases = f.aliases;
-    return row;
-  });
+    defs.push(row);
+  }
+
+  const archivedCandidates = capturedKeysWithValues.filter((k) => !activeKeySet.has(k));
+  archivedCandidates.sort((a, b) => humanizeCustomerLeadFieldKey(a).localeCompare(humanizeCustomerLeadFieldKey(b)));
+
+  for (const k of archivedCandidates) {
+    const cfgRow = byKey.get(k);
+    const snap = capturedLeadFieldMeta?.[k];
+    const snapLabel = snap?.label != null ? String(snap.label).trim() : '';
+    const snapType = snap?.type != null ? String(snap.type).trim() : '';
+    if (cfgRow && cfgRow.disabled) {
+      const row: Record<string, unknown> = {
+        key: k,
+        label: snapLabel || String(cfgRow.label ?? '').trim() || humanizeCustomerLeadFieldKey(k),
+        type: snapType || cfgRow.type || 'text',
+        required: !!cfgRow.required,
+        order: order++,
+        disabled: true,
+        archived: true,
+        fieldStatus: 'inactive',
+        source: 'current',
+        enabled: false,
+      };
+      if (cfgRow.placeholder) row.placeholder = cfgRow.placeholder;
+      if (cfgRow.options?.length) row.options = cfgRow.options;
+      defs.push(row);
+      continue;
+    }
+    defs.push({
+      key: k,
+      label: snapLabel || humanizeCustomerLeadFieldKey(k),
+      type: snapType || 'unknown',
+      required: false,
+      order: order++,
+      disabled: true,
+      archived: true,
+      fieldStatus: 'deleted',
+      source: 'captured_data',
+      enabled: false,
+    });
+  }
+
+  return defs;
+}
+
+/** @deprecated Prefer mergeCustomerLeadFieldDefinitions — kept for tests and callers without captured keys. */
+export function customerLeadFieldDefinitionsFromBot(leadCapture: unknown): Array<Record<string, unknown>> {
+  return mergeCustomerLeadFieldDefinitions(leadCapture, []);
+}
+
+/** Merge snapshot rows when new lead values are persisted (future captures). */
+export function mergeCapturedLeadFieldMetaSnapshot(
+  existing: Record<string, unknown> | undefined | null,
+  normalizedFields: Array<{ key: string; label: string; type?: string; disabled?: boolean }>,
+  appliedKeys: string[],
+): Record<string, { label: string; type: string }> | undefined {
+  const out: Record<string, { label: string; type: string }> = {};
+  if (existing && typeof existing === 'object' && !Array.isArray(existing)) {
+    for (const [k, v] of Object.entries(existing)) {
+      const kk = String(k ?? '').trim();
+      if (!kk || !v || typeof v !== 'object' || Array.isArray(v)) continue;
+      const vr = v as Record<string, unknown>;
+      const label = str(vr.label);
+      const type = str(vr.type);
+      if (label?.trim() && type?.trim()) {
+        out[kk] = { label: label.trim(), type: type.trim() };
+      }
+    }
+  }
+  const byKey = new Map(normalizedFields.map((f) => [String(f.key ?? '').trim(), f] as const));
+  for (const k of appliedKeys) {
+    const kk = String(k ?? '').trim();
+    if (!kk) continue;
+    const fld = byKey.get(kk);
+    if (!fld || fld.disabled) continue;
+    out[kk] = {
+      label: String(fld.label ?? '').trim() || humanizeCustomerLeadFieldKey(kk),
+      type: String(fld.type ?? 'text'),
+    };
+  }
+  return Object.keys(out).length ? out : undefined;
 }
 
 function conversationOriginForCustomerLeads(c: LeanConversation): Record<string, unknown> | null {
@@ -913,6 +1089,7 @@ export function serializeCustomerWorkspaceLeadDetail(c: LeanConversation, botId:
   const origin = conversationOriginForCustomerLeads(c);
   const loc = locationForCustomerLeads(c);
   const dev = deviceInfoForCustomerLeadsList(c);
+  const capturedLeadFieldMetaOut = extractCapturedLeadFieldMetaLean(c as Record<string, unknown>);
 
   return {
     conversationId: id,
@@ -920,6 +1097,7 @@ export function serializeCustomerWorkspaceLeadDetail(c: LeanConversation, botId:
     ...(capturedLeadData ? { capturedLeadData } : {}),
     ...(capturedLeadFieldMessageIds ? { capturedLeadFieldMessageIds } : {}),
     ...(leadFieldKeys?.length ? { leadFieldKeys } : {}),
+    ...(capturedLeadFieldMetaOut ? { capturedLeadFieldMeta: capturedLeadFieldMetaOut } : {}),
     leadCapturedAt: iso(c.leadCapturedAt),
     ...(leadSourceMessageId ? { leadSourceMessageId } : {}),
     hasLead: bool(c.hasLead),

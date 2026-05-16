@@ -1,8 +1,9 @@
 import { useMemo, type CSSProperties } from 'react';
 import type { CustomerLeadFieldDefinition, CustomerLeadListItem } from '@/api/types';
 import {
+  inferLeadFieldStatus,
   isLeadsTableNameFieldColumn,
-  leadColumnHeaderLabel,
+  leadDetailFieldLabel,
   LEADS_TABLE_LEAD_COL_MAX_PX,
   LEADS_TABLE_NAME_FIELD_COL_MAX_PX,
 } from './leadsUiHelpers';
@@ -40,6 +41,24 @@ function colField(d: CustomerLeadFieldDefinition): CSSProperties {
     maxWidth: LEADS_TABLE_NAME_FIELD_COL_MAX_PX,
     width: LEADS_TABLE_NAME_FIELD_COL_MAX_PX,
   };
+}
+
+function LeadFieldColumnHeaderBadge({ def }: { def: CustomerLeadFieldDefinition }) {
+  const st = inferLeadFieldStatus(def);
+  if (st === 'active') return null;
+  const label = st === 'inactive' ? 'Inactive' : 'Deleted';
+  const cls =
+    st === 'inactive'
+      ? 'bg-amber-100 text-amber-900 ring-amber-200/75'
+      : 'bg-rose-50 text-rose-900 ring-rose-200/75';
+  return (
+    <span
+      className={`shrink-0 rounded px-1 py-px text-[9px] font-semibold uppercase tracking-wide ring-1 ring-inset ${cls}`}
+      aria-label={`${label} field`}
+    >
+      {label}
+    </span>
+  );
 }
 
 /** Lead column: don’t grow past max width so other columns get room on wide viewports. */
@@ -104,7 +123,9 @@ export function LeadsTable({ botId, leads, columnDefs, onOpenDetail, onOpenChat 
               {columnDefs.map((d) => (
                 <th
                   key={d.key}
-                  className={`min-w-0 px-2 py-2.5 text-left align-middle sm:px-3 ${thLabel}`}
+                  className={`min-w-0 px-2 py-2.5 text-left align-middle sm:px-3 ${thLabel}${
+                    inferLeadFieldStatus(d) !== 'active' ? ' text-slate-400' : ''
+                  }`}
                   scope="col"
                   title={d.key}
                   style={
@@ -113,7 +134,10 @@ export function LeadsTable({ botId, leads, columnDefs, onOpenDetail, onOpenChat 
                       : undefined
                   }
                 >
-                  <span className="block truncate">{leadColumnHeaderLabel(d)}</span>
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <span className="block truncate">{leadDetailFieldLabel(d)}</span>
+                    <LeadFieldColumnHeaderBadge def={d} />
+                  </span>
                 </th>
               ))}
               <th className={`min-w-0 px-2 py-2.5 text-left align-middle sm:px-3 ${thLabel}`} scope="col">

@@ -6,7 +6,7 @@ import { CHART } from '../shared/analyticsChartTheme';
 import { APEX } from '../shared/apexAnalyticsTheme';
 import { ApexChartLoader } from '../shared/ApexChartLoader';
 import { apexTooltipRow, apexTooltipShell } from '../shared/apexTooltip';
-import { apexChartBase, apexLegendBottom, apexXAxisCategories } from '../shared/apexChartUtils';
+import { apexChartBase, apexXAxisCategories } from '../shared/apexChartUtils';
 import { AnalyticsChartEmpty } from '../shared/AnalyticsChartEmpty';
 import { SENTIMENT_CHART_COLORS } from './sentimentChartTheme';
 import { SENTIMENT_CHART_SERIES_ORDER } from './sentimentTrendsChartHelpers';
@@ -89,13 +89,7 @@ export function SentimentOverTimeChart({
       },
       dataLabels: { enabled: false },
       grid: apexGridSoft(),
-      legend: {
-        ...apexLegendBottom(),
-        fontSize: '11px',
-        fontWeight: 500,
-        markers: { size: 5, strokeWidth: 0, offsetX: -2, offsetY: 1 },
-        itemMargin: { horizontal: 10, vertical: 4 },
-      },
+      legend: { show: false },
       xaxis: { ...apexXAxisCategories(cats, -35), tooltip: { enabled: false } },
       yaxis: {
         labels: {

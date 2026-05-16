@@ -48,7 +48,7 @@ export function ConversationWorkspaceUserMessage({ message }: { message: Custome
   const audioUrl = si?.audioUrl?.trim() ?? '';
   const isVoiceMessage = Boolean(isUserVoice && audioUrl);
 
-  const showCredits = shouldShowMessageCreditBadge(message.creditCost, message.creditReason);
+  const showCredits = shouldShowMessageCreditBadge(message.creditCost, message.creditReason, message.creditBreakdown);
   const openCreditModal = showCredits ? () => setCreditDetailsOpen(true) : undefined;
   const creditBadge = showCredits ? (
     <button
@@ -57,7 +57,12 @@ export function ConversationWorkspaceUserMessage({ message }: { message: Custome
       className="cursor-pointer border-none bg-transparent p-0"
       aria-label="View credit breakdown for this message"
     >
-      <MessageCreditBadge creditCost={message.creditCost} creditReason={message.creditReason} className="shrink-0" />
+      <MessageCreditBadge
+        creditCost={message.creditCost}
+        creditReason={message.creditReason}
+        creditBreakdown={message.creditBreakdown}
+        className="shrink-0"
+      />
     </button>
   ) : null;
   const voiceToolbarVisible =

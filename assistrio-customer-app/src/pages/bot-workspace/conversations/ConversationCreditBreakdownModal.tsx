@@ -3,6 +3,7 @@ import { useMemo } from 'react';
 import type { CustomerConversationMessage } from '@/api/types';
 import { Modal } from '@/components/ui';
 import { cn } from '@/lib/utils';
+import { breakdownRowVisitorLabel } from './creditBreakdownDisplay';
 import { formatCreditAmount } from './conversationDisplayFormat';
 import {
   buildConversationCreditBreakdown,
@@ -65,7 +66,12 @@ function BreakdownSummary({ payload, detailTotal }: { payload: ConversationCredi
             {payload.rollupByBreakdownComponents.length ? (
               <div className="space-y-1">
                 {payload.rollupByBreakdownComponents.map((c) => (
-                  <div key={c.key}>{row(`${c.label} (units × rate rows: ${Math.round(c.billedUnits)})`, formatCreditAmount(c.creditsUsed))}</div>
+                  <div key={c.key}>
+                    {row(
+                      `${breakdownRowVisitorLabel({ key: c.key, label: c.label })} (units × rate rows: ${Math.round(c.billedUnits)})`,
+                      formatCreditAmount(c.creditsUsed),
+                    )}
+                  </div>
                 ))}
               </div>
             ) : (
@@ -73,7 +79,7 @@ function BreakdownSummary({ payload, detailTotal }: { payload: ConversationCredi
             )}
           </div>
           {payload.attachmentOnlyMessageCount > 0 ? (
-            <div>{row('Messages billed as attachment-only', payload.attachmentOnlyMessageCount)}</div>
+            <div>{row('Attachment-only messages (not billable)', payload.attachmentOnlyMessageCount)}</div>
           ) : null}
           {row('Messages that included attachments', payload.messagesWithAttachments)}
           {row('Total dictation sessions (stored on messages)', payload.totalDictationSessions)}

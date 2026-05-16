@@ -83,9 +83,10 @@ export function SentimentLabelRankingCard({
                       ? 'gap-0 px-1 py-0.5'
                       : 'gap-0.5 rounded-lg px-2.5 py-2.5',
                   'focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/25',
-                  'hover:border-slate-200/90 hover:bg-white/90',
-                  'active:bg-slate-100/80',
-                  hidden && 'opacity-45',
+                  embedded
+                    ? 'hover:border-slate-200 hover:bg-white active:bg-slate-100'
+                    : 'hover:border-slate-200/90 hover:bg-white/90 active:bg-slate-100/80',
+                  !embedded && hidden && 'opacity-45',
                 )}
               >
                 <div
@@ -96,8 +97,10 @@ export function SentimentLabelRankingCard({
                 >
                   <span
                     className={cn(
-                      'shrink-0 rounded-full ring-2 ring-white drop-shadow-sm',
+                      'shrink-0 rounded-full ring-2 ring-white',
+                      !embedded && 'drop-shadow-sm',
                       embedded ? 'h-2 w-2' : modalCompactRows ? 'h-1.5 w-1.5 ring-1' : 'mt-1.5 h-2.5 w-2.5',
+                      embedded && hidden && 'opacity-55',
                     )}
                     style={{ backgroundColor: dotColor }}
                     aria-hidden
@@ -107,6 +110,7 @@ export function SentimentLabelRankingCard({
                       className={cn(
                         'm-0 truncate font-semibold text-slate-900',
                         embedded ? 'text-xs leading-snug' : modalCompactRows ? 'text-[10px] leading-tight' : 'text-sm',
+                        embedded && hidden && 'text-slate-400',
                       )}
                     >
                       {row.label}
@@ -117,6 +121,7 @@ export function SentimentLabelRankingCard({
                       className={cn(
                         'm-0 font-semibold tabular-nums text-slate-900',
                         embedded ? 'text-xs leading-snug' : modalCompactRows ? 'text-[10px] leading-tight' : 'text-sm',
+                        embedded && hidden && 'text-slate-400',
                       )}
                     >
                       {countStr}
@@ -125,6 +130,7 @@ export function SentimentLabelRankingCard({
                           className={cn(
                             'font-semibold tabular-nums text-teal-700/90',
                             embedded ? 'text-[11px] tabular-nums sm:text-xs' : modalCompactRows ? 'text-[9px] sm:text-[10px]' : 'text-xs',
+                            embedded && hidden && '!text-slate-400',
                           )}
                         >
                           {' '}

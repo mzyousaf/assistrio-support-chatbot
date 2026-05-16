@@ -70,7 +70,6 @@ describe('SentimentSummaryCards', () => {
     expect(html).toContain('Happy');
     expect(html).not.toContain('(0.1–0.49)');
     expect(html).toContain('text-teal-600');
-    expect(html).toContain('mt-auto');
     expect(html).not.toContain('0.42');
     expect(html).toMatch(/>\s*Happy\s*<\/p>/);
   });

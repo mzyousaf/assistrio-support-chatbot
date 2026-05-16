@@ -56,10 +56,11 @@ export function customerShellSectionTitle(pathname: string): string | null {
       'insights/conversations': 'Agent · Conversations',
       'activity/leads': 'Agent · Leads',
       'analytics/chats': 'Agent · Analytics',
-      'analytics/knowledge-sources': 'Agent · Knowledge Sources',
+      'usage': 'Agent · Agent Resources',
       'analytics/leads': 'Agent · Leads analytics',
       'analytics/topics': 'Agent · Topics',
       'analytics/sentiment': 'Agent · Sentiment',
+      'analytics/agent-resources': 'Agent · Agent Resources',
     };
     return labels[rest] ?? 'Agent';
   }

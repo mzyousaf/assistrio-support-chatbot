@@ -13,10 +13,7 @@ import { CustomerSessionAuthGuard } from '../auth/customer/customer-session.guar
 import type { RequestUser } from '../auth/shared/request-user.types';
 import { BotsService } from '../bots/bots.service';
 import { ChatEngineService } from '../chat/chat-engine.service';
-import {
-  customerLeadFieldDefinitionsFromBot,
-  parseWorkspaceLeadsListFilters,
-} from '../chat/workspace-conversation-serialize.util';
+import { parseWorkspaceLeadsListFilters } from '../chat/workspace-conversation-serialize.util';
 import { WorkspacesService } from '../workspaces/workspaces.service';
 
 type RequestWithUser = FastifyRequest & { user?: RequestUser };
@@ -66,9 +63,6 @@ export class CustomerBotLeadsController {
     const skip = useBeforeCursor ? 0 : (page - 1) * limit;
     const pageReply = useBeforeCursor ? 1 : page;
     const filters = parseWorkspaceLeadsListFilters(q);
-    const leadFieldDefinitions = customerLeadFieldDefinitionsFromBot(
-      (bot as { leadCapture?: unknown }).leadCapture,
-    );
     return this.chatEngineService.listBotLeadsForWorkspace({
       botOid: new Types.ObjectId(String((bot as { _id: unknown })._id)),
       limit,
@@ -76,7 +70,7 @@ export class CustomerBotLeadsController {
       page: pageReply,
       beforeSortAtIso,
       filters,
-      leadFieldDefinitions,
+      leadCapture: (bot as { leadCapture?: unknown }).leadCapture,
     });
   }
 
@@ -87,13 +81,10 @@ export class CustomerBotLeadsController {
     @Param('conversationId') conversationId: string,
   ) {
     const bot = await this.requireWorkspaceBot(req, id);
-    const leadFieldDefinitions = customerLeadFieldDefinitionsFromBot(
-      (bot as { leadCapture?: unknown }).leadCapture,
-    );
     const detail = await this.chatEngineService.getBotLeadDetailForWorkspace({
       botOid: new Types.ObjectId(String((bot as { _id: unknown })._id)),
       conversationId,
-      leadFieldDefinitions,
+      leadCapture: (bot as { leadCapture?: unknown }).leadCapture,
     });
     if (!detail) {
       throw new NotFoundException('Lead not found');

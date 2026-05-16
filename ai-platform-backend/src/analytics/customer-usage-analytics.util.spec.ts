@@ -26,6 +26,14 @@ describe('customer-usage-analytics.util', () => {
     expect(q.usageType).toBe('voice_message');
   });
 
+  it('parseCustomerUsageQuery rejects invalid startedFrom', () => {
+    expect(() => parseCustomerUsageQuery({ startedFrom: 'nope' })).toThrow(BadRequestException);
+  });
+
+  it('parseCustomerUsageQuery parses startedFrom', () => {
+    expect(parseCustomerUsageQuery({ startedFrom: 'runtime_iframe' }).startedFrom).toBe('runtime_iframe');
+  });
+
   it('usageLedgerUsageTypeLabel maps known types', () => {
     expect(usageLedgerUsageTypeLabel('dictation_message')).toBe('Dictation message');
   });

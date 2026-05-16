@@ -1,11 +1,14 @@
 import type { CustomerLeadListItem } from '@/api/types';
 import { describe, expect, it } from 'vitest';
 import {
+  activeLeadFieldDefinitions,
   displayLeadFieldValue,
   formatLeadSourcePage,
   formatLeadUrlInboxDisplay,
   countLoadedLeadsWithName,
+  inferLeadFieldStatus,
   isLeadsTableNameFieldColumn,
+  leadCsvColumnHeaderLabel,
   leadPrimaryIdentity,
   leadQualityFromCaptured,
   leadTableDynamicDefinitions,
@@ -13,13 +16,77 @@ import {
 } from './leadsUiHelpers';
 
 describe('leadsUiHelpers', () => {
-  it('visibleLeadFieldDefinitions drops disabled and sorts by order', () => {
+  it('inferLeadFieldStatus prefers explicit fieldStatus over archived/source', () => {
+    expect(
+      inferLeadFieldStatus({
+        key: 'x',
+        label: 'X',
+        type: 'text',
+        required: false,
+        order: 0,
+        archived: true,
+        fieldStatus: 'active',
+      }),
+    ).toBe('active');
+  });
+
+  it('visibleLeadFieldDefinitions keeps inactive/deleted columns and sorts by order', () => {
     const v = visibleLeadFieldDefinitions([
-      { key: 'b', label: 'B', type: 'text', required: false, order: 2 },
-      { key: 'a', label: 'A', type: 'text', required: false, order: 1, disabled: true },
-      { key: 'c', label: 'C', type: 'text', required: false, order: 0 },
+      { key: 'email', label: 'Email', type: 'email', required: false, order: 0 },
+      {
+        key: 'legacy',
+        label: 'Legacy',
+        type: 'text',
+        required: false,
+        order: 2,
+        archived: true,
+        disabled: true,
+      },
+      { key: 'name', label: 'Name', type: 'text', required: false, order: 1 },
     ]);
-    expect(v.map((x) => x.key)).toEqual(['c', 'b']);
+    expect(v.map((x) => x.key)).toEqual(['email', 'name', 'legacy']);
+  });
+
+  it('activeLeadFieldDefinitions excludes inactive/deleted defs', () => {
+    const a = activeLeadFieldDefinitions([
+      { key: 'email', label: 'Email', type: 'email', required: false, order: 0 },
+      { key: 'legacy', label: 'Legacy', type: 'text', required: false, order: 1, archived: true },
+    ]);
+    expect(a.map((x) => x.key)).toEqual(['email']);
+  });
+
+  it('leadCsvColumnHeaderLabel uses Deleted vs Inactive suffix from source', () => {
+    expect(
+      leadCsvColumnHeaderLabel({
+        key: 'company_size',
+        label: 'Company size',
+        type: 'text',
+        required: false,
+        order: 0,
+        archived: true,
+        source: 'captured_data',
+      }),
+    ).toBe('Company size (Deleted)');
+    expect(
+      leadCsvColumnHeaderLabel({
+        key: 'budget',
+        label: 'Budget',
+        type: 'text',
+        required: false,
+        order: 0,
+        archived: true,
+        source: 'current',
+      }),
+    ).toBe('Budget (Inactive)');
+    expect(
+      leadCsvColumnHeaderLabel({
+        key: 'email',
+        label: 'Email',
+        type: 'email',
+        required: false,
+        order: 0,
+      }),
+    ).toBe('Email');
   });
 
   it('displayLeadFieldValue uses em dash when missing', () => {

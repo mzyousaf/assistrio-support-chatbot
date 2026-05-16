@@ -6,7 +6,7 @@ import { formatConversationAbsolute } from '@/lib/conversationDateFormat';
 import { conversationMessageBodyText } from '../conversations/conversationMessageText';
 import { ConversationInsightsSheetSection } from '../conversations/ConversationInsightsSheet';
 import { customerConversationInsightsPath } from './conversationInsightsDeepLink';
-import { leadColumnHeaderLabel, leadDetailSheetSectionClassName } from './leadsUiHelpers';
+import { leadDetailFieldLabel, leadDetailSheetSectionClassName } from './leadsUiHelpers';
 
 const LEAD_FIELDS_FROM_MESSAGES_TITLE = 'Captured Fields from messages';
 
@@ -61,7 +61,7 @@ export function LeadCaptureMessagesSection({ botId, detail, definitions, message
   const labelByKey = useMemo(() => {
     const map = new Map<string, string>();
     for (const d of definitions) {
-      map.set(d.key, leadColumnHeaderLabel(d));
+      map.set(d.key, leadDetailFieldLabel(d));
     }
     return map;
   }, [definitions]);

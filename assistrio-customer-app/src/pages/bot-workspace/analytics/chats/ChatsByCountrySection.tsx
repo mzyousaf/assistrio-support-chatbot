@@ -37,6 +37,12 @@ function isElementVisibleInScrollContainer(element: HTMLElement, container: HTML
 
 type Props = {
   countries: CustomerChatsAnalyticsCountryRow[];
+  /** Card heading (default: Chats by Country). */
+  sectionTitle?: string;
+  /** Modal heading when expanding all countries. */
+  modalTitle?: string;
+  /** Subtitle under the section title. */
+  sectionDescription?: string;
 };
 
 function CountryUnknownTag() {
@@ -190,7 +196,10 @@ function CountryRankingColumn({
   );
 }
 
-function ChatsByCountryBody({ countries }: Props) {
+function ChatsByCountryBody({
+  countries,
+  modalTitle = 'Chats by Country',
+}: Pick<Props, 'countries' | 'modalTitle'>) {
   const [viewAllOpen, setViewAllOpen] = useState(false);
   const [mapHoveredCountryCode, setMapHoveredCountryCode] = useState<string | null>(null);
   const sidebarListScrollRef = useRef<HTMLDivElement>(null);
@@ -258,7 +267,7 @@ function ChatsByCountryBody({ countries }: Props) {
           setViewAllOpen(false);
           setMapHoveredCountryCode(null);
         }}
-        title="Chats by Country"
+        title={modalTitle}
         description="All countries with chat volume in this period."
         size="lg"
         className="h-[90vh] w-[90vw] max-h-[90vh] max-w-[90vw]"
@@ -297,18 +306,23 @@ function ChatsByCountryBody({ countries }: Props) {
   );
 }
 
-export function ChatsByCountrySection({ countries }: Props) {
+export function ChatsByCountrySection({
+  countries,
+  sectionTitle = 'Chats by Country',
+  modalTitle = 'Chats by Country',
+  sectionDescription = 'Where conversations are coming from.',
+}: Props) {
   return (
     <AnalyticsChartCard
-      title="Chats by Country"
-      description="Where conversations are coming from."
+      title={sectionTitle}
+      description={sectionDescription}
       noMaxHeight
       bodyClassName="overflow-x-hidden overflow-y-hidden"
       className={cn(
         'overflow-hidden border-slate-100/95 shadow-[0_1px_3px_rgba(15,23,42,0.06)]',
       )}
     >
-      <ChatsByCountryBody countries={countries} />
+      <ChatsByCountryBody countries={countries} modalTitle={modalTitle} />
     </AnalyticsChartCard>
   );
 }

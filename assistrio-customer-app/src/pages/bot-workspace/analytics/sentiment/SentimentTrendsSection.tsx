@@ -103,11 +103,16 @@ export function SentimentTrendsSection({
           <SentimentChartStyleTabs value={chartStyle} onChange={onChartStyleChange} disabled={disabled} />
         </div>
       }
-      bodyClassName="flex min-h-0 flex-1 flex-col !overflow-y-auto"
+      bodyClassName={cn(
+        'flex min-h-0 flex-1 flex-col',
+        chartStyle === 'bar' ? '!overflow-y-hidden' : '!overflow-y-auto',
+      )}
       noMaxHeight
       className={cn(
         'overflow-hidden border-slate-100/95 shadow-[0_1px_3px_rgba(15,23,42,0.06)]',
-        TOPICS_ANALYTICS_SECTION_CARD_CLASS,
+        chartStyle === 'bar'
+          ? 'h-auto min-h-0 max-h-none'
+          : TOPICS_ANALYTICS_SECTION_CARD_CLASS,
       )}
     >
       <div className="flex min-h-0 flex-1 flex-col gap-6 p-3 sm:p-5 lg:flex-row lg:items-stretch lg:gap-0">
@@ -123,11 +128,8 @@ export function SentimentTrendsSection({
           <h3 className="m-0 mt-2 shrink-0 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
             {rankingTitle}
           </h3>
-          <p className="m-0 mt-1 max-w-full text-[10px] leading-snug text-slate-500">
-            Tap a row to show or hide that series on the chart. At least one stays visible.
-          </p>
           <div className="mt-2 flex min-h-[10.5rem] min-w-0 flex-1 flex-col overflow-hidden lg:min-h-0">
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200/80 bg-slate-50/60 p-1">
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-slate-50 p-1">
               <SentimentLabelRankingCard
                 rankingRows={rankingRows}
                 hiddenSeriesIds={hiddenSeriesIds}

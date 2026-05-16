@@ -21,6 +21,10 @@ import {
   type CustomerLeadsAnalyticsQueryInput,
   type ParsedCustomerLeadsAnalyticsQuery,
 } from './customer-leads-analytics.util';
+import {
+  mongoLeadCompleteExpr,
+  parseLeadCompletenessConfigFromBot,
+} from './customer-leads-analytics-completeness.util';
 
 export type CustomerLeadsAnalyticsResponse = {
   range: {
@@ -31,6 +35,9 @@ export type CustomerLeadsAnalyticsResponse = {
   summary: {
     totalConversations: number;
     totalLeads: number;
+    completeLeads: number;
+    partialLeads: number;
+    leadCompletionRate: number | null;
     conversionRate: number | null;
     totalCapturedFields: number;
     averageFieldsPerLead: number | null;
@@ -39,7 +46,10 @@ export type CustomerLeadsAnalyticsResponse = {
     date: string;
     conversations: number;
     leads: number;
+    completeLeads: number;
+    partialLeads: number;
     conversionRate: number | null;
+    leadCompletionRate: number | null;
   }>;
   startedFromBreakdown: Array<{
     key: ConversationStartedFromKey;
@@ -67,6 +77,9 @@ export type CustomerLeadsAnalyticsResponse = {
     label: string;
     type: LeadFieldType | 'unknown';
     capturedCount: number;
+    fieldStatus: 'active' | 'inactive' | 'deleted';
+    /** @deprecated Prefer fieldStatus; retained for backward-compatible API consumers. */
+    archived?: boolean;
   }>;
 };
 
@@ -98,17 +111,6 @@ function leadAttributionDateExpr(): Record<string, unknown> {
   };
 }
 
-function andMatch(
-  base: Record<string, unknown>,
-  extra: Record<string, unknown>,
-): Record<string, unknown> {
-  const clauses = base.$and;
-  if (Array.isArray(clauses)) {
-    return { $and: [...clauses, extra] };
-  }
-  return { $and: [base, extra] };
-}
-
 function dateTruncStage(
   dateField: string,
   granularity: CustomerChatsGranularity,
@@ -136,6 +138,20 @@ function toBucketMap(
   return m;
 }
 
+function toLeadQualityBucketMap(
+  rows: Array<{ _id: Date; leads: number; completeLeads: number }>,
+  granularity: CustomerChatsGranularity,
+): Map<string, { leads: number; completeLeads: number }> {
+  const m = new Map<string, { leads: number; completeLeads: number }>();
+  for (const r of rows) {
+    m.set(bucketKeyIso(alignBucketStart(r._id, granularity)), {
+      leads: r.leads,
+      completeLeads: r.completeLeads,
+    });
+  }
+  return m;
+}
+
 function round4(n: number | null): number | null {
   if (n == null || !Number.isFinite(n)) return null;
   return Math.round(n * 10_000) / 10_000;
@@ -144,6 +160,11 @@ function round4(n: number | null): number | null {
 function conversionRate(conv: number, leads: number): number | null {
   if (conv <= 0) return null;
   return round4(Math.min(1, leads / conv));
+}
+
+function leadCompletionRatio(leads: number, completeLeads: number): number | null {
+  if (leads <= 0) return null;
+  return round4(Math.min(1, completeLeads / leads));
 }
 
 function uniqKeys<T extends string>(keys: T[]): T[] {
@@ -261,12 +282,16 @@ export class CustomerLeadsAnalyticsService {
     const oid = new Types.ObjectId(botId);
     const convMatch = this.buildConversationMatch(oid, q);
 
+    const bot = await this.botsService.findOne(botId);
+    const completenessCfg = parseLeadCompletenessConfigFromBot(bot as Record<string, unknown> | null);
+    const completeExpr = mongoLeadCompleteExpr(completenessCfg);
+
     const [
       totalConversations,
-      totalLeads,
+      leadQualityTotals,
       totalCapturedFields,
       tsConversations,
-      tsLeads,
+      tsLeadQuality,
       sfConv,
       sfLeads,
       locCountriesConv,
@@ -276,10 +301,10 @@ export class CustomerLeadsAnalyticsService {
       fieldRows,
     ] = await Promise.all([
       this.conversationModel.countDocuments(convMatch),
-      this.conversationModel.countDocuments(andMatch(convMatch, { $expr: conversationLeadQualifyExpr() })),
+      this.aggregateLeadQualityTotals(convMatch, completeExpr),
       this.aggregateTotalCapturedFields(convMatch),
       this.aggregateConversationTimeSeries(convMatch, q.granularity),
-      this.aggregateLeadTimeSeries(convMatch, q.granularity, { from: q.from, to: q.to }),
+      this.aggregateLeadQualityTimeSeries(convMatch, q.granularity, { from: q.from, to: q.to }, completeExpr),
       this.aggregateStartedFromConversations(convMatch),
       this.aggregateStartedFromLeads(convMatch),
       this.aggregateLocationCountriesConversations(convMatch),
@@ -289,19 +314,28 @@ export class CustomerLeadsAnalyticsService {
       this.aggregateFieldCaptureKeys(convMatch),
     ]);
 
-    const bot = await this.botsService.findOne(botId);
+    const totalLeads = leadQualityTotals.totalLeads;
+    const completeLeads = Math.min(leadQualityTotals.completeLeads, totalLeads);
+    const partialLeads = Math.max(0, totalLeads - completeLeads);
+
     const fieldMeta = this.buildFieldMetaMap(bot);
 
     const bucketStarts = enumerateBucketStarts(q.from, q.to, q.granularity);
     const timeSeries = bucketStarts.map((bucketStart) => {
       const key = bucketKeyIso(bucketStart);
       const conv = tsConversations.get(key) ?? 0;
-      const leads = tsLeads.get(key) ?? 0;
+      const lq = tsLeadQuality.get(key) ?? { leads: 0, completeLeads: 0 };
+      const leads = lq.leads;
+      const complete = Math.min(lq.completeLeads, leads);
+      const partial = Math.max(0, leads - complete);
       return {
         date: key,
         conversations: conv,
         leads,
+        completeLeads: complete,
+        partialLeads: partial,
         conversionRate: conversionRate(conv, leads),
+        leadCompletionRate: leadCompletionRatio(leads, complete),
       };
     });
 
@@ -324,11 +358,14 @@ export class CustomerLeadsAnalyticsService {
       .map((r) => {
         const key = String(r._id);
         const meta = fieldMeta.get(key);
+        const fieldStatus = this.resolveFieldCaptureFieldStatus(bot, key);
         return {
           fieldKey: key,
           label: meta?.label ?? humanizeFieldKey(key),
           type: (meta?.type ?? 'unknown') as LeadFieldType | 'unknown',
           capturedCount: r.capturedCount,
+          fieldStatus,
+          ...(fieldStatus !== 'active' ? { archived: true } : {}),
         };
       })
       .sort((a, b) => b.capturedCount - a.capturedCount);
@@ -342,6 +379,9 @@ export class CustomerLeadsAnalyticsService {
       summary: {
         totalConversations,
         totalLeads,
+        completeLeads,
+        partialLeads,
+        leadCompletionRate: leadCompletionRatio(totalLeads, completeLeads),
         conversionRate: conversionRate(totalConversations, totalLeads),
         totalCapturedFields,
         averageFieldsPerLead: totalLeads > 0 ? round4(totalCapturedFields / totalLeads) : null,
@@ -362,7 +402,7 @@ export class CustomerLeadsAnalyticsService {
     const m = new Map<string, { label: string; type: LeadFieldType }>();
     const lc = bot?.leadCapture as { fields?: Array<{ key?: string; label?: string; type?: LeadFieldType; disabled?: boolean }> } | undefined;
     for (const f of lc?.fields ?? []) {
-      if (!f || f.disabled) continue;
+      if (!f) continue;
       const k = String(f.key ?? '').trim();
       if (!k) continue;
       const label = String(f.label ?? '').trim() || humanizeFieldKey(k);
@@ -370,6 +410,29 @@ export class CustomerLeadsAnalyticsService {
       m.set(k, { label, type });
     }
     return m;
+  }
+
+  /**
+   * Active: configured field + capture on + not disabled.
+   * Inactive: still configured but capture off, field disabled, or globally inactive.
+   * Deleted: key not on bot anymore but appears in historical captures for the range.
+   */
+  private resolveFieldCaptureFieldStatus(
+    bot: Record<string, unknown> | null,
+    fieldKey: string,
+  ): 'active' | 'inactive' | 'deleted' {
+    const lc = bot?.leadCapture as {
+      enabled?: boolean;
+      fields?: Array<{ key?: string; disabled?: boolean }>;
+    } | undefined;
+    const fields = Array.isArray(lc?.fields) ? lc!.fields! : [];
+    const fk = String(fieldKey ?? '').trim();
+    const cfgRow = fields.find((f) => String(f?.key ?? '').trim() === fk);
+    if (!cfgRow) return 'deleted';
+    const captureGloballyOn =
+      typeof lc?.enabled === 'boolean' ? lc.enabled : fields.length > 0;
+    if (!captureGloballyOn || cfgRow.disabled === true) return 'inactive';
+    return 'active';
   }
 
   private buildConversationMatch(
@@ -445,11 +508,39 @@ export class CustomerLeadsAnalyticsService {
     return toBucketMap(rows, granularity);
   }
 
-  private async aggregateLeadTimeSeries(
+  private async aggregateLeadQualityTotals(
+    convMatch: Record<string, unknown>,
+    completeExpr: Record<string, unknown>,
+  ): Promise<{ totalLeads: number; completeLeads: number }> {
+    const pipeline: PipelineStage[] = [
+      { $match: convMatch },
+      { $match: { $expr: conversationLeadQualifyExpr() } },
+      {
+        $group: {
+          _id: null,
+          totalLeads: { $sum: 1 },
+          completeLeads: {
+            $sum: {
+              $cond: [{ $eq: [completeExpr, true] }, 1, 0],
+            },
+          },
+        },
+      },
+    ];
+    const rows = await this.conversationModel.aggregate<{ totalLeads: number; completeLeads: number }>(pipeline);
+    const row = rows[0];
+    return {
+      totalLeads: row?.totalLeads ?? 0,
+      completeLeads: row?.completeLeads ?? 0,
+    };
+  }
+
+  private async aggregateLeadQualityTimeSeries(
     convMatch: Record<string, unknown>,
     granularity: CustomerChatsGranularity,
     range: { from: Date; to: Date },
-  ): Promise<Map<string, number>> {
+    completeExpr: Record<string, unknown>,
+  ): Promise<Map<string, { leads: number; completeLeads: number }>> {
     const pipeline: PipelineStage[] = [
       { $match: convMatch },
       { $match: { $expr: conversationLeadQualifyExpr() } },
@@ -466,12 +557,19 @@ export class CustomerLeadsAnalyticsService {
       {
         $group: {
           _id: dateTruncStage('_leadAt', granularity),
-          n: { $sum: 1 },
+          leads: { $sum: 1 },
+          completeLeads: {
+            $sum: {
+              $cond: [{ $eq: [completeExpr, true] }, 1, 0],
+            },
+          },
         },
       },
     ];
-    const rows = await this.conversationModel.aggregate<{ _id: Date; n: number }>(pipeline);
-    return toBucketMap(rows, granularity);
+    const rows = await this.conversationModel.aggregate<{ _id: Date; leads: number; completeLeads: number }>(
+      pipeline,
+    );
+    return toLeadQualityBucketMap(rows, granularity);
   }
 
   private async aggregateStartedFromConversations(

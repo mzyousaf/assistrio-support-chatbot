@@ -14,12 +14,10 @@ import type {
   CustomerTopicsAnalyticsResponse,
   CustomerSentimentAnalyticsParams,
   CustomerSentimentAnalyticsResponse,
-  CustomerKnowledgeSourcesAnalyticsResponse,
-  CustomerBotKnowledgeSourcesAnalyticsParams,
+  CustomerAgentResourcesAnalyticsResponse,
+  CustomerBotAgentResourcesAnalyticsParams,
   CustomerLeadsAnalyticsResponse,
   CustomerBotLeadsAnalyticsParams,
-  CustomerBotUsageParams,
-  CustomerUsageResponse,
   CustomerBotListItem,
   CustomerConversationDetail,
   CustomerConversationMessage,
@@ -133,20 +131,20 @@ export function getCustomerBotSentimentAnalytics(
   );
 }
 
-/** GET /api/customer/bots/:id/analytics/knowledge-sources */
-export function getCustomerBotKnowledgeSourcesAnalytics(
+/** GET /api/customer/bots/:id/analytics/agent-resources */
+export function getCustomerBotAgentResourcesAnalytics(
   id: string,
-  params?: CustomerBotKnowledgeSourcesAnalyticsParams,
+  params?: CustomerBotAgentResourcesAnalyticsParams,
 ) {
   const q = new URLSearchParams();
   if (params?.from?.trim()) q.set('from', params.from.trim());
   if (params?.to?.trim()) q.set('to', params.to.trim());
   if (params?.granularity) q.set('granularity', params.granularity);
   if (params?.includePreview === false) q.set('includePreview', 'false');
-  if (params?.sourceType) q.set('sourceType', params.sourceType);
+  if (params?.startedFrom) q.set('startedFrom', params.startedFrom);
   const qs = q.toString();
-  return customerFetch<CustomerKnowledgeSourcesAnalyticsResponse>(
-    `${P}/bots/${encodeURIComponent(id)}/analytics/knowledge-sources${qs ? `?${qs}` : ''}`,
+  return customerFetch<CustomerAgentResourcesAnalyticsResponse>(
+    `${P}/bots/${encodeURIComponent(id)}/analytics/agent-resources${qs ? `?${qs}` : ''}`,
   );
 }
 
@@ -162,20 +160,6 @@ export function getCustomerBotLeadsAnalytics(id: string, params?: CustomerBotLea
   const qs = q.toString();
   return customerFetch<CustomerLeadsAnalyticsResponse>(
     `${P}/bots/${encodeURIComponent(id)}/analytics/leads${qs ? `?${qs}` : ''}`,
-  );
-}
-
-/** GET /api/customer/bots/:id/usage */
-export function getCustomerBotUsage(id: string, params?: CustomerBotUsageParams) {
-  const q = new URLSearchParams();
-  if (params?.from?.trim()) q.set('from', params.from.trim());
-  if (params?.to?.trim()) q.set('to', params.to.trim());
-  if (params?.granularity) q.set('granularity', params.granularity);
-  if (params?.includePreview === false) q.set('includePreview', 'false');
-  if (params?.usageType?.trim()) q.set('usageType', params.usageType.trim());
-  const qs = q.toString();
-  return customerFetch<CustomerUsageResponse>(
-    `${P}/bots/${encodeURIComponent(id)}/usage${qs ? `?${qs}` : ''}`,
   );
 }
 

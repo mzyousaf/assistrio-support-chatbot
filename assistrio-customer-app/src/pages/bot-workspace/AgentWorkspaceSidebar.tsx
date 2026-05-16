@@ -19,7 +19,6 @@ import {
   Lightbulb,
   LayoutDashboard,
   Globe2,
-  Coins,
 } from 'lucide-react';
 import { NavLink, useLocation, useNavigate, useParams } from 'react-router-dom';
 import type { CustomerBotDetail } from '../../api/types';
@@ -131,13 +130,13 @@ export function AgentWorkspaceSidebar({ bot, health }: Props) {
     isKnowledgeSuggestions;
 
   const isAnalyticsChats = match('analytics/chats');
-  const isAnalyticsKnowledgeSources = match('analytics/knowledge-sources');
   const isAnalyticsLeads = match('analytics/leads');
   const isAnalyticsTopics = match('analytics/topics');
   const isAnalyticsSentiment = match('analytics/sentiment');
+  const isAnalyticsAgentResources = match('analytics/agent-resources');
   const isAnalyticsParent =
     isAnalyticsChats ||
-    isAnalyticsKnowledgeSources ||
+    isAnalyticsAgentResources ||
     isAnalyticsLeads ||
     isAnalyticsTopics ||
     isAnalyticsSentiment;
@@ -171,10 +170,10 @@ export function AgentWorkspaceSidebar({ bot, health }: Props) {
 
   const analyticsSubNav = [
     { to: `${base}/analytics/chats`, label: 'Chats', active: isAnalyticsChats },
-    { to: `${base}/analytics/knowledge-sources`, label: 'Knowledge Sources', active: isAnalyticsKnowledgeSources },
     { to: `${base}/analytics/leads`, label: 'Leads', active: isAnalyticsLeads },
     { to: `${base}/analytics/topics`, label: 'Topics', active: isAnalyticsTopics },
     { to: `${base}/analytics/sentiment`, label: 'Sentiment', active: isAnalyticsSentiment },
+    { to: `${base}/analytics/agent-resources`, label: 'Agent Resources', active: isAnalyticsAgentResources },
   ];
 
   // Track bar refs & indicators for Knowledge Base
@@ -339,9 +338,6 @@ export function AgentWorkspaceSidebar({ bot, health }: Props) {
           </NavLink>
           <NavLink to={`${base}/activity/leads`} onClick={guardNav} className={({ isActive }) => navCls(isActive)}>
             {({ isActive }) => <><UserCheck size={18} strokeWidth={1.75} className={iconCls(isActive)} />Leads</>}
-          </NavLink>
-          <NavLink to={`${base}/usage`} onClick={guardNav} className={({ isActive }) => navCls(isActive)}>
-            {({ isActive }) => <><Coins size={18} strokeWidth={1.75} className={iconCls(isActive)} />Usage</>}
           </NavLink>
 
           {/* Analytics */}

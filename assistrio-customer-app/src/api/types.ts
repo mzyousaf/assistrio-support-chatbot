@@ -125,7 +125,7 @@ export type CustomerBotConversationsListResponse = {
   nextCursor: string | null;
 };
 
-/** Lead column definitions from `bot.leadCapture.fields` (GET …/leads, GET …/leads/:id). */
+/** Lead column definitions from merged bot config + historical `capturedLeadData` keys (GET …/leads, GET …/leads/:id). */
 export type CustomerLeadFieldDefinition = {
   key: string;
   label: string;
@@ -134,6 +134,12 @@ export type CustomerLeadFieldDefinition = {
   /** Index in bot config array (stable column order). */
   order: number;
   disabled?: boolean;
+  /** Present when the field is no longer active but values exist on historical leads. */
+  archived?: boolean;
+  /** Derived column lifecycle status from merged definitions API (preferred over archived/source alone). */
+  fieldStatus?: 'active' | 'inactive' | 'deleted';
+  source?: 'current' | 'captured_data';
+  enabled?: boolean;
   placeholder?: string;
   options?: string[];
   aliases?: string[];
@@ -227,6 +233,8 @@ export type CustomerLeadDetail = {
   botId: string;
   leadFieldDefinitions: CustomerLeadFieldDefinition[];
   capturedLeadData?: Record<string, string>;
+  /** Snapshot of labels/types at capture time (new chats only). */
+  capturedLeadFieldMeta?: Record<string, { label: string; type: string }>;
   /** Field key → visitor message id that last set that captured value (new chats only). */
   capturedLeadFieldMessageIds?: Record<string, string>;
   leadFieldKeys?: string[];
@@ -1398,7 +1406,7 @@ export type CustomerSentimentAnalyticsParams = {
   sentiment?: CustomerSentimentLabelId;
 };
 
-/** GET /api/customer/bots/:id/analytics/knowledge-sources */
+/** Primary source / KB citation enums (agent-resources analytics, persisted `KnowledgeMessage.sources`). */
 export type CustomerKnowledgeSourcesAnalyticsSourceType =
   | 'document'
   | 'faq'
@@ -1415,70 +1423,143 @@ export type CustomerKnowledgeSourcesAnalyticsRange = {
   granularity: CustomerChatsAnalyticsGranularity;
 };
 
-export type CustomerKnowledgeSourcesAnalyticsSummary = {
-  totalAssistantMessages: number;
-  messagesWithSources: number;
-  messagesWithoutSources: number;
-  totalSourceUses: number;
-  uniqueSourcesUsed: number;
-  averageSourcesPerAnswer: number | null;
-  averageSourceMatchScore: number | null;
-  fallbackAnswers: number;
+/** GET /api/customer/bots/:id/analytics/agent-resources */
+export type CustomerAgentResourcesAnalyticsRange = {
+  from: string;
+  to: string;
+  granularity: CustomerChatsAnalyticsGranularity;
+  includePreview: boolean;
+  startedFrom?: CustomerChatsAnalyticsStartedFromKey;
 };
 
-export type CustomerKnowledgeSourcesTimeSeriesPoint = {
+export type CustomerAgentResourcesUsageCreditRule = {
+  usageType: string;
+  label: string;
+  credits: number;
+  enabled: boolean;
+  billable: boolean;
+  /**
+   * When false, billed UI splits do not multiply counts by `credits` for this modality (rollup matches server totals).
+   * When absent, behave as true.
+   */
+  includeInTotalCredits?: boolean;
+};
+
+/** Coherent Usage-in-range row from credit breakdown (`count × creditsEach = creditsUsed`). */
+export type CustomerAgentResourcesUsageComponentRow = {
+  key: string;
+  label: string;
+  count: number;
+  creditsEach: number;
+  creditsUsed: number;
+  billable: boolean;
+};
+
+export type CustomerAgentResourcesUsageSummary = {
+  totalCreditsUsed: number;
+  /** Ledger rollup when it differs from coherent breakdown-derived `totalCreditsUsed`. */
+  ledgerCreditsTotal?: number;
+  /** Present on current API — drives Usage-in-range formulas without mixing aggregates. */
+  componentRows?: CustomerAgentResourcesUsageComponentRow[];
+  textMessages: number;
+  voiceMessages: number;
+  voiceDictationSessions: number;
+  /** Deprecated for display: merged into `textMessages` / text credits in analytics APIs. Always `0` when present. */
+  suggestedQuestionMessages: number;
+  averageCreditsPerMessage: number | null;
+  /**
+   * Credits attributed to each modality bucket from persisted message breakdowns,
+   * scaled per period so stacks match `totalCreditsUsed`. Omitted on older API responses.
+   */
+  textCreditsAttributed?: number;
+  voiceCreditsAttributed?: number;
+  dictationCreditsAttributed?: number;
+  /** Deprecated for display: merged into `textCreditsAttributed`. */
+  suggestedQuestionCreditsAttributed?: number;
+};
+
+export type CustomerAgentResourcesUsageTimePoint = {
   date: string;
-  assistantMessages: number;
-  messagesWithSources: number;
-  messagesWithoutSources: number;
-  sourceUses: number;
-  averageSourceMatchScore: number | null;
+  totalCreditsUsed: number;
+  textMessages: number;
+  voiceMessages: number;
+  voiceDictationSessions: number;
+  /** Deprecated for display: merged into text counts/credits client- and server-side. */
+  suggestedQuestionMessages: number;
+  textCreditsAttributed?: number;
+  voiceCreditsAttributed?: number;
+  dictationCreditsAttributed?: number;
+  /** Deprecated for display: merged into `textCreditsAttributed`. */
+  suggestedQuestionCreditsAttributed?: number;
 };
 
-export type CustomerKnowledgeSourceTypeBreakdownItem = {
+export type CustomerAgentResourcesKbSummary = {
+  messagesWithSources: number;
+  messagesWithoutSources: number;
+  primarySourceUses: number;
+  uniquePrimarySources: number;
+  topPrimarySource: {
+    knowledgeBaseItemId: string | null;
+    sourceTitle: string | null;
+    sourceType: CustomerKnowledgeSourcesAnalyticsSourceType;
+    primarySourceUses: number;
+  } | null;
+  averagePrimarySourceScore: number | null;
+};
+
+export type CustomerAgentResourcesKbTimePoint = Record<string, string | number> & {
+  date: string;
+  messagesWithSources: number;
+};
+
+export type CustomerAgentResourcesKbPrimaryTypeBreakdownItem = {
   sourceType: CustomerKnowledgeSourcesAnalyticsSourceType;
   label: string;
-  sourceUses: number;
-  uniqueSources: number;
-  assistantMessages: number;
+  primarySourceUses: number;
   averageScore: number | null;
 };
 
-export type CustomerTopKnowledgeSourceItem = {
+export type CustomerAgentResourcesTopPrimarySourceItem = {
   knowledgeBaseItemId: string | null;
   sourceTitle: string | null;
   sourceType: CustomerKnowledgeSourcesAnalyticsSourceType;
   sourceUrl: string | null;
-  sourceUses: number;
+  primarySourceUses: number;
   assistantMessages: number;
   averageScore: number | null;
   lastUsedAt: string | null;
 };
 
-export type CustomerKnowledgeSourcesAnalyticsResponse = {
-  range: CustomerKnowledgeSourcesAnalyticsRange;
-  summary: CustomerKnowledgeSourcesAnalyticsSummary;
-  timeSeries: CustomerKnowledgeSourcesTimeSeriesPoint[];
-  sourceTypeBreakdown: CustomerKnowledgeSourceTypeBreakdownItem[];
-  topSources: CustomerTopKnowledgeSourceItem[];
-  noSourceBreakdown: {
-    messagesWithoutSources: number;
-    fallbackAnswers: number;
+export type CustomerAgentResourcesAnalyticsResponse = {
+  range: CustomerAgentResourcesAnalyticsRange;
+  usage: {
+    summary: CustomerAgentResourcesUsageSummary;
+    creditRules: CustomerAgentResourcesUsageCreditRule[];
+    timeSeries: CustomerAgentResourcesUsageTimePoint[];
+  };
+  knowledgeBase: {
+    summary: CustomerAgentResourcesKbSummary;
+    timeSeries: CustomerAgentResourcesKbTimePoint[];
+    sourceTypeBreakdown: CustomerAgentResourcesKbPrimaryTypeBreakdownItem[];
+    topPrimarySources: CustomerAgentResourcesTopPrimarySourceItem[];
   };
 };
 
-export type CustomerBotKnowledgeSourcesAnalyticsParams = {
+export type CustomerBotAgentResourcesAnalyticsParams = {
   from?: string;
   to?: string;
   granularity?: CustomerChatsAnalyticsGranularity;
   includePreview?: boolean;
-  sourceType?: CustomerKnowledgeSourcesAnalyticsSourceType;
+  startedFrom?: CustomerChatsAnalyticsStartedFromKey;
 };
 
 /** GET /api/customer/bots/:id/analytics/leads */
 export type CustomerLeadsAnalyticsSummary = {
   totalConversations: number;
   totalLeads: number;
+  completeLeads: number;
+  partialLeads: number;
+  leadCompletionRate: number | null;
   conversionRate: number | null;
   totalCapturedFields: number;
   averageFieldsPerLead: number | null;
@@ -1488,7 +1569,10 @@ export type CustomerLeadsTimeSeriesPoint = {
   date: string;
   conversations: number;
   leads: number;
+  completeLeads: number;
+  partialLeads: number;
   conversionRate: number | null;
+  leadCompletionRate: number | null;
 };
 
 export type CustomerLeadsStartedFromBreakdownItem = {
@@ -1518,6 +1602,9 @@ export type CustomerLeadsFieldCaptureItem = {
   label: string;
   type: 'text' | 'email' | 'phone' | 'number' | 'url' | 'unknown';
   capturedCount: number;
+  fieldStatus?: 'active' | 'inactive' | 'deleted';
+  /** @deprecated Prefer fieldStatus; omitted when undefined on legacy payloads. */
+  archived?: boolean;
 };
 
 export type CustomerLeadsAnalyticsResponse = {
@@ -1539,79 +1626,6 @@ export type CustomerBotLeadsAnalyticsParams = {
   includePreview?: boolean;
   startedFrom?: CustomerChatsAnalyticsStartedFromKey;
   countryCode?: string;
-};
-
-/** GET /api/customer/bots/:id/usage */
-export type CustomerBotUsageParams = {
-  from?: string;
-  to?: string;
-  granularity?: CustomerChatsAnalyticsGranularity;
-  includePreview?: boolean;
-  /** UsageLedger.usageType filter */
-  usageType?: string;
-};
-
-export type CustomerUsageSummary = {
-  totalCreditsUsed: number;
-  totalBillableCredits: number;
-  totalNonBillableCredits: number;
-  totalUsageEvents: number;
-  totalMessages: number;
-  textMessages: number;
-  voiceMessages: number;
-  dictationMessages: number;
-  attachmentMessages: number;
-  suggestedQuestionMessages: number;
-  averageCreditsPerMessage: number | null;
-};
-
-export type CustomerUsageTimeSeriesPoint = {
-  date: string;
-  creditsUsed: number;
-  billableCredits: number;
-  nonBillableCredits: number;
-  usageEvents: number;
-  messages: number;
-  textMessages: number;
-  voiceMessages: number;
-  dictationMessages: number;
-  attachmentMessages: number;
-  suggestedQuestionMessages: number;
-};
-
-export type CustomerUsageTypeBreakdownItem = {
-  usageType: string;
-  label: string;
-  events: number;
-  creditsUsed: number;
-  billableCredits: number;
-  nonBillableCredits: number;
-};
-
-export type CustomerUsageCreditReasonItem = {
-  creditReason: string;
-  events: number;
-  creditsUsed: number;
-};
-
-export type CustomerUsageDictationVoiceSummary = {
-  voiceMessages: number;
-  dictationMessages: number;
-  voiceCreditsUsed: number;
-  dictationCreditsUsed: number;
-  dictationSessions: number;
-  totalSpeechWords: number;
-  totalSpeechCharacters: number;
-  totalAudioDurationSeconds: number;
-};
-
-export type CustomerUsageResponse = {
-  range: CustomerKnowledgeSourcesAnalyticsRange;
-  summary: CustomerUsageSummary;
-  timeSeries: CustomerUsageTimeSeriesPoint[];
-  usageTypeBreakdown: CustomerUsageTypeBreakdownItem[];
-  creditReasonBreakdown: CustomerUsageCreditReasonItem[];
-  dictationVoiceSummary: CustomerUsageDictationVoiceSummary;
 };
 
 export type CreateDraftResponse = {

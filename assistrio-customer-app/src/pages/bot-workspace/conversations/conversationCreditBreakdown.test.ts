@@ -34,17 +34,24 @@ describe('buildConversationCreditBreakdown', () => {
         id: '2',
         messageId: '2',
         content: 'b',
-        creditCost: 3,
+        creditCost: 1.25,
         creditReason: 'composite:text_message+dictation_session',
         creditBreakdown: [
           { key: 'text_message', label: 'Text message', count: 1, creditsEach: 1, creditsUsed: 1, billable: true },
-          { key: 'dictation_session', label: 'Dictation', count: 1, creditsEach: 2, creditsUsed: 2, billable: true },
+          {
+            key: 'dictation_session',
+            label: 'Dictation',
+            count: 1,
+            creditsEach: 0.25,
+            creditsUsed: 0.25,
+            billable: true,
+          },
         ],
         voiceMeta: { dictationSessionCount: 1 },
       }),
     ];
     const p = buildConversationCreditBreakdown(messages);
-    expect(p.totalFromMessages).toBe(4);
+    expect(p.totalFromMessages).toBe(2.25);
     expect(p.rollupByBreakdownComponents.length).toBe(2);
     expect(p.rows[0]?.breakdownAvailable).toBe(true);
     expect(p.rows[p.rows.length - 1]?.breakdownAvailable).toBe(false);
@@ -62,6 +69,32 @@ describe('buildConversationCreditBreakdown', () => {
     ]);
     expect(p.rollupByBreakdownComponents.length).toBe(0);
     expect(p.rows[0]?.breakdownAvailable).toBe(false);
+  });
+
+  it('merges suggested_question_message breakdown components into text_message', () => {
+    const p = buildConversationCreditBreakdown([
+      baseUser({
+        id: '1',
+        messageId: '1',
+        content: 'chip',
+        creditCost: 1,
+        creditReason: 'suggested_question_message',
+        creditBreakdown: [
+          {
+            key: 'suggested_question_message',
+            label: 'Suggested question',
+            count: 1,
+            creditsEach: 1,
+            creditsUsed: 1,
+            billable: true,
+          },
+        ],
+      }),
+    ]);
+    expect(p.rollupByBreakdownComponents.some((x) => x.key === 'suggested_question_message')).toBe(false);
+    expect(p.rollupByBreakdownComponents.find((x) => x.key === 'text_message')).toEqual(
+      expect.objectContaining({ billedUnits: 1, creditsUsed: 1, label: 'Text message' }),
+    );
   });
 
   it('shows decimal totals from stored rows', () => {

@@ -90,6 +90,10 @@ import {
 import {
   buildWorkspaceConversationListMatch,
   buildWorkspaceLeadsListFacetPipeline,
+  collectCapturedLeadDataKeysUnionFromLeadRows,
+  collectCapturedLeadDataKeysWithValues,
+  mergeCapturedLeadFieldMetaSnapshot,
+  mergeCustomerLeadFieldDefinitions,
   serializeCustomerWorkspaceLeadDetail,
   serializeCustomerWorkspaceLeadListRow,
   serializeMessageFeedbackForWorkspace,
@@ -1104,6 +1108,7 @@ export class ChatEngineService {
     const leadConfig = bot.leadCapture;
     const conv = conversation as {
       capturedLeadData?: CapturedLeadData;
+      capturedLeadFieldMeta?: Record<string, unknown>;
       leadCaptureMeta?: LeadCaptureMeta;
       summary?: string;
       leadCapturedAt?: Date;
@@ -1154,6 +1159,7 @@ export class ChatEngineService {
 
     const updates: {
       capturedLeadData?: CapturedLeadData;
+      capturedLeadFieldMeta?: Record<string, { label: string; type: string }>;
       leadCaptureMeta?: LeadCaptureMeta;
       hasLead?: boolean;
       leadCapturedAt?: Date;
@@ -1215,6 +1221,17 @@ export class ChatEngineService {
           appliedLeadValueKeys,
         );
       }
+      const metaSnap = mergeCapturedLeadFieldMetaSnapshot(
+        conv.capturedLeadFieldMeta,
+        normalizedLead.fields.map((f) => ({
+          key: f.key,
+          label: f.label,
+          type: f.type,
+          disabled: f.disabled,
+        })),
+        appliedLeadValueKeys,
+      );
+      if (metaSnap) updates.capturedLeadFieldMeta = metaSnap;
       chatLog({
         event: 'chat.lead_fields_captured',
         level: 'info',
@@ -1997,7 +2014,7 @@ export class ChatEngineService {
     page: number;
     beforeSortAtIso?: string | null;
     filters?: WorkspaceLeadsListFilters | null;
-    leadFieldDefinitions: Array<Record<string, unknown>>;
+    leadCapture: unknown;
   }): Promise<{
     leadFieldDefinitions: Array<Record<string, unknown>>;
     leads: Array<Record<string, unknown>>;
@@ -2046,6 +2063,10 @@ export class ChatEngineService {
       void _;
       return serializeCustomerWorkspaceLeadListRow(rest as Record<string, unknown>, botId);
     });
+    const capturedUnion = collectCapturedLeadDataKeysUnionFromLeadRows(
+      leads as Array<{ capturedLeadData?: Record<string, unknown> }>,
+    );
+    const leadFieldDefinitions = mergeCustomerLeadFieldDefinitions(params.leadCapture, capturedUnion);
     let nextCursor: string | null = null;
     if (hasMore && slice.length > 0) {
       const last = slice[slice.length - 1] as { _leadSortAt?: Date };
@@ -2054,7 +2075,7 @@ export class ChatEngineService {
     }
 
     return {
-      leadFieldDefinitions: params.leadFieldDefinitions,
+      leadFieldDefinitions,
       leads,
       nextCursor,
       totalMatching,
@@ -2070,7 +2091,7 @@ export class ChatEngineService {
   async getBotLeadDetailForWorkspace(params: {
     botOid: Types.ObjectId;
     conversationId: string;
-    leadFieldDefinitions: Array<Record<string, unknown>>;
+    leadCapture: unknown;
   }): Promise<Record<string, unknown> | null> {
     let cid: Types.ObjectId;
     try {
@@ -2083,13 +2104,18 @@ export class ChatEngineService {
       return null;
     }
     const base = serializeCustomerWorkspaceLeadDetail(conv as Record<string, unknown>, params.botOid.toString());
+    const capturedKeys = collectCapturedLeadDataKeysWithValues(
+      base.capturedLeadData as Record<string, unknown> | undefined,
+    );
+    const metaRaw = base.capturedLeadFieldMeta as Record<string, { label?: string; type?: string }> | undefined;
+    const leadFieldDefinitions = mergeCustomerLeadFieldDefinitions(params.leadCapture, capturedKeys, metaRaw);
     const leadSourceMessagePreview = await this.resolveLeadSourceMessagePreview(
       cid,
       (conv as { leadSourceMessageId?: unknown }).leadSourceMessageId,
     );
     return {
       ...base,
-      leadFieldDefinitions: params.leadFieldDefinitions,
+      leadFieldDefinitions,
       ...(leadSourceMessagePreview ? { leadSourceMessagePreview } : {}),
     };
   }

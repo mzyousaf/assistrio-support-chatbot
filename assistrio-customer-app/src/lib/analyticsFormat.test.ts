@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  formatAnalyticsAiCreditsLabel,
   formatAnalyticsCredits,
   formatAnalyticsCreditsWithUnit,
   formatAnalyticsDateLabel,
@@ -25,9 +26,17 @@ describe('analyticsFormat', () => {
     expect(formatAnalyticsCredits(3.25)).toBe('3.25');
   });
 
-  it('formatAnalyticsCreditsWithUnit appends credits label', () => {
-    expect(formatAnalyticsCreditsWithUnit(3)).toBe('3 credits');
+  it('formatAnalyticsCreditsWithUnit uses AI Credits wording', () => {
+    expect(formatAnalyticsCreditsWithUnit(3)).toBe('3 AI Credits');
+    expect(formatAnalyticsCreditsWithUnit(1)).toBe('1 AI Credit');
     expect(formatAnalyticsCreditsWithUnit(NaN)).toBe('—');
+  });
+
+  it('formatAnalyticsAiCreditsLabel matches visitor badge wording', () => {
+    expect(formatAnalyticsAiCreditsLabel(1)).toBe('1 AI Credit');
+    expect(formatAnalyticsAiCreditsLabel(1.19)).toBe('1.19 AI Credits');
+    expect(formatAnalyticsAiCreditsLabel(0)).toBe('0 AI Credits');
+    expect(formatAnalyticsAiCreditsLabel(undefined)).toBe('—');
   });
 
   it('formatAnalyticsChatsCountWithUnit pluralizes chat', () => {

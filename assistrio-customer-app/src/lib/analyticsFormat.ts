@@ -42,11 +42,20 @@ export function formatAnalyticsCredits(value: unknown): string {
   return new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(n);
 }
 
-/** Tooltip / sentence form — e.g. "36 credits" (uses em dash when not finite). */
+/**
+ * Visitor-facing AI Credits label (matches conversation spend badges): {@code "1 AI Credit"}, {@code "1.19 AI Credits"}.
+ */
+export function formatAnalyticsAiCreditsLabel(value: unknown): string {
+  const n = finiteNumber(value);
+  if (n == null) return EM;
+  const numStr = formatAnalyticsCredits(n);
+  if (numStr === EM) return EM;
+  return n === 1 ? `${numStr} AI Credit` : `${numStr} AI Credits`;
+}
+
+/** Tooltip / sentence form — same wording as visitor badges ({@link formatAnalyticsAiCreditsLabel}). */
 export function formatAnalyticsCreditsWithUnit(value: unknown): string {
-  const c = formatAnalyticsCredits(value);
-  if (c === EM) return EM;
-  return `${c} credits`;
+  return formatAnalyticsAiCreditsLabel(value);
 }
 
 /** Similarity / match scores from RAG (null → em dash). Plain numeric, not a percentage. */

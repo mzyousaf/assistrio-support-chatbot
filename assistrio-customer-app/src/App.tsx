@@ -9,7 +9,6 @@ import { BotWorkspaceLayout } from './pages/bot-workspace/BotWorkspaceLayout';
 import { PlaygroundLayout } from './pages/bot-workspace/PlaygroundLayout';
 import { PublishWorkspacePage } from './pages/bot-workspace/PublishWorkspacePage';
 import { ChatsAnalyticsPage } from './pages/bot-workspace/analytics/chats/ChatsAnalyticsPage';
-import { KnowledgeSourcesAnalyticsPage } from './pages/bot-workspace/analytics/knowledge-sources/KnowledgeSourcesAnalyticsPage';
 import { LeadsAnalyticsPage } from './pages/bot-workspace/analytics/leads/LeadsAnalyticsPage';
 import { KnowledgeBaseLayout } from './pages/bot-workspace/knowledge/KnowledgeBaseLayout';
 import { KnowledgeOverviewPage } from './pages/bot-workspace/knowledge/KnowledgeOverviewPage';
@@ -44,7 +43,7 @@ import { AiIntegrationsWorkspacePage } from './pages/bot-workspace/AiIntegration
 import { TranslationWorkspacePage } from './pages/bot-workspace/TranslationWorkspacePage';
 import { TopicsAnalyticsPage } from './pages/bot-workspace/analytics/topics/TopicsAnalyticsPage';
 import { SentimentAnalyticsPage } from './pages/bot-workspace/analytics/sentiment/SentimentAnalyticsPage';
-import { BotUsagePage } from './pages/bot-workspace/BotUsagePage';
+import { AgentResourcesAnalyticsPage } from './pages/bot-workspace/analytics/agent-resources/AgentResourcesAnalyticsPage';
 import { ConversationsInsightsPage } from './pages/bot-workspace/ConversationsInsightsPage';
 import { CustomerLeadsPage } from './pages/bot-workspace/CustomerLeadsPage';
 import { BotsListPage } from './pages/BotsListPage';
@@ -209,9 +208,13 @@ export function App() {
                 element={<CustomerLeadsPage />}
               />
               <Route path="analytics/chats" element={<ChatsAnalyticsPage />} />
-              <Route path="analytics/knowledge-sources" element={<KnowledgeSourcesAnalyticsPage />} />
+              <Route path="analytics/agent-resources" element={<AgentResourcesAnalyticsPage />} />
+              <Route
+                path="analytics/knowledge-sources"
+                element={<Navigate to="analytics/agent-resources" replace />}
+              />
               <Route path="analytics/leads" element={<LeadsAnalyticsPage />} />
-              <Route path="usage" element={<BotUsagePage />} />
+              <Route path="usage" element={<Navigate to="analytics/agent-resources" replace />} />
               <Route path="analytics/topics" element={<TopicsAnalyticsPage />} />
               <Route path="analytics/sentiment" element={<SentimentAnalyticsPage />} />
             </Route>

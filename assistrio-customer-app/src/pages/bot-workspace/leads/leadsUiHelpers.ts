@@ -26,13 +26,39 @@ export function isLeadsTableNameFieldColumn(d: CustomerLeadFieldDefinition): boo
   return label === 'name' || label === 'full name';
 }
 
-/** Column defs shown in table and detail (respect `disabled`, preserve `order`). */
-export function visibleLeadFieldDefinitions(defs: CustomerLeadFieldDefinition[]): CustomerLeadFieldDefinition[] {
-  return [...defs].filter((d) => !d.disabled && String(d.key ?? '').trim()).sort((a, b) => a.order - b.order);
+export type LeadFieldStatusUi = 'active' | 'inactive' | 'deleted';
+
+/** Resolve lifecycle status from API fields (fieldStatus preferred; fallback via archived/source). */
+export function inferLeadFieldStatus(d: CustomerLeadFieldDefinition): LeadFieldStatusUi {
+  if (d.fieldStatus) return d.fieldStatus;
+  if (!d.archived) return 'active';
+  return d.source === 'current' ? 'inactive' : 'deleted';
 }
 
-export function leadColumnHeaderLabel(d: CustomerLeadFieldDefinition): string {
-  return d.label?.trim() || d.key;
+/** Bot-active fields only (capture-quality / completeness heuristics). */
+export function activeLeadFieldDefinitions(defs: CustomerLeadFieldDefinition[]): CustomerLeadFieldDefinition[] {
+  return [...defs]
+    .filter((d) => inferLeadFieldStatus(d) === 'active' && String(d.key ?? '').trim())
+    .sort((a, b) => a.order - b.order);
+}
+
+/** Column defs for inbox table and CSV: configured fields first, then inactive/deleted keys with values. */
+export function visibleLeadFieldDefinitions(defs: CustomerLeadFieldDefinition[]): CustomerLeadFieldDefinition[] {
+  return [...defs].filter((d) => String(d.key ?? '').trim()).sort((a, b) => a.order - b.order);
+}
+
+/** Plain label for drawer rows and table headers (badges carry inactive/deleted). */
+export function leadDetailFieldLabel(d: CustomerLeadFieldDefinition): string {
+  return (d.label?.trim() || d.key?.trim() || '').trim() || d.key;
+}
+
+/** CSV header cells — suffix for historical columns (inactive vs deleted). */
+export function leadCsvColumnHeaderLabel(d: CustomerLeadFieldDefinition): string {
+  const base = leadDetailFieldLabel(d);
+  const st = inferLeadFieldStatus(d);
+  if (st === 'deleted') return `${base} (Deleted)`;
+  if (st === 'inactive') return `${base} (Inactive)`;
+  return base;
 }
 
 /** Resolve the actual `capturedLeadData` property key (case-insensitive). */
@@ -155,7 +181,7 @@ export function leadTableDynamicDefinitions(
 export function countLoadedLeadsWithName(leads: CustomerLeadListItem[], defs: CustomerLeadFieldDefinition[]): number {
   const nameKeys = new Set<string>();
   for (const d of defs) {
-    if (d.disabled) continue;
+    if (inferLeadFieldStatus(d) !== 'active') continue;
     if (!isLeadsTableNameFieldColumn(d)) continue;
     const raw = d.key?.trim();
     if (raw) nameKeys.add(raw);
@@ -182,7 +208,7 @@ export function countLoadedLeadsWithName(leads: CustomerLeadListItem[], defs: Cu
 export function countLoadedLeadsWithEmail(leads: CustomerLeadListItem[], defs: CustomerLeadFieldDefinition[]): number {
   const emailKeys = new Set<string>();
   for (const d of defs) {
-    if (d.disabled) continue;
+    if (inferLeadFieldStatus(d) !== 'active') continue;
     const k = d.key?.trim().toLowerCase();
     if (!k) continue;
     if (d.type?.toLowerCase() === 'email' || k === 'email') emailKeys.add(d.key);
@@ -203,7 +229,7 @@ export function countLoadedLeadsWithEmail(leads: CustomerLeadListItem[], defs: C
 export function countLoadedLeadsWithPhone(leads: CustomerLeadListItem[], defs: CustomerLeadFieldDefinition[]): number {
   const phoneKeys = new Set<string>();
   for (const d of defs) {
-    if (d.disabled) continue;
+    if (inferLeadFieldStatus(d) !== 'active') continue;
     const k = d.key?.trim().toLowerCase();
     if (!k) continue;
     const t = d.type?.toLowerCase();
@@ -308,7 +334,7 @@ export function leadQualityFromCaptured(
   capturedLeadData: Record<string, string> | undefined,
   defs: CustomerLeadFieldDefinition[],
 ): { kind: LeadQualityKind; label: string } {
-  const visible = visibleLeadFieldDefinitions(defs);
+  const visible = activeLeadFieldDefinitions(defs);
   const data = capturedLeadData ?? {};
 
   const requiredDefs = visible.filter((d) => d.required);
@@ -325,7 +351,6 @@ export function leadQualityFromCaptured(
   const hasEmailVal = hasValueForAnyConfiguredKey(data, emailKeys);
 
   const hasPhoneConfigured = visible.some((d) => {
-    if (d.disabled) return false;
     const k = d.key.trim().toLowerCase();
     const t = d.type?.toLowerCase();
     return t === 'tel' || t === 'phone' || k === 'phone' || k === 'mobile';

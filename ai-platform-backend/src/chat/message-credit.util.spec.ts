@@ -1,4 +1,4 @@
-﻿import { CHAT_MESSAGE_CREDIT_RULES, CHAT_MESSAGE_CREDIT_RULE_VERSION } from './chat-credit-rules.constant';
+import { CHAT_MESSAGE_CREDIT_RULES, CHAT_MESSAGE_CREDIT_RULE_VERSION } from './chat-credit-rules.constant';
 import {
   buildChatCreditRuleFingerprint,
   calculateMessageCreditUsage,
@@ -138,7 +138,7 @@ describe('calculateMessageCreditUsage', () => {
       hasTextContent: true,
     });
     expect(r.usageType).toBe('dictation_message');
-    expect(r.creditsUsed).toBe(3);
+    expect(r.creditsUsed).toBe(1.25);
     expect(r.creditReason).toBe('composite:dictation_session+text_message');
     const sumRows = r.breakdown.reduce((a, b) => a + b.creditsUsed, 0);
     expect(sumRows).toBe(r.creditsUsed);
@@ -150,10 +150,10 @@ describe('calculateMessageCreditUsage', () => {
       voiceMeta: { isDictationMessage: true, dictationSessionCount: 2 },
       hasTextContent: true,
     });
-    expect(r.creditsUsed).toBe(5);
+    expect(r.creditsUsed).toBe(1.5);
     const dict = r.breakdown.find((x) => x.key === 'dictation_session');
     expect(dict?.count).toBe(2);
-    expect(dict?.creditsUsed).toBe(4);
+    expect(dict?.creditsUsed).toBe(0.5);
   });
 
   it('dictation missing count defaults to 1 session', () => {
@@ -164,7 +164,7 @@ describe('calculateMessageCreditUsage', () => {
     });
     const dict = r.breakdown.find((x) => x.key === 'dictation_session');
     expect(dict?.count).toBe(1);
-    expect(dict?.creditsUsed).toBe(2);
+    expect(dict?.creditsUsed).toBe(0.25);
   });
 
   it('typed text without dictation => text component only', () => {
@@ -201,8 +201,8 @@ describe('calculateMessageCreditUsage', () => {
   it('decimal credits sum correctly in breakdown totals', () => {
     const rules = {
       ...CHAT_MESSAGE_CREDIT_RULES,
-      text_message: { enabled: true, credits: 0.25 },
-      dictation_session: { enabled: true, credits: 0.5 },
+      text_message: { ...CHAT_MESSAGE_CREDIT_RULES.text_message, credits: 0.25 },
+      dictation_session: { ...CHAT_MESSAGE_CREDIT_RULES.dictation_session, credits: 0.5 },
     };
     const r = calculateMessageCreditUsage(
       { inputType: 'dictation', voiceMeta: { isDictationMessage: true, dictationSessionCount: 2 }, hasTextContent: true },
@@ -225,7 +225,7 @@ describe('calculateMessageCreditUsage', () => {
   it('quick_reply supported', () => {
     const r = calculateMessageCreditUsage({ inputType: 'quick_reply' });
     expect(r.usageType).toBe('quick_reply_message');
-    expect(r.creditsUsed).toBe(1);
+    expect(r.creditsUsed).toBe(0);
   });
 
   it('standalone attachment bucket keys => only attachment row when disabled rules', () => {
@@ -236,8 +236,8 @@ describe('calculateMessageCreditUsage', () => {
   it('disabled text rule yields billed dictation totals only', () => {
     const rules = {
       ...CHAT_MESSAGE_CREDIT_RULES,
-      text_message: { enabled: false, credits: 5 },
-      dictation_session: { enabled: true, credits: 2 },
+      text_message: { ...CHAT_MESSAGE_CREDIT_RULES.text_message, enabled: false, credits: 5 },
+      dictation_session: { ...CHAT_MESSAGE_CREDIT_RULES.dictation_session, credits: 2 },
     };
     const r = calculateMessageCreditUsage(
       {
@@ -260,7 +260,7 @@ describe('calculateMessageCreditUsage', () => {
   it('fractional text credits via rules override', () => {
     const rules = {
       ...CHAT_MESSAGE_CREDIT_RULES,
-      text_message: { enabled: true, credits: 1.25 },
+      text_message: { ...CHAT_MESSAGE_CREDIT_RULES.text_message, credits: 1.25 },
     };
     const r = calculateMessageCreditUsage({ inputType: 'text' }, rules);
     expect(r.creditsUsed).toBe(1.25);
@@ -270,7 +270,27 @@ describe('calculateMessageCreditUsage', () => {
   it('missing inputType resolves unknown ledger path', () => {
     const r = calculateMessageCreditUsage({});
     expect(r.usageType).toBe('unknown_message');
+    expect(r.creditsUsed).toBe(0);
+  });
+
+  it('exclude component from totals keeps composite creditReason but charges only included lines', () => {
+    const rules = {
+      ...CHAT_MESSAGE_CREDIT_RULES,
+      dictation_session: { ...CHAT_MESSAGE_CREDIT_RULES.dictation_session, includeInTotalCredits: false },
+    };
+    const r = calculateMessageCreditUsage(
+      {
+        inputType: 'dictation',
+        voiceMeta: { isDictationMessage: true, dictationSessionCount: 1 },
+        hasTextContent: true,
+      },
+      rules,
+    );
     expect(r.creditsUsed).toBe(1);
+    expect(r.creditReason).toBe('composite:dictation_session+text_message');
+    expect(r.breakdown.find((x) => x.key === 'dictation_session')?.creditsUsed).toBe(0);
+    expect(r.breakdown.find((x) => x.key === 'dictation_session')?.billable).toBe(false);
+    expect(r.breakdown.find((x) => x.key === 'text_message')?.creditsUsed).toBe(1);
   });
 });
 

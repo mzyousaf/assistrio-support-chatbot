@@ -29,12 +29,12 @@ describe('leadsFiltersModel', () => {
     expect(countActiveLeadsFilters(apiParamsToLeadsDraft({ search: 'x' }))).toBe(1);
   });
 
-  it('field key options respect order and skip disabled', () => {
+  it('field key options respect order and include inactive or removed keys', () => {
     const keys = leadsFilterFieldKeyOptions([
       { key: 'z', label: 'Z', type: 'text', required: false, order: 2, disabled: false },
-      { key: 'a', label: 'A', type: 'text', required: false, order: 0, disabled: true },
+      { key: 'a', label: 'A', type: 'text', required: false, order: 0, disabled: true, fieldStatus: 'inactive' },
       { key: 'm', label: 'M', type: 'text', required: false, order: 1, disabled: false },
     ]);
-    expect(keys).toEqual(['m', 'z']);
+    expect(keys).toEqual(['a', 'm', 'z']);
   });
 });
