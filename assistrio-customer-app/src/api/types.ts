@@ -1,0 +1,1752 @@
+/** GET /api/customer/me */
+export type CustomerMe = {
+  id: string;
+  email: string;
+  role: string;
+  workspaceIds: string[];
+  /** Display names for workspaces (same order as `workspaceIds` when present). */
+  workspaces?: Array<{ id: string; name: string }>;
+  firstName?: string;
+  lastName?: string;
+  /** Profile image URL (e.g. Google picture). */
+  picture?: string;
+};
+
+/** GET /api/customer/bots list item */
+export type CustomerBotListItem = {
+  _id: string;
+  name: string;
+  agentsPackAgent: boolean;
+  category: string;
+  status: string;
+  isPublic: boolean;
+  visibility: string;
+  createdAt: string | null;
+  slug: string;
+  primaryColor: string;
+  avatarEmoji?: string;
+  imageUrl?: string;
+  shortDescription?: string;
+  activeOrigins?: string[];
+  leadCaptureEnabled?: boolean;
+  totalConversations?: number;
+  totalMessages?: number;
+  knowledgeDocs?: number;
+  knowledgeFaqs?: number;
+  knowledgeSnippets?: number;
+  knowledgeDatasheets?: number;
+  lastActivityAt?: string | null;
+  lastTrainedAt?: string | null;
+};
+
+/** GET /api/customer/bots/:botId/conversations — origin subset on each row */
+export type CustomerConversationOriginSummary = {
+  source?: string;
+  mode?: string;
+  embedType?: string;
+  websiteOrigin?: string;
+  pageUrl?: string;
+  referrer?: string;
+};
+
+export type CustomerConversationLocationSummary = {
+  country?: string;
+  countryCode?: string;
+  region?: string;
+  city?: string;
+  timezone?: string;
+};
+
+export type CustomerConversationDeviceSummary = {
+  deviceType?: string;
+  browser?: string;
+  os?: string;
+  language?: string;
+};
+
+/** GET /api/customer/bots/:botId/conversations list row */
+export type CustomerConversationListItem = {
+  id: string;
+  conversationId: string;
+  /** Masked display — not the raw widget visitor id. */
+  chatVisitorId: string;
+  sessionId?: string;
+  userPreview: string;
+  assistantPreview: string;
+  startedAt: string | null;
+  firstUserMessageAt: string | null;
+  lastUserMessageAt: string | null;
+  lastAssistantMessageAt: string | null;
+  lastMessageAt: string | null;
+  lastActivityAt: string;
+  createdAt: string | null;
+  startedFrom: string | null;
+  sessionSource: string | null;
+  conversationOrigin: CustomerConversationOriginSummary | null;
+  location: CustomerConversationLocationSummary | null;
+  deviceInfo: CustomerConversationDeviceSummary | null;
+  totalUserMessages: number;
+  totalAssistantMessages: number;
+  totalMessages: number;
+  textMessageCount: number;
+  voiceMessageCount: number;
+  dictationMessageCount: number;
+  attachmentMessageCount: number;
+  suggestedQuestionMessageCount: number;
+  totalCreditsUsed: number;
+  sourcesUsedCount: number;
+  hasLead: boolean;
+  hasVoice: boolean;
+  hasDictation: boolean;
+  hasAttachment: boolean;
+  status: string;
+  leadFieldKeys?: string[];
+  /** Thread-level analytics (same shape as conversation detail). */
+  conversationSentiment?: CustomerConversationSentimentSummary;
+  conversationTopics?: CustomerConversationTopicsSummary;
+};
+
+export type CustomerBotConversationsListParams = {
+  limit?: number;
+  before?: string | null;
+  dateFrom?: string;
+  dateTo?: string;
+  startedFrom?: string;
+  hasLead?: boolean;
+  hasVoice?: boolean;
+  hasDictation?: boolean;
+  hasAttachment?: boolean;
+  deviceType?: string;
+  countryCode?: string;
+};
+
+export type CustomerBotConversationsListResponse = {
+  conversations: CustomerConversationListItem[];
+  nextCursor: string | null;
+};
+
+/** Lead column definitions from `bot.leadCapture.fields` (GET …/leads, GET …/leads/:id). */
+export type CustomerLeadFieldDefinition = {
+  key: string;
+  label: string;
+  type: string;
+  required: boolean;
+  /** Index in bot config array (stable column order). */
+  order: number;
+  disabled?: boolean;
+  placeholder?: string;
+  options?: string[];
+  aliases?: string[];
+};
+
+export type CustomerLeadConversationOrigin = {
+  pageUrl?: string;
+  websiteOrigin?: string;
+  referrer?: string;
+};
+
+export type CustomerLeadLocation = {
+  country?: string;
+  countryCode?: string;
+  region?: string;
+  city?: string;
+  timezone?: string;
+  /** e.g. ip_lookup, browser_timezone */
+  source?: string;
+};
+
+export type CustomerLeadDeviceInfo = {
+  deviceType?: string;
+  browser?: string;
+  browserVersion?: string;
+  os?: string;
+  osVersion?: string;
+  screenWidth?: number;
+  screenHeight?: number;
+  language?: string;
+};
+
+/** GET /api/customer/bots/:botId/leads row */
+export type CustomerLeadListItem = {
+  conversationId: string;
+  botId: string;
+  capturedLeadData?: Record<string, string>;
+  leadFieldKeys?: string[];
+  leadCapturedAt: string | null;
+  leadSourceMessageId?: string;
+  hasLead: boolean;
+  startedFrom: string | null;
+  sessionSource: string | null;
+  lastActivityAt: string | null;
+  startedAt: string | null;
+  totalMessages: number;
+  totalCreditsUsed: number;
+  conversationOrigin: CustomerLeadConversationOrigin | null;
+  location: CustomerLeadLocation | null;
+  deviceInfo: CustomerLeadDeviceInfo | null;
+};
+
+export type CustomerBotLeadsListParams = {
+  limit?: number;
+  /** 1-based page (server-side offset pagination). */
+  page?: number;
+  /** @deprecated Prefer `page`. Cursor for legacy infinite scroll when `page` is omitted. */
+  before?: string | null;
+  dateFrom?: string;
+  dateTo?: string;
+  startedFrom?: string;
+  countryCode?: string;
+  /** Non-empty `capturedLeadData[fieldKey]` filter (safe key only). */
+  fieldKey?: string;
+  /** Case-insensitive substring match on any string value in `capturedLeadData`. */
+  search?: string;
+};
+
+export type CustomerLeadsListResponse = {
+  leadFieldDefinitions: CustomerLeadFieldDefinition[];
+  leads: CustomerLeadListItem[];
+  /** Last-row cursor when another page exists (legacy). */
+  nextCursor: string | null;
+  /** Total rows matching current filters (all pages). */
+  totalMatching: number;
+  /** Echo of the requested 1-based page (legacy cursor mode may report `1`). */
+  page: number;
+  /** True if at least one more row exists after this page. */
+  hasNextPage: boolean;
+  /** Filtered-set rollup: rows with a non-empty name / full_name / fullname value. */
+  matchingWithNameCount: number;
+  /** Filtered-set rollup: rows with a non-empty email value. */
+  matchingWithEmailCount: number;
+  /** ISO timestamp: max capture/sort time in the filtered set. */
+  latestMatchingCapturedAt: string | null;
+};
+
+/** GET /api/customer/bots/:botId/leads/:conversationId */
+export type CustomerLeadDetail = {
+  conversationId: string;
+  botId: string;
+  leadFieldDefinitions: CustomerLeadFieldDefinition[];
+  capturedLeadData?: Record<string, string>;
+  /** Field key → visitor message id that last set that captured value (new chats only). */
+  capturedLeadFieldMessageIds?: Record<string, string>;
+  leadFieldKeys?: string[];
+  leadCapturedAt: string | null;
+  leadSourceMessageId?: string;
+  /** Truncated user message that triggered lead capture (when resolvable). */
+  leadSourceMessagePreview?: string;
+  hasLead: boolean;
+  startedFrom?: string;
+  sessionSource?: string;
+  status: string;
+  startedAt: string | null;
+  lastUserMessageAt: string | null;
+  lastAssistantMessageAt: string | null;
+  lastMessageAt: string | null;
+  lastActivityAt: string | null;
+  createdAt: string | null;
+  totalUserMessages: number;
+  totalAssistantMessages: number;
+  totalMessages: number;
+  totalCreditsUsed: number;
+  sourcesUsedCount: number;
+  conversationOrigin: CustomerLeadConversationOrigin | null;
+  location: CustomerLeadLocation | null;
+  deviceInfo: CustomerLeadDeviceInfo | null;
+  hasVoice: boolean;
+  hasDictation: boolean;
+  hasAttachment: boolean;
+};
+
+/** GET /api/customer/bots/:botId/conversations/:conversationId */
+export type CustomerConversationOriginDetail = {
+  source?: string;
+  mode?: string;
+  embedType?: string;
+  pageUrl?: string;
+  referrer?: string;
+  websiteOrigin?: string;
+  parentOrigin?: string;
+  iframeUrl?: string;
+  sharedUrl?: string;
+  shareSlug?: string;
+};
+
+export type CustomerConversationLocationDetail = {
+  country?: string;
+  countryCode?: string;
+  region?: string;
+  city?: string;
+  timezone?: string;
+  source?: string;
+};
+
+export type CustomerConversationDeviceDetail = {
+  deviceType?: string;
+  browser?: string;
+  browserVersion?: string;
+  os?: string;
+  osVersion?: string;
+  screenWidth?: number;
+  screenHeight?: number;
+  language?: string;
+};
+
+/** Optional analytics sentiment rollup on a conversation thread. */
+export type CustomerConversationSentimentSummary = {
+  label?: 'positive' | 'neutral' | 'negative' | 'mixed' | 'unknown';
+  score?: number;
+};
+
+/** Optional analytics topic rollup on a conversation thread. */
+export type CustomerConversationTopicsSummary = {
+  primaryTopic?: string;
+  topicLabels?: string[];
+  primarySubTopic?: string;
+  subTopicLabels?: string[];
+};
+
+export type CustomerConversationDetail = {
+  id: string;
+  conversationId: string;
+  botId: string;
+  chatVisitorId?: string;
+  sessionId?: string;
+  legacyVisitorId?: string;
+  startedFrom?: string;
+  sessionSource?: string;
+  status: string;
+  startedAt: string | null;
+  firstUserMessageAt: string | null;
+  lastUserMessageAt: string | null;
+  lastAssistantMessageAt: string | null;
+  lastMessageAt: string | null;
+  lastActivityAt: string | null;
+  createdAt: string | null;
+  endedAt: string | null;
+  conversationOrigin?: CustomerConversationOriginDetail;
+  conversationSentiment?: CustomerConversationSentimentSummary;
+  conversationTopics?: CustomerConversationTopicsSummary;
+  capturedLeadData?: Record<string, string>;
+  location?: CustomerConversationLocationDetail;
+  deviceInfo?: CustomerConversationDeviceDetail;
+  totalUserMessages: number;
+  totalAssistantMessages: number;
+  totalMessages: number;
+  textMessageCount: number;
+  voiceMessageCount: number;
+  dictationMessageCount: number;
+  attachmentMessageCount: number;
+  suggestedQuestionMessageCount: number;
+  quickReplyMessageCount: number;
+  totalCreditsUsed: number;
+  sourcesUsedCount: number;
+  hasLead: boolean;
+  leadCapturedAt: string | null;
+  leadFieldKeys?: string[];
+  leadSourceMessageId?: string;
+  /** Truncated user message that triggered lead capture (when resolvable). */
+  leadSourceMessagePreview?: string;
+  hasVoice: boolean;
+  hasDictation: boolean;
+  hasAttachment: boolean;
+};
+
+export type CustomerConversationMessageSpeechInput = {
+  mode: 'dictate' | 'voice';
+  transcript?: string;
+  audioUrl?: string;
+  mimeType?: string;
+  durationMs?: number;
+};
+
+export type CustomerConversationMessageAttachment = {
+  id?: string;
+  name: string;
+  mimeType?: string;
+  url?: string;
+  size?: number;
+  createdAt?: string;
+  /** Alternate shapes the client may normalize (not all sent by workspace API). */
+  filename?: string;
+  fileName?: string;
+  originalName?: string;
+  contentType?: string;
+  type?: string;
+  mime?: string;
+  bytes?: number;
+  sizeBytes?: number;
+  downloadUrl?: string;
+  publicUrl?: string;
+  href?: string;
+};
+
+export type CustomerConversationMessageSource = {
+  sourceType?: string;
+  knowledgeBaseItemId?: string;
+  sourceTitle?: string;
+  sourceUrl?: string;
+  chunkId?: string;
+  score?: number;
+  preview?: string;
+  docId?: string;
+  docTitle?: string;
+  usedAt?: string;
+  /** Alternate shapes some APIs normalize into titles (workspace may omit if blank). */
+  title?: string;
+  name?: string;
+};
+
+export type CustomerConversationMessageAiMeta = {
+  modelUsed?: string;
+  responseTimeMs?: number;
+  promptTokens?: number;
+  completionTokens?: number;
+  totalTokens?: number;
+  ragUsed?: boolean;
+  sourcesCount?: number;
+  fallbackUsed?: boolean;
+  errorCode?: string;
+  errorMessage?: string;
+};
+
+/** Denormalized visitor thumbs on assistant messages (workspace read API). */
+export type CustomerConversationMessageFeedback = {
+  rating: 'up' | 'down';
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type CustomerConversationVoiceMeta = {
+  isVoiceMessage?: boolean;
+  isDictationMessage?: boolean;
+  speechDurationSeconds?: number;
+  speechToTextCharacters?: number;
+  speechToTextWords?: number;
+  transcriptionProvider?: string;
+  transcriptionStatus?: string;
+  dictationDurationSeconds?: number;
+  audioDurationSeconds?: number;
+  audioSizeBytes?: number;
+  audioMimeType?: string;
+  dictationSessionCount?: number;
+};
+
+export type CustomerConversationMessageCreditBreakdownRow = {
+  key: string;
+  label: string;
+  count: number;
+  creditsEach: number;
+  creditsUsed: number;
+  billable: boolean;
+};
+
+export type CustomerConversationMessageTopics = {
+  primaryTopic?: string;
+  topicLabels?: string[];
+  topicConfidence?: number;
+  primarySubTopic?: string;
+  subTopicLabels?: string[];
+};
+
+export type CustomerConversationMessageSentiment = {
+  label?: 'positive' | 'neutral' | 'negative' | 'mixed' | 'unknown';
+  score?: number;
+};
+
+export type CustomerConversationMessage = {
+  id: string;
+  messageId: string;
+  role: string;
+  content: string;
+  text: string;
+  createdAt: string;
+  speechInput?: CustomerConversationMessageSpeechInput;
+  attachments?: CustomerConversationMessageAttachment[];
+  inputType?: string;
+  inputMethod?: string;
+  voiceMeta?: CustomerConversationVoiceMeta;
+  creditCost?: number;
+  creditReason?: string;
+  billingType?: string;
+  quotaPeriod?: string;
+  chargedAt?: string;
+  creditBreakdown?: CustomerConversationMessageCreditBreakdownRow[];
+  topics?: CustomerConversationMessageTopics;
+  sentiment?: CustomerConversationMessageSentiment;
+  sources?: CustomerConversationMessageSource[];
+  aiMeta?: CustomerConversationMessageAiMeta;
+  feedback?: CustomerConversationMessageFeedback | null;
+};
+
+/** POST /api/customer/bots/:id/datasheets/preview (multipart `file`) */
+export type CustomerDatasheetPreviewResponse = {
+  ok: true;
+  importSessionId: string;
+  fileName: string;
+  columns: string[];
+  previewRows: string[][];
+  fileSizeBytes: number;
+  totalDataRows: number;
+  estimatedDataRows?: number;
+};
+
+/** POST /api/customer/bots/:id/datasheets/import-cancel (JSON body) */
+export type CustomerDatasheetImportCancelResponse = {
+  ok: true;
+  /** Present when cancel was a no-op because the session was already cancelled. */
+  alreadyCancelled?: boolean;
+};
+
+/** POST /api/customer/bots/:id/datasheets/import-confirm (JSON body) */
+export type CustomerDatasheetImportConfirmResponseBase = {
+  ok: true;
+  botId: string;
+  knowledgeBaseItemId: string;
+  importJobId: string;
+  sheetIndex: number;
+  tableImportDisplayState: string;
+  idempotent?: boolean;
+  httpAccepted?: true;
+};
+
+/** @deprecated Use {@link CustomerDatasheetImportConfirmResponseBase} / import-confirm */
+export type CustomerDatasheetImportResponse = {
+  ok: true;
+  botId: string;
+  sheetIndex: number;
+  sourceFile: { bucket: string; key: string };
+};
+
+export type CustomerKnowledgeCsvImportErrorDetail = {
+  row: number;
+  column: string;
+  message: string;
+};
+
+export type CustomerKnowledgeCsvImportResponse = {
+  ok: true;
+  imported: number;
+  skippedDueToCapacity?: number;
+  fileName: string;
+};
+
+export type CustomerKnowledgeCsvSampleResponse = {
+  fileName: string;
+  content: string;
+};
+
+/** Subset of `leadCapture` aligned with backend `BotLeadCaptureV2` / workspace PATCH. */
+export type CustomerLeadField = {
+  key: string;
+  label: string;
+  type: 'text' | 'email' | 'phone' | 'number' | 'url';
+  required?: boolean;
+  disabled?: boolean;
+  aliases?: string[];
+};
+
+export type CustomerLeadCapture = {
+  enabled?: boolean;
+  fields?: CustomerLeadField[];
+  askStrategy?: 'soft' | 'balanced' | 'direct';
+  politeMode?: boolean;
+  captureMode?: 'chat' | 'form' | 'hybrid';
+};
+
+/** Canonical KB training lifecycle — same for documents (ingest), FAQ, snippets, tables, suggestions, overview. */
+export type KnowledgeTrainingStatus =
+  | 'pending'
+  | 'queued'
+  | 'processing'
+  | 'ready'
+  | 'failed'
+  /** API/polling only — DB items use `failed` + `trainingError=plan_limit_bot_kb_total`. */
+  | 'out_of_storage';
+
+/** @deprecated Use `KnowledgeTrainingStatus` */
+export type CustomerKnowledgeItemTrainingStatus = KnowledgeTrainingStatus;
+
+/**
+ * Removing KB content from the customer app:
+ * - **Documents** — `DELETE …/documents/:id` and `POST …/documents/bulk-delete` (soft-delete server-side; hard purge is internal).
+ * - **FAQ, snippets, datasheets rows, suggested chips** — `POST …/knowledge/items/bulk-delete` with `{ itemIds }` (same rules as legacy per-item delete), or section `PATCH/PUT …/knowledge/…` when replacing shortened lists; do not rely on sparse `PATCH …/bots/:id` for KB content.
+ */
+
+/** `GET/POST/PATCH` `/api/customer/bots/:id/knowledge/...` overview + training control responses. */
+export type CustomerKnowledgeByTypeBlock = {
+  items: number;
+  characters: number;
+  rows?: number;
+};
+
+/** Matches backend `KnowledgeUsageApiPayload` — UTF-8 byte totals for trainable KB. */
+export type CustomerKnowledgeSectionLimits = {
+  faqTotalMaxBytes: number;
+  snippetTotalMaxBytes: number;
+  suggestionTotalMaxBytes: number;
+};
+
+export type CustomerKnowledgeUsage = {
+  totalBytes: number;
+  /** Bytes eligible to train (excludes `out_of_storage` rows); defaults to `totalBytes` if omitted. */
+  trainableBytes?: number;
+  maxBytes: number;
+  remainingBytes: number;
+  percentUsed: number;
+  documentBytes: number;
+  faqBytes: number;
+  noteBytes: number;
+  tableBytes: number;
+  suggestionBytes: number;
+  sectionLimits: CustomerKnowledgeSectionLimits;
+};
+
+export type KnowledgeReplyPriorityMode = 'default' | 'priority';
+export type KnowledgeReplyPrioritySourceType =
+  | 'faq'
+  | 'note'
+  | 'table'
+  | 'document'
+  | 'suggestion';
+export type KnowledgeReplyPrioritySettings = {
+  mode: KnowledgeReplyPriorityMode;
+  sourceOrder: KnowledgeReplyPrioritySourceType[];
+};
+
+export type CustomerKnowledgeOverviewResponse = {
+  botId: string;
+  knowledgeTraining: {
+    autoTrainEnabled: boolean;
+    trainingDelayMinutes: number;
+    scheduleMode?: 'smart' | 'fixed';
+  };
+  knowledgeReplyPriority?: KnowledgeReplyPrioritySettings;
+  knowledgeStats: {
+    totalCharacters: number;
+    totalItems: number;
+    readyCharacters: number;
+    pendingCharacters: number;
+    queuedCharacters: number;
+    processingCharacters: number;
+    failedCharacters: number;
+    uiOnlyCharacters: number;
+    readyItems: number;
+    pendingItems: number;
+    queuedItems: number;
+    processingItems: number;
+    failedItems: number;
+    uiOnlyItems: number;
+    byType: {
+      snippets: CustomerKnowledgeByTypeBlock;
+      qna: CustomerKnowledgeByTypeBlock;
+      documents: CustomerKnowledgeByTypeBlock;
+      datasheets: CustomerKnowledgeByTypeBlock;
+      suggestions: CustomerKnowledgeByTypeBlock;
+    };
+    lastUpdatedAt?: string;
+    lastQueuedAt?: string;
+    lastTrainingStartedAt?: string;
+    lastTrainedAt?: string;
+  };
+  queue: {
+    queuedItems: number;
+    queuedCharacters: number;
+    processingItems: number;
+    processingCharacters: number;
+    nextRunAfter?: string;
+    lastQueuedAt?: string;
+    estimatedTrainingSeconds: number;
+    estimatedLabel: string;
+  };
+  pending: { items: number; characters: number };
+  failed: { items: number; characters: number };
+  knowledgeUsage: CustomerKnowledgeUsage;
+};
+
+/** GET `/api/customer/bots/:id/knowledge/training/pending-items` */
+export type CustomerPendingTrainingSectionType =
+  | 'document'
+  | 'faq'
+  | 'note'
+  | 'table'
+  | 'suggestion';
+
+/** Matches GET `/knowledge/training/pending-items` row badges */
+export type CustomerPendingTrainingItemDisplayStatus =
+  | 'needs_training'
+  | 'failed'
+  | 'scheduled'
+  | 'extraction_failed'
+  | 'in_training'
+  | 'training_queued';
+
+export type CustomerPendingTrainingItemsResponse = {
+  total: number;
+  sections: Array<{
+    type: CustomerPendingTrainingSectionType;
+    label: string;
+    count: number;
+    items: Array<{
+      id: string;
+      title: string;
+      displayStatus: CustomerPendingTrainingItemDisplayStatus;
+      /** ISO `runAfter` for `scheduled` (future) or `training_queued` when set (countdown / “Training soon”). */
+      nextRunAfter?: string | null;
+    }>;
+  }>;
+};
+
+/** Canonical phase from GET `/knowledge/training/status` (`displayPhase`). */
+export type CustomerAgentTrainingDisplayPhase =
+  | 'empty'
+  | 'ready'
+  | 'training_required'
+  | 'extracting'
+  | 'importing'
+  | 'training'
+  | 'partially_ready'
+  | 'failed';
+
+/** GET `/api/customer/bots/:id/knowledge/training/status` — POST retrain-agent adds optional `affectedTypes`. */
+export type CustomerAgentTrainingStatusResponse = {
+  status: 'trained' | 'training' | 'needs_training' | 'failed';
+  /** Short English headline; aligned with {@link displayPhase}. */
+  label: string;
+  /** Preferred single field for headline priority + styling. */
+  displayPhase?: CustomerAgentTrainingDisplayPhase;
+  isTraining: boolean;
+  /** True when any `dataSources[].trainingQueued` &gt; 0. */
+  training_queued?: boolean;
+  /** True while document text extraction is in progress (`extractionStatus` pipeline). */
+  isTextExtracting: boolean;
+  /** Preferred alias for {@link isTextExtracting}. */
+  isExtracting?: boolean;
+  /** True while a datasheet/table async import is in progress. */
+  isImporting?: boolean;
+  isTrained: boolean;
+  needsTraining: boolean;
+  hasFailed: boolean;
+  /** `pending` = action-needed items (pending + failed + future-scheduled queued, etc.). */
+  counts: {
+    pending: number;
+    /** Queued and due now (runAfter missing/null or ≤ now), excluding future-scheduled rows */
+    queued: number;
+    processing: number;
+    ready: number;
+    failed: number;
+    total: number;
+  };
+  characters: {
+    pending: number;
+    queued: number;
+    processing: number;
+    ready: number;
+    failed: number;
+    total: number;
+  };
+  lastQueuedAt?: string | null;
+  lastTrainingStartedAt?: string | null;
+  lastTrainedAt?: string | null;
+  nextRunAfter?: string | null;
+  estimatedTrainingSeconds: number;
+  estimatedLabel: string;
+  lifecycleCounts?: {
+    extractingCount: number;
+    extractionFailedCount: number;
+    datasheetImportPipelineCount?: number;
+    trainingQueuedCount: number;
+    trainingProcessingCount: number;
+    trainingFailedCount: number;
+    readyCount: number;
+  };
+  /** Per data source — same buckets as overview “Data sources”. */
+  dataSources: CustomerAgentTrainingDataSourceRow[];
+  /** Present on POST `/knowledge/training/retrain-agent` — sections to refetch lightweight status. */
+  affectedTypes?: CustomerPendingTrainingSectionType[];
+  /** UTF-8 storage usage vs quota (same shape as overview `knowledgeUsage`). */
+  knowledgeUsage: CustomerKnowledgeUsage;
+};
+
+export type CustomerAgentTrainingDataSourceRow = {
+  key: 'documents' | 'qna' | 'snippets' | 'datasheets' | 'suggestions';
+  trainingRequired: number;
+  /** Lifecycle `queued` count per bucket; omit on older API responses. */
+  trainingQueued?: number;
+  inTraining: number;
+  trained: number;
+  failed: number;
+  total: number;
+};
+
+/** `GET` `/api/customer/bots/:id/knowledge/status?type=...` */
+export type CustomerKnowledgeStatusItem = {
+  id: string;
+  /** When `false`, item is not used in replies (mirrors KB `active`). */
+  active?: boolean;
+  status: KnowledgeTrainingStatus;
+  /** Customer-facing display status (e.g. `out_of_storage`) while `status` stays the DB lifecycle value. */
+  trainingStatus?: string;
+  lastQueuedAt?: string | null;
+  runAfter?: string | null;
+  lastTrainingStartedAt?: string | null;
+  lastTrainedAt?: string | null;
+  /** Mirrors backend `KnowledgeBaseItem.trainingError` (embedding/train phase only). */
+  trainingError?: string | null;
+  /** Document rows: mirrors `KnowledgeBaseItem.extractionStatus`. */
+  extractionStatus?: string;
+  extractionError?: string | null;
+  /** Backend composite UX key — prefer over inferring from `status`. */
+  displayStatus?: string;
+  /** Human-readable status line from API bundle; prefer when set. */
+  displayLabel?: string;
+  displayMessage?: string | null;
+  faqIndex?: number;
+  snippetIndex?: number;
+  tableIndex?: number;
+  suggestionIndex?: number;
+  /** Mirrors backend `sourceType` on KB rows (e.g. `document`). */
+  sourceType?: string;
+  /** ISO — manual retry stuck heuristic for table import / row age */
+  updatedAt?: string | null;
+  /** Legacy alias when route id differed from KB `_id`; prefer `id`. */
+  documentId?: string;
+  /** Document-linked rows: mirrors latest IngestJob.status for merge + debugging. */
+  latestIngestJobStatus?: string | null;
+  documentStatus?: KnowledgeTrainingStatus | string;
+  knowledgeItemStatus?: KnowledgeTrainingStatus | string;
+  extractManualRetrySuggested?: boolean;
+  trainingManualRetrySuggested?: boolean;
+  /** When training failed after stuck recovery cap; stable if `trainingError` is humanized. */
+  trainingFailureCode?: string | null;
+  /** When backend `KB_TRAINING_LOGS` / legacy `DEBUG_KB_TRAINING` verbose mode; otherwise omitted. */
+  embeddedChunkCount?: number;
+  /** Document rows: UTF-8 byte size of stored trainable text (lightweight status poll). */
+  storedTextUtf8Bytes?: number;
+  /** Parallel to `status` from lightweight status API (import/extract flags). */
+  isImporting?: boolean;
+  isExtracting?: boolean;
+  isTraining?: boolean;
+};
+
+export type CustomerKnowledgeStatusResponse = {
+  items: CustomerKnowledgeStatusItem[];
+};
+
+/** `POST` `/api/customer/bots/:botId/knowledge/items/:itemId/retry` */
+export type CustomerKnowledgeItemManualRetryResponse = {
+  ok: true;
+  action:
+    | 'retry_extraction'
+    | 'retry_training'
+    | 'retry_import'
+    | 'reset_stuck_extraction'
+    | 'reset_stuck_training'
+    | 'reset_stuck_import';
+  status: string;
+  extractionStatus: string;
+  displayStatus: string;
+  displayMessage: string;
+};
+
+/** Q&A group from KB (`PATCH` `faqs`). Legacy rows may only have `question` + `answer`. */
+export type CustomerKnowledgeFaq = {
+  /** Group label shown in the library. */
+  title?: string;
+  /** Phrasing variants for retrieval; first maps to `question` for older clients. */
+  questions?: string[];
+  question: string;
+  answer: string;
+  active?: boolean;
+  /** Index in persisted `faqs` array — used for KB status polling. */
+  faqIndex?: number;
+  knowledgeItemId?: string;
+  trainingStatus?: CustomerKnowledgeItemTrainingStatus;
+  lastTrainedAt?: string | null;
+  /** Next scheduled training run (ISO), when queued with a delay. */
+  runAfter?: string | null;
+};
+
+export type CustomerKnowledgeSnippet = {
+  title: string;
+  snippet: string;
+  active?: boolean;
+  snippetIndex?: number;
+  knowledgeItemId?: string;
+  trainingStatus?: CustomerKnowledgeItemTrainingStatus;
+  lastTrainedAt?: string | null;
+  runAfter?: string | null;
+};
+
+export type CustomerKnowledgeDatasheet = {
+  title: string;
+  columns: string[];
+  rows: string[][];
+  active?: boolean;
+  tableIndex?: number;
+  /** KnowledgeBaseItem `_id` for stable status polling merges after reorder/delete */
+  knowledgeItemId?: string;
+  /** KB pipeline status for this datasheet (from `GET` bot). */
+  trainingStatus?: CustomerKnowledgeItemTrainingStatus;
+  lastTrainedAt?: string | null;
+  runAfter?: string | null;
+  /** Original import file size in bytes, when available. */
+  importFileSize?: number | null;
+  importFileName?: string | null;
+};
+
+/** Document row from GET `/api/customer/bots/:botId/documents` (list). */
+export type CustomerWorkspaceDocument = {
+  _id?: string | { toString(): string };
+  /** KB row id (mirrors `knowledgeItemId` / `_id` as string). */
+  id?: string;
+  botId?: string | { toString(): string };
+  /** Preferred document title/name from enriched list/detail API. */
+  displayName?: string;
+  title?: string;
+  sourceType?: string;
+  status?: string;
+  /** Server-derived pipeline message — prefer over local heuristics when set. */
+  displayMessage?: string | null;
+  /** Prefer over reconstructing titles from filenames. */
+  displayLabel?: string;
+  displayStatus?: string;
+  extractionStatus?: string;
+  extractionError?: string | null;
+  extractManualRetrySuggested?: boolean;
+  trainingManualRetrySuggested?: boolean;
+  /** Human-readable label for `status` / `documentStatus` after list/detail enrichment (pipeline stage). */
+  statusLabel?: string;
+  error?: string;
+  ingestedAt?: string | Date;
+  fileName?: string;
+  fileType?: string;
+  fileSize?: number;
+  active?: boolean;
+  createdAt?: string | Date;
+  /** Populated on GET single-document when ingested. */
+  text?: string;
+  /** Linked KnowledgeBaseItem id when known (server-enriched). */
+  knowledgeItemId?: string;
+  /**
+   * With server enrichment: **collective pipeline stage** (upload → extract → train), same codes as `status`.
+   * Omit on un-enriched rows / legacy responses (then often upload lifecycle only).
+   */
+  documentStatus?: string;
+  knowledgeItemStatus?: string;
+  latestIngestJobStatus?: string | null;
+  embeddedChunkCount?: number;
+  trainingStatus?: KnowledgeTrainingStatus;
+  /** True when backend can resolve storage (private S3 or public URL). */
+  hasFile?: boolean;
+  /** Relative URL path suffix for fetching a signed download URL (list rows). */
+  downloadUrlPath?: string;
+  /** Present on document detail when `hasFile` — short-lived signed URL or public file URL. */
+  downloadUrl?: string;
+  /** From extractedKnowledge text after ingestion (not file byte size). */
+  characterCount?: number;
+  /** Server: true once trainable document text has been persisted (extraction / manual body). */
+  isContentExtracted?: boolean;
+  /** Same as `content` length when persisted (UTF-16 code units). */
+  extractedTextLength?: number;
+  /** Merged from KB status poll: UTF-8 size of stored document text while list rows refresh. */
+  storedTextUtf8Bytes?: number;
+  /** From lightweight KB status poll — parallel to extraction pipeline. */
+  isExtracting?: boolean;
+  isTraining?: boolean;
+  isImporting?: boolean;
+  /** Upload lifecycle only (not KB training). */
+  uploadStatus?: string;
+  originalName?: string;
+  /** Original upload filename when API uses this field name (alias of `originalName` / `fileName`). */
+  originalFilename?: string;
+  mimeType?: string;
+  sizeBytes?: number;
+};
+
+/** Subset of `personality` aligned with backend `BotPersonality` / workspace PATCH. */
+export type CustomerBotPersonality = {
+  name?: string;
+  description?: string;
+  systemPrompt?: string;
+  behaviorPreset?: string;
+  tone?: string;
+  language?: string;
+  thingsToAvoid?: string;
+};
+
+export type CustomerBotTranslationSettings = {
+  enabled?: boolean;
+  mode?: 'english_only' | 'auto' | 'fixed';
+  fixedLanguage?: string;
+  transcriptLanguage?: 'english';
+};
+
+/** GET /api/customer/bots/:id — `bot` subset used by onboarding and workspace UI. */
+export type CustomerBotDetail = {
+  id: string;
+  slug: string;
+  name: string;
+  shortDescription?: string;
+  description?: string;
+  /** Bot avatar image URL (widget / profile). */
+  imageUrl?: string;
+  /** Single emoji used when no custom image URL is set. */
+  avatarEmoji?: string;
+  /** Persisted avatar mode (legacy bots infer from `imageUrl` / `avatarEmoji`). */
+  avatarSource?: 'upload' | 'url' | 'emoji' | 'none';
+  category?: string;
+  categories?: string[];
+  knowledgeDescription?: string;
+  knowledgeSnippets?: CustomerKnowledgeSnippet[];
+  knowledgeDatasheets?: CustomerKnowledgeDatasheet[];
+  welcomeMessage?: string;
+  /** When false, welcome text is kept but not shown in the widget. */
+  welcomeMessageEnabled?: boolean;
+  status: string;
+  isPublic?: boolean;
+  visibility?: string;
+  faqs?: CustomerKnowledgeFaq[];
+  /**
+   * Legacy: `string`. New: `{ label, context?, suggestionIndex?, knowledgeItemId?, trainingStatus? }`.
+   * Optional `context` limits the first reply to that text (no full KB).
+   */
+  exampleQuestions?: Array<
+    | string
+    | {
+        label: string;
+        context?: string;
+        active?: boolean;
+        /** Widget: do not show this suggestion’s chip in chat. */
+        hideChipTextInChat?: boolean;
+        suggestionIndex?: number;
+        knowledgeItemId?: string;
+        trainingStatus?: CustomerKnowledgeItemTrainingStatus;
+        lastTrainedAt?: string | null;
+      }
+  >;
+  personality?: CustomerBotPersonality;
+  translationSettings?: CustomerBotTranslationSettings;
+  config?: Record<string, unknown>;
+  allowedOrigins?: Array<{ origin: string; label?: string; isActive?: boolean }>;
+  includeNameInKnowledge?: boolean;
+  includeTaglineInKnowledge?: boolean;
+  includeNotesInKnowledge?: boolean;
+  leadCapture?: CustomerLeadCapture;
+  chatUI?: unknown;
+  clientDraftId?: string;
+  accessKey?: string;
+  secretKey?: string;
+  visitorMultiChatEnabled?: boolean;
+  visitorMultiChatMax?: number | null;
+  /** Hosted share page (`/share/:slug`) — safe subset; no secrets. */
+  shareChat?: {
+    enabled?: boolean;
+    slug?: string;
+    expiresAt?: string | null;
+    allowDraft?: boolean;
+    /** Always true for new share preview; token + expiry required server-side. */
+    requiresPreviewToken?: boolean;
+    /** True when token hash + expiry are stored (legacy links may be false). */
+    secureSharePreviewConfigured?: boolean;
+    /** Present after owner revokes the preview link (safe metadata only). */
+    tokenRevokedAt?: string | null;
+  };
+  knowledgeReplyPriority?: KnowledgeReplyPrioritySettings;
+  /** ISO timestamp: last document ingest used as training signal (see list stats). */
+  lastTrainedAt?: string | null;
+  /** UTF-8 KB storage usage vs agent quota (GET bot). */
+  knowledgeUsage?: CustomerKnowledgeUsage;
+};
+
+/** POST /api/customer/bots/:id/lifecycle-action — success JSON body */
+export type CustomerBotLifecycleResponse =
+  | {
+      ok: true;
+      action: 'publish';
+      status: 'published';
+      embedSnippet: string;
+      accessKey: string;
+      allowedOrigins: string[];
+    }
+  | { ok: true; action: 'draft'; status: 'draft' };
+
+/** GET /api/customer/bots/:id */
+export type CustomerBotDetailResponse = {
+  ok: true;
+  bot: CustomerBotDetail & Record<string, unknown>;
+  health: Record<string, unknown>;
+};
+
+/** GET /api/customer/bots/:id/insights */
+export type CustomerBotInsightsResponse = {
+  schemaVersion: 1;
+  bot: {
+    id: string;
+    name: string;
+    slug: string;
+    status: string;
+  };
+  metrics: {
+    totalConversations: number;
+    totalMessages: number;
+    conversationsWithCapturedLeads: number;
+    knowledgeDocuments: number;
+  };
+  activity: {
+    lastActivityAt: string | null;
+  };
+};
+
+export type CustomerChatsAnalyticsGranularity = 'hour' | 'day' | 'week' | 'month';
+
+export type CustomerChatsAnalyticsRange = {
+  from: string;
+  to: string;
+  granularity: CustomerChatsAnalyticsGranularity;
+};
+
+export type CustomerChatsAnalyticsSummary = {
+  totalConversations: number;
+  totalMessages: number;
+  totalThumbsUp: number;
+  totalThumbsDown: number;
+  averageMessagesPerConversation: number;
+};
+
+export type CustomerChatsAnalyticsTimeSeriesPoint = {
+  date: string;
+  conversations: number;
+  messages: number;
+};
+
+export type CustomerChatsAnalyticsStartedFromKey =
+  | 'playground_preview'
+  | 'shared_preview'
+  | 'runtime_widget'
+  | 'runtime_iframe'
+  | 'unknown';
+
+export type CustomerChatsAnalyticsCountryRow = {
+  country: string | null;
+  countryCode: string | null;
+  conversations: number;
+  messages: number;
+};
+
+export type CustomerChatsAnalyticsCityRow = {
+  city: string | null;
+  countryCode: string | null;
+  conversations: number;
+  messages: number;
+};
+
+export type CustomerChatsAnalyticsTopPageRow = {
+  page: string;
+  pageLabel: string;
+  websiteOrigin: string | null;
+  conversations: number;
+  messages: number;
+};
+
+export type CustomerChatsAnalyticsStartedFromBreakdownItem = {
+  key: CustomerChatsAnalyticsStartedFromKey;
+  label: string;
+  conversations: number;
+  messages: number;
+};
+
+/** GET /api/customer/bots/:id/analytics/chats */
+export type CustomerChatsAnalyticsResponse = {
+  range: CustomerChatsAnalyticsRange;
+  summary: CustomerChatsAnalyticsSummary;
+  timeSeries: CustomerChatsAnalyticsTimeSeriesPoint[];
+  locationBreakdown: {
+    countries: CustomerChatsAnalyticsCountryRow[];
+    cities: CustomerChatsAnalyticsCityRow[];
+  };
+  topPagesBreakdown: CustomerChatsAnalyticsTopPageRow[];
+  startedFromBreakdown: CustomerChatsAnalyticsStartedFromBreakdownItem[];
+};
+
+export type CustomerBotChatsAnalyticsParams = {
+  from?: string;
+  to?: string;
+  granularity?: CustomerChatsAnalyticsGranularity;
+  includePreview?: boolean;
+  startedFrom?: CustomerChatsAnalyticsStartedFromKey;
+  countryCode?: string;
+  deviceType?: string;
+};
+
+/** Main topic ids for GET …/analytics/topics (matches backend `TOPIC_TAXONOMY_IDS`). */
+export const CUSTOMER_TOPICS_ANALYTICS_MAIN_TOPIC_IDS = [
+  'pricing',
+  'billing',
+  'subscription',
+  'refund',
+  'product_question',
+  'technical_support',
+  'bug_report',
+  'account_access',
+  'setup_onboarding',
+  'integration',
+  'api_webhook',
+  'sales',
+  'demo_request',
+  'human_agent',
+  'lead_capture',
+  'order_status',
+  'shipping_delivery',
+  'returns_exchange',
+  'appointment_booking',
+  'documentation',
+  'feature_request',
+  'complaint',
+  'feedback',
+  'security_privacy',
+  'compliance',
+  'cancellation',
+  'trial',
+  'usage_limits',
+  'general_question',
+  'other',
+] as const;
+
+export type CustomerTopicsAnalyticsTopicId = (typeof CUSTOMER_TOPICS_ANALYTICS_MAIN_TOPIC_IDS)[number];
+
+export type CustomerTopicsAnalyticsSummary = {
+  totalUserMessages: number;
+  classifiedMessages: number;
+  unclassifiedMessages: number;
+  conversationsWithTopics: number;
+  topTopic: CustomerTopicsAnalyticsTopicId | null;
+  topicCoverageRate: number;
+};
+
+export type CustomerTopicsAnalyticsTimeSeriesPoint = {
+  date: string;
+  classifiedMessages: number;
+  unclassifiedMessages: number;
+} & Record<CustomerTopicsAnalyticsTopicId, number>;
+
+/** Unique conversations per topic per bucket (not message counts). */
+export type CustomerTopicsAnalyticsConversationTopicSeriesPoint = {
+  date: string;
+} & Record<CustomerTopicsAnalyticsTopicId, number>;
+
+export type CustomerTopicBreakdownByMessagesItem = {
+  topic: CustomerTopicsAnalyticsTopicId;
+  label: string;
+  messages: number;
+  conversations: number;
+  percentage: number;
+};
+
+export type CustomerTopicBreakdownByConversationItem = {
+  topic: CustomerTopicsAnalyticsTopicId;
+  label: string;
+  conversations: number;
+  percentage: number;
+};
+
+/** @deprecated Use CustomerTopicBreakdownByMessagesItem */
+export type CustomerTopicBreakdownItem = CustomerTopicBreakdownByMessagesItem;
+
+export type CustomerTopicsFastestGrowingItem = {
+  topic: CustomerTopicsAnalyticsTopicId;
+  label: string;
+  currentCount: number;
+  previousCount: number;
+  change: number;
+  changePercent: number | null;
+  growthLabel: 'New' | null;
+  messages: number;
+  conversations: number;
+};
+
+/** Per-topic sentiment counts on user messages (multi-tag messages count toward each topic). */
+export type CustomerTopicSentimentBreakdownItem = {
+  topic: CustomerTopicsAnalyticsTopicId;
+  label: string;
+  totalMessages: number;
+  positive: number;
+  neutral: number;
+  negative: number;
+  mixed: number;
+  unknown: number;
+};
+
+/** GET /api/customer/bots/:id/analytics/topics */
+export type CustomerTopicsAnalyticsResponse = {
+  range: CustomerChatsAnalyticsRange;
+  summary: CustomerTopicsAnalyticsSummary;
+  /** @deprecated Use topicMessageTimeSeries */
+  timeSeries: CustomerTopicsAnalyticsTimeSeriesPoint[];
+  /** @deprecated Use topicConversationTimeSeries */
+  conversationTopicSeries?: CustomerTopicsAnalyticsConversationTopicSeriesPoint[];
+  /** @deprecated Use topicBreakdownByMessages */
+  topicBreakdown: CustomerTopicBreakdownByMessagesItem[];
+  /** @deprecated Use fastestGrowingByMessages */
+  fastestGrowingTopics?: CustomerTopicsFastestGrowingItem[];
+
+  topicBreakdownByMessages: CustomerTopicBreakdownByMessagesItem[];
+  topicBreakdownByConversations: CustomerTopicBreakdownByConversationItem[];
+  topicMessageTimeSeries: CustomerTopicsAnalyticsTimeSeriesPoint[];
+  topicConversationTimeSeries: CustomerTopicsAnalyticsConversationTopicSeriesPoint[];
+  fastestGrowingByMessages: CustomerTopicsFastestGrowingItem[];
+  fastestGrowingByConversations: CustomerTopicsFastestGrowingItem[];
+  topicSentimentBreakdown: CustomerTopicSentimentBreakdownItem[];
+};
+
+export type CustomerTopicAnalyticsParams = {
+  from?: string;
+  to?: string;
+  granularity?: CustomerChatsAnalyticsGranularity;
+  includePreview?: boolean;
+  startedFrom?: CustomerChatsAnalyticsStartedFromKey;
+  topic?: CustomerTopicsAnalyticsTopicId;
+  /** Message charts: `primary` = only `topics.primaryTopic`; `all` = labels when present else primary (default). */
+  messageTopicScope?: 'all' | 'primary';
+};
+
+/** GET /api/customer/bots/:id/analytics/sentiment */
+export type CustomerSentimentLabelId =
+  | 'positive'
+  | 'neutral'
+  | 'negative'
+  | 'mixed'
+  | 'unknown';
+
+export type CustomerSentimentAnalyticsSummary = {
+  totalUserMessages: number;
+  classifiedMessages: number;
+  unclassifiedMessages: number;
+  sentimentCoverageRate: number;
+  averageSentimentScore: number | null;
+  dominantSentiment: CustomerSentimentLabelId | null;
+  negativeMessages: number;
+  mixedMessages: number;
+  /** Distinct conversations with at least one user message in range (after filters). */
+  totalConversations: number;
+  /** Distinct conversations with at least one classified user message in range. */
+  classifiedConversations: number;
+  /** Distinct conversations with no classified user message in range. */
+  unclassifiedConversations: number;
+  /** Distinct conversations with at least one negative user message in range. */
+  negativeConversations: number;
+  /** Distinct conversations with at least one mixed user message in range. */
+  mixedConversations: number;
+};
+
+export type CustomerSentimentAnalyticsTimeSeriesPoint = {
+  date: string;
+  classifiedMessages: number;
+  unclassifiedMessages: number;
+  positive: number;
+  neutral: number;
+  negative: number;
+  mixed: number;
+  unknown: number;
+  averageSentimentScore: number | null;
+};
+
+/** Per bucket: distinct chats that started in the bucket, one thread-level sentiment label each. */
+export type CustomerSentimentAnalyticsConversationTimeSeriesPoint = {
+  date: string;
+  classifiedConversations: number;
+  unclassifiedConversations: number;
+  positive: number;
+  neutral: number;
+  negative: number;
+  mixed: number;
+  unknown: number;
+  averageSentimentScore: number | null;
+};
+
+export type CustomerSentimentBreakdownItem = {
+  sentiment: CustomerSentimentLabelId;
+  label: string;
+  messages: number;
+  conversations: number;
+  percentage: number;
+  averageScore: number | null;
+};
+
+export type CustomerSentimentAnalyticsStartedFromBreakdownItem = {
+  startedFrom: CustomerChatsAnalyticsStartedFromKey;
+  label: string;
+  messages: number;
+  conversations: number;
+  averageScore: number | null;
+};
+
+export type CustomerSentimentAnalyticsResponse = {
+  range: CustomerChatsAnalyticsRange;
+  summary: CustomerSentimentAnalyticsSummary;
+  timeSeries: CustomerSentimentAnalyticsTimeSeriesPoint[];
+  conversationTimeSeries: CustomerSentimentAnalyticsConversationTimeSeriesPoint[];
+  sentimentBreakdown: CustomerSentimentBreakdownItem[];
+  startedFromBreakdown: CustomerSentimentAnalyticsStartedFromBreakdownItem[];
+};
+
+export type CustomerSentimentAnalyticsParams = {
+  from?: string;
+  to?: string;
+  granularity?: CustomerChatsAnalyticsGranularity;
+  includePreview?: boolean;
+  startedFrom?: CustomerChatsAnalyticsStartedFromKey;
+  sentiment?: CustomerSentimentLabelId;
+};
+
+/** GET /api/customer/bots/:id/analytics/knowledge-sources */
+export type CustomerKnowledgeSourcesAnalyticsSourceType =
+  | 'document'
+  | 'faq'
+  | 'note'
+  | 'datasheet'
+  | 'suggestion'
+  | 'website'
+  | 'manual_text'
+  | 'unknown';
+
+export type CustomerKnowledgeSourcesAnalyticsRange = {
+  from: string;
+  to: string;
+  granularity: CustomerChatsAnalyticsGranularity;
+};
+
+export type CustomerKnowledgeSourcesAnalyticsSummary = {
+  totalAssistantMessages: number;
+  messagesWithSources: number;
+  messagesWithoutSources: number;
+  totalSourceUses: number;
+  uniqueSourcesUsed: number;
+  averageSourcesPerAnswer: number | null;
+  averageSourceMatchScore: number | null;
+  fallbackAnswers: number;
+};
+
+export type CustomerKnowledgeSourcesTimeSeriesPoint = {
+  date: string;
+  assistantMessages: number;
+  messagesWithSources: number;
+  messagesWithoutSources: number;
+  sourceUses: number;
+  averageSourceMatchScore: number | null;
+};
+
+export type CustomerKnowledgeSourceTypeBreakdownItem = {
+  sourceType: CustomerKnowledgeSourcesAnalyticsSourceType;
+  label: string;
+  sourceUses: number;
+  uniqueSources: number;
+  assistantMessages: number;
+  averageScore: number | null;
+};
+
+export type CustomerTopKnowledgeSourceItem = {
+  knowledgeBaseItemId: string | null;
+  sourceTitle: string | null;
+  sourceType: CustomerKnowledgeSourcesAnalyticsSourceType;
+  sourceUrl: string | null;
+  sourceUses: number;
+  assistantMessages: number;
+  averageScore: number | null;
+  lastUsedAt: string | null;
+};
+
+export type CustomerKnowledgeSourcesAnalyticsResponse = {
+  range: CustomerKnowledgeSourcesAnalyticsRange;
+  summary: CustomerKnowledgeSourcesAnalyticsSummary;
+  timeSeries: CustomerKnowledgeSourcesTimeSeriesPoint[];
+  sourceTypeBreakdown: CustomerKnowledgeSourceTypeBreakdownItem[];
+  topSources: CustomerTopKnowledgeSourceItem[];
+  noSourceBreakdown: {
+    messagesWithoutSources: number;
+    fallbackAnswers: number;
+  };
+};
+
+export type CustomerBotKnowledgeSourcesAnalyticsParams = {
+  from?: string;
+  to?: string;
+  granularity?: CustomerChatsAnalyticsGranularity;
+  includePreview?: boolean;
+  sourceType?: CustomerKnowledgeSourcesAnalyticsSourceType;
+};
+
+/** GET /api/customer/bots/:id/analytics/leads */
+export type CustomerLeadsAnalyticsSummary = {
+  totalConversations: number;
+  totalLeads: number;
+  conversionRate: number | null;
+  totalCapturedFields: number;
+  averageFieldsPerLead: number | null;
+};
+
+export type CustomerLeadsTimeSeriesPoint = {
+  date: string;
+  conversations: number;
+  leads: number;
+  conversionRate: number | null;
+};
+
+export type CustomerLeadsStartedFromBreakdownItem = {
+  key: CustomerChatsAnalyticsStartedFromKey;
+  label: string;
+  conversations: number;
+  leads: number;
+  conversionRate: number | null;
+};
+
+export type CustomerLeadsCountryRow = {
+  country: string | null;
+  countryCode: string | null;
+  leads: number;
+  conversations: number;
+};
+
+export type CustomerLeadsCityRow = {
+  city: string | null;
+  countryCode: string | null;
+  leads: number;
+  conversations: number;
+};
+
+export type CustomerLeadsFieldCaptureItem = {
+  fieldKey: string;
+  label: string;
+  type: 'text' | 'email' | 'phone' | 'number' | 'url' | 'unknown';
+  capturedCount: number;
+};
+
+export type CustomerLeadsAnalyticsResponse = {
+  range: CustomerKnowledgeSourcesAnalyticsRange;
+  summary: CustomerLeadsAnalyticsSummary;
+  timeSeries: CustomerLeadsTimeSeriesPoint[];
+  startedFromBreakdown: CustomerLeadsStartedFromBreakdownItem[];
+  locationBreakdown: {
+    countries: CustomerLeadsCountryRow[];
+    cities: CustomerLeadsCityRow[];
+  };
+  fieldCaptureBreakdown: CustomerLeadsFieldCaptureItem[];
+};
+
+export type CustomerBotLeadsAnalyticsParams = {
+  from?: string;
+  to?: string;
+  granularity?: CustomerChatsAnalyticsGranularity;
+  includePreview?: boolean;
+  startedFrom?: CustomerChatsAnalyticsStartedFromKey;
+  countryCode?: string;
+};
+
+/** GET /api/customer/bots/:id/usage */
+export type CustomerBotUsageParams = {
+  from?: string;
+  to?: string;
+  granularity?: CustomerChatsAnalyticsGranularity;
+  includePreview?: boolean;
+  /** UsageLedger.usageType filter */
+  usageType?: string;
+};
+
+export type CustomerUsageSummary = {
+  totalCreditsUsed: number;
+  totalBillableCredits: number;
+  totalNonBillableCredits: number;
+  totalUsageEvents: number;
+  totalMessages: number;
+  textMessages: number;
+  voiceMessages: number;
+  dictationMessages: number;
+  attachmentMessages: number;
+  suggestedQuestionMessages: number;
+  averageCreditsPerMessage: number | null;
+};
+
+export type CustomerUsageTimeSeriesPoint = {
+  date: string;
+  creditsUsed: number;
+  billableCredits: number;
+  nonBillableCredits: number;
+  usageEvents: number;
+  messages: number;
+  textMessages: number;
+  voiceMessages: number;
+  dictationMessages: number;
+  attachmentMessages: number;
+  suggestedQuestionMessages: number;
+};
+
+export type CustomerUsageTypeBreakdownItem = {
+  usageType: string;
+  label: string;
+  events: number;
+  creditsUsed: number;
+  billableCredits: number;
+  nonBillableCredits: number;
+};
+
+export type CustomerUsageCreditReasonItem = {
+  creditReason: string;
+  events: number;
+  creditsUsed: number;
+};
+
+export type CustomerUsageDictationVoiceSummary = {
+  voiceMessages: number;
+  dictationMessages: number;
+  voiceCreditsUsed: number;
+  dictationCreditsUsed: number;
+  dictationSessions: number;
+  totalSpeechWords: number;
+  totalSpeechCharacters: number;
+  totalAudioDurationSeconds: number;
+};
+
+export type CustomerUsageResponse = {
+  range: CustomerKnowledgeSourcesAnalyticsRange;
+  summary: CustomerUsageSummary;
+  timeSeries: CustomerUsageTimeSeriesPoint[];
+  usageTypeBreakdown: CustomerUsageTypeBreakdownItem[];
+  creditReasonBreakdown: CustomerUsageCreditReasonItem[];
+  dictationVoiceSummary: CustomerUsageDictationVoiceSummary;
+};
+
+export type CreateDraftResponse = {
+  botId: string;
+  slug: string;
+};
+
+export type CustomerDocumentsResponse = {
+  documents: CustomerWorkspaceDocument[];
+  total: number;
+  counts: {
+    total?: number;
+    pending?: number;
+    queued?: number;
+    processing?: number;
+    ready?: number;
+    failed?: number;
+  };
+  lastIngestedAt?: string | null;
+  lastFailedDoc?: unknown;
+};
+
+/** GET /api/customer/bots/:botId/documents/:id/download-url */
+export type CustomerDocumentDownloadUrlResponse = {
+  url: string;
+};
+
+/** One row returned from POST /api/customer/bots/:botId/documents (multipart; max files per request is capped, typically 5). */
+export type CustomerDocumentUploadRow = {
+  _id: string;
+  botId: string;
+  title: string;
+  sourceType: string;
+  /** Upload lifecycle (`uploading` \| `uploaded` \| `upload_failed`) — not KB training status */
+  status: string;
+  documentStatus: string;
+  trainingStatus: KnowledgeTrainingStatus;
+  fileName: string;
+  fileType: string;
+  fileSize: number;
+  active: boolean;
+  createdAt: string;
+};
+
+/** POST /api/customer/bots/:botId/documents (multipart: repeat field `file`; max files per request typically 5 — not a cap on total documents). */
+export type CustomerDocumentUploadResponse = {
+  ok: true;
+  documents: CustomerDocumentUploadRow[];
+  ingestions?: Array<{ jobStatus: 'queued' }>;
+};
+
+export type ChatResponse = {
+  ok: true;
+  conversationId: string;
+  assistantMessage: string;
+  sources?: unknown;
+};
+
+export type ApiErrorBody = {
+  error?: string;
+  errorCode?: string;
+};
+
+/** GET/POST/PATCH/DELETE `/api/customer/bots/:id/share-link` */
+export type CustomerShareLinkStatus =
+  | 'not_created'
+  | 'active'
+  | 'disabled'
+  | 'expired'
+  | 'revoked'
+  | 'missing';
+
+export type CustomerShareLinkResponse = {
+  enabled: boolean;
+  slug: string;
+  /** Absolute share path on Assistrio (no secrets). */
+  shareUrl?: string;
+  expiresAt?: string | null;
+  tokenRevokedAt?: string | null;
+  allowDraft?: boolean;
+  requiresPreviewToken?: boolean;
+  /** Hours chosen for this link (response only; echoed from request when applicable). */
+  expiresInHours?: number;
+  /**
+   * Plain token for building the full URL. Owner APIs only; null when revoked or unavailable.
+   * Omitted on some legacy responses; prefer GET share-link after open.
+   */
+  previewToken?: string | null;
+  /** Client-only: after a successful create/regenerate, treat as configured. */
+  secureSharePreviewConfigured?: boolean;
+  /** Server-computed modal status (GET share-link and post-mutation responses). */
+  status?: CustomerShareLinkStatus;
+};
+
+/** GET `/api/shared/bots/:slug/init` */
+export type SharedBotInitPayload = {
+  status: 'ok';
+  shareSlug: string;
+  bot: {
+    id: string;
+    name: string;
+    imageUrl?: string;
+    avatarEmoji?: string;
+    tagline?: string;
+    description?: string;
+    welcomeMessage?: string;
+    welcomeMessageEnabled?: boolean;
+    suggestedQuestions?: string[];
+    exampleQuestions?: string[];
+    suggestedQuestionChips?: Array<{ label: string; suggestionId?: string; hideChipTextInChat?: boolean }>;
+  };
+  settings: {
+    chatUI?: unknown;
+    brandingMessage?: string;
+    privacyText?: string;
+    visitorMultiChatEnabled?: boolean;
+    visitorMultiChatMax?: number | null;
+  };
+  chatVisitorId: string;
+};
+
+/** POST `/api/widget/iframe/init` */
+export type WidgetIframeInitPayload = {
+  status: 'ok';
+  bot: SharedBotInitPayload['bot'];
+  settings: SharedBotInitPayload['settings'];
+  chatVisitorId: string;
+};
+
+export type ApiResult<T> =
+  | { ok: true; data: T; status: number }
+  | {
+      ok: false;
+      status: number;
+      error: string;
+      errorCode?: string;
+      body: unknown;
+    };

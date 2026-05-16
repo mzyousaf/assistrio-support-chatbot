@@ -1,0 +1,64 @@
+# Dependencies & build output (reinstalled / rebuilt in the image)
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+dist
+
+# VCS
+.git
+.gitignore
+.github
+
+# Tests & coverage (not used by `nest build` in this Dockerfile)
+coverage
+.nyc_output
+**/*.spec.ts
+**/test
+**/e2e
+jest.config.js
+jest.config.ts
+jest.config.mjs
+
+# Local env (keep example for reference in repo only — not copied by current Dockerfile)
+.env
+.env.*
+!.env.example
+
+# Logs & temp
+logs
+*.log
+tmp
+temp
+*.tmp
+*.temp
+*.swp
+*~
+.cache
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea
+.vscode
+*.code-workspace
+
+# Docker / Compose (not inputs to `nest build`)
+docker-compose*.yml
+docker-compose*.yaml
+compose*.yaml
+
+# Optional local tooling
+.husky
+.prettierrc*
+.prettierignore
+.eslintrc*
+eslint.config.*
+.editorconfig
+
+# Docs (not required to compile)
+*.md
+docs
+
+# One-off / migration scripts (not copied by current Dockerfile)
+scripts

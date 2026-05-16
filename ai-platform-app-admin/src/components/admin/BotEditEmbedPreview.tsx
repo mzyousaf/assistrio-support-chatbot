@@ -1,0 +1,55 @@
+"use client";
+
+import dynamic from "next/dynamic";
+import { usePathname } from "next/navigation";
+import React, { useEffect, useState } from "react";
+import type { EmbedChatConfig } from "@assistrio/chat-widget";
+
+/** Main `index.mjs` touches `document` at load — only load on the client. */
+const EmbedWidgetRoot = dynamic(
+  () => import("@assistrio/chat-widget").then((m) => m.EmbedWidgetRoot),
+  { ssr: false, loading: () => null },
+);
+
+type BotEditEmbedPreviewProps = {
+  botId: string;
+  /** Draft UI + behavior prompts for `/api/widget/preview/*` (personality/config merged server-side on chat). */
+  previewOverrides: NonNullable<EmbedChatConfig["previewOverrides"]> & {
+    personality?: unknown;
+    config?: unknown;
+    leadCapture?: unknown;
+  };
+};
+
+/**
+ * Live widget preview in the editor: `EmbedWidgetRoot` in preview mode with cookie auth.
+ * `previewOverrides` carries unsaved copy + prompts (`personality`, `config`) for the preview APIs.
+ */
+export function BotEditEmbedPreview({ botId, previewOverrides }: BotEditEmbedPreviewProps) {
+  const [apiBaseUrl, setApiBaseUrl] = useState("");
+  const pathname = usePathname() ?? "";
+
+  useEffect(() => {
+    setApiBaseUrl(
+      (typeof process !== "undefined" && process.env.NEXT_PUBLIC_API_BASE_URL?.trim()) ||
+      (typeof window !== "undefined" ? window.location.origin : "") ||
+      "",
+    );
+  }, []);
+
+  if (!apiBaseUrl) return null;
+
+  return (
+    <EmbedWidgetRoot
+      rawConfig={{
+        botId,
+        apiBaseUrl,
+        mode: "preview",
+        sessionPreview: true,
+        position: "right",
+        previewSourcePage: pathname || undefined,
+        previewOverrides: previewOverrides as EmbedChatConfig["previewOverrides"],
+      }}
+    />
+  );
+}

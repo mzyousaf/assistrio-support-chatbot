@@ -1,0 +1,37 @@
+import type { BotFaq } from "@/components/admin/BotFaqsEditor";
+import type {
+  BotAllowedOrigin,
+  BotChatUI,
+  BotConfig,
+  BotLeadCaptureV2,
+  BotPersonality,
+} from "@/models/Bot";
+
+export interface BotFormSubmitPayload {
+  name: string;
+  shortDescription?: string;
+  description?: string;
+  categories: string[];
+  imageUrl?: string;
+  avatarEmoji?: string;
+  welcomeMessage?: string;
+  welcomeMessageEnabled?: boolean;
+  knowledgeDescription?: string;
+  faqs: BotFaq[];
+  exampleQuestions?: string[];
+  status?: "draft" | "published";
+  isPublic?: boolean;
+  leadCapture: BotLeadCaptureV2;
+  chatUI: BotChatUI;
+  personality: BotPersonality;
+  config: BotConfig;
+  openaiApiKeyOverride?: string;
+  whisperApiKeyOverride?: string;
+  includeNameInKnowledge?: boolean;
+  includeTaglineInKnowledge?: boolean;
+  includeNotesInKnowledge?: boolean;
+  visibility?: "public" | "private";
+  allowedOrigins?: BotAllowedOrigin[];
+  visitorMultiChatEnabled?: boolean;
+  visitorMultiChatMax?: number | null;
+}

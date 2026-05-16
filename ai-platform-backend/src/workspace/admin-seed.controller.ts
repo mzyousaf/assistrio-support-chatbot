@@ -1,0 +1,181 @@
+import {
+  Body,
+  Controller,
+  HttpException,
+  HttpStatus,
+  Post,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
+import { FastifyRequest } from 'fastify';
+import { Types } from 'mongoose';
+import { BotsService } from '../bots/bots.service';
+import { DocumentsService } from '../documents/documents.service';
+import { IngestionService } from '../ingestion/ingestion.service';
+import { USER_ROLES, type UserRole } from '../models';
+import { ASSISTRIO_EMBED_ALLOWED_ORIGINS } from './shared/assistrio-embed-allowed-origins';
+import { SHOWCASE_BOTS } from './shared/showcase-bots-seed.data';
+import { AuthService } from '../auth/shared/auth.service';
+import { AdminSessionAuthGuard } from '../auth/admin/admin-session.guard';
+import type { RequestUser } from '../auth/shared/request-user.types';
+import { SuperAdminGuard } from '../auth/admin/super-admin.guard';
+import { WorkspacesService } from '../workspaces/workspaces.service';
+import {
+  ShowcaseAgentsPackService,
+  SHOWCASE_AGENTS_PACK_MAX_PER_REQUEST,
+  SHOWCASE_AGENTS_PACK_MAX_PER_USER,
+} from './shared/showcase-agents-pack.service';
+
+type RequestWithUser = FastifyRequest & { user?: RequestUser };
+
+/**
+ * Staff-only seed / internal setup (`/api/admin/seed/*`).
+ */
+@Controller('api/admin/seed')
+@UseGuards(AdminSessionAuthGuard, SuperAdminGuard)
+export class AdminSeedController {
+  constructor(
+    private readonly botsService: BotsService,
+    private readonly documentsService: DocumentsService,
+    private readonly ingestionService: IngestionService,
+    private readonly authService: AuthService,
+    private readonly workspacesService: WorkspacesService,
+    private readonly showcaseAgentsPackService: ShowcaseAgentsPackService,
+  ) {}
+
+  @Post()
+  async seedUser(@Body() body: { email?: string; password?: string; role?: string }) {
+    const email = typeof body?.email === 'string' ? body.email : '';
+    const password = typeof body?.password === 'string' ? body.password : '';
+    const roleInput = typeof body?.role === 'string' ? body.role.trim().toLowerCase() : 'customer';
+    const role: UserRole = (USER_ROLES as readonly string[]).includes(roleInput) ? (roleInput as UserRole) : 'customer';
+    try {
+      const user = await this.authService.createUser(email, password, role);
+      return {
+        ok: true,
+        message: 'User created.',
+        email: (user as unknown as { email?: string }).email,
+        role,
+      };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to create user';
+      const status =
+        message === 'User with this email already exists'
+          ? HttpStatus.CONFLICT
+          : HttpStatus.BAD_REQUEST;
+      throw new HttpException({ error: message }, status);
+    }
+  }
+
+  @Post('showcase-bots')
+  async seedShowcaseBots(@Req() req: RequestWithUser) {
+    try {
+      const createdByUserId =
+        req.user?._id != null && Types.ObjectId.isValid(String(req.user._id))
+          ? new Types.ObjectId(String(req.user._id))
+          : undefined;
+      const workspaceId =
+        req.user?._id != null
+          ? await this.workspacesService.ensurePersonalWorkspaceForUser(String(req.user._id))
+          : undefined;
+      const createdBots: { botId: string; slug: string; docsQueued: number }[] = [];
+      const skippedBots: { slug: string; reason: string }[] = [];
+
+      for (const seed of SHOWCASE_BOTS) {
+        const existing = await this.botsService.findOneBySlug(seed.slug);
+        if (existing) {
+          skippedBots.push({ slug: seed.slug, reason: 'already_exists' });
+          continue;
+        }
+        const bot = await this.botsService.create({
+          name: seed.name,
+          slug: seed.slug,
+          status: 'published',
+          isPublic: true,
+          allowedOrigins: ASSISTRIO_EMBED_ALLOWED_ORIGINS.map((o) => ({ ...o })),
+          shortDescription: seed.shortDescription,
+          description: seed.description,
+          welcomeMessage: seed.welcomeMessage,
+          exampleQuestions: seed.exampleQuestions,
+          personality: seed.personality,
+          chatUI: {
+            primaryColor: '#14B8A6',
+            backgroundStyle: 'light',
+            bubbleBorderRadius: 20,
+            launcherPosition: 'bottom-right',
+            timePosition: 'top',
+            showBranding: true,
+          },
+          config: { temperature: 0.3, responseLength: 'medium', maxTokens: 512 },
+          leadCapture: { enabled: false, fields: [] },
+          faqs: [],
+          categories: [],
+          ...(createdByUserId ? { createdByUserId, ownerId: createdByUserId } : {}),
+          ...(workspaceId ? { workspaceId } : {}),
+        });
+        const botId = (bot as { _id?: { toString?: () => string } })._id?.toString?.() ?? String((bot as { _id?: unknown })._id);
+        let docsQueued = 0;
+        for (const docSeed of seed.docs) {
+          const doc = await this.documentsService.create({
+            botId,
+            title: docSeed.title,
+            sourceType: 'manual',
+            status: 'queued',
+            text: docSeed.text,
+          });
+          const docId = (doc as { _id?: { toString?: () => string } })._id?.toString?.() ?? String((doc as { _id?: unknown })._id);
+          await this.ingestionService.createQueuedJob(botId, docId);
+          docsQueued += 1;
+        }
+        createdBots.push({ botId, slug: seed.slug, docsQueued });
+      }
+      return { ok: true, createdBots, skippedBots };
+    } catch (err) {
+      console.error('Seed showcase bots failed', err);
+      throw new HttpException({ error: 'Internal server error' }, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  @Post('showcase-agents-pack')
+  async seedShowcaseAgentsPack(@Body() body: { count?: unknown }, @Req() req: RequestWithUser) {
+    const raw = body?.count;
+    const count = typeof raw === 'number' ? raw : Number(raw);
+    if (!Number.isFinite(count) || count < 1 || count > SHOWCASE_AGENTS_PACK_MAX_PER_REQUEST) {
+      throw new HttpException(
+        { error: `count must be 1–${SHOWCASE_AGENTS_PACK_MAX_PER_REQUEST}` },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const createdByUserId =
+      req.user?._id != null && Types.ObjectId.isValid(String(req.user._id))
+        ? new Types.ObjectId(String(req.user._id))
+        : undefined;
+    if (!createdByUserId) {
+      throw new HttpException({ error: 'User id required' }, HttpStatus.BAD_REQUEST);
+    }
+    const workspaceId = await this.workspacesService.ensurePersonalWorkspaceForUser(String(req.user?._id));
+    try {
+      const pack = await this.showcaseAgentsPackService.runPack({
+        count: Math.floor(count),
+        createdByUserId,
+        workspaceId,
+      });
+      return {
+        ok: true,
+        maxTotalShowcasePerSuperadmin: SHOWCASE_AGENTS_PACK_MAX_PER_USER,
+        ...pack,
+        note:
+          pack.skippedDueToCap > 0
+            ? `Only ${pack.created.length} created: you are at or near the ${SHOWCASE_AGENTS_PACK_MAX_PER_USER} showcase cap for your account.`
+            : undefined,
+      };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Pack failed';
+      if (msg.includes('count')) {
+        throw new HttpException({ error: msg }, HttpStatus.BAD_REQUEST);
+      }
+      console.error('Showcase agents pack failed', err);
+      throw new HttpException({ error: 'Internal server error' }, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+}
