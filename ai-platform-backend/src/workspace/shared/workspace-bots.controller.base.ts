@@ -192,6 +192,11 @@ export abstract class WorkspaceBotsControllerBase {
         knowledgeDatasheets: stats?.knowledgeDatasheets ?? 0,
         lastActivityAt: stats?.lastActivityAt ?? null,
         lastTrainedAt: stats?.lastTrainedAt ?? null,
+        isPlatformBot: (b as { isPlatformBot?: boolean }).isPlatformBot === true,
+        platformBotType:
+          typeof (b as { platformBotType?: unknown }).platformBotType === 'string'
+            ? (b as { platformBotType: string }).platformBotType
+            : undefined,
       };
     });
   }

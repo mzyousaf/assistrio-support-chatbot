@@ -16,6 +16,8 @@ import { RateLimitModule } from './rate-limit/rate-limit.module';
 import { KnowledgeModule } from './knowledge/knowledge.module';
 import { JobsCronService } from './worker/jobs-cron.service';
 import { InternalModule } from './internal/internal.module';
+import { AdminCustomersModule } from './admin-customers/admin-customers.module';
+import { AdminPlatformBotsModule } from './admin-platform-bots/admin-platform-bots.module';
 
 const registerKbCrons = shouldRegisterKbInProcessCronsForAppModule();
 
@@ -25,6 +27,8 @@ const registerKbCrons = shouldRegisterKbInProcessCronsForAppModule();
     AppConfigModule,
     MongooseDbModule,
     InternalModule,
+    AdminCustomersModule,
+    AdminPlatformBotsModule,
     RateLimitModule,
     KnowledgeModule,
     WorkspaceModule,

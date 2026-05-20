@@ -46,6 +46,7 @@ import {
 } from '../workspace/shared/example-questions.util';
 import { randomBytes } from 'crypto';
 import { botIsEffectivelyDeleted, botNotDeletedClause } from './bot-not-deleted.util';
+import { buildPlatformBotPublicMongoFilter } from '../platform-bots/platform-bot-public-filter.util';
 
 /** Shallow merge for dedicated KB row PATCH bodies (`undefined` skips the key). */
 function mergeKbRowPatch(base: Record<string, unknown>, patch: Record<string, unknown>): Record<string, unknown> {
@@ -220,6 +221,96 @@ export class BotsService {
     };
   }
 
+  platformBotPublicMongoFilter(query: { type?: string }): Record<string, unknown> {
+    return buildPlatformBotPublicMongoFilter(query);
+  }
+
+  private readonly publicShowcaseListSelect =
+    '_id name slug shortDescription category avatarEmoji imageUrl exampleQuestions chatUI createdAt visibility accessKey';
+
+  private leanDocsToPublicBotDto(docs: Record<string, unknown>[]): PublicBotDto[] {
+    return docs.map((bot) => ({
+      id: String(bot._id),
+      name: String(bot.name ?? ''),
+      slug: String(bot.slug ?? ''),
+      visibility: 'public' as const,
+      accessKey: String(bot.accessKey ?? ''),
+      shortDescription: bot.shortDescription != null ? String(bot.shortDescription) : undefined,
+      category: bot.category != null ? String(bot.category) : undefined,
+      avatarEmoji: bot.avatarEmoji != null ? String(bot.avatarEmoji) : undefined,
+      imageUrl: bot.imageUrl != null ? String(bot.imageUrl) : undefined,
+      exampleQuestions: exampleQuestionsToPublicLabels(bot.exampleQuestions),
+      chatUI: bot.chatUI as PublicBotDto['chatUI'] | undefined,
+      createdAt:
+        bot.createdAt instanceof Date
+          ? bot.createdAt.toISOString()
+          : String(bot.createdAt ?? ''),
+      knowledgeBasePreview: [] as PublicKnowledgeBasePreviewItem[],
+      knowledgeBaseCounts: {
+        documents: 0,
+        faqs: 0,
+        notes: 0,
+        urls: 0,
+        html: 0,
+        datasheets: 0,
+      },
+    }));
+  }
+
+  private async enrichPublicShowcaseDtos(bots: PublicBotDto[]): Promise<PublicBotDto[]> {
+    return this.attachTotalChats(
+      await this.attachKnowledgeBaseCounts(
+        await this.attachKnowledgeNotePreview(await this.attachKnowledgeBasePreview(bots)),
+      ),
+    );
+  }
+
+  /** Lean platform showcase bots (published, public, type showcase). */
+  private async findPublishedPlatformShowcaseLeanDocs(): Promise<Record<string, unknown>[]> {
+    return this.botModel
+      .find(this.platformBotPublicMongoFilter({ type: 'showcase' }))
+      .sort({ createdAt: -1 })
+      .select(this.publicShowcaseListSelect)
+      .lean() as Promise<Record<string, unknown>[]>;
+  }
+
+  /**
+   * Published public platform bots for anonymous platform-bot APIs.
+   */
+  async findPublishedPublicPlatformBots(query: { type?: string }): Promise<Record<string, unknown>[]> {
+    return this.botModel
+      .find(this.platformBotPublicMongoFilter(query))
+      .sort({ createdAt: -1 })
+      .select(
+        '_id name description shortDescription platformBotType imageUrl slug accessKey welcomeMessage welcomeMessageEnabled exampleQuestions createdAt visibility isPlatformBot status isPublic',
+      )
+      .lean() as Promise<Record<string, unknown>[]>;
+  }
+
+  async findPublishedPublicPlatformBotByIdOrSlug(
+    idOrSlug: string,
+  ): Promise<Record<string, unknown> | null> {
+    const key = String(idOrSlug ?? '').trim();
+    if (!key) return null;
+    const base = this.platformBotPublicMongoFilter({});
+    if (Types.ObjectId.isValid(key)) {
+      const doc = await this.botModel
+        .findOne({ $and: [{ _id: new Types.ObjectId(key) }, base] })
+        .select(
+          '_id name description shortDescription platformBotType imageUrl slug accessKey welcomeMessage welcomeMessageEnabled exampleQuestions createdAt visibility isPlatformBot status isPublic',
+        )
+        .lean();
+      return doc ? (doc as Record<string, unknown>) : null;
+    }
+    const doc = await this.botModel
+      .findOne({ $and: [{ slug: key.toLowerCase() }, base] })
+      .select(
+        '_id name description shortDescription platformBotType imageUrl slug accessKey welcomeMessage welcomeMessageEnabled exampleQuestions createdAt visibility isPlatformBot status isPublic',
+      )
+      .lean();
+    return doc ? (doc as Record<string, unknown>) : null;
+  }
+
   async findAll() {
     return this.botModel.find(botNotDeletedClause()).select('-secretKey').lean();
   }
@@ -301,7 +392,7 @@ export class BotsService {
         .find({ $and: [base, botNotDeletedClause()] })
         .sort({ createdAt: -1 })
         .select(
-          'name agentsPackAgent category status isPublic createdAt _id slug visibility workspaceId chatUI avatarEmoji imageUrl shortDescription allowedOrigins leadCapture',
+          'name agentsPackAgent category status isPublic createdAt _id slug visibility workspaceId chatUI avatarEmoji imageUrl shortDescription allowedOrigins leadCapture isPlatformBot platformBotType',
         )
         .lean();
     }
@@ -322,7 +413,7 @@ export class BotsService {
       .find({ $and: [base, { $or: orClause }, botNotDeletedClause()] })
       .sort({ createdAt: -1 })
       .select(
-        'name agentsPackAgent category status isPublic createdAt _id slug visibility workspaceId chatUI avatarEmoji imageUrl shortDescription allowedOrigins leadCapture',
+        'name agentsPackAgent category status isPublic createdAt _id slug visibility workspaceId chatUI avatarEmoji imageUrl shortDescription allowedOrigins leadCapture isPlatformBot platformBotType',
       )
       .lean();
   }
@@ -434,48 +525,24 @@ export class BotsService {
   }
 
   /**
-   * Anonymous public gallery: published public bots **owned by a superadmin** (`ownerId`).
+   * Anonymous public gallery: prefers published public **platform showcase** bots; falls back to
+   * superadmin-owned published public bots.
    */
   async findPublicShowcase(): Promise<PublicBotDto[]> {
+    const platformDocs = await this.findPublishedPlatformShowcaseLeanDocs();
+    if (platformDocs.length > 0) {
+      return this.enrichPublicShowcaseDtos(this.leanDocsToPublicBotDto(platformDocs));
+    }
+
     const match = await this.publicShowcaseMongoFilter();
     const docs = await this.botModel
       .find(match)
       .sort({ createdAt: -1 })
-      .select(
-        '_id name slug shortDescription category avatarEmoji imageUrl exampleQuestions chatUI createdAt visibility accessKey',
-      )
+      .select(this.publicShowcaseListSelect)
       .lean();
 
-    const bots = docs.map((bot: Record<string, unknown>) => ({
-      id: String(bot._id),
-      name: String(bot.name ?? ''),
-      slug: String(bot.slug ?? ''),
-      visibility: 'public' as const,
-      accessKey: String(bot.accessKey ?? ''),
-      shortDescription: bot.shortDescription != null ? String(bot.shortDescription) : undefined,
-      category: bot.category != null ? String(bot.category) : undefined,
-      avatarEmoji: bot.avatarEmoji != null ? String(bot.avatarEmoji) : undefined,
-      imageUrl: bot.imageUrl != null ? String(bot.imageUrl) : undefined,
-      exampleQuestions: exampleQuestionsToPublicLabels(bot.exampleQuestions),
-      chatUI: bot.chatUI as PublicBotDto['chatUI'] | undefined,
-      createdAt:
-        bot.createdAt instanceof Date
-          ? bot.createdAt.toISOString()
-          : String(bot.createdAt ?? ''),
-      knowledgeBasePreview: [] as PublicKnowledgeBasePreviewItem[],
-      knowledgeBaseCounts: {
-        documents: 0,
-        faqs: 0,
-        notes: 0,
-        urls: 0,
-        html: 0,
-        datasheets: 0,
-      },
-    }));
-    return this.attachTotalChats(
-      await this.attachKnowledgeBaseCounts(
-        await this.attachKnowledgeNotePreview(await this.attachKnowledgeBasePreview(bots)),
-      ),
+    return this.enrichPublicShowcaseDtos(
+      this.leanDocsToPublicBotDto(docs as Record<string, unknown>[]),
     );
   }
 
@@ -487,12 +554,22 @@ export class BotsService {
     return this.findPublicShowcase();
   }
 
-  /** Minimal id lookup for public document download (published, public, superadmin-owned). */
+  /** Minimal id lookup for public document download (platform showcase first, then superadmin-owned). */
   async findPublicShowcaseBotIdBySlug(slug: string): Promise<string | null> {
+    const normalized = slug.trim().toLowerCase();
+    const platformDoc = await this.botModel
+      .findOne({
+        slug: normalized,
+        ...this.platformBotPublicMongoFilter({ type: 'showcase' }),
+      })
+      .select('_id')
+      .lean();
+    if (platformDoc) return String((platformDoc as { _id: unknown })._id);
+
     const match = await this.publicShowcaseMongoFilter();
     const doc = await this.botModel
       .findOne({
-        slug: slug.trim().toLowerCase(),
+        slug: normalized,
         ...match,
       })
       .select('_id')
@@ -859,16 +936,27 @@ export class BotsService {
     faqs: Array<{ question: string; answer: string }>;
     exampleQuestions: string[];
   } | null> {
-    const match = await this.publicShowcaseMongoFilter();
-    const doc = await this.botModel
+    const normalized = slug.trim().toLowerCase();
+    const platformDoc = await this.botModel
       .findOne({
-        slug: slug.trim().toLowerCase(),
-        ...match,
+        slug: normalized,
+        ...this.platformBotPublicMongoFilter({ type: 'showcase' }),
       })
       .select(
-        '_id slug name shortDescription description category avatarEmoji imageUrl welcomeMessage chatUI exampleQuestions visibility accessKey',
+        '_id slug name shortDescription description category avatarEmoji imageUrl welcomeMessage welcomeMessageEnabled chatUI exampleQuestions visibility accessKey',
       )
       .lean();
+    const doc =
+      platformDoc ??
+      (await this.botModel
+        .findOne({
+          slug: normalized,
+          ...(await this.publicShowcaseMongoFilter()),
+        })
+        .select(
+          '_id slug name shortDescription description category avatarEmoji imageUrl welcomeMessage welcomeMessageEnabled chatUI exampleQuestions visibility accessKey',
+        )
+        .lean());
     if (!doc) return null;
     const b = doc as Record<string, unknown>;
     const botId = String(b._id);

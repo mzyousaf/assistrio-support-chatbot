@@ -9,10 +9,14 @@ import {
   MessageSchema,
   UsageLedger,
   UsageLedgerSchema,
+  User,
+  UserSchema,
   Visitor,
   VisitorSchema,
   VisitorEvent,
   VisitorEventSchema,
+  WorkspaceMembership,
+  WorkspaceMembershipSchema,
 } from '../models';
 import { AuthModule } from '../auth/auth.module';
 import { BotsModule } from '../bots/bots.module';
@@ -44,6 +48,8 @@ import { CustomerUsageAnalyticsService } from './customer-usage-analytics.servic
       { name: Conversation.name, schema: ConversationSchema },
       { name: Message.name, schema: MessageSchema },
       { name: UsageLedger.name, schema: UsageLedgerSchema },
+      { name: User.name, schema: UserSchema },
+      { name: WorkspaceMembership.name, schema: WorkspaceMembershipSchema },
     ]),
     VisitorsModule,
     KnowledgeModule,

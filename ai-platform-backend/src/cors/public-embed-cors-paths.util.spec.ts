@@ -127,6 +127,8 @@ describe('isPublicBrowserEmbedCorsPath', () => {
     it('marketing / anonymous routes — strict CORS (not arbitrary customer origins)', () => {
       expect(isPublicBrowserEmbedCorsPath('/api/public/bots')).toBe(false);
       expect(isPublicBrowserEmbedCorsPath('/api/public/bots/acme-widget')).toBe(false);
+      expect(isPublicBrowserEmbedCorsPath('/api/public/platform-bots')).toBe(false);
+      expect(isPublicBrowserEmbedCorsPath('/api/public/platform-bots/demo')).toBe(false);
       expect(isPublicBrowserEmbedCorsPath('/api/public/landing/bots')).toBe(false);
     });
 

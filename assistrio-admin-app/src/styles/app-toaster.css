@@ -1,0 +1,220 @@
+/*
+ * Assistrio — global Sonner toaster
+ * Light surfaces aligned with workspace cards; semantic accent + motion.
+ */
+
+[data-sonner-toaster].app-toaster {
+  /* Above Modal (`z-[300]`); keep very high — Sonner defaults are high but our bundle order can override */
+  z-index: 2147483000;
+  /* Sonner LTR defaults put the close control top-left; move to top-right */
+  --toast-close-button-start: unset;
+  --toast-close-button-end: 0.625rem;
+  --toast-close-button-transform: translate(35%, -35%);
+  --width: min(22.5rem, calc(100vw - 1.5rem));
+  --toast-gap: 10px;
+  --toast-surface: var(--bg-card, #ffffff);
+  --toast-border: var(--ui-border, #e2e8f0);
+  --toast-shadow: var(--shadow-panel, 0 4px 6px -1px rgba(15, 23, 42, 0.05), 0 10px 24px -4px rgba(15, 23, 42, 0.06));
+  --toast-title: #0f172a;
+  --toast-body: #475569;
+  --toast-accent: var(--color-teal-600, #0d9488);
+  --toast-radius: 0;
+}
+
+/*
+ * Do not set `position` on the toast: Sonner uses `position: absolute` for stacking;
+ * overriding (e.g. to `relative`) breaks placement and toasts appear invisible.
+ */
+[data-sonner-toaster].app-toaster[dir='rtl'] {
+  --toast-close-button-start: 0.625rem;
+  --toast-close-button-end: unset;
+  --toast-close-button-transform: translate(-35%, -35%);
+}
+
+[data-sonner-toaster].app-toaster [data-sonner-toast][data-styled='true'].app-toast {
+  width: var(--width);
+  padding: 0.75rem 2.5rem 0.875rem 0.875rem;
+  background: var(--toast-surface);
+  color: var(--toast-title);
+  border: 1px solid var(--toast-border);
+  /* Accent as real border so it follows border-radius (no pseudo-element gap). RTL: inline-start. */
+  border-inline-start-width: 3px;
+  border-inline-start-style: solid;
+  border-inline-start-color: var(--toast-accent);
+  border-radius: var(--toast-radius);
+  box-shadow: var(--toast-shadow);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  align-items: flex-start;
+  gap: 0.75rem;
+  flex-wrap: nowrap;
+}
+
+[data-sonner-toaster].app-toaster [data-sonner-toast][data-type='success'].app-toast {
+  --toast-accent: var(--color-teal-600, #0d9488);
+}
+
+[data-sonner-toaster].app-toaster [data-sonner-toast][data-type='error'].app-toast {
+  --toast-accent: var(--color-danger-text-emphasis, #b91c1c);
+}
+
+[data-sonner-toaster].app-toaster [data-sonner-toast][data-type='info'].app-toast {
+  --toast-accent: var(--color-info-accent-text, #0369a1);
+}
+
+[data-sonner-toaster].app-toaster [data-sonner-toast][data-type='warning'].app-toast {
+  --toast-accent: var(--color-warning-accent-text, #c2410c);
+}
+
+[data-sonner-toaster].app-toaster [data-sonner-toast][data-type='loading'].app-toast,
+[data-sonner-toaster].app-toaster [data-sonner-toast][data-type='default'].app-toast {
+  --toast-accent: #94a3b8;
+}
+
+[data-sonner-toaster].app-toaster [data-sonner-toast].app-toast [data-icon] {
+  order: 0;
+  flex-shrink: 0;
+  margin-top: 0.0625rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 0;
+  background: color-mix(in oklab, var(--toast-accent) 12%, var(--toast-surface));
+  color: var(--toast-accent);
+}
+
+[data-sonner-toaster].app-toaster [data-sonner-toast].app-toast [data-content].app-toast__content {
+  order: 1;
+  flex: 1 1 auto;
+  min-width: 0;
+  gap: 0.125rem;
+  padding-right: 0.25rem;
+}
+
+[data-sonner-toaster].app-toaster [data-sonner-toast].app-toast .app-toast__title {
+  font-weight: 600;
+  font-size: 0.875rem;
+  letter-spacing: -0.015em;
+  color: var(--toast-title);
+  line-height: 1.35;
+}
+
+[data-sonner-toaster].app-toaster [data-sonner-toast].app-toast .app-toast__description {
+  font-weight: 400;
+  font-size: 0.8125rem;
+  color: var(--toast-body);
+  line-height: 1.5;
+  margin-top: 0.1875rem;
+}
+
+/* Sonner: cancel → action in DOM; order so primary reads first */
+[data-sonner-toaster].app-toaster [data-sonner-toast].app-toast [data-button][data-action] {
+  order: 2;
+  align-self: center;
+  flex-shrink: 0;
+  margin-top: 0.125rem;
+}
+
+[data-sonner-toaster].app-toaster [data-sonner-toast].app-toast [data-button][data-cancel] {
+  order: 3;
+  align-self: center;
+  flex-shrink: 0;
+  margin-top: 0.125rem;
+  margin-inline-start: 0.375rem;
+}
+
+[data-sonner-toaster].app-toaster [data-sonner-toast] [data-close-button].app-toast__close {
+  width: 1.375rem;
+  height: 1.375rem;
+  border-radius: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    transform 0.15s ease;
+}
+
+[data-sonner-toaster].app-toaster[dir='ltr'] [data-sonner-toast] [data-close-button].app-toast__close {
+  left: auto !important;
+  right: 0.625rem !important;
+  top: 0.625rem !important;
+  transform: translate(35%, -35%) !important;
+}
+
+[data-sonner-toaster].app-toaster[dir='rtl'] [data-sonner-toast] [data-close-button].app-toast__close {
+  right: auto !important;
+  left: 0.625rem !important;
+  transform: translate(-35%, -35%) !important;
+}
+
+[data-sonner-toaster].app-toaster[dir='ltr'] [data-sonner-toast] [data-close-button].app-toast__close:hover {
+  background: var(--hover-soft, #f1f5f9);
+  border-color: var(--toast-border);
+  color: #0f172a;
+  transform: translate(35%, -35%) scale(0.82) !important;
+}
+
+[data-sonner-toaster].app-toaster[dir='rtl'] [data-sonner-toast] [data-close-button].app-toast__close:hover {
+  background: var(--hover-soft, #f1f5f9);
+  border-color: var(--toast-border);
+  color: #0f172a;
+  transform: translate(-35%, -35%) scale(0.82) !important;
+}
+
+[data-sonner-toaster].app-toaster [data-sonner-toast].app-toast .app-toast__btn {
+  border-radius: 0;
+  min-height: 2rem;
+  padding: 0.375rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+[data-sonner-toaster].app-toaster [data-sonner-toast].app-toast .app-toast__btn:focus-visible {
+  outline: none;
+}
+
+[data-sonner-toaster].app-toaster [data-sonner-toast].app-toast .app-toast__btn--primary:focus-visible {
+  box-shadow: var(--focus-ring-accent, 0 0 0 2px #fff, 0 0 0 4px color-mix(in oklab, var(--color-teal-600) 22%, transparent));
+}
+
+[data-sonner-toaster].app-toaster [data-sonner-toast].app-toast .app-toast__btn--secondary:focus-visible {
+  box-shadow: var(--focus-ring, 0 0 0 2px #fff, 0 0 0 4px rgba(15, 23, 42, 0.14));
+}
+
+[data-sonner-toaster].app-toaster [data-sonner-toast].app-toast .app-toast__btn--primary {
+  border: 1px solid transparent;
+  background: var(--color-teal-600, #0d9488);
+  color: #fff;
+  margin-left: var(--toast-button-margin-start, 0);
+  margin-right: var(--toast-button-margin-end, 0);
+}
+
+[data-sonner-toaster].app-toaster [data-sonner-toast].app-toast .app-toast__btn--primary:hover {
+  background: var(--color-teal-700, #0f766e);
+}
+
+[data-sonner-toaster].app-toaster [data-sonner-toast].app-toast .app-toast__btn--secondary {
+  border: 1px solid var(--toast-border);
+  background: var(--toast-surface);
+  color: #334155;
+}
+
+[data-sonner-toaster].app-toaster [data-sonner-toast].app-toast .app-toast__btn--secondary:hover {
+  background: var(--ui-surface-muted, #f8fafc);
+  border-color: var(--ui-border-hover, #cbd5e1);
+}

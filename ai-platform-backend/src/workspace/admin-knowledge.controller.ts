@@ -23,6 +23,7 @@ import { KnowledgeOverviewService } from './knowledge-overview.service';
 import { RateLimitService } from '../rate-limit/rate-limit.service';
 import { assertKnowledgeTrainQueueRateLimit } from './shared/knowledge-train-queue-rate-limit.util';
 import { KnowledgeBaseItemService } from '../knowledge/knowledge-base-item.service';
+import { KnowledgeItemManualRetryService } from './knowledge-item-manual-retry.service';
 
 type RequestWithUser = FastifyRequest & { user?: RequestUser };
 
@@ -57,6 +58,7 @@ export class AdminKnowledgeController {
     private readonly workspacesService: WorkspacesService,
     private readonly rateLimitService: RateLimitService,
     private readonly knowledgeBaseItemService: KnowledgeBaseItemService,
+    private readonly knowledgeItemManualRetry: KnowledgeItemManualRetryService,
   ) {}
 
   private async assertCanAccess(req: RequestWithUser, botId: string): Promise<void> {
@@ -95,6 +97,95 @@ export class AdminKnowledgeController {
     }
   }
 
+  @Post('items/:itemId/retry')
+  async retryKnowledgeItem(
+    @Param('id') id: string,
+    @Param('itemId') itemId: string,
+    @Req() req: RequestWithUser,
+  ) {
+    await this.assertCanAccess(req, id);
+    try {
+      return await this.knowledgeItemManualRetry.manualRetry(id, itemId);
+    } catch (e) {
+      if (e instanceof HttpException) throw e;
+      console.error('[admin-knowledge] items/:itemId/retry', e);
+      throw new HttpException({ error: 'Internal server error' }, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  @Patch('items/:itemId/use-in-replies')
+  async patchKnowledgeItemUseInReplies(
+    @Param('id') id: string,
+    @Param('itemId') itemId: string,
+    @Body() body: unknown,
+    @Req() req: RequestWithUser,
+  ) {
+    await this.assertCanAccess(req, id);
+    try {
+      const o = parseJsonObjectBody(body);
+      const useInReplies = o.useInReplies;
+      if (typeof useInReplies !== 'boolean') {
+        throw new HttpException(
+          { error: 'useInReplies must be boolean', errorCode: 'invalid_body' },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      const ok = await this.knowledgeBaseItemService.setKnowledgeItemActiveById(id, itemId, useInReplies);
+      if (!ok) {
+        throw new HttpException(
+          { error: 'Knowledge item not found', errorCode: 'kb_item_not_found' },
+          HttpStatus.NOT_FOUND,
+        );
+      }
+      return { ok: true };
+    } catch (e) {
+      if (e instanceof HttpException) throw e;
+      console.error('[admin-knowledge] PATCH items/:itemId/use-in-replies', e);
+      throw new HttpException({ error: 'Internal server error' }, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  @Get('training/status')
+  async getTrainingStatusAggregate(@Param('id') id: string, @Req() req: RequestWithUser) {
+    await this.assertCanAccess(req, id);
+    try {
+      return await this.knowledgeOverview.getAgentTrainingStatus(id);
+    } catch (e) {
+      if (e instanceof HttpException) throw e;
+      console.error('[admin-knowledge] training/status', e);
+      throw new HttpException({ error: 'Internal server error' }, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  @Get('training/pending-items')
+  async getPendingTrainingItems(@Param('id') id: string, @Req() req: RequestWithUser) {
+    await this.assertCanAccess(req, id);
+    try {
+      return await this.knowledgeOverview.getPendingTrainingItems(id);
+    } catch (e) {
+      if (e instanceof HttpException) throw e;
+      console.error('[admin-knowledge] training/pending-items', e);
+      throw new HttpException({ error: 'Internal server error' }, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  @Post('training/retrain-agent')
+  async retrainAgent(@Param('id') id: string, @Body() body: unknown, @Req() req: RequestWithUser) {
+    await this.assertCanAccess(req, id);
+    await assertKnowledgeTrainQueueRateLimit(
+      this.rateLimitService,
+      id,
+      req.user?._id != null ? String(req.user._id) : '',
+    );
+    try {
+      return await this.knowledgeOverview.retrainAgent(id, body);
+    } catch (e) {
+      if (e instanceof HttpException) throw e;
+      console.error('[admin-knowledge] retrain-agent', e);
+      throw new HttpException({ error: 'Internal server error' }, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
   @Delete('items/:itemId')
   async deleteKnowledgeItem(
     @Param('id') id: string,
@@ -127,11 +218,12 @@ export class AdminKnowledgeController {
   async getKnowledgeStatus(
     @Param('id') id: string,
     @Query('type') type: string | undefined,
+    @Query('itemId') itemId: string | undefined,
     @Req() req: RequestWithUser,
   ) {
     await this.assertCanAccess(req, id);
     try {
-      return await this.knowledgeOverview.listKnowledgeItemStatus(id, type);
+      return await this.knowledgeOverview.listKnowledgeItemStatus(id, type, itemId);
     } catch (e) {
       if (e instanceof HttpException) throw e;
       console.error('[admin-knowledge] status', e);

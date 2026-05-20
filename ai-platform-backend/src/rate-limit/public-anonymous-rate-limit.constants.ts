@@ -24,6 +24,10 @@ export const PUBLIC_ANONYMOUS_RATE_LIMITS = {
   publicBotsDetailPerIpPerMinute: 120,
   /** GET /api/public/landing/bots (also protected by API key) */
   landingBotsListPerIpPerMinute: 120,
+  /** GET /api/public/platform-bots */
+  publicPlatformBotsListPerIpPerMinute: 120,
+  /** GET /api/public/platform-bots/:idOrSlug */
+  publicPlatformBotsDetailPerIpPerMinute: 120,
 } as const;
 
 export const PUBLIC_ANON_RATE_PREFIX = {
@@ -32,4 +36,6 @@ export const PUBLIC_ANON_RATE_PREFIX = {
   publicBotsList: 'anon_pub:public_bots_list',
   publicBotsSlug: 'anon_pub:public_bots_slug',
   landingBotsList: 'anon_pub:landing_bots_list',
+  publicPlatformBotsList: 'anon_pub:public_platform_bots_list',
+  publicPlatformBotsDetail: 'anon_pub:public_platform_bots_detail',
 } as const;

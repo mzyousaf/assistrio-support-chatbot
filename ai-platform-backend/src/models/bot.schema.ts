@@ -519,6 +519,13 @@ export class Bot {
     default: () => ({ knowledgeSize: { ...DEFAULT_BOT_KNOWLEDGE_SIZE } }),
   })
   botConfig?: BotPlanConfig;
+  /**
+   * Assistrio-owned bot (landing demos, showcase, support, internal). Stored on the normal `Bot` collection.
+   */
+  @Prop({ default: false, index: true })
+  isPlatformBot?: boolean;
+  @Prop({ enum: ['landing_demo', 'showcase', 'support', 'internal'] })
+  platformBotType?: 'landing_demo' | 'showcase' | 'support' | 'internal';
   /** Tenant workspace for showcase bots (multi-user edit via membership). */
   @Prop({ type: Types.ObjectId, ref: 'Workspace', index: true })
   workspaceId?: Types.ObjectId;

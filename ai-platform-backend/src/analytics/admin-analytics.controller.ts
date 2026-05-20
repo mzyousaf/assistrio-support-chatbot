@@ -9,6 +9,7 @@ import {
 import { AdminSessionAuthGuard } from '../auth/admin/admin-session.guard';
 import { SuperAdminGuard } from '../auth/admin/super-admin.guard';
 import { BotsService } from '../bots/bots.service';
+import { parseAdminAnalyticsScopeQuery } from './admin-bots-summary-query.util';
 import { AnalyticsService } from './analytics.service';
 
 /**
@@ -28,13 +29,29 @@ export class AdminAnalyticsController {
   }
 
   @Get('bots/summary')
-  botsSummary(@Query('from') from?: string, @Query('to') to?: string) {
-    return this.analyticsService.getBotsSummary({ from, to });
+  botsSummary(
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('scope') scope?: string,
+    @Query('platformOnly') platformOnly?: string,
+    @Query('customerId') customerId?: string,
+  ) {
+    return this.analyticsService.getBotsSummary(
+      parseAdminAnalyticsScopeQuery({ from, to, scope, platformOnly, customerId }),
+    );
   }
 
   @Get('leads/summary')
-  leadsSummary(@Query('from') from?: string, @Query('to') to?: string) {
-    return this.analyticsService.getLeadsSummary({ from, to });
+  leadsSummary(
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('scope') scope?: string,
+    @Query('platformOnly') platformOnly?: string,
+    @Query('customerId') customerId?: string,
+  ) {
+    return this.analyticsService.getLeadsSummary(
+      parseAdminAnalyticsScopeQuery({ from, to, scope, platformOnly, customerId }),
+    );
   }
 
   @Get()

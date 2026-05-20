@@ -3,6 +3,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { AuthModule } from '../auth/auth.module';
 import { BotsController } from './bots.controller';
 import { PublicBotsController } from './public-bots.controller';
+import { PublicPlatformBotsController } from './public-platform-bots.controller';
 import { LandingBotsController } from './landing-bots.controller';
 import { WidgetInitController } from './widget-init.controller';
 import { LandingSiteApiKeyGuard } from './landing-site-api-key.guard';
@@ -63,6 +64,7 @@ import { DocumentsModule } from '../documents/documents.module';
   controllers: [
     BotsController,
     PublicBotsController,
+    PublicPlatformBotsController,
     LandingBotsController,
     WidgetInitController,
     WidgetTestingBotController,

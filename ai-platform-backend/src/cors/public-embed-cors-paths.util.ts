@@ -66,6 +66,7 @@ export const STRICT_CORS_PATH_PREFIXES: readonly string[] = [
   '/api/super-admin',
   /** Gallery + landing curated lists + quota — not arbitrary cross-origin browser reads */
   '/api/public/bots',
+  '/api/public/platform-bots',
   '/api/public/landing',
   /** Hosted share preview (`/api/shared/bots/:slug/...`) — strict Assistrio-app CORS only (see `isSharedPreviewBrowserOriginAllowed`). */
   '/api/shared',

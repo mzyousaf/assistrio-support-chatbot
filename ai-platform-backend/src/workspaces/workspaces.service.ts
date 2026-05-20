@@ -3,6 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { User, Workspace, WorkspaceMembership, type UserRole, type WorkspaceMemberRole } from '../models';
 import { resolvePersonalWorkspaceDisplayName } from './workspace-personal-name.util';
+import { ASSISTRIO_PLATFORM_WORKSPACE_NAME } from '../platform-bots/platform-bot.util';
 
 function oidString(v: unknown): string {
   if (v == null) return '';
@@ -50,6 +51,43 @@ export class WorkspacesService {
   /**
    * If the user has no workspace membership, creates one workspace + admin membership (migration / legacy users).
    */
+  /**
+   * Shared workspace for Assistrio platform/admin bots. Creates the workspace if missing and ensures
+   * the given superadmin is an admin member.
+   */
+  async ensurePlatformWorkspace(superadminUserId: string): Promise<Types.ObjectId> {
+    if (!Types.ObjectId.isValid(superadminUserId)) {
+      throw new Error('Invalid user id');
+    }
+    const uid = new Types.ObjectId(superadminUserId);
+    const existingWs = await this.workspaceModel
+      .findOne({ name: ASSISTRIO_PLATFORM_WORKSPACE_NAME })
+      .select('_id')
+      .lean();
+    let workspaceId: Types.ObjectId;
+    if (existingWs && (existingWs as { _id?: Types.ObjectId })._id) {
+      workspaceId = (existingWs as { _id: Types.ObjectId })._id;
+    } else {
+      const ws = await this.workspaceModel.create({
+        name: ASSISTRIO_PLATFORM_WORKSPACE_NAME.slice(0, 120),
+        createdAt: new Date(),
+      });
+      workspaceId = (ws as { _id: Types.ObjectId })._id;
+    }
+    const membership = await this.membershipModel
+      .findOne({ workspaceId, userId: uid })
+      .select('_id')
+      .lean();
+    if (!membership) {
+      await this.membershipModel.create({
+        workspaceId,
+        userId: uid,
+        role: 'admin' as WorkspaceMemberRole,
+      });
+    }
+    return workspaceId;
+  }
+
   async ensurePersonalWorkspaceForUser(userId: string): Promise<Types.ObjectId> {
     if (!Types.ObjectId.isValid(userId)) {
       throw new Error('Invalid user id');

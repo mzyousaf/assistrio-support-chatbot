@@ -1,16 +1,25 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { Model, Types, type PipelineStage } from 'mongoose';
 import {
   Bot,
   Conversation,
   Message,
+  User,
   Visitor,
   VisitorEvent,
+  WorkspaceMembership,
   type VisitorEventType,
 } from '../models';
+import { customerDisplayName } from '../admin-customers/admin-customers.util';
 import { DocumentsService } from '../documents/documents.service';
+import { adminAnalyticsBotOwnershipFields } from './admin-analytics-bot-fields.util';
+import type { AdminAnalyticsScopeQuery } from './admin-bots-summary-query.util';
 import type { OverviewDateRangeQuery } from './analytics-date-range.util';
+import {
+  listBotIdsForAnalyticsFilter,
+  resolveBotsSummaryBotFindFilter,
+} from './admin-bots-summary-scope.util';
 import { parseOverviewDateRange } from './analytics-date-range.util';
 import {
   extractAssistantFeedbackMessageId,
@@ -43,6 +52,9 @@ export class AnalyticsService {
     @InjectModel(Bot.name) private readonly botModel: Model<Bot>,
     @InjectModel(Conversation.name) private readonly conversationModel: Model<Conversation>,
     @InjectModel(Message.name) private readonly messageModel: Model<Message>,
+    @InjectModel(User.name) private readonly userModel: Model<User>,
+    @InjectModel(WorkspaceMembership.name)
+    private readonly workspaceMembershipModel: Model<WorkspaceMembership>,
     private readonly documentsService: DocumentsService,
   ) {}
 
@@ -323,53 +335,21 @@ export class AnalyticsService {
    * Per-bot operational metrics for the internal dashboard table (`createdAt` window matches overview
    * message/conversation totals; per-bot lead rows use the same “touched in range” rule as overview leads).
    */
-  async getBotsSummary(query: OverviewDateRangeQuery) {
+  async getBotsSummary(query: AdminAnalyticsScopeQuery) {
     const { from, to, label } = parseOverviewDateRange(query);
-    const evRange = { createdAt: { $gte: from, $lte: to } };
+    const botFindFilter = await resolveBotsSummaryBotFindFilter({
+      scope: query.scope,
+      customerId: query.customerId,
+      userModel: this.userModel,
+      membershipModel: this.workspaceMembershipModel,
+    });
+    const scopedBotIds = await listBotIdsForAnalyticsFilter(this.botModel, botFindFilter);
 
-    const [messageStats, conversationStats, leadByBot] = await Promise.all([
-      this.messageModel.aggregate<{
-        _id: Types.ObjectId;
-        messageCount: number;
-        showcaseRuntimeUserMessages: number;
-        trialRuntimeUserMessages: number;
-      }>([
-        { $match: evRange },
-        {
-          $group: {
-            _id: '$botId',
-            messageCount: { $sum: 1 },
-            showcaseRuntimeUserMessages: {
-              $sum: {
-                $cond: [
-                  {
-                    $and: [{ $eq: ['$role', 'user'] }, { $eq: ['$showcaseRuntimeUserMessage', true] }],
-                  },
-                  1,
-                  0,
-                ],
-              },
-            },
-            trialRuntimeUserMessages: {
-              $sum: {
-                $cond: [
-                  {
-                    $and: [{ $eq: ['$role', 'user'] }, { $eq: ['$trialRuntimeUserMessage', true] }],
-                  },
-                  1,
-                  0,
-                ],
-              },
-            },
-          },
-        },
-      ]),
-      this.conversationModel.aggregate<{ _id: Types.ObjectId; conversationCount: number }>([
-        { $match: evRange },
-        { $group: { _id: '$botId', conversationCount: { $sum: 1 } } },
-      ]),
-      this.aggregateLeadsByBot(from, to),
-    ]);
+    const [messageStats, conversationStats, leadByBot] = await this.fetchPerBotRangeMetrics(
+      from,
+      to,
+      scopedBotIds,
+    );
 
     const messageMap = new Map(
       messageStats.map((r) => [
@@ -387,7 +367,7 @@ export class AnalyticsService {
     );
 
     const botDocs = await this.botModel
-      .find({})
+      .find(botFindFilter)
       .select(
         '-secretKey -openaiApiKeyOverride -whisperApiKeyOverride -personality.systemPrompt',
       )
@@ -415,6 +395,7 @@ export class AnalyticsService {
         category: b.category ?? null,
         leadCaptureEnabled: b.leadCapture?.enabled === true,
         createdAt,
+        ...adminAnalyticsBotOwnershipFields(b as Parameters<typeof adminAnalyticsBotOwnershipFields>[0]),
         messageCount,
         conversationCount,
         legacyTaggedUserMessagesBucket1,
@@ -435,6 +416,13 @@ export class AnalyticsService {
       'conversationsWithCapturedLeads per bot uses the same touched-in-range rule as overview leads (lastActivityAt or createdAt).',
       'This response is an operational summary — not a PV-safe or embed-facing contract.',
     ];
+    if (query.scope === 'platform') {
+      caveats.push('Bot list filtered to platform-owned bots (isPlatformBot: true).');
+    } else if (query.scope === 'customer' && query.customerId) {
+      caveats.push('Bot list filtered to bots accessible to the specified customer account.');
+    } else if (query.scope === 'customer') {
+      caveats.push('Bot list filtered to tenant/customer bots (excludes platform-owned bots).');
+    }
     if (truncated) {
       caveats.push(`List truncated to the first ${MAX_BOTS_SUMMARY_ROWS} bots after sorting by activity (use filters in a future slice).`);
     }
@@ -445,6 +433,10 @@ export class AnalyticsService {
         from: from.toISOString(),
         to: to.toISOString(),
         label,
+      },
+      filter: {
+        scope: query.scope,
+        ...(query.customerId ? { customerId: query.customerId } : {}),
       },
       truncated,
       bots: rows.slice(0, MAX_BOTS_SUMMARY_ROWS),
@@ -585,7 +577,9 @@ export class AnalyticsService {
         category: botDoc.category ?? null,
         leadCaptureEnabled: botDoc.leadCapture?.enabled === true,
         createdAt,
-        ownerId: botDoc.ownerId != null ? String(botDoc.ownerId) : null,
+        ...adminAnalyticsBotOwnershipFields(
+          botDoc as Parameters<typeof adminAnalyticsBotOwnershipFields>[0],
+        ),
       },
       metrics: {
         messageCount: m0?.messageCount ?? 0,
@@ -689,13 +683,135 @@ export class AnalyticsService {
     };
   }
 
+  /**
+   * Customer-level analytics for admin (`GET /api/admin/customers/:customerId/analytics/overview`).
+   * Only bots the customer can access; platform bots appear only when the customer owns/has access.
+   */
+  async getCustomerAnalyticsOverview(customerIdRaw: string, query: OverviewDateRangeQuery) {
+    const customerId = customerIdRaw.trim();
+    const { from, to } = parseOverviewDateRange(query);
+    const botFindFilter = await resolveBotsSummaryBotFindFilter({
+      scope: 'customer',
+      customerId,
+      userModel: this.userModel,
+      membershipModel: this.workspaceMembershipModel,
+    });
+
+    const customerDoc = await this.userModel.findOne({ _id: new Types.ObjectId(customerId), role: 'customer' }).lean();
+    if (!customerDoc) {
+      throw new NotFoundException({ error: 'Customer not found' });
+    }
+
+    const botDocs = await this.botModel
+      .find(botFindFilter)
+      .select(
+        'name status isPlatformBot platformBotType workspaceId ownerId createdAt updatedAt',
+      )
+      .lean();
+
+    const botIds = (botDocs as { _id: Types.ObjectId }[]).map((b) => b._id);
+    const [messageStats, conversationStats, leadByBot] = await this.fetchPerBotRangeMetrics(from, to, botIds);
+
+    const messageMap = new Map(messageStats.map((r) => [String(r._id), r.messageCount]));
+    const conversationMap = new Map(
+      conversationStats.map((r) => [String(r._id), r.conversationCount]),
+    );
+    const leadMap = new Map(
+      leadByBot.map((r) => [r.botId, r.conversationsWithCapturedLeads]),
+    );
+
+    let conversationCount = 0;
+    let messageCount = 0;
+    let conversationsWithCapturedLeads = 0;
+
+    const bots = (botDocs as Array<Record<string, unknown>>).map((b) => {
+      const botId = String(b._id);
+      const msg = messageMap.get(botId) ?? 0;
+      const conv = conversationMap.get(botId) ?? 0;
+      const leads = leadMap.get(botId) ?? 0;
+      messageCount += msg;
+      conversationCount += conv;
+      conversationsWithCapturedLeads += leads;
+      const status = b.status === 'published' ? 'published' : 'draft';
+      const ownership = adminAnalyticsBotOwnershipFields(
+        b as Parameters<typeof adminAnalyticsBotOwnershipFields>[0],
+      );
+      const createdAt =
+        b.createdAt instanceof Date
+          ? b.createdAt.toISOString()
+          : b.createdAt
+            ? new Date(b.createdAt as string).toISOString()
+            : null;
+      const updatedAt =
+        b.updatedAt instanceof Date
+          ? b.updatedAt.toISOString()
+          : b.updatedAt
+            ? new Date(b.updatedAt as string).toISOString()
+            : null;
+      return {
+        botId,
+        name: String(b.name ?? '').trim() || 'Untitled',
+        status: status as 'draft' | 'published',
+        ...ownership,
+        conversationCount: conv,
+        messageCount: msg,
+        conversationsWithCapturedLeads: leads,
+        createdAt,
+        updatedAt,
+      };
+    });
+
+    bots.sort((a, b) => {
+      if (b.messageCount !== a.messageCount) return b.messageCount - a.messageCount;
+      return a.name.localeCompare(b.name);
+    });
+
+    const publishedBotCount = bots.filter((b) => b.status === 'published').length;
+    const draftBotCount = bots.length - publishedBotCount;
+
+    return {
+      ok: true as const,
+      customer: {
+        id: customerId,
+        name: customerDisplayName(customerDoc as Parameters<typeof customerDisplayName>[0]),
+        email: String((customerDoc as { email?: string }).email ?? '').trim(),
+      },
+      range: {
+        from: from.toISOString(),
+        to: to.toISOString(),
+      },
+      totals: {
+        botCount: bots.length,
+        publishedBotCount,
+        draftBotCount,
+        conversationCount,
+        messageCount,
+        conversationsWithCapturedLeads,
+      },
+      bots,
+      caveats: [
+        'Only bots accessible to this customer account are included (workspace membership or legacy owner).',
+        'Message and conversation counts use createdAt within the selected range.',
+        'conversationsWithCapturedLeads uses the same touched-in-range + non-empty capturedLeadData rule as admin overview.',
+      ],
+    };
+  }
+
   /** Aggregate lead metrics for the internal dashboard (counts only — no raw lead values). */
-  async getLeadsSummary(query: OverviewDateRangeQuery) {
+  async getLeadsSummary(query: AdminAnalyticsScopeQuery) {
     const { from, to, label } = parseOverviewDateRange(query);
+    const botFindFilter = await resolveBotsSummaryBotFindFilter({
+      scope: query.scope,
+      customerId: query.customerId,
+      userModel: this.userModel,
+      membershipModel: this.workspaceMembershipModel,
+    });
+    const scopedBotIds = await listBotIdsForAnalyticsFilter(this.botModel, botFindFilter);
+
     const [conversationsWithCapturedLeads, totalLeadFieldsCaptured, byBotRaw] = await Promise.all([
-      this.countConversationsWithCapturedLeadsInRange(from, to),
-      this.sumNonEmptyLeadFieldValuesInRange(from, to),
-      this.aggregateLeadsByBot(from, to),
+      this.countConversationsWithCapturedLeadsInRange(from, to, scopedBotIds),
+      this.sumNonEmptyLeadFieldValuesInRange(from, to, scopedBotIds),
+      this.aggregateLeadsByBot(from, to, scopedBotIds),
     ]);
 
     const sorted = [...byBotRaw].sort((a, b) => b.conversationsWithCapturedLeads - a.conversationsWithCapturedLeads);
@@ -726,6 +842,13 @@ export class AnalyticsService {
     if (truncatedByBot) {
       caveats.push(`byBot lists the top ${MAX_LEADS_BY_BOT_ROWS} bots by conversations with captured leads.`);
     }
+    if (query.scope === 'platform') {
+      caveats.push('Totals and byBot are limited to platform-owned bots (isPlatformBot: true).');
+    } else if (query.scope === 'customer' && query.customerId) {
+      caveats.push('Totals and byBot are limited to bots accessible to the specified customer account.');
+    } else if (query.scope === 'customer') {
+      caveats.push('Totals and byBot are limited to tenant/customer bots (excludes platform-owned bots).');
+    }
 
     return {
       schemaVersion: 1 as const,
@@ -733,6 +856,10 @@ export class AnalyticsService {
         from: from.toISOString(),
         to: to.toISOString(),
         label,
+      },
+      filter: {
+        scope: query.scope,
+        ...(query.customerId ? { customerId: query.customerId } : {}),
       },
       totals: {
         conversationsWithCapturedLeads,
@@ -743,15 +870,107 @@ export class AnalyticsService {
     };
   }
 
+  private async fetchPerBotRangeMetrics(
+    from: Date,
+    to: Date,
+    scopedBotIds: Types.ObjectId[] | null,
+  ): Promise<
+    [
+      Array<{
+        _id: Types.ObjectId;
+        messageCount: number;
+        showcaseRuntimeUserMessages: number;
+        trialRuntimeUserMessages: number;
+      }>,
+      Array<{ _id: Types.ObjectId; conversationCount: number }>,
+      Array<{ botId: string; conversationsWithCapturedLeads: number; leadFieldsCaptured: number }>,
+    ]
+  > {
+    const evRange: Record<string, unknown> = { createdAt: { $gte: from, $lte: to } };
+    const botMatch = this.botIdScopeMatch(scopedBotIds);
+    const rangeMatch = { ...evRange, ...botMatch };
+
+    return Promise.all([
+      scopedBotIds !== null && scopedBotIds.length === 0
+        ? Promise.resolve([])
+        : this.messageModel.aggregate<{
+            _id: Types.ObjectId;
+            messageCount: number;
+            showcaseRuntimeUserMessages: number;
+            trialRuntimeUserMessages: number;
+          }>([
+            { $match: rangeMatch },
+            {
+              $group: {
+                _id: '$botId',
+                messageCount: { $sum: 1 },
+                showcaseRuntimeUserMessages: {
+                  $sum: {
+                    $cond: [
+                      {
+                        $and: [
+                          { $eq: ['$role', 'user'] },
+                          { $eq: ['$showcaseRuntimeUserMessage', true] },
+                        ],
+                      },
+                      1,
+                      0,
+                    ],
+                  },
+                },
+                trialRuntimeUserMessages: {
+                  $sum: {
+                    $cond: [
+                      {
+                        $and: [{ $eq: ['$role', 'user'] }, { $eq: ['$trialRuntimeUserMessage', true] }],
+                      },
+                      1,
+                      0,
+                    ],
+                  },
+                },
+              },
+            },
+          ]),
+      scopedBotIds !== null && scopedBotIds.length === 0
+        ? Promise.resolve([])
+        : this.conversationModel.aggregate<{ _id: Types.ObjectId; conversationCount: number }>([
+            { $match: rangeMatch },
+            { $group: { _id: '$botId', conversationCount: { $sum: 1 } } },
+          ]),
+      this.aggregateLeadsByBot(from, to, scopedBotIds),
+    ]);
+  }
+
+  private botIdScopeMatch(scopedBotIds: Types.ObjectId[] | null): Record<string, unknown> {
+    if (scopedBotIds === null) {
+      return {};
+    }
+    return { botId: { $in: scopedBotIds } };
+  }
+
   /**
    * Conversations with lead data touched in range — uses {@link Conversation.lastActivityAt} when set.
    */
-  private async countConversationsWithCapturedLeadsInRange(from: Date, to: Date): Promise<number> {
-    const rows = await this.conversationModel.aggregate<{ n: number }>([
+  private async countConversationsWithCapturedLeadsInRange(
+    from: Date,
+    to: Date,
+    scopedBotIds: Types.ObjectId[] | null = null,
+  ): Promise<number> {
+    if (scopedBotIds !== null && scopedBotIds.length === 0) {
+      return 0;
+    }
+    const stages: PipelineStage[] = [];
+    const botMatch = this.botIdScopeMatch(scopedBotIds);
+    if (Object.keys(botMatch).length > 0) {
+      stages.push({ $match: botMatch });
+    }
+    stages.push(
       this.conversationTouchedInRangeStage(from, to),
       this.hasNonEmptyCapturedLeadPipelineStage(),
       { $count: 'n' },
-    ]);
+    );
+    const rows = await this.conversationModel.aggregate<{ n: number }>(stages);
     return rows[0]?.n ?? 0;
   }
 
@@ -788,8 +1007,20 @@ export class AnalyticsService {
     };
   }
 
-  private async sumNonEmptyLeadFieldValuesInRange(from: Date, to: Date): Promise<number> {
-    const rows = await this.conversationModel.aggregate<{ total: number }>([
+  private async sumNonEmptyLeadFieldValuesInRange(
+    from: Date,
+    to: Date,
+    scopedBotIds: Types.ObjectId[] | null = null,
+  ): Promise<number> {
+    if (scopedBotIds !== null && scopedBotIds.length === 0) {
+      return 0;
+    }
+    const stages: PipelineStage[] = [];
+    const botMatch = this.botIdScopeMatch(scopedBotIds);
+    if (Object.keys(botMatch).length > 0) {
+      stages.push({ $match: botMatch });
+    }
+    stages.push(
       this.conversationTouchedInRangeStage(from, to),
       this.hasNonEmptyCapturedLeadPipelineStage(),
       {
@@ -806,21 +1037,27 @@ export class AnalyticsService {
         },
       },
       { $group: { _id: null, total: { $sum: '$nonEmptyFieldCount' } } },
-    ]);
+    );
+    const rows = await this.conversationModel.aggregate<{ total: number }>(stages);
     return rows[0]?.total ?? 0;
   }
 
   private async aggregateLeadsByBot(
     from: Date,
     to: Date,
+    scopedBotIds: Types.ObjectId[] | null = null,
   ): Promise<
     Array<{ botId: string; conversationsWithCapturedLeads: number; leadFieldsCaptured: number }>
   > {
-    const rows = await this.conversationModel.aggregate<{
-      _id: Types.ObjectId;
-      conversationsWithCapturedLeads: number;
-      leadFieldsCaptured: number;
-    }>([
+    if (scopedBotIds !== null && scopedBotIds.length === 0) {
+      return [];
+    }
+    const stages: PipelineStage[] = [];
+    const botMatch = this.botIdScopeMatch(scopedBotIds);
+    if (Object.keys(botMatch).length > 0) {
+      stages.push({ $match: botMatch });
+    }
+    stages.push(
       this.conversationTouchedInRangeStage(from, to),
       this.hasNonEmptyCapturedLeadPipelineStage(),
       {
@@ -844,7 +1081,12 @@ export class AnalyticsService {
           leadFieldsCaptured: { $sum: '$nonEmptyFieldCount' },
         },
       },
-    ]);
+    );
+    const rows = await this.conversationModel.aggregate<{
+      _id: Types.ObjectId;
+      conversationsWithCapturedLeads: number;
+      leadFieldsCaptured: number;
+    }>(stages);
     return rows.map((r) => ({
       botId: String(r._id),
       conversationsWithCapturedLeads: r.conversationsWithCapturedLeads,
