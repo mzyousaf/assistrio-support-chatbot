@@ -55,6 +55,19 @@ describe('buildConversationCreditBreakdown', () => {
     expect(p.rollupByBreakdownComponents.length).toBe(2);
     expect(p.rows[0]?.breakdownAvailable).toBe(true);
     expect(p.rows[p.rows.length - 1]?.breakdownAvailable).toBe(false);
+    expect(p.usageSidebarUsesBreakdownAttribution).toBe(true);
+    expect(p.visitorMessageCount).toBe(2);
+    expect(p.averageCreditsPerVisitorMessage).toBeCloseTo(1.125);
+    expect(p.usageModalityRows.find((x) => x.usageType === 'text_message')).toMatchObject({
+      quantity: 2,
+      creditsUsed: 2,
+      noun: 'messages',
+    });
+    expect(p.usageModalityRows.find((x) => x.usageType === 'dictation_session')).toMatchObject({
+      quantity: 1,
+      creditsUsed: 0.25,
+      noun: 'sessions',
+    });
   });
 
   it('falls back gracefully when breakdown missing', () => {
@@ -69,6 +82,12 @@ describe('buildConversationCreditBreakdown', () => {
     ]);
     expect(p.rollupByBreakdownComponents.length).toBe(0);
     expect(p.rows[0]?.breakdownAvailable).toBe(false);
+    expect(p.usageSidebarUsesBreakdownAttribution).toBe(false);
+    expect(p.usageModalityRows.find((x) => x.usageType === 'voice_message')).toMatchObject({
+      quantity: 1,
+      creditsUsed: 1,
+      noun: 'messages',
+    });
   });
 
   it('merges suggested_question_message breakdown components into text_message', () => {
@@ -95,6 +114,10 @@ describe('buildConversationCreditBreakdown', () => {
     expect(p.rollupByBreakdownComponents.find((x) => x.key === 'text_message')).toEqual(
       expect.objectContaining({ billedUnits: 1, creditsUsed: 1, label: 'Text message' }),
     );
+    expect(p.usageModalityRows.find((x) => x.usageType === 'text_message')).toMatchObject({
+      quantity: 1,
+      creditsUsed: 1,
+    });
   });
 
   it('shows decimal totals from stored rows', () => {
@@ -118,5 +141,8 @@ describe('buildConversationCreditBreakdown', () => {
       }),
     ]);
     expect(p.rollupByBreakdownComponents.find((x) => x.key === 'text_message')?.creditsUsed).toBe(1.5);
+    const textUsage = p.usageModalityRows.find((x) => x.usageType === 'text_message');
+    expect(textUsage?.creditsUsed).toBe(1.5);
+    expect(textUsage?.creditsEach).toBeCloseTo(1.5);
   });
 });

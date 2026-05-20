@@ -8,6 +8,11 @@ import { normalizeChatOpenAnimation } from "../../lib/chatOpenAnimationNormalize
 import type { ChatLauncherWhenOpen, ChatOpenAnimation } from "../../models/botChatUI";
 import { chatPanelOutlineStyle } from "./chatPanelChrome";
 import { chatShadowIntensityClass } from "./chatShadowStyles";
+import {
+  DEFAULT_LAUNCHER_DIAMETER_PX,
+  LAUNCHER_EDGE_INSET_PX,
+  PANEL_ABOVE_LAUNCHER_GAP_PX,
+} from "../../lib/embedPanelConstraints";
 
 export interface ChatWithLauncherProps extends Omit<ChatProps, "onClose"> {
   /** Called when chat panel is closed. */
@@ -36,13 +41,6 @@ export interface ChatWithLauncherProps extends Omit<ChatProps, "onClose"> {
   /** `aria-label` for the dialog wrapper (default "Chat"). */
   dialogAriaLabel?: string;
 }
-
-/** Matches `ChatLauncherBubble` default when `size` is omitted. */
-const DEFAULT_LAUNCHER_DIAMETER_PX = 48;
-/** Tailwind `bottom-4` / `top-4` / `left-4` / `right-4` (1rem). */
-const LAUNCHER_EDGE_INSET_PX = 16;
-/** Space between the launcher and the chat panel when open (avoids overlap at max launcher size). */
-const PANEL_ABOVE_LAUNCHER_GAP_PX = 12;
 
 const panelHorizontalClasses = {
   "bottom-right": "right-4",

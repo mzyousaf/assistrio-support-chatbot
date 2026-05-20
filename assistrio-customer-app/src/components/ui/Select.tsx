@@ -1,4 +1,5 @@
 import {
+  Fragment,
   useState,
   useRef,
   useEffect,
@@ -25,24 +26,51 @@ export type SelectProps = Omit<SelectHTMLAttributes<HTMLSelectElement>, 'size'> 
   triggerClassName?: string;
 };
 
-type OptionRow = { value: string; label: string; disabled?: boolean };
+type OptionRow = { value: string; label: string; disabled?: boolean; sectionLabel?: string };
 
+function optionTextLabel(children: ReactNode): string {
+  if (typeof children === 'string' || typeof children === 'number') return String(children);
+  return '';
+}
+
+/** Flattens `<option>` / `<optgroup label>`/`option`/` children for the styled listbox. */
 function parseOptions(children: ReactNode): OptionRow[] {
   const rows: OptionRow[] = [];
   Children.forEach(children, (child) => {
     if (!isValidElement(child)) return;
-    if (child.type !== 'option') return;
-    const p = child.props as { value?: string; disabled?: boolean; children?: ReactNode };
-    const label =
-      typeof p.children === 'string' || typeof p.children === 'number'
-        ? String(p.children)
-        : '';
-    const v = String(p.value ?? '');
-    rows.push({
-      value: v,
-      label: label || v,
-      disabled: p.disabled,
-    });
+    const typeStr = typeof child.type === 'string' ? child.type.toLowerCase() : '';
+    if (typeStr === 'optgroup') {
+      const gp = child.props as { label?: string; children?: ReactNode };
+      const groupCaption = gp.label != null ? String(gp.label) : '';
+      let firstOption = true;
+      Children.forEach(gp.children ?? null, (optEl) => {
+        if (!isValidElement(optEl)) return;
+        const optType =
+          typeof optEl.type === 'string' ? String(optEl.type).toLowerCase() : '';
+        if (optType !== 'option') return;
+        const p = optEl.props as { value?: string; disabled?: boolean; children?: ReactNode };
+        const label = optionTextLabel(p.children);
+        const v = String(p.value ?? '');
+        rows.push({
+          value: v,
+          label: label || v,
+          disabled: p.disabled,
+          sectionLabel: firstOption && groupCaption ? groupCaption : undefined,
+        });
+        firstOption = false;
+      });
+      return;
+    }
+    if (typeStr === 'option') {
+      const p = child.props as { value?: string; disabled?: boolean; children?: ReactNode };
+      const label = optionTextLabel(p.children);
+      const v = String(p.value ?? '');
+      rows.push({
+        value: v,
+        label: label || v,
+        disabled: p.disabled,
+      });
+    }
   });
   return rows;
 }
@@ -98,7 +126,7 @@ function computeMenuRect(el: HTMLElement): MenuRect {
 /**
  * Custom listbox select: styled trigger + rich dropdown (not the OS native menu).
  * List renders in a portal with fixed positioning so it is not clipped by overflow ancestors.
- * Accepts `<option value="…">Label</option>` children; API matches native `onChange` / `value`.
+ * Accepts `<option>` and `<optgroup label="…">` / `<option>` children (flattened into one listbox with section captions).
  */
 export const Select = forwardRef<HTMLButtonElement, SelectProps>(function Select(
   {
@@ -202,10 +230,22 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(function Select
           zIndex: 1100,
         }}
       >
-        {opts.map((o) => {
+        {opts.map((o, idx) => {
           const isSelected = o.value === current;
           return (
-            <li key={o.value} role="presentation" className="px-1">
+          <Fragment key={o.value}>
+            {o.sectionLabel ? (
+              <li
+                role="presentation"
+                className={cn(
+                  'px-3 pb-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400',
+                  idx > 0 ? 'border-t border-slate-100 pt-2' : 'pt-0.5 pb-1',
+                )}
+              >
+                {o.sectionLabel}
+              </li>
+            ) : null}
+            <li role="presentation" className="px-1">
               <button
                 type="button"
                 role="option"
@@ -237,6 +277,7 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(function Select
                 <span className="min-w-0 flex-1">{o.label}</span>
               </button>
             </li>
+          </Fragment>
           );
         })}
       </ul>

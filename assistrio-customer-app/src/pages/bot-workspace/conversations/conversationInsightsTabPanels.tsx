@@ -1,9 +1,15 @@
 import { type ReactNode, useState } from 'react';
-import type { CustomerConversationDetail, CustomerConversationListItem, CustomerConversationMessage } from '@/api/types';
+import type {
+  CustomerConversationDetail,
+  CustomerConversationListItem,
+  CustomerConversationMessage,
+} from '@/api/types';
 import { Tooltip } from '@/components/ui';
 import { formatConversationAbsolute, formatConversationRelative } from '@/lib/conversationDateFormat';
+import { formatAnalyticsAiCreditsLabel } from '@/lib/analyticsFormat';
 import { safeClientString } from '@/lib/safeClientString';
 import { cn } from '@/lib/utils';
+import { ExternalLink } from 'lucide-react';
 import {
   capitalizeWordsFromKey,
   conversationChannelLabel,
@@ -11,15 +17,19 @@ import {
   dashUnlessText,
   deviceTypeCustomerLabel,
   formatBrowserOsLine,
-  formatConversationOriginSourceType,
   INSIGHT_EM_DASH,
-  sanitizedHostname,
   screenSizeDisplay,
-  sentimentCustomerLabel,
   sortedLeadPresentation,
+  visitorOriginHref,
+  visitorOriginLineDisplay,
+  visitorPageHref,
   visitorPageLineDisplay,
+  visitorReferrerHref,
+  visitorReferrerLineDisplay,
 } from './conversationInsightsFormatting';
-import { topicTaxonomyCustomerLabel } from './conversationTopicSentimentDisplay';
+import { MESSAGE_SENTIMENT_TAG_LABELS, topicSecondaryPillClass } from './conversationTopicSentimentDisplay';
+import { SentimentTag, TopicTag } from './MessageTopicSentimentTags';
+import { MessageCreditBadge } from './MessageCreditBadge';
 import { ConversationDetailCopyButton } from './ConversationDetailCopyButton';
 import {
   ConversationInsightsSheet,
@@ -28,8 +38,16 @@ import {
   ConversationInsightsSheetUrlRow,
   conversationInsightsDetailOuterClassName,
 } from './ConversationInsightsSheet';
-import { formatCompactNumber, formatCreditAmount } from './conversationDisplayFormat';
+import { formatCompactNumber } from './conversationDisplayFormat';
 import { ConversationCreditBreakdownModal } from './ConversationCreditBreakdownModal';
+
+/** Tooltips for General → Topic & sentiment row labels */
+const GENERAL_TOPIC_PRIMARY_LABEL_HINT =
+  'The main topic Analytics assigned to this chat, inferred from visitor messages.';
+const GENERAL_TOPIC_OTHER_LABEL_HINT =
+  'Extra topic labels on this thread besides the primary topic.';
+const GENERAL_SENTIMENT_LABEL_HINT =
+  'Sentiment summarizes visitor (user) messages in this conversation.';
 
 type MsgState = 'idle' | 'loading' | 'ok' | 'error';
 
@@ -65,39 +83,43 @@ function statusBadgeClass(rawKey: string): string {
   return 'border-slate-200/85 bg-white text-slate-800';
 }
 
-function sentimentToneBadgeClass(sentimentKey: string): string {
-  const k = sentimentKey.trim().toLowerCase();
-  if (!k || k === 'unknown') return 'border-slate-200/85 bg-slate-50 text-slate-800';
-  if (k === 'positive') return 'border-emerald-200/80 bg-emerald-50/90 text-emerald-900';
-  if (k === 'neutral') return 'border-slate-200/85 bg-slate-50 text-slate-800';
-  if (k === 'negative') return 'border-rose-200/80 bg-rose-50/95 text-rose-900';
-  if (k === 'mixed') return 'border-violet-200/80 bg-violet-50/95 text-violet-900';
-  return 'border-slate-200/85 bg-slate-50 text-slate-800';
-}
-
 export { conversationInsightsDetailOuterClassName } from './ConversationInsightsSheet';
+
+function InsightsTagPlaceholder({ children }: { children: ReactNode }) {
+  return <span className={cn(topicSecondaryPillClass, 'cursor-default')}>{children}</span>;
+}
 
 export function ConversationInsightsGeneralTab({
   listItem,
   detail,
+  messages,
+  msgState,
 }: {
   listItem: CustomerConversationListItem;
   detail: CustomerConversationDetail;
+  messages: CustomerConversationMessage[] | null;
+  msgState: ConversationMsgLoadState;
 }) {
+  const [creditModalOpen, setCreditModalOpen] = useState(false);
+  const canShowCreditDetails = msgState === 'ok' && messages != null;
+
   const cid = dashUnlessText(detail.conversationId || detail.id);
   const source = conversationChannelLabel(detail, listItem.startedFrom);
   const sentimentKey =
     typeof detail.conversationSentiment?.label === 'string' ? detail.conversationSentiment.label.trim().toLowerCase() : '';
-  const sentimentSummary = sentimentCustomerLabel(detail);
+  const showSentimentTag = Boolean(sentimentKey && MESSAGE_SENTIMENT_TAG_LABELS.has(sentimentKey));
+
   const ct = detail.conversationTopics;
-  const primaryTopicDisplay = ct?.primaryTopic?.trim()
-    ? topicTaxonomyCustomerLabel(ct.primaryTopic)
-    : 'Not analyzed';
-  const topicLabelIds = ct?.topicLabels ?? [];
-  const topicsLineDisplay =
-    topicLabelIds.length > 0
-      ? [...new Set(topicLabelIds.map((id) => topicTaxonomyCustomerLabel(id)))].join(', ')
-      : 'Not analyzed';
+  const primaryTopicId = ct?.primaryTopic?.trim() ?? '';
+  const topicLabelIds = [
+    ...new Set(
+      (ct?.topicLabels ?? [])
+        .filter((x): x is string => typeof x === 'string' && Boolean(x.trim()))
+        .map((x) => x.trim()),
+    ),
+  ];
+  const secondaryTopicIds = primaryTopicId ? topicLabelIds.filter((id) => id !== primaryTopicId) : topicLabelIds;
+
   const { customerLabel: statusLabel, rawKey: statusKey } = conversationStatusPresentation(detail.status);
   const lastAct = detail.lastActivityAt ?? listItem.lastActivityAt;
   const created = detail.createdAt ?? listItem.createdAt;
@@ -105,9 +127,9 @@ export function ConversationInsightsGeneralTab({
   return (
     <div className={conversationInsightsDetailOuterClassName}>
       <ConversationInsightsSheet>
-        <ConversationInsightsSheetSection title="Conversation">
+        <ConversationInsightsSheetSection title="Chat">
           <ConversationInsightsSheetRow
-            label="Source"
+            label="Widget Channel"
             value={<ToneBadge className="border-teal-200/80 bg-teal-50/90 text-teal-900">{dashUnlessText(source)}</ToneBadge>}
           />
           <ConversationInsightsSheetRow
@@ -120,7 +142,24 @@ export function ConversationInsightsGeneralTab({
           />
           <ConversationInsightsSheetRow
             label="Total usage"
-            value={<span className="tabular-nums text-slate-900">{formatCreditAmount(detail.totalCreditsUsed)}</span>}
+            value={
+              <button
+                type="button"
+                disabled={!canShowCreditDetails}
+                onClick={canShowCreditDetails ? () => setCreditModalOpen(true) : undefined}
+                className={cn(
+                  'm-0 border-none bg-transparent p-0 text-left',
+                  canShowCreditDetails ? 'cursor-pointer' : 'cursor-default opacity-90',
+                )}
+                aria-label={
+                  canShowCreditDetails
+                    ? 'View credit details for this chat'
+                    : 'Load chat to view credit details'
+                }
+              >
+                <MessageCreditBadge creditCost={detail.totalCreditsUsed} />
+              </button>
+            }
           />
           <ConversationInsightsSheetRow label="Created" value={formatConversationAbsolute(created)} />
           <ConversationInsightsSheetRow
@@ -138,14 +177,14 @@ export function ConversationInsightsGeneralTab({
             }
           />
           <ConversationInsightsSheetRow
-            label="Conversation ID"
+            label="Chat ID"
             value={
               cid === INSIGHT_EM_DASH ? (
                 cid
               ) : (
                 <span className="inline-flex min-w-0 flex-wrap items-center gap-2">
                   <span className="break-all font-mono text-[13px] text-slate-900">{cid}</span>
-                  <ConversationDetailCopyButton value={cid} ariaLabel="Copy conversation ID" />
+                  <ConversationDetailCopyButton value={cid} ariaLabel="Copy chat ID" />
                 </span>
               )
             }
@@ -153,21 +192,83 @@ export function ConversationInsightsGeneralTab({
         </ConversationInsightsSheetSection>
 
         <ConversationInsightsSheetSection title="Topic & sentiment">
-          <ConversationInsightsSheetRow label="Primary topic" value={primaryTopicDisplay} />
-          <ConversationInsightsSheetRow label="Topics" value={topicsLineDisplay} />
+          <ConversationInsightsSheetRow
+            label="Primary topic"
+            labelTooltip={GENERAL_TOPIC_PRIMARY_LABEL_HINT}
+            value={
+              primaryTopicId ? (
+                <div className="flex min-w-0 flex-wrap gap-1">
+                  <TopicTag topicId={primaryTopicId} />
+                </div>
+              ) : (
+                <InsightsTagPlaceholder>Not analyzed</InsightsTagPlaceholder>
+              )
+            }
+          />
+          <ConversationInsightsSheetRow
+            label="Other topics"
+            labelTooltip={GENERAL_TOPIC_OTHER_LABEL_HINT}
+            value={
+              secondaryTopicIds.length > 0 ? (
+                <div className="flex min-w-0 flex-wrap gap-1">
+                  {secondaryTopicIds.map((id) => (
+                    <TopicTag key={id} topicId={id} />
+                  ))}
+                </div>
+              ) : (
+                <InsightsTagPlaceholder>Not analyzed</InsightsTagPlaceholder>
+              )
+            }
+          />
           <ConversationInsightsSheetRow
             label="Sentiment"
-            value={<ToneBadge className={sentimentToneBadgeClass(sentimentKey)}>{sentimentSummary}</ToneBadge>}
+            labelTooltip={GENERAL_SENTIMENT_LABEL_HINT}
+            value={
+              showSentimentTag ? (
+                <div className="flex min-w-0 flex-wrap gap-1">
+                  <SentimentTag labelKey={sentimentKey} />
+                </div>
+              ) : (
+                <InsightsTagPlaceholder>Not analyzed</InsightsTagPlaceholder>
+              )
+            }
           />
         </ConversationInsightsSheetSection>
       </ConversationInsightsSheet>
+      <ConversationCreditBreakdownModal open={creditModalOpen} onClose={() => setCreditModalOpen(false)} messages={messages} />
     </div>
+  );
+}
+
+function VisitorInsightsExternalLink({ href, displayText }: { href?: string; displayText: string }) {
+  const plain = displayText.trim().length === 0 || displayText === INSIGHT_EM_DASH;
+  if (!href || plain) {
+    return <span className="break-all text-slate-600">{displayText}</span>;
+  }
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={cn(
+        'group inline-flex min-w-0 max-w-full cursor-pointer items-start rounded-sm font-normal outline-none',
+        'focus-visible:ring-2 focus-visible:ring-teal-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-white',
+      )}
+    >
+      <span className="inline-flex min-w-0 max-w-full items-start gap-1.5 border-b border-transparent pb-px text-slate-600 transition-[border-color,color] group-hover:border-teal-600 group-hover:text-teal-900">
+        <span className="min-w-0 flex-1 break-all leading-snug">{displayText}</span>
+        <ExternalLink
+          className="mt-0.5 size-3.5 shrink-0 text-slate-500 transition-colors group-hover:text-teal-900"
+          strokeWidth={2}
+          aria-hidden
+        />
+      </span>
+    </a>
   );
 }
 
 export function ConversationInsightsVisitorTab({ detail }: { detail: CustomerConversationDetail }) {
   const l = detail.location;
-  const o = detail.conversationOrigin;
   const dev = detail.deviceInfo;
   const { browserLine, osLine } = formatBrowserOsLine(dev?.browser, dev?.browserVersion, dev?.os, dev?.osVersion);
 
@@ -176,7 +277,7 @@ export function ConversationInsightsVisitorTab({ detail }: { detail: CustomerCon
       <ConversationInsightsSheet>
         <ConversationInsightsSheetSection
           title="Location"
-          description="Approximate geography from network lookups or visitor browser hints."
+          description="Approximate geography from network lookups."
         >
           <ConversationInsightsSheetRow label="Country" value={dashUnlessText(l?.country)} />
           <ConversationInsightsSheetRow label="Region" value={dashUnlessText(l?.region)} />
@@ -194,11 +295,17 @@ export function ConversationInsightsVisitorTab({ detail }: { detail: CustomerCon
 
         <ConversationInsightsSheetSection title="Page source">
           <ConversationInsightsSheetRow
-            label="Source type"
-            value={dashUnlessText(o?.source ? formatConversationOriginSourceType(o.source) : undefined)}
+            label="Origin"
+            value={<VisitorInsightsExternalLink href={visitorOriginHref(detail)} displayText={visitorOriginLineDisplay(detail)} />}
           />
-          <ConversationInsightsSheetRow label="Page" value={visitorPageLineDisplay(detail)} />
-          <ConversationInsightsSheetRow label="Referrer" value={dashUnlessText(sanitizedHostname(o?.referrer))} />
+          <ConversationInsightsSheetRow
+            label="Page"
+            value={<VisitorInsightsExternalLink href={visitorPageHref(detail)} displayText={visitorPageLineDisplay(detail)} />}
+          />
+          <ConversationInsightsSheetRow
+            label="Referrer"
+            value={<VisitorInsightsExternalLink href={visitorReferrerHref(detail)} displayText={visitorReferrerLineDisplay(detail)} />}
+          />
         </ConversationInsightsSheetSection>
       </ConversationInsightsSheet>
     </div>
@@ -219,11 +326,7 @@ export function ConversationInsightsUsageTab({
   return (
     <div className={conversationInsightsDetailOuterClassName}>
       <ConversationInsightsSheet>
-        <ConversationInsightsSheetSection title="Messages">
-          <ConversationInsightsSheetRow
-            label="Total messages"
-            value={<span className="tabular-nums">{formatCompactNumber(detail.totalMessages)}</span>}
-          />
+        <ConversationInsightsSheetSection title="Message counts">
           <ConversationInsightsSheetRow
             label="Visitor messages"
             value={<span className="tabular-nums">{formatCompactNumber(detail.totalUserMessages)}</span>}
@@ -233,6 +336,13 @@ export function ConversationInsightsUsageTab({
             value={<span className="tabular-nums">{formatCompactNumber(detail.totalAssistantMessages)}</span>}
           />
           <ConversationInsightsSheetRow
+            label="Total messages"
+            value={<span className="tabular-nums">{formatCompactNumber(detail.totalMessages)}</span>}
+          />
+        </ConversationInsightsSheetSection>
+
+        <ConversationInsightsSheetSection title="Visitor modalities">
+          <ConversationInsightsSheetRow
             label="Text messages"
             value={<span className="tabular-nums">{formatCompactNumber(detail.textMessageCount)}</span>}
           />
@@ -241,55 +351,48 @@ export function ConversationInsightsUsageTab({
             value={<span className="tabular-nums">{formatCompactNumber(detail.voiceMessageCount)}</span>}
           />
           <ConversationInsightsSheetRow
-            label="Dictation used in messages"
+            label="Dictation sessions"
             value={<span className="tabular-nums">{formatCompactNumber(detail.dictationMessageCount)}</span>}
           />
+        </ConversationInsightsSheetSection>
+
+        <ConversationInsightsSheetSection title="Attachments">
           <ConversationInsightsSheetRow
-            label="Attachments"
+            label="Messages with attachments"
             value={<span className="tabular-nums">{formatCompactNumber(detail.attachmentMessageCount)}</span>}
           />
         </ConversationInsightsSheetSection>
 
-        <ConversationInsightsSheetSection title="Credits">
+        <ConversationInsightsSheetSection
+          title="AI Credits"
+          description="Total visitor messaging usage billed on this chat."
+        >
           <ConversationInsightsSheetRow
-            label="Credits used"
+            label="Total"
             value={
-              <span className="inline-flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                <button
-                  type="button"
-                  disabled={!canShowCreditDetails}
-                  onClick={canShowCreditDetails ? () => setCreditModalOpen(true) : undefined}
-                  className={cn(
-                    'm-0 border-none bg-transparent p-0 text-left tabular-nums underline decoration-teal-600/35 underline-offset-2',
-                    canShowCreditDetails
-                      ? 'cursor-pointer font-semibold text-slate-900 hover:text-teal-900'
-                      : 'cursor-default text-slate-900 opacity-95',
-                  )}
-                >
-                  {formatCreditAmount(detail.totalCreditsUsed)}
-                </button>
+              <div className="flex min-w-0 flex-col gap-2">
+                <span className="text-[14px] font-semibold tabular-nums leading-snug text-slate-900">
+                  {formatAnalyticsAiCreditsLabel(detail.totalCreditsUsed)}
+                </span>
                 {canShowCreditDetails ? (
                   <button
                     type="button"
-                    className="m-0 cursor-pointer rounded-sm border-none bg-transparent p-0 text-left text-[11px] font-semibold tracking-tight text-teal-800 underline decoration-teal-600/35 underline-offset-2 hover:text-teal-900"
+                    className="m-0 self-start rounded-sm border-none bg-transparent p-0 text-left text-[12px] font-semibold text-teal-800 underline decoration-teal-600/35 underline-offset-2 hover:text-teal-900"
                     onClick={() => setCreditModalOpen(true)}
                   >
-                    View details
+                    View breakdown
                   </button>
                 ) : (
-                  <span className="text-[11px] text-slate-400">Load chat to drill down</span>
+                  <span className="text-[12px] leading-snug text-slate-400">
+                    Load the chat transcript to open the breakdown.
+                  </span>
                 )}
-              </span>
+              </div>
             }
           />
         </ConversationInsightsSheetSection>
       </ConversationInsightsSheet>
-      <ConversationCreditBreakdownModal
-        open={creditModalOpen}
-        onClose={() => setCreditModalOpen(false)}
-        conversationTotalCreditsUsed={detail.totalCreditsUsed}
-        messages={messages}
-      />
+      <ConversationCreditBreakdownModal open={creditModalOpen} onClose={() => setCreditModalOpen(false)} messages={messages} />
     </div>
   );
 }
@@ -303,7 +406,7 @@ export function ConversationInsightsLeadTab({ detail }: { detail: CustomerConver
         <ConversationInsightsSheet>
           <section className="p-10 text-center">
             <p className="m-0 text-[13px] font-semibold text-slate-900">No lead captured</p>
-            <p className="m-0 mt-2 text-[13px] leading-relaxed text-slate-600">No lead was captured in this conversation.</p>
+            <p className="m-0 mt-2 text-[13px] leading-relaxed text-slate-600">No lead was captured in this chat.</p>
           </section>
         </ConversationInsightsSheet>
       </div>
@@ -384,14 +487,14 @@ export function ConversationInsightsAdvancedTab({
       <ConversationInsightsSheet>
         <ConversationInsightsSheetSection title="Identifiers">
           <ConversationInsightsSheetRow
-            label="Conversation ID"
+            label="Chat ID"
             value={
               cid === INSIGHT_EM_DASH ? (
                 cid
               ) : (
                 <span className="inline-flex flex-wrap items-center gap-2">
                   <span className="break-all font-mono text-[12px] text-slate-900">{cid}</span>
-                  <ConversationDetailCopyButton value={cid} ariaLabel="Copy conversation id" />
+                  <ConversationDetailCopyButton value={cid} ariaLabel="Copy chat ID" />
                 </span>
               )
             }

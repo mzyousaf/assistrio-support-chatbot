@@ -92,5 +92,19 @@ describe('assembleEvidencePromptWithBudget', () => {
     expect(result.tokenDistribution.userEvidence).toBeDefined();
     expect(result.tokenDistribution.userConversation).toBe(0);
     expect(DEFAULT_EVIDENCE_BUDGET_OPTIONS.minTopEvidenceItems).toBe(3);
+    expect(DEFAULT_EVIDENCE_BUDGET_OPTIONS.maxEvidenceItems).toBe(8);
+    expect(DEFAULT_EVIDENCE_BUDGET_OPTIONS.maxEvidenceTokens).toBe(2200);
+  });
+
+  it('caps evidence items at default maxEvidenceItems (8)', () => {
+    const items = Array.from({ length: 12 }, (_, i) => ({ text: `chunk-${i}` }));
+    const { kept } = trimEvidenceWithProtection(
+      items,
+      DEFAULT_EVIDENCE_BUDGET_OPTIONS.maxEvidenceTokens,
+      DEFAULT_EVIDENCE_BUDGET_OPTIONS.minTopEvidenceItems,
+      DEFAULT_EVIDENCE_BUDGET_OPTIONS.maxEvidenceItems,
+    );
+    expect(kept.length).toBeLessThanOrEqual(8);
+    expect(kept.length).toBeGreaterThanOrEqual(3);
   });
 });

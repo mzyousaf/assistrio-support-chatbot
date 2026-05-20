@@ -70,7 +70,7 @@ export function LeadDetailHeader({ detail, fieldDefinitions, onOpenConversation 
         onClick={onOpenConversation}
       >
         <SquareArrowOutUpRight size={15} strokeWidth={2} aria-hidden />
-        Open conversation
+        Open chat log
       </Button>
     </div>
   );

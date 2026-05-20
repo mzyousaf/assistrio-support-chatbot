@@ -1,4 +1,3 @@
-import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import 'sonner/dist/styles.css';
@@ -9,8 +8,9 @@ if (!el) {
   throw new Error('Root element #root not found');
 }
 
-createRoot(el).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-);
+/**
+ * Omit `<StrictMode>`: in development React otherwise mounts passive effects twice in a row,
+ * which duplicated identical customer GETs (conversation transcript + detail). Production builds
+ * do not double-invoke effects even with StrictMode, but `vite`/dev did — dropping it fixes dev parity.
+ */
+createRoot(el).render(<App />);

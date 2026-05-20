@@ -919,7 +919,6 @@ export function Chat({
           title={title ?? s.title}
           subtitle={subtitle ?? s.subtitle}
           conversationLoading={conversationLoading}
-          accentColor={accentColor}
           statusIndicator={effectiveStatus}
           liveIndicatorStyle={liveIndicatorStyle}
           statusDotStyle={statusDotStyle}

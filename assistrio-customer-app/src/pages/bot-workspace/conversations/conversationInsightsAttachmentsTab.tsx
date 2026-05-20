@@ -80,7 +80,7 @@ export function ConversationInsightsAttachmentsTab({
         <h2 className="m-0 text-[15px] font-semibold leading-tight tracking-tight text-slate-900">All Attachments</h2>
         {rows.length > 0 ? (
           <p className="m-0 mt-1 text-[13px] leading-snug text-slate-500">
-            <span className="tabular-nums">{rows.length}</span> file{rows.length === 1 ? '' : 's'} from this conversation
+            <span className="tabular-nums">{rows.length}</span> file{rows.length === 1 ? '' : 's'} from this chat
           </p>
         ) : null}
       </header>
@@ -92,7 +92,7 @@ export function ConversationInsightsAttachmentsTab({
         >
           <p className="m-0 text-[13px] font-medium text-slate-700">Nothing attached yet</p>
           <p className="m-0 mx-auto mt-2 max-w-sm text-[12px] leading-relaxed text-slate-500">
-            Visitor-uploaded files from this conversation will show up here.
+            Visitor-uploaded files from this chat will show up here.
           </p>
         </div>
       ) : (

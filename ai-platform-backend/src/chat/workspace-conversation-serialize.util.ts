@@ -1,5 +1,6 @@
 import { Types } from 'mongoose';
 import {
+  SENTIMENT_LABEL_SET,
   TOPIC_SUBTOPIC_LABELS_MAX_ON_CONVERSATION,
   TOPIC_SUBTOPIC_LABELS_MAX_PER_MESSAGE,
   TOPIC_TAXONOMY_ID_SET,
@@ -10,17 +11,40 @@ import type { MessageAiMeta, MessageFeedback, MessageSource, MessageVoiceMeta } 
 import { PREVIEW_STARTED_FROM_VALUES } from '../analytics/customer-chats-analytics.util';
 import { normalizeLeadCaptureConfig } from './lead-capture-config';
 
+function parseOptionalNonNegativeNumber(v: string | undefined): number | null {
+  if (v == null || typeof v !== 'string' || !v.trim()) return null;
+  const n = Number.parseFloat(v.trim());
+  if (!Number.isFinite(n) || n < 0) return null;
+  return n;
+}
+
 /** Optional filters for workspace conversation list (customer/admin). */
 export type WorkspaceConversationListFilters = {
   dateFrom?: string | null;
   dateTo?: string | null;
-  startedFrom?: string | null;
+  /** When one key, equality on `startedFrom`; when several, `{ $in }` (matches analytics OR semantics). */
+  startedFromKeys?: string[] | null;
   hasLead?: boolean | null;
   hasVoice?: boolean | null;
   hasDictation?: boolean | null;
   hasAttachment?: boolean | null;
   deviceType?: string | null;
   countryCode?: string | null;
+  /** Thread `totalCreditsUsed` (defaults missing to 0 in expressions). Numeric range wins over presets when set. */
+  minCredits?: number | null;
+  maxCredits?: number | null;
+  creditsGtZero?: boolean | null;
+  creditsZero?: boolean | null;
+  hasQuickReply?: boolean | null;
+  hasSuggestedQuestion?: boolean | null;
+  /** Minimum thread `totalMessages` (missing treated as 0 in expressions). */
+  minMessages?: number | null;
+  /** `conversationTopics.primaryTopic` equals one of these (OR semantics). */
+  primaryTopics?: string[] | null;
+  /** Threads where `conversationTopics.topicLabels` overlaps this set (OR semantics). */
+  secondaryTopics?: string[] | null;
+  /** Thread `conversationSentiment.label` (OR semantics). */
+  sentiments?: string[] | null;
 };
 
 const STARTED_FROM_VALUES = new Set([
@@ -41,6 +65,32 @@ export function parseOptionalBool(v: string | undefined): boolean | null {
   return null;
 }
 
+function parseCommaTaxonomyTopics(raw: string | undefined): string[] | null {
+  if (!raw?.trim()) return null;
+  const ids = [
+    ...new Set(
+      raw
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean),
+    ),
+  ].filter((id) => TOPIC_TAXONOMY_ID_SET.has(id));
+  return ids.length ? ids : null;
+}
+
+function parseCommaSentiments(raw: string | undefined): string[] | null {
+  if (!raw?.trim()) return null;
+  const ids = [
+    ...new Set(
+      raw
+        .split(',')
+        .map((s) => s.trim().toLowerCase())
+        .filter(Boolean),
+    ),
+  ].filter((id) => SENTIMENT_LABEL_SET.has(id));
+  return ids.length ? ids : null;
+}
+
 export function parseWorkspaceConversationListFilters(q: Record<string, string | string[] | undefined>): WorkspaceConversationListFilters {
   const one = (k: string): string | undefined => {
     const v = q[k];
@@ -50,22 +100,59 @@ export function parseWorkspaceConversationListFilters(q: Record<string, string |
   const dateFrom = one('dateFrom')?.trim() || null;
   const dateTo = one('dateTo')?.trim() || null;
   const startedFromRaw = one('startedFrom')?.trim() || null;
-  const startedFrom =
-    startedFromRaw && STARTED_FROM_VALUES.has(startedFromRaw) ? startedFromRaw : null;
+  let startedFromKeys: string[] | null = null;
+  if (startedFromRaw) {
+    const keys = [
+      ...new Set(
+        startedFromRaw
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean),
+      ),
+    ].filter((k) => STARTED_FROM_VALUES.has(k));
+    if (keys.length > 0) startedFromKeys = keys;
+  }
   const deviceRaw = one('deviceType')?.trim().toLowerCase() || null;
   const deviceType = deviceRaw && DEVICE_TYPES.has(deviceRaw) ? deviceRaw : null;
   const cc = one('countryCode')?.trim().toUpperCase() || null;
   const countryCode = cc && /^[A-Z]{2}$/.test(cc) ? cc : null;
+  let minCredits = parseOptionalNonNegativeNumber(one('minCredits') ?? undefined);
+  let maxCredits = parseOptionalNonNegativeNumber(one('maxCredits') ?? undefined);
+  if (minCredits != null && maxCredits != null && minCredits > maxCredits) {
+    const swap = minCredits;
+    minCredits = maxCredits;
+    maxCredits = swap;
+  }
+  const numericCredits = minCredits != null || maxCredits != null;
+  const creditsGtRaw = numericCredits ? null : parseOptionalBool(one('creditsGtZero') ?? undefined);
+  const creditsZeroRaw = numericCredits ? null : parseOptionalBool(one('creditsZero') ?? undefined);
+  const hasQuickReply = parseOptionalBool(one('hasQuickReply') ?? undefined);
+  const hasSuggestedQuestion = parseOptionalBool(one('hasSuggestedQuestion') ?? undefined);
+  let minMessages = parseOptionalNonNegativeNumber(one('minMessages') ?? undefined);
+  if (minMessages != null) {
+    minMessages = Math.floor(minMessages);
+    if (minMessages <= 0) minMessages = null;
+  }
   return {
     dateFrom,
     dateTo,
-    startedFrom,
+    startedFromKeys,
     hasLead: parseOptionalBool(one('hasLead') ?? undefined),
     hasVoice: parseOptionalBool(one('hasVoice') ?? undefined),
     hasDictation: parseOptionalBool(one('hasDictation') ?? undefined),
     hasAttachment: parseOptionalBool(one('hasAttachment') ?? undefined),
     deviceType,
     countryCode,
+    minCredits: numericCredits ? minCredits ?? null : null,
+    maxCredits: numericCredits ? maxCredits ?? null : null,
+    creditsGtZero: creditsGtRaw === true ? true : null,
+    creditsZero: creditsZeroRaw === true ? true : null,
+    hasQuickReply,
+    hasSuggestedQuestion,
+    minMessages,
+    primaryTopics: parseCommaTaxonomyTopics(one('primaryTopics')),
+    secondaryTopics: parseCommaTaxonomyTopics(one('secondaryTopics')),
+    sentiments: parseCommaSentiments(one('sentiments')),
   };
 }
 
@@ -662,8 +749,11 @@ export function buildWorkspaceConversationListMatch(
     const d = new Date(filters.dateTo);
     if (Number.isFinite(d.getTime())) parts.push({ lastActivityAt: { $lte: d } });
   }
-  if (filters?.startedFrom) {
-    parts.push({ startedFrom: filters.startedFrom });
+  const keys = filters?.startedFromKeys?.filter(Boolean) ?? [];
+  if (keys.length === 1) {
+    parts.push({ startedFrom: keys[0] });
+  } else if (keys.length > 1) {
+    parts.push({ startedFrom: { $in: keys } });
   }
   if (filters?.hasLead === true) parts.push({ hasLead: true });
   if (filters?.hasLead === false) {
@@ -683,6 +773,62 @@ export function buildWorkspaceConversationListMatch(
   }
   if (filters?.deviceType) parts.push({ 'deviceInfo.deviceType': filters.deviceType });
   if (filters?.countryCode) parts.push({ 'location.countryCode': filters.countryCode });
+
+  if (filters?.minMessages != null) {
+    const messagesAsDouble = { $toDouble: { $ifNull: ['$totalMessages', 0] } };
+    parts.push({
+      $expr: { $gte: [messagesAsDouble, filters.minMessages] },
+    });
+  }
+
+  const creditsAsDouble = { $toDouble: { $ifNull: ['$totalCreditsUsed', 0] } };
+  if (filters?.minCredits != null || filters?.maxCredits != null) {
+    const checks: Record<string, unknown>[] = [];
+    if (filters.minCredits != null) {
+      checks.push({ $gte: [creditsAsDouble, filters.minCredits] });
+    }
+    if (filters.maxCredits != null) {
+      checks.push({ $lte: [creditsAsDouble, filters.maxCredits] });
+    }
+    parts.push({
+      $expr: checks.length === 1 ? checks[0] : { $and: checks },
+    });
+  } else if (filters?.creditsGtZero === true) {
+    parts.push({ $expr: { $gt: [creditsAsDouble, 0] } });
+  } else if (filters?.creditsZero === true) {
+    parts.push({ $expr: { $lte: [creditsAsDouble, 0] } });
+  }
+
+  if (filters?.hasQuickReply === true) {
+    parts.push({ $expr: { $gt: [{ $ifNull: ['$quickReplyMessageCount', 0] }, 0] } });
+  } else if (filters?.hasQuickReply === false) {
+    parts.push({ $expr: { $lte: [{ $ifNull: ['$quickReplyMessageCount', 0] }, 0] } });
+  }
+  if (filters?.hasSuggestedQuestion === true) {
+    parts.push({ $expr: { $gt: [{ $ifNull: ['$suggestedQuestionMessageCount', 0] }, 0] } });
+  } else if (filters?.hasSuggestedQuestion === false) {
+    parts.push({ $expr: { $lte: [{ $ifNull: ['$suggestedQuestionMessageCount', 0] }, 0] } });
+  }
+
+  const sen = filters?.sentiments?.filter(Boolean) ?? [];
+  if (sen.length === 1) {
+    parts.push({ 'conversationSentiment.label': sen[0] });
+  } else if (sen.length > 1) {
+    parts.push({ 'conversationSentiment.label': { $in: sen } });
+  }
+
+  const pts = filters?.primaryTopics?.filter(Boolean) ?? [];
+  if (pts.length === 1) {
+    parts.push({ 'conversationTopics.primaryTopic': pts[0] });
+  } else if (pts.length > 1) {
+    parts.push({ 'conversationTopics.primaryTopic': { $in: pts } });
+  }
+
+  const sec = filters?.secondaryTopics?.filter(Boolean) ?? [];
+  if (sec.length > 0) {
+    parts.push({ 'conversationTopics.topicLabels': { $in: sec } });
+  }
+
   return parts.length === 1 ? parts[0] : { $and: parts };
 }
 
@@ -754,6 +900,9 @@ export function serializeWorkspaceMessageRow(m: Record<string, unknown>): Record
     if (ai) base.aiMeta = ai;
     const fb = serializeMessageFeedbackForWorkspace(m.feedback as MessageFeedback | undefined);
     if (fb) base.feedback = fb;
+    if (m.isWelcomeMessage === true || m.inputType === 'welcome') {
+      base.isWelcomeMessage = true;
+    }
   }
 
   return base;

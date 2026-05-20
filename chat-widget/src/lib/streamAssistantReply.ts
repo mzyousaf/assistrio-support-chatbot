@@ -1,11 +1,12 @@
 import type { Dispatch, SetStateAction } from "react";
 
 import type { ChatUIMessage, ChatUIMessageStatus } from "../components/chat-ui/types";
+import { sanitizeChatMessageContent } from "./chatMessageDisplay.util";
 
 /** Target pacing: steady characters per second (linear over wall time). */
 const MS_PER_CHAR = 28;
 const MIN_DURATION_MS = 1_200;
-const MAX_DURATION_MS = 18_000;
+const MAX_DURATION_MS = 2_000;
 
 export type StreamAssistantReplyOptions = {
   /** Applied when the full text has been revealed (default `sent`; use `error` for failed API bodies). */
@@ -14,7 +15,7 @@ export type StreamAssistantReplyOptions = {
 
 /**
  * Reveal assistant text incrementally after the HTTP response completes (client-side “streaming” UX).
- * Linear progress for consistent typing speed; updates on rAF.
+ * Linear progress for consistent typing speed; updates on rAF (max 2s wall time).
  */
 export function streamAssistantReply(
   assistantId: string,
@@ -23,8 +24,9 @@ export function streamAssistantReply(
   options?: StreamAssistantReplyOptions,
 ): Promise<void> {
   const finalStatus: ChatUIMessageStatus = options?.finalStatus ?? "sent";
+  const cleanText = sanitizeChatMessageContent("assistant", fullText);
 
-  if (!fullText.length) {
+  if (!cleanText.length) {
     const createdAt = new Date().toISOString();
     setMessages((prev) =>
       prev.map((m) =>
@@ -39,7 +41,7 @@ export function streamAssistantReply(
   return new Promise((resolve) => {
     const durationMs = Math.min(
       MAX_DURATION_MS,
-      Math.max(MIN_DURATION_MS, fullText.length * MS_PER_CHAR),
+      Math.max(MIN_DURATION_MS, cleanText.length * MS_PER_CHAR),
     );
     const start = performance.now();
     let lastRenderedLength = -1;
@@ -47,17 +49,17 @@ export function streamAssistantReply(
     const frame = (now: number) => {
       const elapsed = now - start;
       const t = Math.min(1, elapsed / durationMs);
-      const i = t >= 1 ? fullText.length : Math.floor(t * fullText.length);
+      const i = t >= 1 ? cleanText.length : Math.floor(t * cleanText.length);
 
       if (i !== lastRenderedLength) {
         lastRenderedLength = i;
-        const done = i >= fullText.length;
+        const done = i >= cleanText.length;
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantId
               ? {
                   ...m,
-                  content: fullText.slice(0, i),
+                  content: cleanText.slice(0, i),
                   status: (done ? finalStatus : "streaming") as ChatUIMessageStatus,
                   ...(done ? { createdAt: new Date().toISOString() } : {}),
                 }

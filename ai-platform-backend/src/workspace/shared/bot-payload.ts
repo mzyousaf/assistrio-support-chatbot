@@ -30,6 +30,11 @@ import {
 import { MAX_DATASHEET_IMPORT_BYTES } from '../../documents/bot-document-upload.constants';
 import { DEFAULT_KB_FIELD_LIMITS } from '../../knowledge/knowledge-plan-limits';
 import {
+  maxTokensPresetToResponseLength,
+  responseLengthEnumToMaxTokens,
+  snapMaxTokensToPreset,
+} from '../../chat/chat-llm-params.util';
+import {
   normalizeKnowledgeReplyPrioritySettings,
   type KnowledgeReplyPrioritySettings,
 } from '../../knowledge/knowledge-reply-priority.util';
@@ -621,10 +626,97 @@ export function normalizePersonalityInput(personalityInput: Record<string, unkno
 
 export function normalizeConfigInput(configInput: Record<string, unknown>): BotConfig {
   const configCandidate: BotConfig = {};
-  if (typeof configInput.temperature === 'number' && configInput.temperature >= 0 && configInput.temperature <= 1) configCandidate.temperature = configInput.temperature;
-  if (typeof configInput.maxTokens === 'number' && Number.isFinite(configInput.maxTokens)) configCandidate.maxTokens = Math.max(1, Math.floor(configInput.maxTokens));
-  if (['short', 'medium', 'long'].includes(String(configInput.responseLength))) configCandidate.responseLength = configInput.responseLength as BotConfig['responseLength'];
+  if (typeof configInput.temperature === 'number' && configInput.temperature >= 0 && configInput.temperature <= 1) {
+    configCandidate.temperature = configInput.temperature;
+  }
+  if (typeof configInput.maxTokens === 'number' && Number.isFinite(configInput.maxTokens)) {
+    const snapped = snapMaxTokensToPreset(configInput.maxTokens);
+    configCandidate.maxTokens = snapped;
+    configCandidate.responseLength = maxTokensPresetToResponseLength(snapped);
+  } else if (['short', 'medium', 'long'].includes(String(configInput.responseLength))) {
+    const rl = configInput.responseLength as BotConfig['responseLength'];
+    configCandidate.responseLength = rl;
+    configCandidate.maxTokens = responseLengthEnumToMaxTokens(String(rl));
+  }
+  if ('responseStyleMode' in configInput) {
+    const mode = String(configInput.responseStyleMode ?? '').trim();
+    if (mode === 'free' || mode === 'structured') {
+      configCandidate.responseStyleMode = mode;
+    }
+  }
+  if ('responseStyleDescription' in configInput) {
+    const raw =
+      typeof configInput.responseStyleDescription === 'string'
+        ? configInput.responseStyleDescription.trim()
+        : '';
+    if (raw) {
+      configCandidate.responseStyleDescription = clampStr(raw, BOT_FIELD_MAX.responseStyleDescription);
+    }
+  }
+  if ('responseStyleInstructions' in configInput) {
+    const raw =
+      typeof configInput.responseStyleInstructions === 'string'
+        ? configInput.responseStyleInstructions.trim()
+        : '';
+    if (raw) {
+      configCandidate.responseStyleInstructions = clampStr(raw, BOT_FIELD_MAX.responseStyleInstructions);
+    }
+  }
+  if ('responseStyleRefinedAt' in configInput) {
+    const raw = configInput.responseStyleRefinedAt;
+    if (typeof raw === 'string' && raw.trim()) {
+      configCandidate.responseStyleRefinedAt = raw.trim().slice(0, 64);
+    }
+  }
+  if ('answerMode' in configInput) {
+    const mode = String(configInput.answerMode ?? '').trim();
+    if (mode === 'knowledge_first' || mode === 'knowledge_only') {
+      configCandidate.answerMode = mode;
+    }
+  }
   return configCandidate;
+}
+
+/** Normalize bot config answer mode (default knowledge_first). */
+export function normalizeAnswerMode(raw: unknown): 'knowledge_first' | 'knowledge_only' {
+  return raw === 'knowledge_only' ? 'knowledge_only' : 'knowledge_first';
+}
+
+/** True when PATCH explicitly clears `config.responseStyleInstructions`. */
+export function shouldUnsetResponseStyleInstructions(configInput: Record<string, unknown>): boolean {
+  if (!('responseStyleInstructions' in configInput)) return false;
+  const v = configInput.responseStyleInstructions;
+  return v === null || (typeof v === 'string' && !v.trim());
+}
+
+/** True when PATCH explicitly clears `config.responseStyleDescription`. */
+export function shouldUnsetResponseStyleDescription(configInput: Record<string, unknown>): boolean {
+  if (!('responseStyleDescription' in configInput)) return false;
+  const v = configInput.responseStyleDescription;
+  return v === null || (typeof v === 'string' && !v.trim());
+}
+
+/** True when PATCH explicitly clears `config.responseStyleMode`. */
+export function shouldUnsetResponseStyleMode(configInput: Record<string, unknown>): boolean {
+  if (!('responseStyleMode' in configInput)) return false;
+  const v = configInput.responseStyleMode;
+  return v === null || (typeof v === 'string' && !v.trim());
+}
+
+/** True when PATCH explicitly clears `config.responseStyleRefinedAt`. */
+export function shouldUnsetResponseStyleRefinedAt(configInput: Record<string, unknown>): boolean {
+  if (!('responseStyleRefinedAt' in configInput)) return false;
+  return configInput.responseStyleRefinedAt === null;
+}
+
+/** Collect config keys to unset when clearing structured/free response style fields. */
+export function collectResponseStyleConfigUnsetKeys(configInput: Record<string, unknown>): string[] {
+  const keys: string[] = [];
+  if (shouldUnsetResponseStyleInstructions(configInput)) keys.push('responseStyleInstructions');
+  if (shouldUnsetResponseStyleDescription(configInput)) keys.push('responseStyleDescription');
+  if (shouldUnsetResponseStyleMode(configInput)) keys.push('responseStyleMode');
+  if (shouldUnsetResponseStyleRefinedAt(configInput)) keys.push('responseStyleRefinedAt');
+  return keys;
 }
 
 export interface NormalizedBotPayload {
@@ -797,6 +889,8 @@ export type WorkspaceBotPatchNormalized = {
   chatUI?: BotChatUI;
   personality?: BotPersonality;
   config?: BotConfig;
+  /** Keys to remove from `config` after merge (explicit clears from PATCH). */
+  unsetConfigKeys?: string[];
   translationSettings?: BotTranslationSettings;
   openaiApiKeyOverride?: string;
   whisperApiKeyOverride?: string;
@@ -886,7 +980,12 @@ export function normalizeWorkspaceBotPatch(input: Record<string, unknown>): Work
     out.personality = normalizePersonalityInput(input.personality as Record<string, unknown>);
   }
   if (touched.has('config') && input.config && typeof input.config === 'object') {
-    out.config = normalizeConfigInput(input.config as Record<string, unknown>);
+    const rawConfig = input.config as Record<string, unknown>;
+    out.config = normalizeConfigInput(rawConfig);
+    const styleUnsetKeys = collectResponseStyleConfigUnsetKeys(rawConfig);
+    if (styleUnsetKeys.length > 0) {
+      out.unsetConfigKeys = styleUnsetKeys;
+    }
   }
   if (touched.has('translationSettings')) {
     out.translationSettings = normalizeTranslationSettings(input.translationSettings);

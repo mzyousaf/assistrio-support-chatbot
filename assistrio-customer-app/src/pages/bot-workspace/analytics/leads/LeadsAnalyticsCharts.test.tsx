@@ -52,14 +52,14 @@ describe('LeadsWidgetSourceChart', () => {
         rows={[
           {
             key: 'runtime_widget',
-            label: 'Runtime Widget',
+            label: 'Chat Widget',
             conversations: 10,
             leads: 0,
             conversionRate: 0,
           },
           {
             key: 'runtime_iframe',
-            label: 'Runtime IFrame',
+            label: 'Iframe',
             conversations: 2,
             leads: 3,
             conversionRate: 0.5,
@@ -67,8 +67,8 @@ describe('LeadsWidgetSourceChart', () => {
         ]}
       />,
     );
-    expect(html).not.toContain('Runtime Widget');
-    expect(html).toContain('Runtime IFrame');
+    expect(html).not.toContain('Chat Widget');
+    expect(html).toContain('Iframe');
   });
 });
 
@@ -78,7 +78,7 @@ describe('LeadsSourceChart rows', () => {
       { key: 'runtime_iframe', label: 'x', conversations: 5, leads: 2, conversionRate: 0.4 },
     ];
     const chartRows = buildLeadsSourceChartRows(rows);
-    expect(chartRows[0]?.label).toBe('Runtime IFrame');
+    expect(chartRows[0]?.label).toBe('Iframe');
   });
 });
 

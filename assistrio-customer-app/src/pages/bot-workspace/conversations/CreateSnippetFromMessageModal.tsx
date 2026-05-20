@@ -8,7 +8,7 @@ const FORM_ID = 'create-snippet-from-message-form';
 
 export function defaultSnippetTitleFromAnswer(answer: string): string {
   const t = answer.replace(/\s+/g, ' ').trim();
-  if (!t) return 'Conversation snippet';
+  if (!t) return 'Chat snippet';
   const clipped = t.length <= 60 ? t : `${t.slice(0, 57)}…`;
   return clampStrUtf8Bytes(clipped, KB_PLAN_SNIPPET_TITLE_MAX_UTF8_BYTES);
 }

@@ -1,44 +1,42 @@
-import type {
-  CustomerConversationMessageAiMeta,
-  CustomerConversationMessageFeedback,
-  CustomerConversationMessageSource,
-} from '@/api/types';
+import type { CustomerConversationMessageFeedback } from '@/api/types';
 import { Tooltip } from '@/components/ui';
 import { cn } from '@/lib/utils';
-import { formatConversationAbsolute, formatConversationRelative } from '@/lib/conversationDateFormat';
-import { AssistantRetrievalConfidencePill } from './AssistantRetrievalConfidencePill';
+import {
+  assistantFooterPillClass,
+  assistantWelcomeTagClass,
+} from './assistantMessageFooterStyles';
+import { AssistantMessageTimePill } from './AssistantMessageTimePill';
 import { MessageFeedbackStatus } from './MessageFeedbackStatus';
-import { pickTopMatchedSource } from './conversationTopSource';
+
+const sourcesTagTooltip = 'Knowledge used for this assistant reply.';
+const reviewAnswerTagTooltip =
+  'Turn this assistant reply into reusable knowledge as Q&A or a snippet.';
+
+export type AssistantMessageFooterVariant = 'default' | 'playground';
 
 type Props = {
   createdAt: string;
   feedback?: CustomerConversationMessageFeedback | null;
   onReviseAnswer?: () => void;
   showRevise?: boolean;
-  sources?: CustomerConversationMessageSource[] | null;
-  aiMeta?: CustomerConversationMessageAiMeta;
-  onOpenConfidenceModal?: () => void;
+  isWelcomeMessage?: boolean;
+  /** Playground chat logs: welcome shows tag + time; others show Sources, Review Answer, and time pill. */
+  variant?: AssistantMessageFooterVariant;
+  onOpenSources?: () => void;
   className?: string;
 };
-
-const pillNeutral =
-  'inline-flex shrink-0 items-center gap-1 rounded-md border border-slate-200/85 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700 shadow-sm transition hover:border-teal-200/90 hover:bg-teal-50/45 active:bg-teal-50/70 disabled:pointer-events-none disabled:opacity-40';
 
 export function AssistantMessageFooter({
   createdAt,
   feedback,
   onReviseAnswer,
   showRevise,
-  sources,
-  aiMeta: _aiMeta,
-  onOpenConfidenceModal,
+  isWelcomeMessage,
+  variant = 'default',
+  onOpenSources,
   className,
 }: Props) {
-  void _aiMeta;
-  const list = sources?.filter(Boolean) ?? [];
-  const top = list.length ? pickTopMatchedSource(list) : null;
-
-  const absTime = formatConversationAbsolute(createdAt);
+  const playground = variant === 'playground';
 
   return (
     <div
@@ -48,19 +46,30 @@ export function AssistantMessageFooter({
       )}
     >
       <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-        {onOpenConfidenceModal ? (
-          <AssistantRetrievalConfidencePill score={top?.score} onClick={onOpenConfidenceModal} />
+        {playground && isWelcomeMessage ? (
+          <>
+            <span className={assistantWelcomeTagClass}>Welcome chat</span>
+            <AssistantMessageTimePill createdAt={createdAt} />
+          </>
         ) : null}
-        {showRevise && onReviseAnswer ? (
-          <button type="button" className={pillNeutral} onClick={onReviseAnswer}>
-            Review Answer
-          </button>
+        {playground && !isWelcomeMessage ? (
+          <Tooltip content={sourcesTagTooltip} side="top" panelClassName="max-w-xs text-xs">
+            <button type="button" className={assistantFooterPillClass} onClick={onOpenSources}>
+              Sources
+            </button>
+          </Tooltip>
         ) : null}
-        <Tooltip content={absTime} side="top" panelClassName="max-w-xs text-xs">
-          <span className="inline-flex shrink-0 cursor-default items-center rounded-md border border-slate-200/85 bg-white px-2 py-0.5 text-slate-600 shadow-sm">
-            {formatConversationRelative(createdAt)}
-          </span>
-        </Tooltip>
+        {!playground && isWelcomeMessage ? (
+          <span className={assistantWelcomeTagClass}>Welcome message</span>
+        ) : null}
+        {!isWelcomeMessage && showRevise && onReviseAnswer ? (
+          <Tooltip content={reviewAnswerTagTooltip} side="top" panelClassName="max-w-xs text-xs">
+            <button type="button" className={assistantFooterPillClass} onClick={onReviseAnswer}>
+              Review Answer
+            </button>
+          </Tooltip>
+        ) : null}
+        {!isWelcomeMessage ? <AssistantMessageTimePill createdAt={createdAt} /> : null}
       </div>
       <MessageFeedbackStatus feedback={feedback} className="shrink-0" />
     </div>

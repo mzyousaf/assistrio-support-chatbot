@@ -33,7 +33,7 @@ export function conversationListItemPlaceholder(conversationId: string): Custome
     suggestedQuestionMessageCount: 0,
     totalCreditsUsed: 0,
     sourcesUsedCount: 0,
-    hasLead: true,
+    hasLead: false,
     hasVoice: false,
     hasDictation: false,
     hasAttachment: false,

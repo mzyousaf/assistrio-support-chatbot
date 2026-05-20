@@ -14,6 +14,16 @@ export {
 export { ChatLauncherBubble } from "./ChatLauncherBubble";
 export { ChatWithLauncher } from "./ChatWithLauncher";
 
+export {
+  AssistrioLoaderCaption,
+  AssistrioPageLoaderSpinner,
+} from "./AssistrioPageLoaderSpinner";
+export type {
+  AssistrioLoaderCaptionProps,
+  AssistrioPageLoaderSpinnerProps,
+  AssistrioPageLoaderSpinnerSize,
+} from "./AssistrioPageLoaderSpinner";
+
 export type { ChatProps } from "./Chat";
 export type { ChatHeaderProps } from "./ChatHeader";
 export type { ChatMessagesProps } from "./ChatMessages";

@@ -25,6 +25,11 @@ export type FilterCapsuleProps = {
    * Use for initial default values before the user commits the filter.
    */
   quietValueRow?: boolean;
+  /**
+   * When true beside a visible external label, omit duplicated `title` and `|` in the chip —
+   * only {@link valueLabel} is shown inside the pill.
+   */
+  chipTitleHidden?: boolean;
   open: boolean;
   onToggle: () => void;
   onClose: () => void;
@@ -50,6 +55,7 @@ export function FilterCapsule({
   selectionVisible: selectionVisibleProp,
   clearable: clearableProp,
   quietValueRow = false,
+  chipTitleHidden = false,
   open,
   onToggle,
   onClose,
@@ -59,6 +65,14 @@ export function FilterCapsule({
   const chipHighlighted = selectionVisibleProp ?? applied;
   const showValueRow = chipHighlighted || quietValueRow;
   const showClearButton = clearableProp !== undefined ? clearableProp : applied;
+
+  const valueOnlyClasses = cn(
+    'min-w-0 truncate',
+    chipTitleHidden ? 'font-normal' : 'font-semibold',
+    chipHighlighted
+      ? 'text-[var(--color-teal-700)] group-hover:text-[var(--color-teal-800)]'
+      : 'text-slate-700 group-hover:text-slate-800',
+  );
 
   const wrapRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -186,24 +200,29 @@ export function FilterCapsule({
           onClick={onToggle}
           aria-expanded={open}
           aria-haspopup="listbox"
+          aria-label={chipTitleHidden && showValueRow ? `${title}, ${valueLabel}` : undefined}
         >
           {showValueRow ? (
-            <>
-              <span className="shrink-0 font-normal text-slate-700 group-hover:text-slate-800">{title}</span>
-              <span className="shrink-0 text-slate-300" aria-hidden>
-                |
-              </span>
-              <span
-                className={cn(
-                  'min-w-0 truncate font-semibold',
-                  chipHighlighted
-                    ? 'text-[var(--color-teal-700)] group-hover:text-[var(--color-teal-800)]'
-                    : 'text-slate-700 group-hover:text-slate-800',
-                )}
-              >
-                {valueLabel}
-              </span>
-            </>
+            chipTitleHidden ? (
+              <span className={valueOnlyClasses}>{valueLabel}</span>
+            ) : (
+              <>
+                <span className="shrink-0 font-normal text-slate-700 group-hover:text-slate-800">{title}</span>
+                <span className="shrink-0 text-slate-300" aria-hidden>
+                  |
+                </span>
+                <span
+                  className={cn(
+                    'min-w-0 truncate font-semibold',
+                    chipHighlighted
+                      ? 'text-[var(--color-teal-700)] group-hover:text-[var(--color-teal-800)]'
+                      : 'text-slate-700 group-hover:text-slate-800',
+                  )}
+                >
+                  {valueLabel}
+                </span>
+              </>
+            )
           ) : (
             <span className="shrink-0 font-normal text-slate-700">{title}</span>
           )}

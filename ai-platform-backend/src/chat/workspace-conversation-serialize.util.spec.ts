@@ -1,11 +1,13 @@
 import { Types } from 'mongoose';
 import {
+  buildWorkspaceConversationListMatch,
   buildWorkspaceLeadsAggregationPipeline,
   customerLeadFieldDefinitionsFromBot,
   extractCapturedLeadFieldMessageIdsForWorkspace,
   isSafeCustomerAttachmentHttpUrl,
   maskChatVisitorIdForList,
   mergeCustomerLeadFieldDefinitions,
+  parseWorkspaceConversationListFilters,
   parseWorkspaceLeadsListFilters,
   sanitizeLeadFieldKeyFilter,
   serializeCustomerWorkspaceLeadDetail,
@@ -617,5 +619,56 @@ describe('customer leads API helpers', () => {
       capturedLeadFieldMessageIds: { phone: '507f1f77bcf86cd799439011' },
     } as Record<string, unknown>);
     expect(m).toEqual({ phone: '507f1f77bcf86cd799439011' });
+  });
+});
+
+describe('parseWorkspaceConversationListFilters / buildWorkspaceConversationListMatch (topics & sentiment)', () => {
+  it('parses comma topic and sentiment ids, dropping unknown tokens', () => {
+    expect(
+      parseWorkspaceConversationListFilters({
+        primaryTopics: 'pricing,billing,not_taxonomy',
+        secondaryTopics: 'refund',
+        sentiments: 'positive,NEGATIVE,BAD',
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        primaryTopics: ['pricing', 'billing'],
+        secondaryTopics: ['refund'],
+        sentiments: ['positive', 'negative'],
+      }),
+    );
+  });
+
+  it('composes match with topic and sentiment clauses', () => {
+    const bot = new Types.ObjectId();
+    const m = buildWorkspaceConversationListMatch(
+      bot,
+      {
+        primaryTopics: ['pricing', 'billing'],
+        secondaryTopics: ['refund'],
+        sentiments: ['positive', 'neutral'],
+      },
+      null,
+    );
+    expect(m).toEqual({
+      $and: [
+        { botId: bot },
+        { 'conversationSentiment.label': { $in: ['positive', 'neutral'] } },
+        { 'conversationTopics.primaryTopic': { $in: ['pricing', 'billing'] } },
+        { 'conversationTopics.topicLabels': { $in: ['refund'] } },
+      ],
+    });
+  });
+
+  it('uses equality when exactly one sentiment or primary topic', () => {
+    const bot = new Types.ObjectId();
+    const m = buildWorkspaceConversationListMatch(
+      bot,
+      { sentiments: ['unknown'], primaryTopics: ['other'] },
+      null,
+    );
+    expect(m).toEqual({
+      $and: [{ botId: bot }, { 'conversationSentiment.label': 'unknown' }, { 'conversationTopics.primaryTopic': 'other' }],
+    });
   });
 });

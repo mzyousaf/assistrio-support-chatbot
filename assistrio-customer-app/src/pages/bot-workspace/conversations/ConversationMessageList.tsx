@@ -1,12 +1,14 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, Fragment } from 'react';
+﻿import { useCallback, useEffect, useLayoutEffect, useRef, useState, Fragment } from 'react';
 import type { CustomerConversationMessage } from '@/api/types';
 import { Button } from '@/components/ui';
-import { InlineLoader } from '@/components/PageLoader';
 import { ConversationMessageBubble } from './ConversationMessageBubble';
 import { defaultSnippetTitleFromAnswer } from './CreateSnippetFromMessageModal';
 import { ReviseAnswerDrawer } from './ReviseAnswerDrawer';
 import { safeClientString } from '@/lib/safeClientString';
 import { conversationMessageBodyText, nearestPreviousUserMessageText } from './conversationMessageText';
+import { TranscriptLoadingSkeleton } from './TranscriptLoadingSkeleton';
+import { isWelcomeChatLogMessage, withPlaygroundWelcomeIfNeeded } from './playgroundTranscriptWelcome';
+import type { CustomerBotDetail } from '@/api/types';
 
 type MsgState = 'idle' | 'loading' | 'ok' | 'error';
 
@@ -25,6 +27,10 @@ type Props = {
   scrollConversationVersion?: string;
   /** Scroll to and emphasize this message after load (insights deep link from Leads). */
   highlightMessageId?: string | null;
+  /** Playground chat log transcript (sources chip + modal footer layout). */
+  playgroundTranscript?: boolean;
+  /** Used to synthesize welcome for older playground threads missing a persisted welcome row. */
+  bot?: CustomerBotDetail | null;
 };
 
 export function ConversationMessageList({
@@ -35,6 +41,8 @@ export function ConversationMessageList({
   botId,
   scrollConversationVersion,
   highlightMessageId,
+  playgroundTranscript = false,
+  bot = null,
 }: Props) {
   const [reviseTarget, setReviseTarget] = useState<ReviseTarget | null>(null);
   const scrollEndRef = useRef<HTMLDivElement>(null);
@@ -42,7 +50,14 @@ export function ConversationMessageList({
   const highlightDoneRef = useRef<string>('');
 
   const scrollTranscriptToBottom = useCallback(() => {
-    scrollEndRef.current?.scrollIntoView({ block: 'end', behavior: 'auto' });
+    const end = scrollEndRef.current;
+    if (!end) return;
+    const root = end.closest('[data-insights-transcript-root]');
+    if (root instanceof HTMLElement) {
+      root.scrollTop = root.scrollHeight;
+      return;
+    }
+    end.scrollIntoView({ block: 'end', behavior: 'auto', inline: 'nearest' });
   }, []);
 
   const suppressBottomScroll = Boolean(highlightMessageId?.trim());
@@ -69,7 +84,7 @@ export function ConversationMessageList({
       cancelAnimationFrame(outerId);
       cancelAnimationFrame(innerId);
     };
-  }, [scrollConversationVersion, msgState, messages?.length, scrollTranscriptToBottom, suppressBottomScroll]);
+  }, [scrollConversationVersion, msgState, messages, scrollTranscriptToBottom, suppressBottomScroll]);
 
   useEffect(() => {
     if (suppressBottomScroll) return;
@@ -77,11 +92,13 @@ export function ConversationMessageList({
     if (msgState !== 'ok' || !messages?.length) return;
     const t = window.setTimeout(scrollTranscriptToBottom, 0);
     const t2 = window.setTimeout(scrollTranscriptToBottom, 120);
+    const t3 = window.setTimeout(scrollTranscriptToBottom, 400);
     return () => {
       window.clearTimeout(t);
       window.clearTimeout(t2);
+      window.clearTimeout(t3);
     };
-  }, [scrollConversationVersion, msgState, messages?.length, scrollTranscriptToBottom, suppressBottomScroll]);
+  }, [scrollConversationVersion, msgState, messages, scrollTranscriptToBottom, suppressBottomScroll]);
 
   useLayoutEffect(() => {
     const id = highlightMessageId?.trim();
@@ -112,18 +129,20 @@ export function ConversationMessageList({
     };
   }, [highlightMessageId, msgState, messages, scrollConversationVersion]);
 
-  const openRevise = useCallback((message: CustomerConversationMessage, index: number) => {
-    if (!messages) return;
-    setReviseTarget({
-      message,
-      previousUserText: nearestPreviousUserMessageText(messages, index),
-    });
-  }, [messages]);
+  const openRevise = useCallback(
+    (message: CustomerConversationMessage, index: number, transcript: CustomerConversationMessage[]) => {
+      setReviseTarget({
+        message,
+        previousUserText: nearestPreviousUserMessageText(transcript, index),
+      });
+    },
+    [],
+  );
 
   if (msgState === 'loading') {
     return (
       <div className="flex min-h-0 flex-1 flex-col">
-        <InlineLoader title="Loading conversation…" />
+        <TranscriptLoadingSkeleton />
       </div>
     );
   }
@@ -145,28 +164,32 @@ export function ConversationMessageList({
   if (msgState === 'ok' && messages && messages.length === 0) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center py-12 text-center" role="status">
-        <p className="m-0 text-sm font-medium text-slate-700">No messages in this conversation yet.</p>
+        <p className="m-0 text-sm font-medium text-slate-700">No messages in this chat yet.</p>
       </div>
     );
   }
 
   if (msgState === 'ok' && messages) {
     const safeBotId = botId?.trim() ? botId.trim() : '';
+    const transcriptMessages = withPlaygroundWelcomeIfNeeded(messages, bot, playgroundTranscript);
     const answerText = reviseTarget ? conversationMessageBodyText(reviseTarget.message) : '';
     return (
       <Fragment>
-        <div className="mt-auto flex min-w-0 w-full flex-col">
-          {messages.map((m, index) => (
+        <div className="flex min-w-0 w-full flex-col">
+          {transcriptMessages.map((m, index) => (
             <ConversationMessageBubble
               key={m.messageId || m.id || `${m.createdAt}-${m.role}-${index}`}
               message={m}
               botId={safeBotId || null}
+              playgroundTranscript={playgroundTranscript}
               highlighted={
                 emphasizeMessageId != null && String(m.messageId || m.id || '') === emphasizeMessageId
               }
               onReviseAnswer={
-                safeBotId && (m.role ?? '').toLowerCase() === 'assistant'
-                  ? () => openRevise(m, index)
+                safeBotId &&
+                (m.role ?? '').toLowerCase() === 'assistant' &&
+                !isWelcomeChatLogMessage(m)
+                  ? () => openRevise(m, index, transcriptMessages)
                   : undefined
               }
             />

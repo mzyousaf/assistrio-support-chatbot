@@ -334,7 +334,7 @@ export function AgentWorkspaceSidebar({ bot, health }: Props) {
 
         <div className="flex flex-col gap-1">
           <NavLink to={`${base}/insights/conversations`} onClick={guardNav} className={({ isActive }) => navCls(isActive)}>
-            {({ isActive }) => <><MessageSquare size={18} strokeWidth={1.75} className={iconCls(isActive)} />Conversations</>}
+            {({ isActive }) => <><MessageSquare size={18} strokeWidth={1.75} className={iconCls(isActive)} />Chat logs</>}
           </NavLink>
           <NavLink to={`${base}/activity/leads`} onClick={guardNav} className={({ isActive }) => navCls(isActive)}>
             {({ isActive }) => <><UserCheck size={18} strokeWidth={1.75} className={iconCls(isActive)} />Leads</>}

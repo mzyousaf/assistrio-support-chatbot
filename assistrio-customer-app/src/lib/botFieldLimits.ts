@@ -27,6 +27,8 @@ export const BOT_FIELD_MAX = {
   scrollToBottomLabel: 120,
   menuQuickLinkText: 120,
   menuQuickLinkRoute: 2000,
+  responseStyleDescription: 1500,
+  responseStyleInstructions: 1200,
 } as const;
 
 export function clampStr(s: string, max: number): string {

@@ -53,7 +53,7 @@ export function CreateFaqFromMessageModal({
       }
     >
       <div className="flex flex-col gap-3">
-        <p className="m-0 text-xs text-slate-500">Created from conversation answer</p>
+        <p className="m-0 text-xs text-slate-500">Created from chat answer</p>
         <FaqFromMessageForm
           botId={botId}
           formId={FORM_ID}

@@ -92,7 +92,8 @@ export const DEFAULT_NEW_BOT_PAYLOAD = {
     openAiApiKeyOverride: null as string | null,
     language: 'auto',
     temperature: 0.3,
-    maxTokens: 500,
+    maxTokens: 160,
+    answerMode: 'knowledge_first' as const,
     whisperApiKey: null as string | null,
   },
   chatExperience: {
@@ -191,7 +192,12 @@ export type DefaultBotCreatePayload = {
   chatUI: Record<string, unknown>;
   exampleQuestions: string[];
   personality: Record<string, unknown>;
-  config: { temperature: number; maxTokens: number; responseLength?: string };
+  config: {
+    temperature: number;
+    maxTokens: number;
+    responseLength?: string;
+    answerMode?: 'knowledge_first' | 'knowledge_only';
+  };
   openaiApiKeyOverride?: string | null;
   whisperApiKeyOverride?: string | null;
   /** Aligns with `Bot` schema default; set explicitly so new drafts always store 90 in Mongo. */
@@ -283,6 +289,7 @@ export function getDefaultBotCreatePayload(
       temperature: ai.temperature,
       maxTokens: ai.maxTokens,
       responseLength: 'medium',
+      answerMode: ai.answerMode,
     },
     widgetEmbedRateLimitPerMinute: DEFAULT_WIDGET_EMBED_RATE_LIMIT_PER_MINUTE,
     openaiApiKeyOverride: ai.openAiApiKeyOverride ?? undefined,

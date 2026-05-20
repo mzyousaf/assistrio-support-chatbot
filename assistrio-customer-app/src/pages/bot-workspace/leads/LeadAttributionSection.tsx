@@ -52,7 +52,7 @@ export function LeadConversationSection({ botId, detail }: ConversationProps) {
 
   return (
     <ConversationInsightsSheetSection
-      title="Conversation"
+      title="Chat"
       className={leadDetailSheetSectionClassName}
       footer={
         <Button
@@ -63,12 +63,12 @@ export function LeadConversationSection({ botId, detail }: ConversationProps) {
           onClick={() => navigate(customerConversationInsightsPath(botId, detail.conversationId))}
         >
           <SquareArrowOutUpRight size={15} strokeWidth={2} aria-hidden />
-          Open conversation
+          Open chat log
         </Button>
       }
     >
       <ConversationInsightsSheetRow
-        label="Source"
+        label="Widget Channel"
         value={
           detail.startedFrom ? (
             <ConversationStartedFromBadge startedFrom={detail.startedFrom} />
@@ -78,11 +78,11 @@ export function LeadConversationSection({ botId, detail }: ConversationProps) {
         }
       />
       <ConversationInsightsSheetRow
-        label="Conversation ID"
+        label="Chat ID"
         value={
           <span className="inline-flex min-w-0 flex-wrap items-center gap-2">
             <span className="break-all font-mono text-[12px] text-slate-900">{detail.conversationId}</span>
-            <ConversationDetailCopyButton value={detail.conversationId} ariaLabel="Copy conversation ID" />
+            <ConversationDetailCopyButton value={detail.conversationId} ariaLabel="Copy chat ID" />
           </span>
         }
       />

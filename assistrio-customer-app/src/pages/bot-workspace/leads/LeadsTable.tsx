@@ -189,7 +189,7 @@ export function LeadsTable({
                 );
               })}
               <th className={`min-w-0 px-2 py-2.5 text-left align-middle sm:px-3 ${thLabel}`} scope="col">
-                Source
+                Widget Channel
               </th>
               <th className={`min-w-0 px-2 py-2.5 text-left align-middle sm:px-3 ${thLabel}`} scope="col">
                 Location

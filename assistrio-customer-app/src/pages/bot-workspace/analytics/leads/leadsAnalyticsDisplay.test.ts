@@ -22,9 +22,9 @@ function row(
 
 describe('leadsAnalyticsDisplay', () => {
   it('maps keys to friendly labels', () => {
-    expect(displayLabelForLeadsSourceKey('runtime_widget')).toBe('Runtime Widget');
-    expect(displayLabelForLeadsSourceKey('runtime_iframe')).toBe('Runtime IFrame');
-    expect(displayLabelForLeadsSourceKey('shared_preview')).toBe('Shared Preview');
+    expect(displayLabelForLeadsSourceKey('runtime_widget')).toBe('Chat Widget');
+    expect(displayLabelForLeadsSourceKey('runtime_iframe')).toBe('Iframe');
+    expect(displayLabelForLeadsSourceKey('shared_preview')).toBe('Shared Widget');
     expect(displayLabelForLeadsSourceKey('playground_preview')).toBe('Playground Preview');
     expect(displayLabelForLeadsSourceKey('unknown')).toBe('Unknown');
   });
@@ -35,7 +35,7 @@ describe('leadsAnalyticsDisplay', () => {
     ]);
     expect(normalized).toHaveLength(5);
     const rw = normalized.find((r) => r.key === 'runtime_widget');
-    expect(rw?.label).toBe('Runtime Widget');
+    expect(rw?.label).toBe('Chat Widget');
     expect(rw?.conversations).toBe(10);
     expect(rw?.leads).toBe(4);
     const iframe = normalized.find((r) => r.key === 'runtime_iframe');
@@ -47,7 +47,7 @@ describe('leadsAnalyticsDisplay', () => {
       topLeadSourceLabel([
         row('shared_preview', { leads: 2 }),
         row('runtime_widget', { leads: 10 }),
-        row('playground_preview', { leads: 10 }),
+        row('playground_preview', { leads: 11 }),
       ]),
     ).toBe('Playground Preview');
     expect(topLeadSourceLabel([])).toBe('—');

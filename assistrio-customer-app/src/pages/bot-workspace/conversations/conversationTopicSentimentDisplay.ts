@@ -7,6 +7,13 @@ import { capitalizeWordsFromKey } from './conversationInsightsFormatting';
 export const topicPillClass =
   'inline-flex max-w-full shrink-0 items-center gap-1 rounded-md border border-teal-200/75 bg-teal-50/85 px-1.5 py-0.5 text-[11px] font-medium leading-tight tracking-tight text-teal-900';
 
+/**
+ * Neutral chip shared by Insights **chat logs** row tags (Lead, primary topic, sentiment, credits)
+ * so shape, padding, border, and type scale match.
+ */
+export const chatLogListChipClass =
+  'inline-flex max-w-full min-h-[1.25rem] shrink-0 items-center gap-1 rounded-md border border-slate-200/90 bg-slate-50/98 px-2 py-0.5 text-[10px] font-medium leading-snug text-slate-800 shadow-[0_1px_0_rgba(15,23,42,0.04)]';
+
 /** Muted chip for additional topic tags in modals. */
 export const topicSecondaryPillClass =
   'inline-flex max-w-full shrink-0 items-center gap-0.5 rounded-md border border-slate-200/85 bg-slate-50/90 px-1.5 py-0.5 text-[11px] font-medium leading-tight text-slate-800';

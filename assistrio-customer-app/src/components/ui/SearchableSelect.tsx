@@ -29,6 +29,8 @@ export type SearchableSelectProps = {
   /** Placeholder for the filter field in the dropdown. */
   searchPlaceholder?: string;
   quiet?: boolean;
+  /** Merged into the trigger button (e.g. compact `h-7` in dense modals). Mirrors {@link SelectProps.triggerClassName}. */
+  triggerClassName?: string;
 };
 
 const triggerBase = cn(
@@ -89,6 +91,7 @@ export function SearchableSelect({
   className,
   searchPlaceholder = 'Search languages…',
   quiet: _quiet = false,
+  triggerClassName,
 }: SearchableSelectProps) {
   const current = String(value ?? '');
   const selected = options.find((o) => o.value === current);
@@ -286,6 +289,7 @@ export function SearchableSelect({
           invalid
             ? 'border-[var(--color-danger-border)] focus-visible:border-[var(--color-danger-text-emphasis)] focus-visible:ring-red-900/10'
             : 'border-[var(--ui-border)] hover:enabled:border-[var(--ui-border-hover)] hover:enabled:bg-white',
+          triggerClassName,
         )}
         onClick={() => !disabled && setOpen((o) => !o)}
         onKeyDown={onTriggerKeyDown}

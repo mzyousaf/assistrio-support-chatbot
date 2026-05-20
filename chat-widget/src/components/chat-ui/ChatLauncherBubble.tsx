@@ -36,7 +36,7 @@ export interface ChatLauncherBubbleProps {
   closeLabel?: string;
   /** When true, button is in-flow (no fixed positioning); use for embedding in layout (e.g. right pane). */
   inline?: boolean;
-  /** Size in pixels (default 48). */
+  /** Size in pixels (default 40). */
   size?: number;
   /** Shadow intensity: "none" | "low" | "medium" | "high" (default "medium"). */
   shadowIntensity?: "none" | "low" | "medium" | "high";
@@ -52,12 +52,12 @@ export interface ChatLauncherBubbleProps {
 
 /** Default launcher: chat bubble icon when mode is “default” (no avatar image). */
 const DefaultChatLauncherGlyph = () => (
-  <MessageCircle className="w-6 h-6" strokeWidth={2} aria-hidden />
+  <MessageCircle className="w-5 h-5" strokeWidth={2} aria-hidden />
 );
 
 const CloseIcon = () => (
   <svg
-    className="w-6 h-6"
+    className="w-5 h-5"
     fill="none"
     viewBox="0 0 24 24"
     stroke="currentColor"
@@ -92,7 +92,7 @@ export function ChatLauncherBubble({
   openLabel = "Open chat",
   closeLabel = "Close chat",
   inline = false,
-  size = 48,
+  size = 40,
   shadowIntensity = "medium",
   avatarWithBackground = false,
   avatarRingWidth = 18,
@@ -114,7 +114,7 @@ export function ChatLauncherBubble({
       : whenOpen === "close"
         ? (openIcon ?? <CloseIcon />)
         : (
-          <ChevronDown className="w-6 h-6" strokeWidth={2} aria-hidden />
+          <ChevronDown className="w-5 h-5" strokeWidth={2} aria-hidden />
         );
 
   const intensity =
@@ -123,7 +123,7 @@ export function ChatLauncherBubble({
       : "medium";
   const iconContent = isOpen ? openGlyph : closedGlyph;
 
-  const sizePx = typeof size === "number" && size > 0 ? Math.round(size) : 48;
+  const sizePx = typeof size === "number" && size > 0 ? Math.round(size) : 40;
   const useAvatarRing =
     avatarWithBackground &&
     avatar != null &&
@@ -169,7 +169,7 @@ export function ChatLauncherBubble({
         {iconContent}
         {showBadge && (
           <span
-            className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full text-xs font-semibold bg-white text-gray-900"
+            className="absolute -top-1 -right-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-white px-0.5 text-[10px] font-semibold text-gray-900"
             aria-hidden
           >
             {unreadCount > 99 ? "99+" : unreadCount}

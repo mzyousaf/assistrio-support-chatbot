@@ -104,6 +104,8 @@ export interface BotLike {
     temperature?: number;
     maxTokens?: number;
     responseLength?: 'short' | 'medium' | 'long';
+    responseStyleInstructions?: string;
+    answerMode?: 'knowledge_first' | 'knowledge_only';
   };
   translationSettings?: {
     enabled?: boolean;

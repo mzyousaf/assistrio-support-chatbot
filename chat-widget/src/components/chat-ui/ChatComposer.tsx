@@ -8,6 +8,7 @@ import type { ComposerControlStyle, SpeechRecordingWaveStyle } from "../../model
 import { SPEECH_WAVEFORM_SCROLL_BARS } from "../../lib/useMediaRecorderCapture";
 import type { ChatSpeechInputMeta } from "./types";
 import { ChatUserVoiceMessage } from "./ChatUserVoiceMessage";
+import { AssistrioPageLoaderSpinner } from "./AssistrioPageLoaderSpinner";
 import { cx } from "./utils";
 
 /** Muted brand chip fill when send is idle (no text); icon color stays from `style.color`. */
@@ -192,27 +193,6 @@ function SendUpIcon({ className, strokeWidth = 2.25 }: { className?: string; str
   );
 }
 
-/** Plain circular loader (single stroke arc). */
-function ComposerTranscribeSpinner({ className }: { className?: string }) {
-  return (
-    <svg
-      className={cx("h-[18px] w-[18px] shrink-0 animate-spin motion-reduce:animate-none", className)}
-      viewBox="0 0 24 24"
-      fill="none"
-      aria-hidden
-    >
-      <circle
-        cx="12"
-        cy="12"
-        r="9"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeDasharray="26 58"
-      />
-    </svg>
-  );
-}
 
 /** More text above — scroll up / go to top. */
 function ComposerScrollUpIcon({ className, strokeWidth = 2 }: { className?: string; strokeWidth?: number }) {
@@ -855,7 +835,7 @@ export function ChatComposer({
               >
                 {speechCaptureProcessing ? (
                   <>
-                    <ComposerTranscribeSpinner className="shrink-0" />
+                    <AssistrioPageLoaderSpinner size="compact" decorative className="shrink-0" />
                     <span className="text-[15px] leading-5">
                       {(speechCaptureMode === "voice" ? speechTranscribingVoiceLabel : speechTranscribingDictationLabel) ||
                         (speechCaptureMode === "voice" ? "Processing..." : "Transcribing...")}

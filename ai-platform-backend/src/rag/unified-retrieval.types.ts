@@ -69,12 +69,26 @@ export interface UnifiedRetrievalDebug {
   diversityDebug?: UnifiedRetrievalDiversityDebug;
 }
 
+/** Per-request retrieval timing (no content; safe for latency logs). */
+export interface UnifiedRetrievalTiming {
+  queryEmbeddingMs: number;
+  chunkAggregateMs: number;
+  scoringMs: number;
+  diversityDedupMs: number;
+  candidateChunksCount: number;
+  scoredChunksCount: number;
+  queryEmbeddingCacheHit: boolean;
+  retrievalResultCacheHit?: boolean;
+}
+
 /** Result of getRelevantKnowledgeItemsForBot. */
 export interface UnifiedRetrievalResult {
   /** Ranked knowledge items (all sources combined). */
   items: RankedKnowledgeItem[];
   /** Present when debug is requested. */
   debug?: UnifiedRetrievalDebug;
+  /** Present when retrieval instrumentation is enabled. */
+  timing?: UnifiedRetrievalTiming;
 }
 
 import type { UnifiedRetrievalWeights } from './unified-retrieval-scoring';
@@ -99,4 +113,10 @@ export interface UnifiedRetrievalOptions {
    * Does not use full-bot retrieval.
    */
   restrictToKnowledgeBaseItemId?: string;
+  /** Included in retrieval result cache key when set. */
+  answerMode?: string;
+  maxEvidenceItems?: number;
+  maxEvidenceTokens?: number;
+  /** Skip retrieval result cache (e.g. debug). */
+  disableRetrievalResultCache?: boolean;
 }

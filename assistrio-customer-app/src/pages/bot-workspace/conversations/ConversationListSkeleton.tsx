@@ -4,7 +4,7 @@ type Props = { rows?: number; className?: string };
 
 export function ConversationListSkeleton({ rows = 6, className }: Props) {
   return (
-    <ul className={cn('m-0 list-none space-y-2 p-2', className)} aria-busy aria-label="Loading conversations">
+    <ul className={cn('m-0 list-none space-y-2 p-2', className)} aria-busy aria-label="Loading chats">
       {Array.from({ length: rows }, (_, i) => (
         <li
           key={i}

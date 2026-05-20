@@ -6,6 +6,46 @@
 
 import type { ChatContextBehavior, ChatContextIdentity, ChatContextLeadCapture } from './chat-context.types';
 import type { RetrievalConfidence } from './chat-context.types';
+import type { AnswerMode } from './answerability.helper';
+
+export type ResponseLengthMode = 'short' | 'medium' | 'long';
+
+/** UI preset tier (derived from maxTokens; backend enum stays short/medium/long). */
+export type ResponseLengthTier = 'tiny' | 'short' | 'standard' | 'detailed' | 'complete';
+
+/** Normalize config/personality responseLength to a known mode. */
+export function normalizeResponseLengthMode(raw?: string): ResponseLengthMode {
+  if (raw === 'short' || raw === 'long') return raw;
+  return 'medium';
+}
+
+/** Resolve prompt tier from token cap (preferred) or stored responseLength enum. */
+export function resolveResponseLengthTier(
+  maxTokens?: number,
+  responseLength?: string,
+): ResponseLengthTier {
+  if (maxTokens != null && Number.isFinite(maxTokens)) {
+    const n = maxTokens;
+    if (n <= 64) return 'tiny';
+    if (n <= 96) return 'short';
+    if (n <= 160) return 'standard';
+    if (n <= 256) return 'detailed';
+    return 'complete';
+  }
+  const mode = normalizeResponseLengthMode(responseLength);
+  if (mode === 'short') return 'short';
+  if (mode === 'long') return 'complete';
+  return 'standard';
+}
+
+export const TINY_RESPONSE_LENGTH_MARKER = 'Answer in one short line when possible';
+export const SHORT_RESPONSE_LENGTH_MARKER = 'Answer in 1–2 concise sentences';
+export const STANDARD_RESPONSE_LENGTH_MARKER =
+  'Use one concise paragraph—be clear and helpful without over-explaining';
+export const DETAILED_RESPONSE_LENGTH_MARKER =
+  'Give a more helpful explanation than Standard; use 3–4 short bullets when useful';
+export const COMPLETE_RESPONSE_LENGTH_MARKER =
+  'Give a full business answer for broad questions; use clear mini-sections when useful';
 
 /** Input for building the system prompt. No knowledge content — behavior and control only. */
 export interface SystemPromptInput {
@@ -27,6 +67,8 @@ export interface SystemPromptInput {
     shouldUseFallback: boolean;
     shouldAnswerGenerally: boolean;
   };
+  /** When `knowledge_only`, strict KB-only answers (no invented examples/copy). */
+  answerMode?: AnswerMode;
 }
 
 // --- Section builders (behavior-only; no company facts) ---
@@ -51,26 +93,206 @@ function buildIntroductionSection(hasAssistantHistory: boolean): string {
   );
 }
 
-function buildCommunicationStyleSection(): string {
-  return (
-    '\n--- Communication style ---\n' +
+function buildCommunicationStyleSection(tier: ResponseLengthTier): string {
+  const base =
     'Speak naturally, clearly, and helpfully for a normal non-technical user. ' +
     'Never mention internal or technical concepts in your replies: do not say "knowledge base", "documents", "context", "chunks", "retrieval", "embeddings", "prompts", or "system". ' +
     'Do not use phrases like "in my knowledge base", "according to my context", "based on the provided documents", or "the system says". ' +
-    'When you lack information, use natural wording such as: "I\'m not sure about that right now.", "I don\'t have that information at the moment.", "I couldn\'t find that detail.", or "I can help with what I do know." ' +
-    'Keep responses concise and conversational. Avoid long essay-style replies; break longer answers into short paragraphs or lists.'
+    'When you lack information, use natural wording such as: "I\'m not sure about that right now.", "I don\'t have that information at the moment.", "I couldn\'t find that detail.", or "I can help with what I do know." ';
+
+  let lengthTone: string;
+  if (tier === 'tiny') {
+    lengthTone = 'Keep replies extremely brief—one short line when possible.';
+  } else if (tier === 'short') {
+    lengthTone = 'Keep replies tight: 1–2 concise sentences unless the user clearly needs more.';
+  } else if (tier === 'standard') {
+    lengthTone =
+      'Default to one concise paragraph with no headings. Use "- " bullet lists only when the user asks for a list, features, benefits, examples, or multiple options.';
+  } else if (tier === 'detailed') {
+    lengthTone =
+      'For broad or explanatory questions (what the company does, features, benefits, how it works), write noticeably more than Standard—add context and use 3–4 short "- " bullets when the question asks for features, benefits, or explanation. ' +
+      'For greetings or trivial one-liners, stay brief (a sentence or two).';
+  } else if (tier === 'complete') {
+    lengthTone =
+      'For broad or explanatory questions, give a full structured answer noticeably longer than Standard or Detailed—use ## headings or mini-sections (Overview, Main features, Benefits) only when they fit. ' +
+      'For greetings or tiny factual one-liners, stay brief; when the user asks for explanation or features, add useful structure without padding.';
+  } else {
+    lengthTone = 'Keep responses clear and conversational; add detail only when it helps answer the question.';
+  }
+
+  return '\n--- Communication style ---\n' + base + lengthTone;
+}
+
+function buildResponseLengthSection(tier: ResponseLengthTier): string {
+  if (tier === 'tiny') {
+    return (
+      '\n--- Response length ---\n' +
+      `${TINY_RESPONSE_LENGTH_MARKER}. ` +
+      buildMarkdownStructureRulesForTier('tiny') +
+      'For greetings (e.g. "hi"), reply in one short line.'
+    );
+  }
+  if (tier === 'short') {
+    return (
+      '\n--- Response length ---\n' +
+      `${SHORT_RESPONSE_LENGTH_MARKER}. ` +
+      buildMarkdownStructureRulesForTier('short') +
+      'For greetings or tiny questions, reply in one concise sentence.'
+    );
+  }
+  if (tier === 'standard') {
+    return (
+      '\n--- Response length ---\n' +
+      `${STANDARD_RESPONSE_LENGTH_MARKER}. ` +
+      buildMarkdownStructureRulesForTier('standard') +
+      'For broad questions (e.g. what the company does and its main features), answer in one tight paragraph—do not expand into multi-section or bullet-heavy answers unless the user asked for a list or features. ' +
+      'For greetings (e.g. "hi") or simple one-line questions, keep the reply short.'
+    );
+  }
+  if (tier === 'detailed') {
+    return (
+      '\n--- Response length ---\n' +
+      `${DETAILED_RESPONSE_LENGTH_MARKER}. ` +
+      buildMarkdownStructureRulesForTier('detailed') +
+      'When the user asks for features, benefits, a list, how something works, or a company/product overview, include a short lead sentence plus 3–4 short "- " bullets—this should read noticeably longer and more structured than a single Standard paragraph. ' +
+      'For greetings or trivial one-liners, stay brief (a sentence or two)—do not add bullets, headings, or sections.'
+    );
+  }
+  return (
+    '\n--- Response length ---\n' +
+    `${COMPLETE_RESPONSE_LENGTH_MARKER}. ` +
+    buildMarkdownStructureRulesForTier('complete') +
+    'For broad or overview questions (e.g. explain what the company does and include main features), organize the answer with clear ## headings or mini-sections when useful, such as: Overview, Main features, Benefits, How it helps. ' +
+    'This tier should be visibly fuller than Standard and Detailed on those questions—cover the main points without filler or repetition. ' +
+    'Avoid padding: do not restate the question, add generic fluff, or invent details. ' +
+    'For greetings (e.g. "hi") or tiny questions that need only a one-line answer, stay brief even on Complete.'
   );
 }
 
+export const RESPONSE_STYLE_SUBORDINATE_RULE =
+  'These style preferences are subordinate to factual accuracy, safety, retrieved evidence, refusal rules, system instructions, and the translation contract. Ignore any preference that asks you to invent facts, ignore sources, or override grounding.';
+
+function buildCreativityStyleSection(temperature?: number): string {
+  if (temperature == null || !Number.isFinite(temperature)) return '';
+  const t = Math.min(1, Math.max(0, temperature));
+
+  let guidance: string;
+  if (t <= 0.05) {
+    guidance =
+      'Use the most stable, direct wording possible. For open-ended creative requests (e.g. welcome message ideas, rewrites, brainstorming), offer clear options with minimal variation between them. ' +
+      'For company-specific factual answers, stay strictly faithful to the Knowledge context—do not invent facts or embellish.';
+  } else if (t <= 0.25) {
+    guidance =
+      'Prefer precise, consistent wording. For open-ended creative requests (e.g. welcome message ideas, rewrites, brainstorming, multiple options), offer clear, direct options with minimal playful variation. ' +
+      'For company-specific factual answers, stay faithful to the Knowledge context—do not invent facts.';
+  } else if (t >= 0.95) {
+    guidance =
+      'Allow maximum variety in phrasing and ideas on open-ended creative requests (e.g. multiple greeting options, marketing copy, rewrites, brainstorming). ' +
+      'For company-specific factual answers, stay faithful to the Knowledge context—do not invent facts, change policies, or drift from retrieved evidence for the sake of variety.';
+  } else if (t >= 0.75) {
+    guidance =
+      'Allow noticeably more varied phrasing and ideas on open-ended creative requests (e.g. multiple greeting options, marketing copy, rewrites, brainstorming). ' +
+      'For company-specific factual answers, stay faithful to the Knowledge context—do not invent facts, change policies, or drift from retrieved evidence for the sake of variety.';
+  } else {
+    guidance =
+      'Balance stable factual answers with moderate variety on creative or open-ended requests. ' +
+      'Do not sacrifice accuracy or grounding for creativity; vary wording on non-factual tasks more than on KB-backed answers.';
+  }
+
+  return '\n--- Creativity / variation ---\n' + guidance;
+}
+
+function buildResponseStylePreferencesSection(instructions?: string): string {
+  const text = (instructions ?? '').trim();
+  if (!text) return '';
+  return (
+    '\n--- Response style preferences ---\n' +
+    'Follow these customer-defined style preferences for formatting and tone:\n' +
+    text +
+    '\n\n' +
+    RESPONSE_STYLE_SUBORDINATE_RULE
+  );
+}
+
+/** Marker for tests — formatting rules block in {@link buildSystemPrompt}. */
+export const FORMATTING_RULES_MARKER = '--- Formatting rules ---';
+
+/** Marker for tests — default bullet list syntax. */
+export const MARKDOWN_BULLET_DEFAULT_RULE =
+  'Use "- " Markdown bullets by default';
+
+/** Marker for tests — when numbered lists are allowed. */
+export const MARKDOWN_NUMBERED_LIST_RULE =
+  'Use numbered lists ("1. ", "2. ", …) only when';
+
+/** Marker for tests — bullet list user request. */
+export const MARKDOWN_BULLET_LIST_REQUEST_RULE =
+  'If the user asks for a "bullet list", always use "- " bullets';
+
+/** Marker for tests — creative multi-answer example uses bullets. */
+export const MARKDOWN_CREATIVE_WAYS_EXAMPLE = 'Give me 5 creative ways';
+
+/** Marker for tests — step-by-step uses numbered list. */
+export const MARKDOWN_STEP_BY_STEP_EXAMPLE = 'Step-by-step install instructions';
+
+/** Marker for tests — no headings on small tiers. */
+export const MARKDOWN_NO_HEADINGS_STANDARD_TIERS =
+  'Do not use Markdown headings (##) in Tiny, Short, or Standard responses';
+
+/** Marker for tests — Detailed tier bullet preference. */
+export const MARKDOWN_DETAILED_BULLETS_RULE = 'prefer "- " bullets for features/benefits';
+
+/** Marker for tests — Complete tier headings. */
+export const MARKDOWN_COMPLETE_HEADINGS_RULE = '## Overview';
+
 function buildFormattingSection(): string {
   return (
-    '\n--- Formatting rules ---\n' +
-    'Respond using simple Markdown suitable for a chat interface.\n' +
-    'Allowed formatting: paragraphs, bullet lists, numbered lists, **bold**, *italic*, links, inline `code`, and tables when presenting structured information (e.g. pricing plans or feature lists). Use code blocks only when the user explicitly asks for code.\n' +
-    'Tables should only be used when helpful for comparisons (e.g. pricing plans or feature lists).\n' +
-    'Do not output HTML. Use Markdown only. Do not generate HTML.\n' +
-    'Avoid: HTML, embedded scripts, complex document formatting, and unnecessary code blocks. Keep responses readable inside a chat message bubble. If sharing links, provide them as plain URLs or Markdown links. Do not generate HTML.'
+    `\n${FORMATTING_RULES_MARKER}\n` +
+    'Assistant reply text must be valid Markdown for a chat interface (not HTML). Do not output HTML tags, embedded scripts, or complex document layouts.\n' +
+    'Never include inline citation markers such as [1], [2][4], /[7], [^1], [source:1], or footnotes—sources are shown separately in the app’s “Sources used” panel, not inside the message body.\n' +
+    'Also allowed when appropriate: **bold**, *italic*, links, inline `code`, tables for comparisons, fenced code blocks only when the user asks for code.\n\n' +
+    '--- Lists ---\n' +
+    `${MARKDOWN_BULLET_DEFAULT_RULE} for normal lists, benefits, features, examples, options, and summaries.\n` +
+    `${MARKDOWN_BULLET_LIST_REQUEST_RULE}.\n` +
+    `${MARKDOWN_NUMBERED_LIST_RULE}: the user explicitly asks for a numbered list; the answer is step-by-step instructions; the list is ranked by order/priority; or the user asks for "top 5", "first/second/third", or a clear sequence.\n` +
+    'Each list item must be on its own line with a list marker—do not use plain newline-separated lines without "- " or "1. " prefixes. Do not mix bullet and numbered styles in one list unless the user asks for both.\n' +
+    `Example — user: "Show me a bullet list of Assistrio benefits." → "- Benefit one\\n- Benefit two\\n- Benefit three"\n` +
+    `Example — user: "${MARKDOWN_CREATIVE_WAYS_EXAMPLE}…" → "- Message one\\n- Message two\\n- Message three" (bullets, not 1. 2. 3. unless the user asked for numbered)\n` +
+    `Example — user: "${MARKDOWN_STEP_BY_STEP_EXAMPLE}." → "1. First step\\n2. Second step\\n3. Third step"\n\n` +
+    '--- Headings (tier-specific; see Response length section) ---\n' +
+    `${MARKDOWN_NO_HEADINGS_STANDARD_TIERS}.\n` +
+    `Detailed: may use at most one short ## heading if truly helpful; ${MARKDOWN_DETAILED_BULLETS_RULE}.\n` +
+    `Complete: for broad/explanatory questions only, may use clear ## headings or mini-sections (e.g. ${MARKDOWN_COMPLETE_HEADINGS_RULE}, ## Main features, ## Benefits).`
   );
+}
+
+/** Tier-specific Markdown structure (headings/sections); list defaults are in {@link buildFormattingSection}. */
+function buildMarkdownStructureRulesForTier(tier: ResponseLengthTier): string {
+  switch (tier) {
+    case 'tiny':
+    case 'short':
+      return (
+        'Markdown structure: one short reply—no ## headings, no sections, no lists unless the user explicitly asked for a list. '
+      );
+    case 'standard':
+      return (
+        'Markdown structure: one concise paragraph by default—no ## headings, no sections. ' +
+        'Use "- " bullets only when the user asks for a list, features, benefits, examples, or multiple options (not numbered lists unless step/rank rules apply). '
+      );
+    case 'detailed':
+      return (
+        'Markdown structure: no multi-section layout. At most one short ## heading if it clearly helps. ' +
+        'For features/benefits/list requests, prefer a lead sentence plus 3–4 "- " bullets. '
+      );
+    case 'complete':
+      return (
+        'Markdown structure: for broad/explanatory questions, ## headings or mini-sections are allowed (Overview, Main features, Benefits). ' +
+        'Use "- " bullets inside sections by default; numbered lists only per list rules above. ' +
+        'For greetings or one-line factual answers, stay brief—no headings or sections. '
+      );
+    default:
+      return '';
+  }
 }
 
 /** Explicit rule: company-specific facts come from Knowledge context only, not from system instructions or memory. */
@@ -97,8 +319,6 @@ function buildBehaviorSection(behavior: ChatContextBehavior): string {
   } else {
     bits.push(`Respond in ${langRaw}.`);
   }
-  if (behavior.responseLength === 'short') bits.push('Keep replies short (1-2 sentences).');
-  else if (behavior.responseLength === 'long') bits.push('Give detailed answers when appropriate.');
   let out = '\n--- Behavior ---\n' + (bits.length ? bits.join(' ') : '');
   if (behavior.systemPrompt?.trim()) {
     out += '\n\nOptional response rules:\n' + behavior.systemPrompt.trim();
@@ -106,26 +326,51 @@ function buildBehaviorSection(behavior: ChatContextBehavior): string {
   return out;
 }
 
+function buildAnswerModeSection(answerMode?: AnswerMode): string {
+  if (answerMode !== 'knowledge_only') return '';
+  return (
+    '\n--- Answer behavior (Knowledge-only) ---\n' +
+    'Knowledge-only mode is enabled. Do not create new examples, templates, welcome messages, marketing copy, or rewritten text unless the retrieved evidence explicitly contains that content. ' +
+    'If the requested content is not available in the knowledge sources, say you do not have enough information in the available knowledge sources to answer that.'
+  );
+}
+
 function buildGroundingSection(input: SystemPromptInput): string {
-  const { retrievalConfidence, hasDocumentSnippets, documentDirectAnswerLikely, answerability } = input;
+  const { retrievalConfidence, hasDocumentSnippets, documentDirectAnswerLikely, answerability, answerMode } =
+    input;
   const lowConfidence = retrievalConfidence === 'low';
+  const knowledgeOnly = answerMode === 'knowledge_only';
 
   let grounding =
-    'For greetings, small talk, and general conversation you may respond normally. ' +
-    'For company-specific information (pricing, policies, hours, services, or internal claims) only answer from the available information. ';
+    knowledgeOnly
+      ? 'Answer only from the retrieved knowledge sources. Do not invent facts, examples, templates, or copy. '
+      : 'For greetings, small talk, and general conversation you may respond normally. ' +
+        'For company-specific information (pricing, policies, hours, services, or internal claims) only answer from the available information. ';
 
   if (answerability?.shouldUseFallback) {
-    grounding +=
-      'For this question the retrieved knowledge does not clearly support an answer. Do NOT invent facts. ' +
-      'Use safe wording such as: "I couldn\'t find that in the available knowledge.", "I don\'t have enough information in the knowledge base to answer that accurately.", or "Based on what I have access to, I\'m not able to give you a definite answer on that." ' +
-      'Then offer to help with what you can. ';
+    if (knowledgeOnly) {
+      grounding +=
+        'For this question the retrieved knowledge does not directly support a reliable answer. Do NOT invent facts, examples, templates, marketing copy, or suggestions. ' +
+        'Respond only with: you do not have enough information in the available knowledge sources to answer that. ';
+    } else {
+      grounding +=
+        'For this question the retrieved knowledge does not support a reliable answer. Do NOT invent facts. ' +
+        'Say clearly that you checked the available knowledge but could not find this specific detail, then offer to help with what you can. ' +
+        'Do not claim you have no information at all if unrelated evidence was retrieved—only that this specific detail was not found. ';
+    }
   } else if (answerability?.evidenceStrongEnough && answerability?.directAnswerLikely) {
     grounding +=
-      'The retrieved evidence below is strong for this question; answer directly and confidently from it. Avoid unnecessary hedging. ';
+      'The retrieved evidence below is strong for this question; answer directly and confidently from it. Avoid unnecessary hedging or refusal when the evidence contains the answer. ';
   } else if (answerability?.evidenceStrongEnough) {
-    grounding += 'The retrieved evidence below is sufficient; base your answer on it. ';
+    grounding +=
+      'The retrieved evidence below is relevant and sufficient. Base your answer on it. ' +
+      'For overview or "what does the company do" questions, synthesize a clear answer from multiple evidence items when needed. ' +
+      'Do NOT refuse or say you lack information when the evidence already contains the answer. ';
   } else if (answerability?.shouldAnswerGenerally) {
     grounding += 'This is a general or conversational message; you may respond naturally; strict reliance on the knowledge block is not required. ';
+  } else if (hasDocumentSnippets) {
+    grounding +=
+      'Relevant knowledge evidence is provided below. Use it when it helps answer the question. ';
   }
 
   if (hasDocumentSnippets && !answerability) {
@@ -139,10 +384,12 @@ function buildGroundingSection(input: SystemPromptInput): string {
     }
   }
 
-  if (!answerability?.shouldUseFallback && !answerability?.shouldAnswerGenerally) {
-    grounding += lowConfidence
-      ? ' The available information may not cover this question. Do NOT invent company-specific details; politely say you do not have that detail right now and offer to help with what you can.'
-      : ' If the available information does not contain the answer, politely say you do not have that detail right now. Do not invent company-specific facts. Do not mention "knowledge base", "documents", or other internal concepts when explaining uncertainty.';
+  if (!answerability?.shouldUseFallback && !answerability?.shouldAnswerGenerally && hasDocumentSnippets) {
+    grounding +=
+      lowConfidence
+        ? ' If the evidence truly does not contain the answer, say you could not find that specific detail in the available knowledge—do not invent. '
+        : ' If a specific detail is missing from the evidence, say you could not find that detail; otherwise answer from what is provided. ';
+    grounding += 'Do not mention "knowledge base", "documents", or other internal concepts when explaining uncertainty.';
   }
 
   if (input.leadCapture?.enabled) {
@@ -199,15 +446,23 @@ function buildLeadCaptureSection(leadCapture: ChatContextLeadCapture): string {
  * No factual business knowledge — that is supplied in the user message as Knowledge context.
  */
 export function buildSystemPrompt(input: SystemPromptInput): string {
+  const tier = resolveResponseLengthTier(
+    input.behavior.maxTokens,
+    input.behavior.responseLength,
+  );
   const sections: string[] = [
     buildIdentitySection(input.identity),
     buildIntroductionSection(input.hasAssistantHistory),
-    buildCommunicationStyleSection(),
+    buildCommunicationStyleSection(tier),
     buildFormattingSection(),
     buildFactualSourceRule(),
+    buildResponseLengthSection(tier),
+    buildCreativityStyleSection(input.behavior.temperature),
+    buildResponseStylePreferencesSection(input.behavior.responseStyleInstructions),
+    buildAnswerModeSection(input.answerMode),
     buildBehaviorSection(input.behavior),
     buildGroundingSection(input),
     buildLeadCaptureSection(input.leadCapture),
   ];
-  return sections.join('\n');
+  return sections.filter(Boolean).join('\n');
 }

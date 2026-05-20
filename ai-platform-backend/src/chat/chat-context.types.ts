@@ -15,6 +15,14 @@ export interface ChatContextBehavior {
   tone?: string;
   language?: string;
   responseLength?: string;
+  /** Completion token cap; refines prompt length tier when set. */
+  maxTokens?: number;
+  /** Creativity (OpenAI temperature); used for prompt variation hints, not factual grounding. */
+  temperature?: number;
+  /** Customer output style preferences (formatting/tone); subordinate to grounding and safety. */
+  responseStyleInstructions?: string;
+  /** Knowledge-first (default) vs strict knowledge-only answer behavior. */
+  answerMode?: 'knowledge_first' | 'knowledge_only';
   /** Optional response behavior rules (HOW to answer). Do not put company-specific facts here; those belong in knowledge/retrieval. */
   systemPrompt?: string;
 }

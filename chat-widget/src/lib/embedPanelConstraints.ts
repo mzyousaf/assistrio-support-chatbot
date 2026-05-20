@@ -15,30 +15,41 @@ export const PANEL_ABOVE_LAUNCHER_GAP_PX = 12;
 const HORIZONTAL_VIEW_MARGIN_PX = 20;
 const TOP_VIEW_MARGIN_PX = 16;
 
+/** Default floating launcher diameter when `chatUI.launcherSize` is unset (px). */
+export const DEFAULT_LAUNCHER_DIAMETER_PX = 10;
+
+/** Diameter when `ChatLauncherBubble` is used without `size` (px). Init loading shell matches this. */
+export const CHAT_LAUNCHER_BUBBLE_DEFAULT_SIZE_PX = 40;
+
 export function defaultLauncherDiameterPx(launcherSize?: number): number {
   return typeof launcherSize === "number" && Number.isFinite(launcherSize) && launcherSize > 0
     ? launcherSize
-    : 48;
+    : DEFAULT_LAUNCHER_DIAMETER_PX;
 }
 
 export function floatingLauncherBottomInsetPx(launcherSize?: number): number {
   return LAUNCHER_EDGE_INSET_PX + defaultLauncherDiameterPx(launcherSize) + PANEL_ABOVE_LAUNCHER_GAP_PX;
 }
 
+/** Visual gap between contained preview panel bottom and launcher top (`ContainedLauncherPreview`). */
+export const CONTAINED_PREVIEW_LAUNCHER_GAP_PX = 8;
+
+/** Decorative launcher diameter in workspace contained preview (px). */
+export function containedLauncherPreviewDiameterPx(launcherSize?: number): number {
+  const size = Math.min(
+    96,
+    Math.max(32, Math.round(launcherSize ?? DEFAULT_LAUNCHER_DIAMETER_PX)),
+  );
+  return Math.min(72, Math.max(24, Math.round(size * 0.85)));
+}
+
 /**
  * Pixels the decorative contained launcher is shifted **down** with `bottom: -N` in
  * `ContainedLauncherPreview`. Must match that component so the host can shrink the panel and avoid
- * vertical overflow when the launcher size grows past 48px.
+ * vertical overflow when the launcher size grows.
  */
-const CONTAINED_PREVIEW_BASE_BOTTOM_OUTSET_PX = 50;
-const CONTAINED_PREVIEW_EXTRA_OUTSET_PER_PX_ABOVE_48 = 0.7;
-
 export function containedLauncherPreviewBottomOutsetPx(launcherSize?: number): number {
-  const sizeForSpacing = Math.min(96, Math.max(32, Math.round(launcherSize ?? 48)));
-  return (
-    CONTAINED_PREVIEW_BASE_BOTTOM_OUTSET_PX +
-    Math.max(0, sizeForSpacing - 48) * CONTAINED_PREVIEW_EXTRA_OUTSET_PER_PX_ABOVE_48
-  );
+  return containedLauncherPreviewDiameterPx(launcherSize) + CONTAINED_PREVIEW_LAUNCHER_GAP_PX;
 }
 
 export type PanelBox = { width: number; height: number };

@@ -39,5 +39,12 @@ export default defineConfig({
   },
   server: {
     port: 3002,
+    watch: {
+      /** Always pick up `chat-widget` source edits in the playground preview. */
+      ignored: ['!**/chat-widget/**'],
+    },
+  },
+  optimizeDeps: {
+    include: ['react-markdown', 'unist-util-visit'],
   },
 });

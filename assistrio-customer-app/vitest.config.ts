@@ -5,7 +5,11 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   plugins: [react()],
   resolve: {
-    alias: { '@': path.resolve(__dirname, './src') },
+    dedupe: ['react', 'react-dom'],
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+      '@acw': path.resolve(__dirname, '../chat-widget/src'),
+    },
   },
   test: {
     environment: 'jsdom',

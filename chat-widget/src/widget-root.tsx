@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { AdminLiveChatAdapter } from "./components/AdminLiveChatAdapter";
+import { AssistrioPageLoaderSpinner } from "./components/chat-ui/AssistrioPageLoaderSpinner";
 import { EmbedInitFailureCard } from "./components/EmbedInitFailureCard";
 import { validateAndInitWidget } from "./api";
 import { normalizeEmbedConfig } from "./config";
@@ -8,7 +9,7 @@ import { resolveEmbedInitFailurePresentation } from "./lib/embedInitFailurePrese
 import { createStablePreviewOverridesKey } from "./lib/stablePreviewOverridesKey";
 import { mergeWidgetStrings } from "./lib/widgetStrings";
 import { resolveWidgetDisplayModel } from "./lib/resolveWidgetDisplayModel";
-import { PANEL_COLLAPSED_HEIGHT_PX, PANEL_COLLAPSED_WIDTH_PX } from "./lib/embedPanelConstraints";
+import { PANEL_COLLAPSED_HEIGHT_PX, PANEL_COLLAPSED_WIDTH_PX, CHAT_LAUNCHER_BUBBLE_DEFAULT_SIZE_PX } from "./lib/embedPanelConstraints";
 import type { EmbedChatConfig, WidgetInitResponse } from "./types";
 
 type Phase = "loading" | "error" | "ready";
@@ -38,15 +39,6 @@ function initKeyFromRawConfig(raw: Partial<EmbedChatConfig> | undefined): string
     sorted[k] = rest[k];
   }
   return JSON.stringify(sorted);
-}
-
-/** Indeterminate arc spinner (matches ChatMessages + header loaders). */
-function EmbedInitSpinnerGlyph({ className }: { className: string }) {
-  return (
-    <svg className={`${className} shrink-0 animate-spin motion-reduce:animate-none text-slate-500`} viewBox="0 0 24 24" fill="none" aria-hidden>
-      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeDasharray="26 58" />
-    </svg>
-  );
 }
 
 export interface EmbedWidgetRootProps {
@@ -228,6 +220,7 @@ export function EmbedWidgetRoot({ rawConfig }: EmbedWidgetRootProps) {
       : PANEL_COLLAPSED_HEIGHT_PX;
 
   if (phase === "loading") {
+    const launcherShellPx = CHAT_LAUNCHER_BUBBLE_DEFAULT_SIZE_PX;
     if (contained) {
       return (
         <div
@@ -238,7 +231,7 @@ export function EmbedWidgetRoot({ rawConfig }: EmbedWidgetRootProps) {
           className="inline-flex shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-slate-200/90 bg-slate-50/80"
           style={{ width: containedCollapsedW, height: containedCollapsedH }}
         >
-          <EmbedInitSpinnerGlyph className="h-9 w-9 max-h-[min(2.25rem,100%)] max-w-[min(2.25rem,100%)]" />
+          <AssistrioPageLoaderSpinner size="inline" className="max-h-[min(2rem,100%)] max-w-[min(2rem,100%)]" decorative />
         </div>
       );
     }
@@ -248,9 +241,10 @@ export function EmbedWidgetRoot({ rawConfig }: EmbedWidgetRootProps) {
         aria-live="polite"
         aria-busy="true"
         aria-label="Loading chat"
-        className={`fixed z-[9999] flex h-10 w-10 items-center justify-center ${loadingPositionClass}`}
+        className={`fixed z-[9999] flex items-center justify-center ${loadingPositionClass}`}
+        style={{ width: launcherShellPx, height: launcherShellPx }}
       >
-        <EmbedInitSpinnerGlyph className="h-7 w-7" />
+        <AssistrioPageLoaderSpinner size="inline" decorative />
       </div>
     );
   }

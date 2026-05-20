@@ -1,7 +1,6 @@
 @import "tailwindcss";
 /* Generate Tailwind utilities used by @assistrio/chat-widget (in-app preview). Without this, widget
    classes (flex/gap/alignment) are missing and the floating UI looks broken vs admin. */
-   @source "../node_modules/@assistrio/chat-widget/dist/index.mjs";
    @source "../../chat-widget/src/**/*.tsx";
    @source "../../chat-widget/src/**/*.ts";
 
@@ -122,12 +121,6 @@
   --shadow-card-hover: 0 4px 16px rgba(15, 23, 42, 0.06), 0 1px 3px rgba(15, 23, 42, 0.03);
   --shadow-primary-fill: none;
 
-  /* ── Insights → Conversations: chat logs list scroll math (toolbar height must match ConversationListToolbar) */
-  --insights-chat-logs-header-height: 5.25rem;
-  --insights-chat-logs-error-banner-height: 4rem;
-  --insights-list-error-offset: 0px;
-
-  /* ── Focus — restrained (neutral ring; no loud teal halo) */
   --focus-ring-color: rgba(15, 23, 42, 0.14);
   --focus-ring: 0 0 0 2px var(--ui-surface), 0 0 0 4px var(--focus-ring-color);
   --focus-ring-accent: 0 0 0 2px var(--ui-surface), 0 0 0 4px color-mix(in oklab, var(--color-teal-600) 22%, transparent);
@@ -141,11 +134,6 @@
   --preview-stage-bg: #f1f5f9;
 }
 
-[data-insights-chat-logs-column][data-insights-list-error='true'] {
-  --insights-list-error-offset: var(--insights-chat-logs-error-banner-height);
-}
-
-/* -------------------------------------------------------------------------- */
 /*  Base                                                                       */
 /* -------------------------------------------------------------------------- */
 
@@ -482,8 +470,239 @@ body {
  * Mirrors `chat-widget/src/styles/embed.css` for in-app preview.
  */
 .chat-bubble-content {
-  font-variant-emoji: emoji;
   font-family: var(--font-sans), "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", emoji;
+}
+
+.chat-bubble-content:not(.chat-md-root) :where(a, code, sup, kbd) {
+  color: inherit !important;
+  background: none !important;
+  border: none !important;
+  border-radius: 0 !important;
+  padding: 0 !important;
+  font-size: inherit !important;
+  font-family: inherit !important;
+  font-weight: inherit !important;
+  text-decoration: none !important;
+  box-shadow: none !important;
+}
+
+.chat-bubble-content:not(.chat-md-root) :where(code) {
+  background: none !important;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  font-size: inherit;
+  font-family: inherit;
+  font-weight: inherit;
+  color: inherit;
+}
+
+.chat-bubble-content :where(a[href^="#"], a[data-footnote-ref], sup a) {
+  display: none !important;
+}
+
+.chat-bubble-content :where(a[href]):not([href^="http"]) {
+  color: inherit;
+  background: none !important;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  font-size: inherit;
+  font-weight: inherit;
+  text-decoration: none;
+  pointer-events: none;
+}
+
+.chat-bubble-content a[href^="http"] {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  color: inherit;
+  background: none;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  font-size: inherit;
+  font-weight: inherit;
+}
+
+.chat-bubble-content sup {
+  font-size: inherit;
+  line-height: inherit;
+  vertical-align: baseline;
+}
+
+/* Assistant markdown — mirrors chat-widget/src/styles/embed.css */
+.chat-md-root {
+  font-size: inherit;
+  line-height: 1.5;
+}
+
+.chat-md-root > :first-child {
+  margin-top: 0;
+}
+
+.chat-md-root > :last-child {
+  margin-bottom: 0;
+}
+
+.chat-md-p {
+  margin: 0 0 0.5em;
+}
+
+.chat-md-p:last-child {
+  margin-bottom: 0;
+}
+
+.chat-md-strong {
+  font-weight: 600;
+}
+
+.chat-md-em {
+  font-style: italic;
+}
+
+.chat-md-root ul.chat-md-ul,
+.assistrio-chat-widget .chat-md-root ul.chat-md-ul {
+  list-style-type: disc !important;
+  list-style-position: outside;
+  margin: 0.35em 0 0.5em;
+  margin-left: 0;
+  padding-left: 1.5em;
+}
+
+.chat-md-root ol.chat-md-ol,
+.assistrio-chat-widget .chat-md-root ol.chat-md-ol {
+  list-style-type: decimal !important;
+  list-style-position: outside;
+  margin: 0.35em 0 0.5em;
+  margin-left: 0;
+  padding-left: 1.5em;
+}
+
+.chat-md-root li.chat-md-li,
+.assistrio-chat-widget .chat-md-root li.chat-md-li {
+  display: list-item;
+  margin: 0.15em 0;
+  padding-left: 0.15em;
+}
+
+.chat-md-root ul.chat-md-ul ul.chat-md-ul {
+  list-style-type: circle !important;
+  margin-top: 0.15em;
+}
+
+.chat-md-blockquote {
+  margin: 0.5em 0;
+  padding-left: 0.75em;
+  border-left: 2px solid rgb(148 163 184 / 0.45);
+}
+
+.chat-md-hr {
+  margin: 0.75em 0;
+  border: 0;
+  border-top: 1px solid rgb(148 163 184 / 0.35);
+}
+
+.chat-md-h1,
+.chat-md-h2,
+.chat-md-h3,
+.chat-md-h4 {
+  margin: 0.6em 0 0.35em;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.chat-md-h1 {
+  font-size: 1.15em;
+}
+
+.chat-md-h2 {
+  font-size: 1.08em;
+}
+
+.chat-md-h3,
+.chat-md-h4 {
+  font-size: 1em;
+}
+
+.chat-md-pre {
+  margin: 0.5em 0;
+  padding: 0.65em 0.75em;
+  border-radius: 0.5rem;
+  overflow-x: auto;
+  font-size: 0.92em;
+  line-height: 1.45;
+}
+
+.chat-md-inline-code {
+  padding: 0.1em 0.35em;
+  border-radius: 0.25rem;
+  font-size: 0.92em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+.chat-md-code-block {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+.chat-md-table-wrap {
+  margin: 0.5em 0;
+  overflow-x: auto;
+}
+
+.chat-md-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92em;
+}
+
+.chat-md-th,
+.chat-md-td {
+  padding: 0.35em 0.5em;
+  border: 1px solid rgb(148 163 184 / 0.35);
+  text-align: left;
+}
+
+.chat-md-link {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  color: inherit;
+}
+
+.chat-md-dark {
+  color: rgb(209 213 219);
+}
+
+.chat-md-dark .chat-md-strong {
+  color: rgb(229 231 235);
+}
+
+.chat-md-dark .chat-md-em {
+  color: rgb(156 163 175);
+}
+
+.chat-md-dark .chat-md-pre,
+.chat-md-dark .chat-md-inline-code {
+  background: rgb(30 41 59 / 0.65);
+  color: rgb(226 232 240);
+}
+
+.chat-md-light {
+  color: rgb(55 65 81);
+}
+
+.chat-md-light .chat-md-strong {
+  color: rgb(17 24 39);
+}
+
+.chat-md-light .chat-md-em {
+  color: rgb(75 85 99);
+}
+
+.chat-md-light .chat-md-pre,
+.chat-md-light .chat-md-inline-code {
+  background: rgb(241 245 249);
+  color: rgb(30 41 59);
 }
 
 /** Chats by Country — ranking bar grow-in on load / data refresh. */

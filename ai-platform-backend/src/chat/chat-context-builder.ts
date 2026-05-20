@@ -6,6 +6,7 @@
 
 import type { ChatKnowledgeContext, ChatContextEvidenceItem } from './chat-context.types';
 import type { ChatContextLeadCapture } from './chat-context.types';
+import { KNOWLEDGE_SOURCES_FALLBACK_MESSAGE } from './answerability-enforcement.util';
 import { buildSystemPrompt } from './system-prompt.builder';
 
 /** Input for building the full context (from chat engine). Unified evidence only. */
@@ -18,6 +19,10 @@ export interface BuildChatContextInput {
   tone?: string;
   language?: string;
   responseLength?: string;
+  maxTokens?: number;
+  temperature?: number;
+  responseStyleInstructions?: string;
+  answerMode?: 'knowledge_first' | 'knowledge_only';
   systemPrompt?: string;
   leadCapture: ChatContextLeadCapture;
   conversationMessages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>;
@@ -53,6 +58,10 @@ export function buildChatKnowledgeContext(input: BuildChatContextInput): ChatKno
       tone: input.tone,
       language: input.language,
       responseLength: input.responseLength,
+      maxTokens: input.maxTokens,
+      temperature: input.temperature,
+      responseStyleInstructions: input.responseStyleInstructions,
+      answerMode: input.answerMode,
       systemPrompt: input.systemPrompt,
     },
     knowledge: {
@@ -90,6 +99,7 @@ export function formatPromptFromContext(ctx: ChatKnowledgeContext): {
     documentDirectAnswerLikely: ctx.documentDirectAnswerLikely,
     hasAssistantHistory: ctx.conversation.messages.some((m) => m.role === 'assistant'),
     answerability: ctx.answerability,
+    answerMode: ctx.behavior.answerMode,
   });
 
   const userParts: string[] = [];
@@ -117,7 +127,18 @@ export function formatPromptFromContext(ctx: ChatKnowledgeContext): {
     }
   } else if (hasEvidence) {
     userParts.push('--- Retrieved Knowledge Evidence ---');
-    userParts.push('Answer from the following evidence only. Each item has sourceType, title, and optionally section and URL.');
+    if (ctx.answerability?.shouldUseFallback) {
+      userParts.push(
+        'The retrieved knowledge does not directly support this request. Do not create examples, copy, templates, or suggestions. ' +
+          `Use only this fallback message: "${KNOWLEDGE_SOURCES_FALLBACK_MESSAGE}"`,
+      );
+    } else {
+      userParts.push(
+        'Answer primarily from the following evidence. Each item has sourceType, title, and optionally section and URL. ' +
+          'For broad questions (what the company does, main features, overview), combine relevant items into one clear answer. ' +
+          'Do not refuse when the evidence contains the information the user asked for.',
+      );
+    }
     ctx.knowledge.unifiedEvidence!.forEach((e, i) => {
       const lines: string[] = [];
       lines.push(`[${i + 1}] sourceType: ${e.sourceType}`);

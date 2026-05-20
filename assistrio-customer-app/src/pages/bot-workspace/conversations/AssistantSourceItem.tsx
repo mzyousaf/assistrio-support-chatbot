@@ -1,11 +1,13 @@
 import type { CustomerConversationMessageSource } from '@/api/types';
-import { AssistantRetrievalConfidencePill } from './AssistantRetrievalConfidencePill';
-import { AssistantSourceTypeBadge } from './AssistantSourceTypeBadge';
 import { clampSourcePreview, displayNameFromHttpUrl, safeSourceHttpUrl, sourceDisplayTitle } from './sourceDisplayShared';
 
-type Props = { source: CustomerConversationMessageSource };
+type Props = {
+  source: CustomerConversationMessageSource;
+  /** 1-based index shown as "Source 1", "Source 2", … */
+  index: number;
+};
 
-export function AssistantSourceItem({ source }: Props) {
+export function AssistantSourceItem({ source, index }: Props) {
   const preview = clampSourcePreview(source.preview);
   const href = safeSourceHttpUrl(source.sourceUrl);
   const primary = sourceDisplayTitle(source).trim();
@@ -15,33 +17,32 @@ export function AssistantSourceItem({ source }: Props) {
 
   return (
     <li className="rounded-lg border border-slate-100 bg-slate-50/60 p-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <AssistantSourceTypeBadge
-          sourceType={source.sourceType}
-          retrievalScore={source.score}
-          applyWeakScoreBehaviour={false}
-        />
-        <AssistantRetrievalConfidencePill score={source.score} />
-      </div>
       {showTitleBlock ? (
-        <div className="mt-2 min-w-0">
-          {href ? (
-            <a
-              href={href}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="break-words text-sm font-medium text-teal-700 underline decoration-teal-600/40 underline-offset-2 hover:text-teal-800"
-            >
-              {linkLabel}
-            </a>
-          ) : (
-            <p className="m-0 break-words text-sm font-medium text-slate-900">{primary}</p>
-          )}
+        <div className="min-w-0">
+          <p className="m-0 text-sm font-medium text-slate-900">
+            <span className="text-slate-500">Source {index} · </span>
+            {href ? (
+              <a
+                href={href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-teal-700 underline decoration-teal-600/40 underline-offset-2 hover:text-teal-800"
+              >
+                {linkLabel}
+              </a>
+            ) : (
+              linkLabel
+            )}
+          </p>
           {urlLabel && href && primary && primary !== urlLabel ? (
             <p className="m-0 mt-0.5 break-all text-[11px] text-slate-500">{urlLabel}</p>
           ) : null}
         </div>
-      ) : null}
+      ) : (
+        <p className="m-0 text-sm font-medium text-slate-900">
+          <span className="text-slate-500">Source {index}</span>
+        </p>
+      )}
       {preview ? (
         <p className="m-0 mt-2 whitespace-pre-wrap break-words text-xs leading-relaxed text-slate-600">{preview}</p>
       ) : null}

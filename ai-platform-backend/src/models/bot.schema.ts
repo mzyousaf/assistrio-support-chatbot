@@ -320,6 +320,21 @@ export class BotConfig {
   maxTokens?: number;
   @Prop({ enum: ['short', 'medium', 'long'] })
   responseLength?: string;
+  /** `free` = user-written instructions; `structured` = backend-refined locked format. */
+  @Prop({ enum: ['free', 'structured'] })
+  responseStyleMode?: 'free' | 'structured';
+  /** Customer-defined output style (formatting/tone); subordinate to grounding and safety. */
+  @Prop()
+  responseStyleInstructions?: string;
+  /** Original natural-language description (structured mode only). */
+  @Prop()
+  responseStyleDescription?: string;
+  /** ISO timestamp when structured instructions were last refined/saved. */
+  @Prop()
+  responseStyleRefinedAt?: string;
+  /** `knowledge_first` (default) vs strict `knowledge_only` grounding for answers. */
+  @Prop({ enum: ['knowledge_first', 'knowledge_only'], default: 'knowledge_first' })
+  answerMode?: 'knowledge_first' | 'knowledge_only';
 }
 
 @Schema({ _id: false })

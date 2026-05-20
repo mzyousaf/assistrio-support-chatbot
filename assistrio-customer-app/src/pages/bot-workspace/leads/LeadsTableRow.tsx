@@ -171,13 +171,13 @@ export function LeadsTableRow({
               <Eye size={14} strokeWidth={2} aria-hidden />
             </Button>
           </Tooltip>
-          <Tooltip content="Open conversation in insights" side="top">
+          <Tooltip content="Open chat log in Insights" side="top">
             <Button
               type="button"
               variant="ghost"
               size="sm"
               className={actionIconBtnClass}
-              aria-label="Open conversation in insights"
+              aria-label="Open chat log in Insights"
               onClick={() =>
                 onOpenChat(customerConversationInsightsPath(botId, lead.conversationId))
               }

@@ -30,9 +30,42 @@ import { excerptForDebug, getChunkQualitySignals } from './chunk-quality.helper'
 import {
   classifyQuestion,
   computeAnswerabilityContext,
+  normalizeAnswerMode,
   evaluateEvidenceStrength,
 } from './answerability.helper';
+import { rerankEvidenceForQuestion } from './evidence-question-rerank.util';
+import {
+  deriveFallbackEnforcementReason,
+  resolveAnswerabilityEnforcedFallbackMessage,
+  resolveAnswerabilityFallbackLogReason,
+  shouldPersistAssistantSourcesForTurn,
+  shouldSkipCompletionForAnswerabilityFallback,
+} from './answerability-enforcement.util';
+import {
+  logAnswerabilityFallbackEnforcement,
+  logCompletionParseDebug,
+  logRagDecisionDebug,
+} from './rag-decision-debug.util';
+import {
+  buildTranslationContractSystemSuffix,
+  COMPLETION_JSON_RETRY_USER_APPENDIX,
+  createTranslationCompletionWithFormatFallback,
+  DEFAULT_CHAT_FALLBACK_MESSAGE,
+  parseTranslationCompletion,
+} from './chat-completion-parse.util';
+import { resolveKnowledgeSourceTitle } from './knowledge-source-title.util';
 import { assembleEvidencePromptWithBudget } from './evidence-budget.helper';
+import {
+  isSimpleGreetingFastPathMessage,
+  resolveGreetingFastPathReply,
+} from './chat-greeting-fast-path.util';
+import {
+  buildEvidenceBudgetOptionsFromEnv,
+  getChatMaxEvidenceItems,
+  getChatMaxEvidenceTokens,
+  getChatRetrievalLimit,
+} from './chat-retrieval-config.util';
+import { logChatLatencyBreakdown } from './chat-latency-debug.util';
 import { DEFAULT_SECTION_BUDGET, estimateTokens } from './token-budget.helper';
 import {
   buildLeadCaptureContext,
@@ -83,6 +116,12 @@ import { getServerLocalMonthlyBillingPeriod } from './chat-billing-period.util';
 import { calculateMessageCreditUsage } from './message-credit.util';
 import type { MessageCreditCalculation } from './message-credit.util';
 import { normalizeAssistantMessageSourcesForPersistence } from './assistant-message-sources.normalize';
+import { resolveChatLlmParams, resolveCompletionMaxTokens } from './chat-llm-params.util';
+import {
+  chatAiSettingsPromptFlags,
+  logChatAiSettingsPostCompletion,
+  logChatAiSettingsPreCompletion,
+} from './chat-ai-settings-debug.util';
 import {
   buildConversationTurnAnalyticsPatch,
   mergeLeadFieldKeys,
@@ -136,9 +175,14 @@ function rankedItemToEvidenceItem(item: RankedKnowledgeItem): ChatContextEvidenc
     item.metadata != null && typeof item.metadata === 'object' && 'url' in item.metadata
       ? (item.metadata as { url?: string }).url
       : undefined;
+  const title = resolveKnowledgeSourceTitle({
+    title: item.title,
+    section: item.section,
+    text: item.text,
+  });
   return {
     sourceType: item.sourceType,
-    title: item.title,
+    title,
     section: item.section,
     text: item.text,
     url,
@@ -151,11 +195,16 @@ function rankedItemToEnrichedChunk(item: RankedKnowledgeItem): EnrichedChunk {
       ? (item.metadata as { url?: string }).url
       : undefined;
   const kbId = String(item.sourceId ?? '').trim();
+  const title = resolveKnowledgeSourceTitle({
+    title: item.title,
+    section: item.section,
+    text: item.text,
+  });
   return {
     chunkId: item.id,
     documentId: item.sourceId,
     ...(Types.ObjectId.isValid(kbId) ? { knowledgeBaseItemId: kbId } : {}),
-    title: item.title,
+    title,
     text: item.text,
     semanticScore: item.semanticScore,
     lexicalScore: item.lexicalScore,
@@ -194,28 +243,6 @@ function answerOverlapsDocumentSnippets(
 
 type AskStrategy = 'soft' | 'balanced' | 'direct';
 type CaptureMode = 'chat' | 'form' | 'hybrid';
-
-function parseJsonObjectFromText(text: string): Record<string, unknown> | null {
-  const raw = String(text || '').trim();
-  if (!raw) return null;
-  try {
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : null;
-  } catch {
-    const match = raw.match(/\{[\s\S]*\}/);
-    if (!match) return null;
-    try {
-      const parsed = JSON.parse(match[0]);
-      return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-        ? (parsed as Record<string, unknown>)
-        : null;
-    } catch {
-      return null;
-    }
-  }
-}
 
 /** Decide if we should suggest asking for a lead field this turn (strategy + capture mode + intent). */
 function computeShouldAskThisTurn(
@@ -641,23 +668,24 @@ export class ChatEngineService {
         ...(analyticsPersistence?.location ? { location: analyticsPersistence.location } : {}),
         ...(analyticsPersistence?.deviceInfo ? { deviceInfo: analyticsPersistence.deviceInfo } : {}),
       });
-      if (sessionSource !== 'widget_preview') {
-        const rawWelcome = typeof bot.welcomeMessage === 'string' ? bot.welcomeMessage.trim() : '';
-        if (rawWelcome && isWelcomeMessageActive(bot)) {
-          const welcomeText = resolveWelcomeMessage(rawWelcome, {
-            name: bot.name,
-            shortDescription: bot.shortDescription,
-            description: bot.description,
-          });
-          await this.messageModel.create({
-            conversationId: conv._id,
-            botId: botOid,
-            chatVisitorId,
-            role: 'assistant',
-            content: welcomeText,
-            createdAt: now,
-          });
-        }
+      const rawWelcome = typeof bot.welcomeMessage === 'string' ? bot.welcomeMessage.trim() : '';
+      if (rawWelcome && isWelcomeMessageActive(bot)) {
+        const welcomeText = resolveWelcomeMessage(rawWelcome, {
+          name: bot.name,
+          shortDescription: bot.shortDescription,
+          description: bot.description,
+        });
+        await this.messageModel.create({
+          conversationId: conv._id,
+          botId: botOid,
+          chatVisitorId,
+          role: 'assistant',
+          content: welcomeText,
+          createdAt: now,
+          inputType: 'welcome',
+          inputMethod: 'api',
+          isWelcomeMessage: true,
+        });
       }
       return conv;
     };
@@ -819,8 +847,8 @@ export class ChatEngineService {
     const personality = bot.personality ?? {};
     const cfg = bot.config ?? {};
     const translation = resolveEffectiveTranslationSettings(bot);
-    const temperature = typeof cfg.temperature === 'number' ? cfg.temperature : 0.2;
-    const maxTokens = typeof cfg.maxTokens === 'number' ? cfg.maxTokens : 512;
+    const { temperature, maxTokens, responseLength: configResponseLength } = resolveChatLlmParams(cfg);
+    const completionMaxTokens = resolveCompletionMaxTokens(maxTokens);
 
     const now = new Date();
     const multiEnabled = bot.visitorMultiChatEnabled === true;
@@ -938,6 +966,7 @@ export class ChatEngineService {
       hasTextContent,
     });
 
+    const saveUserMessageStart = Date.now();
     const userMessageDoc = await this.messageModel.create({
       conversationId: conversation._id,
       botId: bot._id,
@@ -961,6 +990,8 @@ export class ChatEngineService {
       createdAt: now,
       ...previewMsgPersist,
     });
+    const saveUserMessageMs = Date.now() - saveUserMessageStart;
+    const usageLedgerStart = Date.now();
     await this.safeAppendMessageUsageLedger({
       bot,
       conversation,
@@ -977,6 +1008,7 @@ export class ChatEngineService {
       hasAttachments: Boolean(inputAttachments?.length),
       previewInitiatedByUserId: inputPreviewInitiatedBy,
     });
+    const usageLedgerMs = Date.now() - usageLedgerStart;
 
     const allMessages = await this.messageModel
       .find({ conversationId: conversation._id })
@@ -1037,20 +1069,51 @@ export class ChatEngineService {
     }
 
     // Unified knowledge retrieval. KB suggestion id: only that item's chunks. Legacy: inline `context` on example question. Invalid id: empty evidence (no full KB).
+    const chatRetrievalLimit = getChatRetrievalLimit();
+    const useGreetingFastPath =
+      !invalidSuggestionPayload &&
+      !useKbSuggestionScope &&
+      !matchedSuggestionContext &&
+      isSimpleGreetingFastPathMessage(messageForLlm);
     const retrievalStart = Date.now();
     let unifiedResult: Awaited<ReturnType<UnifiedKnowledgeRetrievalService['getRelevantKnowledgeItemsForBot']>>;
     if (invalidSuggestionPayload) {
       unifiedResult = { items: [] };
+    } else if (useGreetingFastPath) {
+      unifiedResult = {
+        items: [],
+        timing: {
+          queryEmbeddingMs: 0,
+          chunkAggregateMs: 0,
+          scoringMs: 0,
+          diversityDedupMs: 0,
+          candidateChunksCount: 0,
+          scoredChunksCount: 0,
+          queryEmbeddingCacheHit: false,
+          retrievalResultCacheHit: false,
+        },
+      };
+      chatLog({
+        event: 'chat.greeting_fast_path',
+        level: 'info',
+        botId: bot._id.toString(),
+        conversationId: conversation._id.toString(),
+        chatVisitorId,
+        requestId,
+      });
     } else if (useKbSuggestionScope && sidRaw) {
       try {
         unifiedResult = await this.unifiedKnowledgeRetrievalService.getRelevantKnowledgeItemsForBot(
           bot._id.toString(),
           messageForLlm,
           {
-            limit: 25,
+            limit: chatRetrievalLimit,
             apiKeyOverride: resolvedApiKey,
             debug: requestDebug ?? false,
             restrictToKnowledgeBaseItemId: sidRaw,
+            answerMode: normalizeAnswerMode(cfg.answerMode),
+            maxEvidenceItems: getChatMaxEvidenceItems(),
+            maxEvidenceTokens: getChatMaxEvidenceTokens(),
           },
         );
       } catch (unifiedErr) {
@@ -1076,9 +1139,12 @@ export class ChatEngineService {
           bot._id.toString(),
           messageForLlm,
           {
-            limit: 25,
+            limit: chatRetrievalLimit,
             apiKeyOverride: resolvedApiKey,
             debug: requestDebug ?? false,
+            answerMode: normalizeAnswerMode(cfg.answerMode),
+            maxEvidenceItems: getChatMaxEvidenceItems(),
+            maxEvidenceTokens: getChatMaxEvidenceTokens(),
           },
         );
       } catch (unifiedErr) {
@@ -1096,7 +1162,9 @@ export class ChatEngineService {
       }
     }
     const retrievalDurationMs = Date.now() - retrievalStart;
-    const retrievalConfidence: 'high' | 'medium' | 'low' = invalidSuggestionPayload
+    let retrievalConfidence: 'high' | 'medium' | 'low' = useGreetingFastPath
+      ? 'low'
+      : invalidSuggestionPayload
       ? 'low'
       : useKbSuggestionScope
         ? unifiedResult.items.length === 0
@@ -1258,27 +1326,38 @@ export class ChatEngineService {
       await this.conversationModel.updateOne({ _id: conversation._id }, { $set: updates });
     }
 
-    const evidenceItems: ChatContextEvidenceItem[] = unifiedResult.items.map(rankedItemToEvidenceItem);
+    const questionClassification = classifyQuestion(messageForLlm);
+    const rankedForQuestion = rerankEvidenceForQuestion(
+      unifiedResult.items,
+      messageForLlm,
+      questionClassification,
+    );
+
     const userMax = DEFAULT_SECTION_BUDGET.userMaxTokens;
     const currentMsgTokens = estimateTokens(messageForLlm);
+    const evidenceBudgetStart = Date.now();
     const budget = assembleEvidencePromptWithBudget(
-      evidenceItems,
+      rankedForQuestion,
       conversationMessages,
       currentMsgTokens,
       userMax,
-      undefined,
+      buildEvidenceBudgetOptionsFromEnv(),
     );
+    const evidenceBudgetMs = Date.now() - evidenceBudgetStart;
 
-    const evidenceKept = budget.evidenceKept;
+    const keptRankedItems = budget.evidenceKept;
+    const evidenceKept = keptRankedItems.map(rankedItemToEvidenceItem);
     const evidenceKeptCount = evidenceKept.length;
-    const evidenceTrimmedOutIds = unifiedResult.items.slice(evidenceKeptCount).map((item) => item.id);
+    const evidenceTrimmedOutIds = rankedForQuestion
+      .filter((item) => !keptRankedItems.some((k) => k.id === item.id))
+      .map((item) => item.id);
     const evidenceBlockTokensUsed = budget.tokenDistribution.userEvidence;
     const protectedEvidenceCount = budget.protectedEvidenceCount;
     const evidenceTrimReason = budget.evidenceTrimReason;
     const conversationTrimReason = budget.conversationTrimReason;
     const evidenceTrimSummary = budget.trimSummary;
     const conversationMessagesTrimmedOut = budget.conversationTrimmedOut.length;
-    const evidenceItemsKeptIds = unifiedResult.items.slice(0, evidenceKeptCount).map((item) => item.id);
+    const evidenceItemsKeptIds = keptRankedItems.map((item) => item.id);
     const evidencePromptTokenDistribution: ChatDebugInfo['evidencePromptTokenDistribution'] = {
       system: 0,
       userEvidence: budget.tokenDistribution.userEvidence,
@@ -1304,14 +1383,32 @@ export class ChatEngineService {
       },
     };
 
-    const trimmedChunks: EnrichedChunk[] = unifiedResult.items.slice(0, evidenceKeptCount).map(rankedItemToEnrichedChunk);
+    const trimmedChunks: EnrichedChunk[] = keptRankedItems.map(rankedItemToEnrichedChunk);
     const documentDirectAnswerLikely = evidenceKept.length > 0;
 
-    const keptRankedItems = unifiedResult.items.slice(0, evidenceKeptCount);
-    const questionClassification = classifyQuestion(messageForLlm);
     const evidenceStrength = evaluateEvidenceStrength(keptRankedItems);
-    const answerabilityContext = computeAnswerabilityContext(questionClassification, evidenceStrength);
+    const answerMode = normalizeAnswerMode(cfg.answerMode);
+    const answerabilityStart = Date.now();
+    const answerabilityContext = computeAnswerabilityContext(
+      questionClassification,
+      evidenceStrength,
+      messageForLlm,
+      { answerMode, evidenceItems: keptRankedItems },
+    );
+    const answerabilityMs = Date.now() - answerabilityStart;
 
+    if (
+      !invalidSuggestionPayload &&
+      !suggestionScopeOnly &&
+      keptRankedItems.length > 0 &&
+      answerabilityContext.evidenceStrongEnough
+    ) {
+      retrievalConfidence = 'high';
+    } else if (keptRankedItems.length > 0 && retrievalConfidence === 'low') {
+      retrievalConfidence = 'medium';
+    }
+
+    const promptBuildStart = Date.now();
     const ctx = buildChatKnowledgeContext({
       botName: (bot.name || 'Assistant').trim(),
       category: bot.category,
@@ -1320,7 +1417,11 @@ export class ChatEngineService {
       thingsToAvoid: personality.thingsToAvoid,
       tone: personality.tone ?? 'friendly',
       language: resolvePersonalityLanguageForPrompt(personality.language),
-      responseLength: cfg.responseLength ?? 'medium',
+      responseLength: configResponseLength,
+      maxTokens,
+      temperature,
+      responseStyleInstructions: cfg.responseStyleInstructions,
+      answerMode,
       systemPrompt: personality.systemPrompt,
       leadCapture: leadCaptureContext,
       conversationMessages: budgetResult.conversationMessages as Array<{ role: 'user' | 'assistant' | 'system'; content: string }>,
@@ -1339,61 +1440,203 @@ export class ChatEngineService {
     });
 
     const { systemPrompt, userPrompt } = formatPromptFromContext(ctx);
+    const promptBuildMs = Date.now() - promptBuildStart;
 
-    const fallbackMessage =
-      "I don't have enough information to answer that right now. Is there something else I can help with?";
-    let assistantMessage = fallbackMessage;
+    logRagDecisionDebug({
+      question: messageForLlm,
+      retrievalConfidence,
+      selectedChunksCount: keptRankedItems.length,
+      selectedChunkTitles: keptRankedItems.map((i) =>
+        resolveKnowledgeSourceTitle({ title: i.title, section: i.section, text: i.text }),
+      ),
+      answerabilityDecision: {
+        questionClassification: answerabilityContext.questionClassification,
+        shouldUseFallback: answerabilityContext.shouldUseFallback,
+        shouldAnswerGenerally: answerabilityContext.shouldAnswerGenerally,
+        evidenceStrongEnough: answerabilityContext.evidenceStrongEnough,
+        directAnswerLikely: answerabilityContext.directAnswerLikely,
+        decisionExplanation: answerabilityContext.decisionExplanation,
+        topCombinedScore: answerabilityContext.evidenceStrengthSummary.topCombinedScore,
+        evidenceItemCount: answerabilityContext.evidenceStrengthSummary.evidenceItemCount,
+      },
+      evidencePromptPreview: userPrompt.slice(0, 1200),
+    });
+
+    const promptFlags = chatAiSettingsPromptFlags(systemPrompt);
+    logChatAiSettingsPreCompletion({
+      botId: String(bot._id),
+      conversationId: conversation._id?.toString?.(),
+      temperature,
+      maxTokens,
+      responseLength: configResponseLength,
+      model: CHAT_COMPLETION_MODEL,
+      systemPromptContainsShortInstruction: promptFlags.systemPromptContainsShortInstruction,
+      systemPromptContainsLongInstruction: promptFlags.systemPromptContainsLongInstruction,
+      sessionSource: input.sessionSource,
+    });
+
+    const enforceAnswerabilityFallback = shouldSkipCompletionForAnswerabilityFallback(
+      answerabilityContext.shouldUseFallback,
+    );
+    const fallbackEnforcementReason = enforceAnswerabilityFallback
+      ? deriveFallbackEnforcementReason(answerMode, answerabilityContext, messageForLlm)
+      : undefined;
+    const answerabilityEnforcedFallbackMessage = resolveAnswerabilityEnforcedFallbackMessage();
+    const fallbackMessage = enforceAnswerabilityFallback
+      ? answerabilityEnforcedFallbackMessage
+      : DEFAULT_CHAT_FALLBACK_MESSAGE;
+    const allowGenericFallback = answerabilityContext.shouldUseFallback;
+    const defaultReplyLanguage =
+      translation.mode === 'fixed' ? (translation.fixedLanguage ?? 'English') : 'English';
+    let assistantMessage = '';
     let userEnglishText = String(message || '').trim() || message;
     let userOriginalLanguage = 'en';
-    let assistantDisplayMessage = fallbackMessage;
-    let assistantReplyLanguage = translation.mode === 'fixed' ? (translation.fixedLanguage ?? 'English') : 'English';
+    let assistantDisplayMessage = '';
+    let assistantReplyLanguage = defaultReplyLanguage;
+    let completionParseMeta: ReturnType<typeof parseTranslationCompletion> | undefined;
+    let completionRetried = false;
+    let completionSkipped = false;
+    let promptBuildMsForLatency = promptBuildMs;
+    let openaiCompletionMs = 0;
+    let parseMs = 0;
 
     const completionStart = Date.now();
     let completionModel: string | undefined;
     let completionUsage: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } | undefined;
     let completionErrorBrief: string | undefined;
-    try {
+
+    if (enforceAnswerabilityFallback) {
+      completionSkipped = true;
+      assistantDisplayMessage = answerabilityEnforcedFallbackMessage;
+      assistantMessage = answerabilityEnforcedFallbackMessage;
+      assistantReplyLanguage = defaultReplyLanguage;
+      logAnswerabilityFallbackEnforcement({
+        answerMode,
+        shouldUseFallback: true,
+        fallbackEnforced: true,
+        fallbackEnforcementReason: fallbackEnforcementReason ?? 'knowledge_only_unsupported',
+        completionSkipped: true,
+      });
+    } else if (useGreetingFastPath) {
+      completionSkipped = true;
+      const greetingReply = resolveGreetingFastPathReply(messageForLlm);
+      assistantDisplayMessage = greetingReply;
+      assistantMessage = greetingReply;
+      assistantReplyLanguage = defaultReplyLanguage;
+      chatLog({
+        event: 'chat.greeting_fast_path_completion_skipped',
+        level: 'info',
+        botId: bot._id.toString(),
+        conversationId: conversation._id.toString(),
+        chatVisitorId,
+        requestId,
+      });
+    } else try {
       const openai = new OpenAI({ apiKey: resolvedApiKey });
-      const completion = await withRetry(
-        (attempt) =>
-          withTimeout(
-            openai.chat.completions.create({
-              model: CHAT_COMPLETION_MODEL,
-              messages: [
-                {
-                  role: 'system',
-                  content:
-                    `${systemPrompt}\n\n` +
-                    '--- Translation contract ---\n' +
-                    'Return ONLY JSON (no markdown, no prose) with this exact schema: ' +
-                    '{"userEnglishText":string,"userOriginalLanguage":string,"assistantReplyText":string,"assistantReplyLanguage":string,"assistantEnglishText":string}.\n' +
-                    'Rules:\n' +
-                    '- userEnglishText MUST be faithful English translation/paraphrase of the current user message.\n' +
-                    '- assistantEnglishText MUST be faithful English version of the assistant answer.\n' +
-                    '- assistantReplyText is the visitor-facing answer.\n' +
-                    '- If mode is english_only: assistantReplyText and assistantEnglishText should both be English.\n' +
-                    '- If mode is auto: assistantReplyText should match the user original language.\n' +
-                    '- If mode is fixed: assistantReplyText should be in fixed language.\n' +
-                    '- Never leave fields empty.',
-                },
-                {
-                  role: 'user',
-                  content:
-                    `${userPrompt}\n\n` +
-                    `Translation mode: ${translation.mode}\n` +
-                    `Fixed language: ${translation.fixedLanguage ?? ''}\n` +
-                    'Transcript language: english',
-                },
-              ],
-              temperature,
-              max_tokens: maxTokens,
-            }),
-            AI_CALL_TIMEOUTS.completion,
-            'completion',
+      const baseCompletionMessages: OpenAI.Chat.ChatCompletionMessageParam[] = [
+        {
+          role: 'system',
+          content: `${systemPrompt}${buildTranslationContractSystemSuffix(translation.mode)}`,
+        },
+        {
+          role: 'user',
+          content:
+            `${userPrompt}\n\n` +
+            `Translation mode: ${translation.mode}\n` +
+            `Fixed language: ${translation.fixedLanguage ?? ''}\n` +
+            'Transcript language: english',
+        },
+      ];
+
+      const runCompletion = (messages: OpenAI.Chat.ChatCompletionMessageParam[]) =>
+        createTranslationCompletionWithFormatFallback((responseFormat) =>
+          withRetry(
+            () =>
+              withTimeout(
+                openai.chat.completions.create({
+                  model: CHAT_COMPLETION_MODEL,
+                  messages,
+                  temperature,
+                  max_tokens: completionMaxTokens,
+                  response_format: responseFormat,
+                }),
+                AI_CALL_TIMEOUTS.completion,
+                'completion',
+              ),
+            { maxRetries: 2 },
           ),
-        { maxRetries: 2 },
-      );
+        );
+
+      const openaiStart = Date.now();
+      const firstCompletionResult = await runCompletion(baseCompletionMessages);
+      openaiCompletionMs = Date.now() - openaiStart;
+      if (firstCompletionResult.usedJsonObjectFallback) {
+        chatLog({
+          event: 'response_format_schema_invalid',
+          level: 'warn',
+          botId: bot._id.toString(),
+          conversationId: conversation._id.toString(),
+          requestId,
+        });
+      }
+      let completion = firstCompletionResult.completion;
       completionModel = (completion as { model?: string }).model;
+      let rawModel = completion.choices[0]?.message?.content?.trim() || '';
+
+      const parseStart = Date.now();
+      completionParseMeta = parseTranslationCompletion(rawModel, {
+        allowGenericFallback,
+        defaultReplyLanguage,
+      });
+      parseMs = Date.now() - parseStart;
+
+      logCompletionParseDebug({
+        rawCompletionPreview: completionParseMeta.rawCompletionPreview,
+        parsedJsonOk: completionParseMeta.parsedJsonOk,
+        parseStatus: completionParseMeta.parseStatus,
+        recoveredFromRawText: completionParseMeta.recoveredFromRawText,
+        recoveryMethod: completionParseMeta.recoveryMethod,
+        assistantReplyTextLength: completionParseMeta.fields.assistantReplyText.length,
+        assistantEnglishTextLength: completionParseMeta.fields.assistantEnglishText.length,
+        fallbackReason: completionParseMeta.fallbackReason,
+        retried: false,
+      });
+
+      if (
+        completionParseMeta.shouldRetryCompletion &&
+        !allowGenericFallback &&
+        answerabilityContext.evidenceStrongEnough
+      ) {
+        completionRetried = true;
+        const retryOpenaiStart = Date.now();
+        const retryCompletionResult = await runCompletion([
+          ...baseCompletionMessages,
+          { role: 'user', content: COMPLETION_JSON_RETRY_USER_APPENDIX },
+        ]);
+        openaiCompletionMs += Date.now() - retryOpenaiStart;
+        completion = retryCompletionResult.completion;
+        completionModel = (completion as { model?: string }).model;
+        rawModel = completion.choices[0]?.message?.content?.trim() || '';
+        const retryParseStart = Date.now();
+        completionParseMeta = parseTranslationCompletion(rawModel, {
+          allowGenericFallback,
+          defaultReplyLanguage,
+        });
+        parseMs += Date.now() - retryParseStart;
+        completionParseMeta.recoveryMethod = 'retry';
+        logCompletionParseDebug({
+          rawCompletionPreview: completionParseMeta.rawCompletionPreview,
+          parsedJsonOk: completionParseMeta.parsedJsonOk,
+          parseStatus: completionParseMeta.parseStatus,
+          recoveredFromRawText: completionParseMeta.recoveredFromRawText,
+          recoveryMethod: 'retry',
+          assistantReplyTextLength: completionParseMeta.fields.assistantReplyText.length,
+          assistantEnglishTextLength: completionParseMeta.fields.assistantEnglishText.length,
+          fallbackReason: completionParseMeta.fallbackReason,
+          retried: true,
+        });
+      }
+
       const u = (completion as { usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } })
         .usage;
       if (u && typeof u === 'object') {
@@ -1403,23 +1646,34 @@ export class ChatEngineService {
           total_tokens: u.total_tokens,
         };
       }
-      const rawModel = completion.choices[0]?.message?.content?.trim() || '';
-      const parsed = parseJsonObjectFromText(rawModel);
-      const parsedUserEnglish =
-        typeof parsed?.userEnglishText === 'string' ? parsed.userEnglishText.trim() : '';
-      const parsedUserLanguage =
-        typeof parsed?.userOriginalLanguage === 'string' ? parsed.userOriginalLanguage.trim() : '';
-      const parsedReply =
-        typeof parsed?.assistantReplyText === 'string' ? parsed.assistantReplyText.trim() : '';
-      const parsedReplyLang =
-        typeof parsed?.assistantReplyLanguage === 'string' ? parsed.assistantReplyLanguage.trim() : '';
-      const parsedAssistantEnglish =
-        typeof parsed?.assistantEnglishText === 'string' ? parsed.assistantEnglishText.trim() : '';
-      userEnglishText = parsedUserEnglish || userEnglishText;
-      userOriginalLanguage = parsedUserLanguage || userOriginalLanguage;
-      assistantDisplayMessage = parsedReply || parsedAssistantEnglish || fallbackMessage;
-      assistantReplyLanguage = parsedReplyLang || assistantReplyLanguage;
-      assistantMessage = parsedAssistantEnglish || assistantDisplayMessage || fallbackMessage;
+      logChatAiSettingsPostCompletion({
+        botId: String(bot._id),
+        conversationId: conversation._id?.toString?.(),
+        promptTokens: completionUsage?.prompt_tokens,
+        completionTokens: completionUsage?.completion_tokens,
+        totalTokens: completionUsage?.total_tokens,
+      });
+
+      const hasUsableAnswer = Boolean(
+        completionParseMeta.fields.assistantReplyText || completionParseMeta.fields.assistantEnglishText,
+      );
+      userEnglishText = completionParseMeta.fields.userEnglishText || userEnglishText;
+      userOriginalLanguage = completionParseMeta.fields.userOriginalLanguage || userOriginalLanguage;
+      assistantReplyLanguage =
+        completionParseMeta.fields.assistantReplyLanguage || assistantReplyLanguage;
+
+      if (hasUsableAnswer) {
+        assistantDisplayMessage =
+          completionParseMeta.fields.assistantReplyText || completionParseMeta.fields.assistantEnglishText;
+        assistantMessage =
+          completionParseMeta.fields.assistantEnglishText || assistantDisplayMessage;
+      } else if (allowGenericFallback) {
+        assistantDisplayMessage = fallbackMessage;
+        assistantMessage = fallbackMessage;
+      } else {
+        assistantDisplayMessage = fallbackMessage;
+        assistantMessage = fallbackMessage;
+      }
     } catch (chatError) {
       const errMsg = chatError instanceof Error ? chatError.message : String(chatError);
       completionErrorBrief = errMsg.slice(0, 240);
@@ -1438,12 +1692,41 @@ export class ChatEngineService {
     if (!assistantMessage?.trim()) {
       assistantMessage = fallbackMessage;
       assistantDisplayMessage = fallbackMessage;
+      if (!completionParseMeta) {
+        completionParseMeta = {
+          fields: {
+            userEnglishText: '',
+            userOriginalLanguage: 'en',
+            assistantReplyText: '',
+            assistantEnglishText: '',
+            assistantReplyLanguage: defaultReplyLanguage,
+          },
+          parsedJsonOk: false,
+          parseStatus: 'failed',
+          recoveredFromRawText: false,
+          fallbackReason: completionErrorBrief ? 'completion_api_error' : 'empty_completion',
+          rawCompletionPreview: '',
+          shouldRetryCompletion: false,
+        };
+      }
+      logCompletionParseDebug({
+        rawCompletionPreview: completionParseMeta.rawCompletionPreview,
+        parsedJsonOk: completionParseMeta.parsedJsonOk,
+        parseStatus: completionParseMeta.parseStatus,
+        recoveredFromRawText: completionParseMeta.recoveredFromRawText,
+        recoveryMethod: completionParseMeta.recoveryMethod,
+        assistantReplyTextLength: 0,
+        assistantEnglishTextLength: 0,
+        fallbackReason: completionParseMeta.fallbackReason ?? 'empty_completion',
+        retried: completionRetried,
+      });
       chatLog({
         event: 'chat.empty_completion_fallback',
         level: 'warn',
         botId: bot._id.toString(),
         conversationId: conversation._id.toString(),
         requestId,
+        metadata: { fallbackReason: completionParseMeta.fallbackReason },
       });
     }
 
@@ -1463,20 +1746,76 @@ export class ChatEngineService {
     const userMessageOid = (userMessageDoc as { _id: Types.ObjectId })._id;
     void this.topicSentimentClassificationService.safeClassifyUserMessageById(userMessageOid.toString());
 
-    const sources = buildDedupedSources(trimmedChunks);
-    const displaySources = buildDisplaySources(trimmedChunks);
+    const persistSources = shouldPersistAssistantSourcesForTurn(enforceAnswerabilityFallback);
+    const sources = persistSources ? buildDedupedSources(trimmedChunks) : [];
+    const displaySources = persistSources ? buildDisplaySources(trimmedChunks) : [];
     const assistantCreatedAt = new Date();
-    const messageSources = normalizeAssistantMessageSourcesForPersistence({
-      sources: trimmedChunks,
-      assistantMessageCreatedAt: assistantCreatedAt,
-    });
+    const messageSources = persistSources
+      ? normalizeAssistantMessageSourcesForPersistence({
+          sources: trimmedChunks,
+          assistantMessageCreatedAt: assistantCreatedAt,
+        })
+      : [];
     const sourcesCount = messageSources.length;
     const ragUsed = trimmedChunks.length > 0;
+    const usedGenericFallbackMessage =
+      normalizeMessageForDedupe(assistantDisplayMessage || assistantMessage) ===
+      normalizeMessageForDedupe(fallbackMessage);
     const fallbackUsed =
-      Boolean(completionErrorBrief) ||
-      normalizeMessageForDedupe(assistantMessage) === normalizeMessageForDedupe(fallbackMessage);
+      enforceAnswerabilityFallback || Boolean(completionErrorBrief) || usedGenericFallbackMessage;
+
+    if (enforceAnswerabilityFallback) {
+      logRagDecisionDebug({
+        question: messageForLlm,
+        retrievalConfidence,
+        selectedChunksCount: keptRankedItems.length,
+        selectedChunkTitles: keptRankedItems.map((i) =>
+          resolveKnowledgeSourceTitle({ title: i.title, section: i.section, text: i.text }),
+        ),
+        answerabilityDecision: {
+          questionClassification: answerabilityContext.questionClassification,
+          shouldUseFallback: answerabilityContext.shouldUseFallback,
+          shouldAnswerGenerally: answerabilityContext.shouldAnswerGenerally,
+          evidenceStrongEnough: answerabilityContext.evidenceStrongEnough,
+          directAnswerLikely: answerabilityContext.directAnswerLikely,
+          decisionExplanation: answerabilityContext.decisionExplanation,
+        },
+        answerMode,
+        fallbackEnforced: true,
+        fallbackEnforcementReason: fallbackEnforcementReason ?? 'knowledge_only_unsupported',
+        completionSkipped: true,
+        fallbackReason:
+          resolveAnswerabilityFallbackLogReason(true, fallbackEnforcementReason) ??
+          'answerability_fallback_enforced',
+        evidencePromptPreview: userPrompt.slice(0, 800),
+      });
+    } else if (fallbackUsed && keptRankedItems.length > 0 && answerabilityContext.evidenceStrongEnough) {
+      const parseReason =
+        completionErrorBrief != null
+          ? 'completion_api_error'
+          : completionParseMeta?.fallbackReason ?? 'missing_assistant_reply_text';
+      logRagDecisionDebug({
+        question: messageForLlm,
+        retrievalConfidence,
+        selectedChunksCount: keptRankedItems.length,
+        selectedChunkTitles: keptRankedItems.map((i) =>
+          resolveKnowledgeSourceTitle({ title: i.title, section: i.section, text: i.text }),
+        ),
+        answerabilityDecision: {
+          questionClassification: answerabilityContext.questionClassification,
+          shouldUseFallback: answerabilityContext.shouldUseFallback,
+          shouldAnswerGenerally: answerabilityContext.shouldAnswerGenerally,
+          evidenceStrongEnough: answerabilityContext.evidenceStrongEnough,
+          directAnswerLikely: answerabilityContext.directAnswerLikely,
+          decisionExplanation: answerabilityContext.decisionExplanation,
+        },
+        fallbackReason: parseReason,
+        evidencePromptPreview: userPrompt.slice(0, 800),
+      });
+    }
     const assistantTurnElapsedMs = Date.now() - startTime;
 
+    const saveAssistantMessageStart = Date.now();
     const assistantDoc = await this.messageModel.create({
       conversationId: conversation._id,
       botId: bot._id,
@@ -1495,9 +1834,23 @@ export class ChatEngineService {
         ...(completionUsage?.prompt_tokens != null ? { promptTokens: completionUsage.prompt_tokens } : {}),
         ...(completionUsage?.completion_tokens != null ? { completionTokens: completionUsage.completion_tokens } : {}),
         ...(completionUsage?.total_tokens != null ? { totalTokens: completionUsage.total_tokens } : {}),
-        ragUsed,
+        ragUsed: persistSources && ragUsed,
         sourcesCount,
         fallbackUsed,
+        ...(enforceAnswerabilityFallback
+          ? {
+              fallbackEnforced: true,
+              fallbackEnforcementReason: fallbackEnforcementReason ?? 'knowledge_only_unsupported',
+              completionSkipped: true,
+            }
+          : {}),
+        ...(useGreetingFastPath
+          ? {
+              greetingFastPath: true,
+              completionSkipped: true,
+              responseGeneratedBy: 'greeting_fast_path',
+            }
+          : {}),
         ...(completionErrorBrief
           ? { errorCode: 'completion_failed', errorMessage: completionErrorBrief }
           : {}),
@@ -1505,6 +1858,7 @@ export class ChatEngineService {
       createdAt: assistantCreatedAt,
       ...previewMsgPersist,
     });
+    const saveAssistantMessageMs = Date.now() - saveAssistantMessageStart;
     const assistantMessageId = (assistantDoc as { _id: Types.ObjectId })._id.toString();
 
     await this.safeApplyConversationTurnRollup({
@@ -1539,6 +1893,44 @@ export class ChatEngineService {
     const summaryEnqueueDurationMs = summaryEligible ? Date.now() - enqueueStart : undefined;
 
     const totalDurationMs = Date.now() - startTime;
+    const retrievalTiming = unifiedResult.timing;
+    logChatLatencyBreakdown({
+      requestId,
+      botId: bot._id.toString(),
+      conversationId: conversation._id.toString(),
+      sessionSource,
+      totalDurationMs,
+      retrievalDurationMs,
+      completionDurationMs,
+      retrieval: {
+        queryEmbeddingMs: retrievalTiming?.queryEmbeddingMs ?? 0,
+        chunkAggregateMs: retrievalTiming?.chunkAggregateMs ?? 0,
+        scoringMs: retrievalTiming?.scoringMs ?? 0,
+        diversityDedupMs: retrievalTiming?.diversityDedupMs ?? 0,
+        evidenceBudgetMs,
+        answerabilityMs,
+        selectedChunksCount: keptRankedItems.length,
+        candidateChunksCount: retrievalTiming?.candidateChunksCount ?? 0,
+        scoredChunksCount: retrievalTiming?.scoredChunksCount ?? 0,
+        queryEmbeddingCacheHit: retrievalTiming?.queryEmbeddingCacheHit ?? false,
+        retrievalResultCacheHit: retrievalTiming?.retrievalResultCacheHit ?? false,
+        greetingFastPath: useGreetingFastPath,
+      },
+      completion: {
+        promptBuildMs: promptBuildMsForLatency,
+        openaiCompletionMs,
+        parseMs,
+        completionSkipped,
+        promptTokens: completionUsage?.prompt_tokens,
+        completionTokens: completionUsage?.completion_tokens,
+        totalTokens: completionUsage?.total_tokens,
+      },
+      persistence: {
+        saveUserMessageMs,
+        saveAssistantMessageMs,
+        usageLedgerMs,
+      },
+    });
     chatLog({
       event: 'chat.request_completed',
       level: 'info',
@@ -2003,6 +2395,7 @@ export class ChatEngineService {
         feedback: 1,
         topics: 1,
         sentiment: 1,
+        isWelcomeMessage: 1
       })
       .lean();
     return msgs.map((m) => serializeWorkspaceMessageRow(m as Record<string, unknown>));

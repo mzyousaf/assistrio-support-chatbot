@@ -1,4 +1,5 @@
 import { Children, type ReactNode } from 'react';
+import { Tooltip } from '@/components/ui';
 import { ConversationDetailCopyButton } from './ConversationDetailCopyButton';
 import { cn } from '@/lib/utils';
 
@@ -52,11 +53,27 @@ export function ConversationInsightsSheetSection({ title, description, children,
 type RowProps = {
   label: ReactNode;
   value: ReactNode;
+  /** Shown when hovering or focusing the label (portal tooltip). */
+  labelTooltip?: ReactNode;
   className?: string;
 };
 
 /** Two-column label / value pair (divider from parent divide-y). */
-export function ConversationInsightsSheetRow({ label, value, className }: RowProps) {
+export function ConversationInsightsSheetRow({ label, value, labelTooltip, className }: RowProps) {
+  const labelCell =
+    labelTooltip != null ? (
+      <Tooltip content={labelTooltip} side="top" panelClassName="max-w-xs text-[0.6875rem] font-normal leading-relaxed">
+        <span
+          tabIndex={0}
+          className="cursor-default border-b border-dotted border-slate-400/55 outline-none focus-visible:ring-2 focus-visible:ring-teal-500/25 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+        >
+          {label}
+        </span>
+      </Tooltip>
+    ) : (
+      label
+    );
+
   return (
     <div
       className={cn(
@@ -64,7 +81,7 @@ export function ConversationInsightsSheetRow({ label, value, className }: RowPro
         className,
       )}
     >
-      <div className="text-[13px] text-slate-500">{label}</div>
+      <div className="text-[13px] text-slate-500">{labelCell}</div>
       <div className="min-w-0 text-[13px] font-normal leading-snug text-slate-900 sm:text-left">{value}</div>
     </div>
   );

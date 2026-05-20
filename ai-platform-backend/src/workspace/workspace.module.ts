@@ -18,6 +18,7 @@ import { AdminUploadController } from './admin-upload.controller';
 import { AdminKnowledgeController } from './admin-knowledge.controller';
 import { CustomerKnowledgeController } from './customer-knowledge.controller';
 import { CustomerBotsController } from './customer-bots.controller';
+import { CustomerBotAiController } from './customer-bot-ai.controller';
 import { CustomerBotInsightsController } from './customer-bot-insights.controller';
 import { CustomerBotChatsAnalyticsController } from './customer-bot-chats-analytics.controller';
 import { CustomerBotLeadsAnalyticsController } from './customer-bot-leads-analytics.controller';
@@ -64,6 +65,7 @@ import { KnowledgeItemManualRetryService } from './knowledge-item-manual-retry.s
     AdminSeedController,
     AdminUploadController,
     CustomerBotsController,
+    CustomerBotAiController,
     CustomerKnowledgeController,
     CustomerBotInsightsController,
     CustomerBotChatsAnalyticsController,

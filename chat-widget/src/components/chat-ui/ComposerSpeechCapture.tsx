@@ -5,6 +5,7 @@ import {
   computeSpeechWaveformBarRects,
 } from "../../lib/speech-waveform-layout";
 import { SPEECH_WAVEFORM_SCROLL_BARS } from "../../lib/useMediaRecorderCapture";
+import { AssistrioPageLoaderSpinner } from "./AssistrioPageLoaderSpinner";
 import { cx } from "./utils";
 
 /** Waveform / voice hint (first control when input is empty). Use `stretch` to fill a wide slot (non-uniform scale). */
@@ -57,27 +58,6 @@ export function SpeechLevelWaveform({
   );
 }
 
-/** Plain circular loader (single stroke arc). */
-function ComposerTranscribeSpinner({ className }: { className?: string }) {
-  return (
-    <svg
-      className={cx("h-[18px] w-[18px] shrink-0 animate-spin motion-reduce:animate-none", className)}
-      viewBox="0 0 24 24"
-      fill="none"
-      aria-hidden
-    >
-      <circle
-        cx="12"
-        cy="12"
-        r="9"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeDasharray="26 58"
-      />
-    </svg>
-  );
-}
 
 /** Stop recording — filled square (readable at 18px icon size). */
 function StopIcon({ className }: { className?: string }) {
@@ -135,7 +115,7 @@ export function ComposerSpeechCaptureField({
     >
       {speechCaptureProcessing ? (
         <>
-          <ComposerTranscribeSpinner className="shrink-0" />
+          <AssistrioPageLoaderSpinner size="compact" decorative className="shrink-0" />
           <span className="text-[15px] leading-5">Transcribing...</span>
         </>
       ) : showLiveSpeechWaveform && speechWaveformLevels ? (

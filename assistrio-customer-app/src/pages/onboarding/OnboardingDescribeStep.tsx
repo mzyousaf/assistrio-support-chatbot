@@ -6,6 +6,7 @@ import { prevStepPath } from '../../onboarding/onboardingState';
 import { styles } from './onboardingStep';
 import { Button, Select, Textarea } from '@/components/ui';
 import { BEHAVIOR_PRESETS, TONE_OPTIONS, VALID_TONE_VALUES } from '../bot-workspace/behaviorConstants';
+import { responseLengthToMaxTokens } from '../bot-workspace/aiIntegrationsConstants';
 
 const STEP = 'describe-profile';
 
@@ -46,14 +47,18 @@ export function OnboardingDescribeStep() {
       return;
     }
     setSaving(true);
+    const rl = LENGTHS.some((x) => x.value === responseLength) ? responseLength : 'medium';
     const res = await patchDraft({
       description: d,
       personality: {
         tone,
         behaviorPreset,
+        description: d,
+        systemPrompt: d,
       },
       config: {
-        responseLength,
+        responseLength: rl,
+        maxTokens: responseLengthToMaxTokens(rl),
       },
     });
     setSaving(false);

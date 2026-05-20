@@ -5,6 +5,7 @@ import { Blend, Frown, Meh, Smile, Tag, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   MESSAGE_SENTIMENT_TAG_LABELS,
+  chatLogListChipClass,
   messageShouldShowTopicSentimentTags,
   sentimentTaxonomyCustomerLabel,
   topicPillClass,
@@ -35,6 +36,15 @@ function sentimentPillClass(rawKey: string): string {
   return 'border-slate-200/80 bg-slate-50 text-slate-700';
 }
 
+function sentimentIconTintClass(rawKey: string): string {
+  const k = rawKey.trim().toLowerCase();
+  if (k === 'positive') return 'text-emerald-600';
+  if (k === 'neutral') return 'text-slate-500';
+  if (k === 'negative') return 'text-rose-600';
+  if (k === 'mixed') return 'text-violet-600';
+  return 'text-slate-500';
+}
+
 function messageMainAndSubs(topics: CustomerConversationMessageTopics | undefined): { mainId: string; subIds: string[] } {
   const primary = topics?.primaryTopic?.trim() ?? '';
   const raw = (topics?.topicLabels ?? [])
@@ -52,9 +62,19 @@ function messageMainAndSubs(topics: CustomerConversationMessageTopics | undefine
   return { mainId, subIds: ordered.filter((id) => id !== mainId) };
 }
 
-export function TopicTag({ topicId, className }: { topicId: string; className?: string }) {
+export function TopicTag({
+  topicId,
+  className,
+  chatLogList,
+}: {
+  topicId: string;
+  className?: string;
+  /** Use the shared neutral chip (Insights chat logs). */
+  chatLogList?: boolean;
+}) {
   const label = topicTaxonomyCustomerLabel(topicId);
   if (!label) return null;
+  const chipClass = chatLogList ? cn(chatLogListChipClass, className) : cn(topicPillClass, 'cursor-default', className);
   return (
     <Tooltip
       side="top"
@@ -66,9 +86,13 @@ export function TopicTag({ topicId, className }: { topicId: string; className?: 
         </>
       }
     >
-      <span className={cn(topicPillClass, 'cursor-default', className)}>
-        <Tag className="size-3 shrink-0 opacity-90" strokeWidth={2} aria-hidden />
-        {label}
+      <span className={chipClass}>
+        <Tag
+          className={cn('size-3 shrink-0', chatLogList ? 'text-teal-600' : 'opacity-90')}
+          strokeWidth={2}
+          aria-hidden
+        />
+        <span className={cn(chatLogList && 'min-w-0 truncate')}>{label}</span>
       </span>
     </Tooltip>
   );
@@ -77,9 +101,11 @@ export function TopicTag({ topicId, className }: { topicId: string; className?: 
 export function SentimentTag({
   labelKey,
   className,
+  chatLogList,
 }: {
   labelKey: string;
   className?: string;
+  chatLogList?: boolean;
 }) {
   const display = sentimentTaxonomyCustomerLabel(labelKey);
   const SentimentIcon = sentimentIcon(labelKey);
@@ -96,12 +122,20 @@ export function SentimentTag({
     >
       <span
         className={cn(
-          'inline-flex max-w-full shrink-0 cursor-default items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] font-medium leading-tight tracking-tight',
-          sentimentPillClass(labelKey),
-          className,
+          chatLogList
+            ? cn(chatLogListChipClass, className)
+            : cn(
+                'inline-flex max-w-full shrink-0 cursor-default items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] font-medium leading-tight tracking-tight',
+                sentimentPillClass(labelKey),
+                className,
+              ),
         )}
       >
-        <SentimentIcon className="size-3 shrink-0 opacity-90" strokeWidth={2} aria-hidden />
+        <SentimentIcon
+          className={cn('size-3 shrink-0 opacity-90', chatLogList && sentimentIconTintClass(labelKey))}
+          strokeWidth={2}
+          aria-hidden
+        />
         {display}
       </span>
     </Tooltip>
@@ -128,17 +162,33 @@ export function MessageTopicSentimentTags({
     <>
       <div className={cn('flex flex-wrap items-center justify-end gap-1', className)}>
         {showPrimary ? (
-          <button
-            type="button"
-            className={primaryTopicTriggerClass}
-            aria-haspopup="dialog"
-            aria-expanded={detailsOpen}
-            aria-label={`View topic details: ${topicTaxonomyCustomerLabel(mainId) || mainId}`}
-            onClick={() => setDetailsOpen(true)}
-          >
-            <Tag className="size-3 shrink-0 opacity-90" strokeWidth={2} aria-hidden />
-            {topicTaxonomyCustomerLabel(mainId) || mainId}
-          </button>
+          (() => {
+            const label = topicTaxonomyCustomerLabel(mainId) || mainId;
+            return (
+              <Tooltip
+                side="top"
+                panelClassName="max-w-[14rem] text-left text-xs"
+                content={
+                  <>
+                    <span className="text-slate-400">Topic</span>
+                    <span className="mt-0.5 block font-medium text-slate-50">{label}</span>
+                  </>
+                }
+              >
+                <button
+                  type="button"
+                  className={primaryTopicTriggerClass}
+                  aria-haspopup="dialog"
+                  aria-expanded={detailsOpen}
+                  aria-label={`View topic details: ${label}`}
+                  onClick={() => setDetailsOpen(true)}
+                >
+                  <Tag className="size-3 shrink-0 opacity-90" strokeWidth={2} aria-hidden />
+                  {label}
+                </button>
+              </Tooltip>
+            );
+          })()
         ) : null}
         {showSentiment && sk ? <SentimentTag labelKey={sk} /> : null}
       </div>

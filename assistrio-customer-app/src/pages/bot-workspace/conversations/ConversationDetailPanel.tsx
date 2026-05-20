@@ -60,7 +60,7 @@ export function ConversationDetailPanel({
         className={cn(conversationInsightsDetailOuterClassName, 'flex flex-col items-center justify-center gap-3 py-10 text-center')}
         role="alert"
       >
-        <p className="m-0 text-sm font-medium text-slate-800">Couldn&apos;t load conversation details</p>
+        <p className="m-0 text-sm font-medium text-slate-800">Couldn&apos;t load chat details</p>
         {detailError ? (
           <p className="m-0 max-w-md break-words text-xs text-slate-500">{safeClientString(detailError)}</p>
         ) : null}
@@ -95,6 +95,13 @@ export function ConversationDetailPanel({
       return <ConversationInsightsAdvancedTab detail={detail} listItem={listItem} messages={messages} />;
     case 'general':
     default:
-      return <ConversationInsightsGeneralTab detail={detail} listItem={listItem} />;
+      return (
+        <ConversationInsightsGeneralTab
+          detail={detail}
+          listItem={listItem}
+          messages={messages}
+          msgState={msgState}
+        />
+      );
   }
 }

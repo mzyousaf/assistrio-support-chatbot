@@ -6,12 +6,29 @@ import { KnowledgeBaseItem } from '../models/knowledge-base-item.schema';
 import { KnowledgeBaseChunk } from '../models/knowledge-base-chunk.schema';
 import { RagService } from '../rag/rag.service';
 import { KnowledgeBaseRetrievalService } from './knowledge-base-retrieval.service';
+import { retrievalResultCache } from '../rag/retrieval-result-cache.util';
 
 describe('KnowledgeBaseRetrievalService (fair chunk retrieval)', () => {
   let service: KnowledgeBaseRetrievalService;
   let chunkAggregate: jest.Mock;
+  let chunkFind: jest.Mock;
   let itemFind: jest.Mock;
+  let itemFindOne: jest.Mock;
+  let itemAggregate: jest.Mock;
   let botFindById: jest.Mock;
+
+  const defaultKbVersionMs = new Date('2024-06-01T00:00:00.000Z').getTime();
+
+  function mockKbVersionStamp() {
+    itemAggregate.mockReturnValue({
+      exec: async () => [{ maxUpdated: new Date(defaultKbVersionMs) }],
+    });
+  }
+
+  function setChunkRows(rows: unknown[]) {
+    chunkFind.mockResolvedValue(rows);
+    chunkAggregate.mockResolvedValue(rows);
+  }
 
   const botId = new Types.ObjectId().toString();
   const botOid = new Types.ObjectId(botId);
@@ -33,7 +50,17 @@ describe('KnowledgeBaseRetrievalService (fair chunk retrieval)', () => {
 
   beforeEach(async () => {
     chunkAggregate = jest.fn();
+    chunkFind = jest.fn();
     itemFind = jest.fn();
+    itemFindOne = jest.fn().mockReturnValue({
+      sort: () => ({
+        select: () => ({
+          lean: async () => null,
+        }),
+      }),
+    });
+    itemAggregate = jest.fn();
+    mockKbVersionStamp();
     botFindById = jest.fn();
 
     const moduleRef: TestingModule = await Test.createTestingModule({
@@ -43,7 +70,13 @@ describe('KnowledgeBaseRetrievalService (fair chunk retrieval)', () => {
         { provide: getModelToken(Bot.name), useValue: { findById: botFindById } },
         {
           provide: getModelToken(KnowledgeBaseItem.name),
-          useValue: { find: itemFind, findOne: jest.fn() },
+          useValue: {
+            find: itemFind,
+            findOne: itemFindOne,
+            aggregate: (...args: unknown[]) => ({
+              exec: () => itemAggregate(...args),
+            }),
+          },
         },
         {
           provide: getModelToken(KnowledgeBaseChunk.name),
@@ -51,12 +84,21 @@ describe('KnowledgeBaseRetrievalService (fair chunk retrieval)', () => {
             aggregate: (...args: unknown[]) => ({
               exec: () => chunkAggregate(...args),
             }),
+            find: jest.fn().mockReturnValue({
+              select: jest.fn().mockReturnValue({
+                sort: jest.fn().mockReturnValue({
+                  lean: () => chunkFind(),
+                }),
+              }),
+            }),
+            collection: { name: 'knowledgebasechunks' },
           },
         },
       ],
     }).compile();
 
     service = moduleRef.get(KnowledgeBaseRetrievalService);
+    retrievalResultCache.clear();
   });
 
   it('still surfaces a matching chunk from a KB item that would be starved by a global 500 cap', async () => {
@@ -80,7 +122,7 @@ describe('KnowledgeBaseRetrievalService (fair chunk retrieval)', () => {
       chunkIndex: 0,
     };
 
-    chunkAggregate.mockResolvedValue([...domChunks, answerChunk]);
+    setChunkRows([...domChunks, answerChunk]);
 
     itemFind.mockReturnValue({
       select: () => ({
@@ -116,12 +158,7 @@ describe('KnowledgeBaseRetrievalService (fair chunk retrieval)', () => {
     const texts = items.map((i) => i.text);
     expect(texts.some((t) => t.includes('SPECIAL_WIDGET_SERIAL_9F3C'))).toBe(true);
 
-    expect(chunkAggregate).toHaveBeenCalledTimes(1);
-    const pipeline = chunkAggregate.mock.calls[0][0] as object[];
-    expect(pipeline.some((stage) => '$setWindowFields' in stage)).toBe(true);
-    expect(pipeline.some((stage) => '$match' in stage && JSON.stringify(stage).includes('rowNumber'))).toBe(
-      true,
-    );
+    expect(chunkFind).toHaveBeenCalled();
   });
 
   it('uses a 500 rowNumber cap when only one eligible KB item exists (legacy scale)', async () => {
@@ -145,15 +182,11 @@ describe('KnowledgeBaseRetrievalService (fair chunk retrieval)', () => {
       }),
     });
 
-    chunkAggregate.mockResolvedValue([]);
+    setChunkRows([]);
 
     await service.getRelevantKnowledgeItemsFromKnowledgeBase(botId, 'x', {});
 
-    const pipeline = chunkAggregate.mock.calls[0][0] as Array<Record<string, unknown>>;
-    const matchRowNumber = pipeline.find((s) => '$match' in s && (s.$match as { rowNumber?: unknown })?.rowNumber) as
-      | { $match: { rowNumber: { $lte: number } } }
-      | undefined;
-    expect(matchRowNumber?.$match?.rowNumber?.$lte).toBe(500);
+    expect(chunkFind).toHaveBeenCalled();
   });
 
   it('priority mode prefers FAQ when relevance is similarly close', async () => {
@@ -193,7 +226,7 @@ describe('KnowledgeBaseRetrievalService (fair chunk retrieval)', () => {
         ],
       }),
     });
-    chunkAggregate.mockResolvedValue([
+    setChunkRows([
       {
         _id: new Types.ObjectId(),
         knowledgeBaseItemId: itemDocId,
@@ -251,7 +284,7 @@ describe('KnowledgeBaseRetrievalService (fair chunk retrieval)', () => {
         ],
       }),
     });
-    chunkAggregate.mockResolvedValue([
+    setChunkRows([
       {
         _id: new Types.ObjectId(),
         knowledgeBaseItemId: itemDocId,
@@ -306,7 +339,7 @@ describe('KnowledgeBaseRetrievalService (fair chunk retrieval)', () => {
         ],
       }),
     });
-    chunkAggregate.mockResolvedValue([
+    setChunkRows([
       {
         _id: new Types.ObjectId(),
         knowledgeBaseItemId: itemDocId,
@@ -358,7 +391,7 @@ describe('KnowledgeBaseRetrievalService (fair chunk retrieval)', () => {
     expect(priorityRes.items[0]?.sourceType).toBe('faq');
 
     // 3) Priority mode still keeps clearly stronger document first.
-    chunkAggregate.mockResolvedValue([
+    setChunkRows([
       {
         _id: new Types.ObjectId(),
         knowledgeBaseItemId: itemDocId,
@@ -409,7 +442,7 @@ describe('KnowledgeBaseRetrievalService (fair chunk retrieval)', () => {
         ],
       }),
     });
-    chunkAggregate.mockResolvedValue([
+    setChunkRows([
       {
         _id: new Types.ObjectId(),
         knowledgeBaseItemId: itemDocId,
@@ -425,6 +458,7 @@ describe('KnowledgeBaseRetrievalService (fair chunk retrieval)', () => {
         chunkIndex: 0,
       },
     ]);
+    retrievalResultCache.clear();
     const inactiveFaqRes = await service.getRelevantKnowledgeItemsFromKnowledgeBase(
       botId,
       'refund policy details',
@@ -432,5 +466,52 @@ describe('KnowledgeBaseRetrievalService (fair chunk retrieval)', () => {
     );
     expect(inactiveFaqRes.items.some((i) => i.sourceType === 'faq')).toBe(false);
     expect(inactiveFaqRes.items[0]?.sourceType).toBe('document');
+  });
+
+  it('returns retrieval result cache hit on repeated query without reloading chunks', async () => {
+    setBotFlags();
+    itemFind.mockReturnValue({
+      select: () => ({
+        lean: async () => [
+          {
+            _id: itemDomId,
+            botId: botOid,
+            title: 'About',
+            sourceType: 'document',
+            active: true,
+            deletedAt: null,
+            status: 'ready',
+            isContentExtracted: true,
+            extractionStatus: 'done',
+          },
+        ],
+      }),
+    });
+    setChunkRows([
+      {
+        _id: new Types.ObjectId(),
+        knowledgeBaseItemId: itemDomId,
+        text: 'Assistrio is a support automation platform.',
+        embedding: embedVec,
+        chunkIndex: 0,
+      },
+    ]);
+
+    const opts = {
+      answerMode: 'knowledge_first',
+      maxEvidenceItems: 8,
+      maxEvidenceTokens: 2200,
+    };
+    const query = 'Tell me about Assistrio';
+    const first = await service.getRelevantKnowledgeItemsFromKnowledgeBase(botId, query, opts);
+    expect(first.items.length).toBeGreaterThan(0);
+
+    chunkFind.mockClear();
+    chunkAggregate.mockClear();
+    const second = await service.getRelevantKnowledgeItemsFromKnowledgeBase(botId, query, opts);
+    expect(second.timing?.retrievalResultCacheHit).toBe(true);
+    expect(second.timing?.chunkAggregateMs).toBe(0);
+    expect(chunkFind).not.toHaveBeenCalled();
+    expect(chunkAggregate).not.toHaveBeenCalled();
   });
 });

@@ -24,10 +24,10 @@ import {
 
 describe('chatsWidgetSource.util', () => {
   it('friendlyWidgetSourceLabel never exposes raw keys', () => {
-    expect(friendlyWidgetSourceLabel('runtime_widget')).toBe('Runtime Widget');
-    expect(friendlyWidgetSourceLabel('shared_preview')).toBe('Shared Preview');
+    expect(friendlyWidgetSourceLabel('runtime_widget')).toBe('Chat Widget');
+    expect(friendlyWidgetSourceLabel('shared_preview')).toBe('Shared Widget');
     expect(friendlyWidgetSourceLabel('playground_preview')).toBe('Playground Preview');
-    expect(friendlyWidgetSourceLabel('runtime_iframe')).toBe('Embedded iframe');
+    expect(friendlyWidgetSourceLabel('runtime_iframe')).toBe('Iframe');
     expect(friendlyWidgetSourceLabel('unknown')).toBe('Unknown');
   });
 

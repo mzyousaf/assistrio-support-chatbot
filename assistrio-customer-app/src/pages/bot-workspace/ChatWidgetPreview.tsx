@@ -16,9 +16,10 @@ export const CUSTOMER_PREVIEW_PANEL_H = 730;
  * Space reserved **below** the panel for the decorative contained launcher (`ContainedLauncherPreview`:
  * `bottom: -N` + ring). The widget shrinks the panel by `containedLauncherPreviewBottomOutsetPx`
  * when the launcher is shown; this cap is only for the portal surface’s `max-height` (N peaks near
- * ~84px at 96px launcher, plus margin).
+ * ~80px at 96px launcher, plus margin).
  */
-export const CUSTOMER_PREVIEW_LAUNCHER_RESERVE_PX = 100;
+/** Max launcher hang below panel: 72px preview diameter + 8px gap + ring (~8px). */
+export const CUSTOMER_PREVIEW_LAUNCHER_RESERVE_PX = 88;
 
 /** Kept for reference; portal `max-height` uses {@link CUSTOMER_PREVIEW_PORTAL_MAX_H_COLLAPSED} / {@link CUSTOMER_PREVIEW_PORTAL_MAX_H_EXPANDED}. */
 export const CUSTOMER_PREVIEW_STAGE_H = CUSTOMER_PREVIEW_PANEL_H + CUSTOMER_PREVIEW_LAUNCHER_RESERVE_PX;

@@ -19,6 +19,7 @@ import { ChatController } from './chat.controller';
 import { WidgetPreviewController } from './widget-preview.controller';
 import { ChatEngineService } from './chat-engine.service';
 import { ChatService } from './chat.service';
+import { ResponseStyleRefineService } from './response-style-refine.service';
 import { SummaryJobModule } from './summary-job.module';
 import { WhisperTranscriptionService } from './whisper-transcription.service';
 import { WidgetSpeechService } from './widget-speech.service';
@@ -44,7 +45,13 @@ import { TopicSentimentClassificationModule } from '../analytics/topic-sentiment
     ]),
   ],
   controllers: [ChatController, WidgetPreviewController, SharedChatController],
-  providers: [ChatService, ChatEngineService, WhisperTranscriptionService, WidgetSpeechService],
-  exports: [ChatService, ChatEngineService, SummaryJobModule, WidgetSpeechService],
+  providers: [
+    ChatService,
+    ChatEngineService,
+    WhisperTranscriptionService,
+    WidgetSpeechService,
+    ResponseStyleRefineService,
+  ],
+  exports: [ChatService, ChatEngineService, SummaryJobModule, WidgetSpeechService, ResponseStyleRefineService],
 })
 export class ChatModule { }

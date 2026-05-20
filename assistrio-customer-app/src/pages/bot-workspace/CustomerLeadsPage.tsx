@@ -282,7 +282,7 @@ export function CustomerLeadsPage() {
         />
 
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-          <div className="shrink-0 px-4 py-3 sm:px-5">
+          <div className="shrink-0 px-4 py-2.5 sm:px-5">
             <LeadsSummaryCards
               leads={leads}
               totalMatching={listMeta.totalMatching}

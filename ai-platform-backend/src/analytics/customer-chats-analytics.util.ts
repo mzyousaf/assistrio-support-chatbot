@@ -184,11 +184,11 @@ export function startedFromLabel(key: string): string {
     case 'playground_preview':
       return 'Playground Preview';
     case 'shared_preview':
-      return 'Shared Preview';
+      return 'Shared Widget';
     case 'runtime_widget':
-      return 'Runtime Widget';
+      return 'Chat Widget';
     case 'runtime_iframe':
-      return 'Runtime IFrame';
+      return 'Iframe';
     case 'unknown':
       return 'Unknown';
     default:

@@ -51,6 +51,7 @@ export function CustomerWidgetPreviewHost() {
   const {
     getActiveSurfaceElement,
     previewEpoch,
+    previewWidgetGeneration,
     previewOverrides,
     inlineSlotWantsContained,
     setInlineSlotWantsContained,
@@ -149,7 +150,10 @@ export function CustomerWidgetPreviewHost() {
       }
     >
       {/** `previewVisitorScope` + key: fresh `/preview/init` and sessionStorage per playground sidebar section */}
-      <EmbedWidgetRoot key={`${botId}:${playgroundPreviewScope}`} rawConfig={rawConfig} />
+      <EmbedWidgetRoot
+        key={`${botId}:${playgroundPreviewScope}:${previewWidgetGeneration}`}
+        rawConfig={rawConfig}
+      />
     </Suspense>
   );
   const wrapped = (

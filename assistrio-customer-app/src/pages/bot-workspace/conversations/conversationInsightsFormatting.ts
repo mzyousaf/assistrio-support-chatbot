@@ -1,4 +1,5 @@
 import type { CustomerConversationDetail } from '@/api/types';
+import { isWidgetChannelKey, widgetStartedFromUiLabel } from '@/pages/bot-workspace/analytics/shared/widgetChannelLabels';
 
 /** Display placeholder for unavailable analytics cells. */
 export const INSIGHT_EM_DASH = '—';
@@ -39,20 +40,40 @@ export function formatConversationOriginSourceType(raw?: string | null): string 
   return ORIGIN_SOURCES[t] ?? capitalizeWordsFromKey(t.replace(/_/g, ' '));
 }
 
-export function conversationChannelLabel(detail: CustomerConversationDetail, startedFromFallback?: string | null): string {
-  const sf = detail.startedFrom?.trim() || startedFromFallback?.trim();
-  if (sf === 'playground_preview') return 'Playground';
-  if (sf === 'shared_preview') return 'Shared preview';
-  if (sf === 'runtime_widget') return 'Website embed';
-  if (sf === 'runtime_iframe') return 'Website embed (iframe)';
-  const ss = detail.sessionSource?.trim();
-  if (ss === 'widget_preview') return 'Playground';
-  if (ss === 'shared_preview') return 'Shared preview';
-  if (ss === 'shared_link') return 'Shared link';
-  if (ss === 'runtime') return 'Website embed';
-  if (ss === 'iframe_embed') return 'Website embed (iframe)';
+/** Widget channel label from conversation list or detail (`startedFrom` + legacy `sessionSource`). */
+export function conversationChannelPresentation(opts: {
+  startedFrom?: string | null | undefined;
+  sessionSource?: string | null | undefined;
+  startedFromFallback?: string | null | undefined;
+}): string {
+  const sf = opts.startedFrom?.trim() || opts.startedFromFallback?.trim();
+  if (sf && isWidgetChannelKey(sf)) return widgetStartedFromUiLabel(sf);
+  const ss = opts.sessionSource?.trim();
+  if (ss === 'widget_preview') return widgetStartedFromUiLabel('playground_preview');
+  if (ss === 'shared_preview') return widgetStartedFromUiLabel('shared_preview');
+  if (ss === 'shared_link') return widgetStartedFromUiLabel('shared_preview');
+  if (ss === 'runtime') return widgetStartedFromUiLabel('runtime_widget');
+  if (ss === 'iframe_embed') return widgetStartedFromUiLabel('runtime_iframe');
   if (sf === 'unknown' || sf) return ORIGIN_SOURCES[sf] ?? capitalizeWordsFromKey(String(sf).replace(/_/g, ' '));
   return INSIGHT_EM_DASH;
+}
+
+export function conversationChannelLabel(detail: CustomerConversationDetail, startedFromFallback?: string | null): string {
+  return conversationChannelPresentation({
+    startedFrom: detail.startedFrom,
+    sessionSource: detail.sessionSource,
+    startedFromFallback,
+  });
+}
+
+/** Whether chat-log transcript should use playground assistant message chrome. */
+export function isPlaygroundChatLogConversation(opts: {
+  startedFrom?: string | null;
+  sessionSource?: string | null;
+}): boolean {
+  const sf = opts.startedFrom?.trim();
+  if (sf === 'playground_preview') return true;
+  return opts.sessionSource?.trim() === 'widget_preview';
 }
 
 export function conversationStatusPresentation(status: string | undefined): { customerLabel: string; rawKey: string } {
@@ -66,6 +87,46 @@ export function conversationStatusPresentation(status: string | undefined): { cu
   };
 }
 
+/** Reject explicit non-http(s) schemes before coercion (privacy / XSS vectors). */
+const UNSAFE_URL_SCHEME_PREFIX = /^(ftp|javascript|data|blob|mailto|file):/i;
+
+/**
+ * Parse http(s) input into a URL with credentials, query, and hash stripped.
+ * Scheme-less host/path inputs are prefixed with https:// for parsing.
+ */
+function parseSanitizedHttpUrl(raw?: string | null): URL | undefined {
+  const t = raw?.trim();
+  if (!t) return undefined;
+  if (UNSAFE_URL_SCHEME_PREFIX.test(t)) return undefined;
+  const withProto = /^https?:\/\//i.test(t) ? t : `https://${t}`;
+  let u: URL;
+  try {
+    u = new URL(withProto);
+  } catch {
+    return undefined;
+  }
+  if (u.protocol !== 'http:' && u.protocol !== 'https:') return undefined;
+  u.username = '';
+  u.password = '';
+  u.search = '';
+  u.hash = '';
+  return u;
+}
+
+/** Safe navigable http(s) href without query, hash, or credentials; undefined when invalid. */
+export function sanitizedHttpHttpsHref(raw?: string | null): string | undefined {
+  const u = parseSanitizedHttpUrl(raw);
+  const h = u?.href;
+  return h || undefined;
+}
+
+/** Origin-only http(s) URL (scheme + host[:port]); undefined when invalid. */
+export function sanitizedHttpHttpsOriginHref(raw?: string | null): string | undefined {
+  const u = parseSanitizedHttpUrl(raw);
+  const o = u?.origin;
+  return o || undefined;
+}
+
 export function sentimentCustomerLabel(detail: CustomerConversationDetail): string {
   const l = detail.conversationSentiment?.label;
   const k = typeof l === 'string' ? l.trim().toLowerCase() : '';
@@ -77,7 +138,7 @@ export function sentimentCustomerLabel(detail: CustomerConversationDetail): stri
   return capitalizeWordsFromKey(k);
 }
 
-/** Host + pathname, no query or hash (helps avoid leaking share tokens). */
+/** Host + pathname, no query or hash (helps avoid leaking share tokens). Uses {@link URL.host} so non-default ports appear (e.g. localhost:3002). */
 export function sanitizedHostPath(raw?: string | null): string | undefined {
   const t = raw?.trim();
   if (!t) return undefined;
@@ -86,7 +147,7 @@ export function sanitizedHostPath(raw?: string | null): string | undefined {
     const u = new URL(t);
     if (u.protocol !== 'http:' && u.protocol !== 'https:') return undefined;
     const path = u.pathname === '/' ? '' : u.pathname;
-    return `${u.hostname}${path}`;
+    return `${u.host}${path}`;
   } catch {
     return undefined;
   }
@@ -100,6 +161,24 @@ export function sanitizedHostname(raw?: string | null): string | undefined {
     const u = new URL(withProto);
     if (u.protocol !== 'http:' && u.protocol !== 'https:') return undefined;
     return u.hostname || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * HTTP(S) URL-like string → `host` only (hostname[:port], IPv6 bracketed). No path, query, hash, or userinfo.
+ * Schemes other than http(s) return undefined.
+ */
+export function sanitizedHttpHost(raw?: string | null): string | undefined {
+  const t = raw?.trim();
+  if (!t) return undefined;
+  if (UNSAFE_URL_SCHEME_PREFIX.test(t)) return undefined;
+  const withProto = /^https?:\/\//i.test(t) ? t : `https://${t}`;
+  try {
+    const u = new URL(withProto);
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return undefined;
+    return u.host || undefined;
   } catch {
     return undefined;
   }
@@ -142,9 +221,52 @@ export function sharePageSanitizedDisplay(detail: CustomerConversationDetail): s
 
 /** Combined host + path for visitor-facing “Page” row (queries stripped). */
 export function visitorPageLineDisplay(detail: CustomerConversationDetail): string {
-  const merged = sanitizedHostPath(detail.conversationOrigin?.pageUrl?.trim());
-  if (merged) return merged;
+  const u = parseSanitizedHttpUrl(detail.conversationOrigin?.pageUrl?.trim());
+  if (u) {
+    const path = u.pathname === '/' ? '' : u.pathname;
+    return `${u.host}${path}`;
+  }
   return pagePathDisplay(detail);
+}
+
+/** Visitor “Origin” row: site/parent origin only (no path/query/hash). */
+export function visitorOriginLineDisplay(detail: CustomerConversationDetail): string {
+  const o = detail.conversationOrigin;
+  const attempt =
+    sanitizedHttpHost(o?.websiteOrigin) ??
+    sanitizedHttpHost(o?.parentOrigin) ??
+    sanitizedHttpHost(o?.pageUrl) ??
+    sanitizedHttpHost(o?.referrer);
+  return dashUnlessText(attempt);
+}
+
+/** Visitor Origin row link target (origin URL only). Fallback chain matches {@link visitorOriginLineDisplay}. */
+export function visitorOriginHref(detail: CustomerConversationDetail): string | undefined {
+  const o = detail.conversationOrigin;
+  return (
+    sanitizedHttpHttpsOriginHref(o?.websiteOrigin) ??
+    sanitizedHttpHttpsOriginHref(o?.parentOrigin) ??
+    sanitizedHttpHttpsOriginHref(o?.pageUrl) ??
+    sanitizedHttpHttpsOriginHref(o?.referrer)
+  );
+}
+
+/** Visitor Page row link target from conversation page URL (path kept; query/hash stripped). */
+export function visitorPageHref(detail: CustomerConversationDetail): string | undefined {
+  return sanitizedHttpHttpsHref(detail.conversationOrigin?.pageUrl);
+}
+
+/** Referrer row: host + path, no query/hash (display). */
+export function visitorReferrerLineDisplay(detail: CustomerConversationDetail): string {
+  const u = parseSanitizedHttpUrl(detail.conversationOrigin?.referrer);
+  if (!u) return INSIGHT_EM_DASH;
+  const path = u.pathname === '/' ? '' : u.pathname;
+  return `${u.host}${path}`;
+}
+
+/** Visitor Referrer row link target (query/hash stripped). */
+export function visitorReferrerHref(detail: CustomerConversationDetail): string | undefined {
+  return sanitizedHttpHttpsHref(detail.conversationOrigin?.referrer);
 }
 
 export function deviceTypeCustomerLabel(raw?: string | null): string {

@@ -1,6 +1,9 @@
 import { useMemo, type CSSProperties } from "react";
 
-import { containedLauncherPreviewBottomOutsetPx } from "../lib/embedPanelConstraints";
+import {
+  containedLauncherPreviewBottomOutsetPx,
+  containedLauncherPreviewDiameterPx,
+} from "../lib/embedPanelConstraints";
 import { launcherBubbleFromChatUI } from "../lib/launcherBubbleFromChatUI";
 import { normalizeLauncherIcon } from "../lib/launcherIconNormalize";
 import type { BotChatUI } from "../models/botChatUI";
@@ -36,9 +39,7 @@ export function ContainedLauncherPreview({
     [chatUI, avatarUrl, avatarEmoji],
   );
   const icon = normalizeLauncherIcon(chatUI?.launcherIcon);
-  const size = bubble.size ?? 48;
-  /** Match real launcher clamp (min 32px) so small `launcherSize` previews accurately. */
-  const diameter = Math.min(72, Math.max(24, Math.round(size * 0.85)));
+  const diameter = containedLauncherPreviewDiameterPx(bubble.size);
   const bottomOutsetPx = containedLauncherPreviewBottomOutsetPx(bubble.size);
   const overlayStyle: CSSProperties = {
     ...BASE_OVERLAY,

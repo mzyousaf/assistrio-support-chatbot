@@ -85,6 +85,16 @@ export type BreakdownComponentTotalsRowModel = {
   creditsUsed: number;
 };
 
+/** Matches Analytics usage sidebar modalities (text / voice / dictation sessions). */
+export type ConversationCreditUsageModalityRowModel = {
+  usageType: 'text_message' | 'voice_message' | 'dictation_session';
+  quantity: number;
+  noun: 'messages' | 'sessions';
+  /** Effective credits per billed unit when quantity > 0 (derived from totals). */
+  creditsEach: number | null;
+  creditsUsed: number;
+};
+
 export type ConversationCreditBreakdownPayload = {
   totalFromMessages: number;
   rollupByStoredReason: ConversationCreditAggregateRow[];
@@ -95,12 +105,81 @@ export type ConversationCreditBreakdownPayload = {
   notBillableMessages: number;
   quotaPeriods: string[];
   rows: ConversationCreditTableRowModel[];
+  visitorMessageCount: number;
+  averageCreditsPerVisitorMessage: number | null;
+  /** True when any visitor message contributed merged {@link rollupByBreakdownComponents} rows (Analytics-equivalent attribution). */
+  usageSidebarUsesBreakdownAttribution: boolean;
+  usageModalityRows: ConversationCreditUsageModalityRowModel[];
 };
 
 function shortenPreview(raw: string, max = 56): string {
   const s = raw.replace(/\s+/g, ' ').trim();
   if (!s) return '';
   return s.length <= max ? s : `${s.slice(0, max - 1)}…`;
+}
+
+type UsageModalityKey = 'text_message' | 'voice_message' | 'dictation_session';
+
+function accumulateUsageModalitiesForSidebar(
+  userRows: CustomerConversationMessage[],
+  componentMap: Map<string, BreakdownComponentTotalsRowModel>,
+): ConversationCreditUsageModalityRowModel[] {
+  type Acc = { quantity: number; creditsUsed: number; noun: 'messages' | 'sessions' };
+
+  const mods: Record<UsageModalityKey, Acc> = {
+    text_message: { quantity: 0, creditsUsed: 0, noun: 'messages' },
+    voice_message: { quantity: 0, creditsUsed: 0, noun: 'messages' },
+    dictation_session: { quantity: 0, creditsUsed: 0, noun: 'sessions' },
+  };
+
+  const modalities: UsageModalityKey[] = ['text_message', 'voice_message', 'dictation_session'];
+
+  for (const ut of modalities) {
+    const comp = componentMap.get(ut);
+    if (!comp) continue;
+    mods[ut].quantity += Math.round(comp.billedUnits);
+    mods[ut].creditsUsed += comp.creditsUsed;
+  }
+
+  for (let i = 0; i < userRows.length; i += 1) {
+    const m = userRows[i];
+    const breakdown = parseBreakdown(m.creditBreakdown);
+    if (breakdown) continue;
+
+    const reasonRaw = typeof m.creditReason === 'string' ? m.creditReason.trim() : '';
+    const rawBasis = normalizeCreditBasis(reasonRaw);
+    if (!rawBasis || rawBasis.includes(',') || reasonRaw.startsWith('composite:')) continue;
+
+    let bk = rawBasis.toLowerCase();
+    if (bk === 'suggested_question_message') bk = 'text_message';
+
+    const cost = finiteCredit(m.creditCost) ?? 0;
+
+    if (bk === 'text_message') {
+      mods.text_message.quantity += 1;
+      mods.text_message.creditsUsed += cost;
+    } else if (bk === 'voice_message' || bk === 'dictation_message') {
+      mods.voice_message.quantity += 1;
+      mods.voice_message.creditsUsed += cost;
+    } else if (bk === 'dictation_session') {
+      const dsRaw = (m.voiceMeta as { dictationSessionCount?: unknown } | undefined)?.dictationSessionCount;
+      const sessions = typeof dsRaw === 'number' && Number.isFinite(dsRaw) ? Math.max(1, Math.round(dsRaw)) : 1;
+      mods.dictation_session.quantity += sessions;
+      mods.dictation_session.creditsUsed += cost;
+    }
+  }
+
+  return modalities.map((usageType) => {
+    const acc = mods[usageType];
+    const creditsEach = acc.quantity > 0 ? acc.creditsUsed / acc.quantity : null;
+    return {
+      usageType,
+      quantity: acc.quantity,
+      noun: acc.noun,
+      creditsEach,
+      creditsUsed: acc.creditsUsed,
+    };
+  });
 }
 
 /** Display-only rollup from persisted message fields (`creditBreakdown` when present, else totals only). Never applies pricing formulas. */
@@ -197,6 +276,12 @@ export function buildConversationCreditBreakdown(messages: CustomerConversationM
 
   const rollupByBreakdownComponents = [...componentMap.values()].sort((a, b) => a.label.localeCompare(b.label));
 
+  const visitorMessageCount = userRows.length;
+  const averageCreditsPerVisitorMessage =
+    visitorMessageCount > 0 ? totalFromMessages / visitorMessageCount : null;
+
+  const usageModalityRows = accumulateUsageModalitiesForSidebar(userRows, componentMap);
+
   return {
     totalFromMessages,
     rollupByStoredReason,
@@ -207,5 +292,9 @@ export function buildConversationCreditBreakdown(messages: CustomerConversationM
     notBillableMessages,
     quotaPeriods: [...quota].sort(),
     rows: tableRows.slice().reverse(),
+    visitorMessageCount,
+    averageCreditsPerVisitorMessage,
+    usageSidebarUsesBreakdownAttribution: componentMap.size > 0,
+    usageModalityRows,
   };
 }

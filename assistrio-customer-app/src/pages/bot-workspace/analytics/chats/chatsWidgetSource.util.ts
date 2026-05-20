@@ -2,22 +2,11 @@ import type {
   CustomerChatsAnalyticsStartedFromBreakdownItem,
   CustomerChatsAnalyticsStartedFromKey,
 } from '@/api/types';
+import { widgetStartedFromUiLabel } from '@/pages/bot-workspace/analytics/shared/AnalyticsInsightsFilterBars';
 
 /** Friendly, stable labels — never expose raw API keys in UI. */
 export function friendlyWidgetSourceLabel(key: CustomerChatsAnalyticsStartedFromKey): string {
-  switch (key) {
-    case 'runtime_widget':
-      return 'Runtime Widget';
-    case 'runtime_iframe':
-      return 'Embedded iframe';
-    case 'shared_preview':
-      return 'Shared Preview';
-    case 'playground_preview':
-      return 'Playground Preview';
-    case 'unknown':
-    default:
-      return 'Unknown';
-  }
+  return widgetStartedFromUiLabel(key);
 }
 
 export type WidgetSourceNormalizedRow = CustomerChatsAnalyticsStartedFromBreakdownItem & {

@@ -24,7 +24,7 @@ export const DEFAULT_EVIDENCE_BUDGET_OPTIONS: Required<EvidenceBudgetOptions> = 
   minEvidenceTokensReserved: 400,
   maxEvidenceTokens: 2200,
   maxConversationTokens: 900,
-  maxEvidenceItems: 30,
+  maxEvidenceItems: 8,
 };
 
 /** Reason code for why trimming was applied (debug). */

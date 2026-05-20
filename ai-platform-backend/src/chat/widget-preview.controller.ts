@@ -14,6 +14,8 @@ import { resolveUserFromPlatformCookieHeader } from '../auth/shared/platform-ses
 import { BotsService } from '../bots/bots.service';
 import { VisitorsService } from '../visitors/visitors.service';
 import { ChatEngineService } from './chat-engine.service';
+import { logChatAiSettingsPreviewMergedConfig } from './chat-ai-settings-debug.util';
+import { resolveChatLlmParams } from './chat-llm-params.util';
 import type { AnalyticsContextPayload, BotLike } from './chat-engine.types';
 import { exampleQuestionsToPublicLabels } from '../workspace/shared/example-questions.util';
 import { WorkspacesService } from '../workspaces/workspaces.service';
@@ -728,6 +730,21 @@ export class WidgetPreviewController {
     }
 
     const botLike = this.buildPreviewBotLike(bot, parsed.previewOverrides);
+    const resolvedLlm = resolveChatLlmParams(botLike.config);
+    logChatAiSettingsPreviewMergedConfig({
+      botId: parsed.botId,
+      previewOverridesConfig:
+        parsed.previewOverrides?.config && typeof parsed.previewOverrides.config === 'object'
+          ? (parsed.previewOverrides.config as Record<string, unknown>)
+          : undefined,
+      mergedConfig:
+        botLike.config && typeof botLike.config === 'object'
+          ? (botLike.config as Record<string, unknown>)
+          : undefined,
+      resolvedTemperature: resolvedLlm.temperature,
+      resolvedMaxTokens: resolvedLlm.maxTokens,
+      resolvedResponseLength: resolvedLlm.responseLength,
+    });
     const msgOrigin = previewMessageOriginFromRequest(request);
     const previewCtx: { sourcePage?: string; origin?: string } = {
       ...(parsed.previewContext?.sourcePage?.trim() ? { sourcePage: parsed.previewContext.sourcePage.trim() } : {}),

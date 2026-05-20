@@ -1,7 +1,11 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import { ThumbsDown, ThumbsUp } from "lucide-react";
+import {
+  prepareChatMessageMarkdown,
+  prepareChatMessagePlainText,
+} from "../../lib/chatMessageDisplay.util";
+import { chatRemarkPlugins } from "../../lib/chatMarkdownPlugins";
+import { chatMarkdownComponents } from "./chatMarkdownComponents";
 import type { UserBubbleStyle } from "../../models/botChatUI";
 import type { ChatUIMessage, ChatUISource } from "./types";
 import { cx } from "./utils";
@@ -10,6 +14,28 @@ import { AttachmentCountBadge } from "./AttachmentCountBadge";
 import { ChatUserVoiceMessage } from "./ChatUserVoiceMessage";
 import { formatRelativeSendTime } from "./relativeTime";
 import { VoiceTranscriptPreview } from "./VoiceTranscriptPreview";
+
+function AssistantThumbUpIcon({ selected, className }: { selected: boolean; className?: string }) {
+  const path = selected
+    ? "M23,10C23,8.89 22.1,8 21,8H14.68L15.64,3.43C15.66,3.33 15.67,3.22 15.67,3.11C15.67,2.7 15.5,2.32 15.23,2.05L14.17,1L7.59,7.58C7.22,7.95 7,8.45 7,9V19A2,2 0 0,0 9,21H18C18.83,21 19.54,20.5 19.84,19.78L22.86,12.73C22.95,12.5 23,12.26 23,12V10M1,21H5V9H1V21Z"
+    : "M5,9V21H1V9H5M9,21A2,2 0 0,1 7,19V9C7,8.45 7.22,7.95 7.59,7.59L14.17,1L15.23,2.06C15.5,2.33 15.67,2.7 15.67,3.11L15.64,3.43L14.69,8H21C22.11,8 23,8.9 23,10V12C23,12.26 22.95,12.5 22.86,12.73L19.84,19.78C19.54,20.5 18.83,21 18,21H9M9,19H18.03L21,12V10H12.21L13.34,4.68L9,9.03V19Z";
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d={path} />
+    </svg>
+  );
+}
+
+function AssistantThumbDownIcon({ selected, className }: { selected: boolean; className?: string }) {
+  const path = selected
+    ? "M19,15H23V3H19M15,3H6C5.17,3 4.46,3.5 4.16,4.22L1.14,11.27C1.05,11.5 1,11.74 1,12V14A2,2 0 0,0 3,16H9.31L8.36,20.57C8.34,20.67 8.33,20.77 8.33,20.88C8.33,21.3 8.5,21.67 8.77,21.94L9.83,23L16.41,16.41C16.78,16.05 17,15.55 17,15V5C17,3.89 16.1,3 15,3Z"
+    : "M19,15V3H23V15H19M15,3A2,2 0 0,1 17,5V15C17,15.55 16.78,16.05 16.41,16.41L9.83,23L8.77,21.94C8.5,21.67 8.33,21.3 8.33,20.88L8.36,20.57L9.31,16H3C1.89,16 1,15.1 1,14V12C1,11.74 1.05,11.5 1.14,11.27L4.16,4.22C4.46,3.5 5.17,3 6,3H15M15,5H5.97L3,12V14H11.78L10.65,19.32L15,14.97V5Z";
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d={path} />
+    </svg>
+  );
+}
 
 export interface ChatBubbleProps {
   /** Dark theme (default true) */
@@ -37,7 +63,9 @@ export interface ChatBubbleProps {
   showCopyButton?: boolean;
   /** Render copy button inside bubble; if false, parent renders copy in sources row */
   renderCopyInBubble?: boolean;
-  /** Render assistant content as simple markdown (**bold**, `code`) */
+  /**
+   * @deprecated Assistant replies always render as Markdown. User messages stay plain text.
+   */
   allowMarkdown?: boolean;
   copyLabel?: string;
   copiedLabel?: string;
@@ -166,7 +194,16 @@ export function ChatBubble({
   }, [message.id, copyText, onCopy]);
 
   const isStreaming = message.status === "streaming";
-  const showMarkdown = isAssistant && allowMarkdown && message.content && !isStreaming;
+  const plainTextContent = useMemo(
+    () => (message.content ? prepareChatMessagePlainText(message.content) : ""),
+    [message.content],
+  );
+  const markdownContent = useMemo(
+    () => (message.content ? prepareChatMessageMarkdown(message.content) : ""),
+    [message.content],
+  );
+  /** Assistant content is always Markdown; render it after reveal (avoids broken partial MD during client-side streaming). */
+  const showMarkdown = isAssistant && Boolean(markdownContent.trim()) && !isStreaming;
   const isWelcomeAssistant =
     isAssistant && typeof message.id === "string" && message.id.startsWith("welcome_");
 
@@ -231,8 +268,6 @@ export function ChatBubble({
   const contentWrapperClass = cx(
     "text-left min-w-0 max-w-full chat-bubble-content",
     "[&>*]:min-w-0 [&>*]:max-w-full",
-    dark ? "[&>code]:bg-gray-500/85 [&>code]:text-gray-200" : "[&>code]:bg-gray-200 [&>code]:text-gray-800",
-    "[&>code]:rounded [&>code]:px-1 [&>code]:py-0.5 [&>code]:break-all"
   );
 
   const plainTextClass =
@@ -343,21 +378,17 @@ export function ChatBubble({
             <div className={bubbleSurfaceClass} style={bubbleInlineStyle} role="article">
               {showMarkdown ? (
                 <div
-                  className={cx(
-                    contentWrapperClass,
-                    "prose prose-sm max-w-full dark:prose-invert",
-                    dark
-                      ? "text-gray-300 [&_p]:text-gray-300 [&_li]:text-gray-300 [&_strong]:font-medium [&_strong]:text-gray-200 [&_em]:text-gray-400 [&_blockquote]:text-gray-400 [&_h1]:text-gray-200 [&_h2]:text-gray-200 [&_h3]:text-gray-300 [&_pre]:text-gray-300"
-                      : "text-gray-700 [&_p]:text-gray-700 [&_strong]:font-medium [&_pre]:text-gray-600",
-                    "[&_a]:text-blue-400 [&_a]:underline [&_a]:break-all",
-                    "[&_pre]:text-sm [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_pre]:rounded",
-                    "[&_table]:max-w-full [&_table]:block [&_table]:overflow-x-auto"
-                  )}
+                  className={cx(contentWrapperClass, "chat-md-root", dark ? "chat-md-dark" : "chat-md-light")}
                 >
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
+                  <ReactMarkdown
+                    remarkPlugins={chatRemarkPlugins}
+                    components={chatMarkdownComponents}
+                  >
+                    {markdownContent}
+                  </ReactMarkdown>
                 </div>
-              ) : message.content?.trim() ? (
-                <div className={plainTextClass}>{message.content}</div>
+              ) : (isUser || isAssistant) && plainTextContent.trim() ? (
+                <div className={plainTextClass}>{plainTextContent}</div>
               ) : null}
             </div>
           )}
@@ -397,16 +428,16 @@ export function ChatBubble({
           {showAssistantFooter ? (
             <div
               className={cx(
-                "mt-1 flex w-full min-w-0 items-center justify-between gap-2 text-[12px] leading-none",
+                "mt-1 flex w-full min-w-0 items-center gap-x-2 gap-y-1 text-[12px] leading-none",
                 dark ? "text-gray-400" : "text-gray-500",
               )}
               data-assistrio-assistant-footer
             >
-              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1 text-[12px] leading-none">
+              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
                 {relativeSentLabel ? (
                   <time
                     className={cx(
-                      "inline-flex min-h-[14px] items-center whitespace-nowrap tabular-nums font-medium leading-none",
+                      "inline-flex h-5 items-center whitespace-nowrap tabular-nums font-medium leading-none",
                       dark ? "text-gray-400" : "text-gray-500",
                     )}
                     dateTime={message.createdAt}
@@ -415,87 +446,74 @@ export function ChatBubble({
                     {relativeSentLabel}
                   </time>
                 ) : null}
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                {showAssistantCopy ? (
-                  <button
-                    type="button"
-                    onClick={handleCopy}
+                {relativeSentLabel && showAssistantThumbs ? (
+                  <span
                     className={cx(
-                      "inline-flex h-[14px] w-[14px] shrink-0 items-center justify-center rounded p-0 text-[12px] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1",
-                      dark
-                        ? "text-gray-400 hover:text-gray-300 focus-visible:ring-gray-500/60 focus-visible:ring-offset-gray-900"
-                        : "text-gray-500 hover:text-gray-600 focus-visible:ring-gray-400/70 focus-visible:ring-offset-white",
+                      "inline-flex h-5 items-center justify-center select-none font-light tabular-nums leading-none",
+                      dark ? "text-gray-500" : "text-gray-400",
                     )}
-                    aria-label={copied ? copiedLabel : copyLabel}
-                    title={copied ? copiedLabel : copyLabel}
+                    aria-hidden
                   >
-                    {copied ? (
-                      <svg className="block h-[14px] w-[14px] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                      </svg>
-                    ) : (
-                      <CopyGlyph className="block h-[14px] w-[14px] shrink-0" />
-                    )}
-                  </button>
+                    |
+                  </span>
                 ) : null}
                 {showAssistantThumbs ? (
-                  <div className="flex items-center gap-2" role="group" aria-label="Rate this reply">
+                  <div className="inline-flex h-5 items-center gap-0.5" role="group" aria-label="Rate this reply">
                     <button
                       type="button"
                       onClick={() => onMessageFeedback!("up")}
                       className={cx(
-                        "inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full p-0 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1",
-                        dark ? "focus-visible:ring-offset-gray-900" : "focus-visible:ring-offset-white",
-                        message.feedbackRating === "up"
-                          ? "bg-emerald-600 text-white shadow-sm focus-visible:ring-emerald-500/70"
-                          : dark
-                            ? "text-gray-400 hover:bg-white/10 focus-visible:ring-gray-500/70"
-                            : "text-gray-500 hover:bg-gray-100 focus-visible:ring-gray-400/70",
+                        "inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full p-0 leading-none transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1",
+                        dark
+                          ? "text-gray-400 hover:bg-white/10 focus-visible:ring-gray-500/70 focus-visible:ring-offset-gray-900"
+                          : "text-gray-500 hover:bg-gray-100 focus-visible:ring-gray-400/70 focus-visible:ring-offset-white",
                       )}
                       aria-label={feedbackHelpfulLabel}
                       title={feedbackHelpfulLabel}
                       aria-pressed={message.feedbackRating === "up"}
                     >
-                      <ThumbsUp
-                        className={cx(
-                          "block h-[11px] w-[11px] shrink-0",
-                          message.feedbackRating === "up" ? "text-white" : undefined,
-                        )}
-                        strokeWidth={2}
-                        fill="none"
-                        aria-hidden
-                      />
+                      <AssistantThumbUpIcon selected={message.feedbackRating === "up"} className="block h-[12.5px] w-[12.5px] shrink-0" />
                     </button>
                     <button
                       type="button"
                       onClick={() => onMessageFeedback!("down")}
                       className={cx(
-                        "inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full p-0 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1",
-                        dark ? "focus-visible:ring-offset-gray-900" : "focus-visible:ring-offset-white",
-                        message.feedbackRating === "down"
-                          ? "bg-red-600 text-white shadow-sm focus-visible:ring-red-500/70"
-                          : dark
-                            ? "text-gray-400 hover:bg-white/10 focus-visible:ring-gray-500/70"
-                            : "text-gray-500 hover:bg-gray-100 focus-visible:ring-gray-400/70",
+                        "inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full p-0 leading-none transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1",
+                        dark
+                          ? "text-gray-400 hover:bg-white/10 focus-visible:ring-gray-500/70 focus-visible:ring-offset-gray-900"
+                          : "text-gray-500 hover:bg-gray-100 focus-visible:ring-gray-400/70 focus-visible:ring-offset-white",
                       )}
                       aria-label={feedbackNotHelpfulLabel}
                       title={feedbackNotHelpfulLabel}
                       aria-pressed={message.feedbackRating === "down"}
                     >
-                      <ThumbsDown
-                        className={cx(
-                          "block h-[11px] w-[11px] shrink-0",
-                          message.feedbackRating === "down" ? "text-white" : undefined,
-                        )}
-                        strokeWidth={2}
-                        fill="none"
-                        aria-hidden
-                      />
+                      <AssistantThumbDownIcon selected={message.feedbackRating === "down"} className="block h-[12.5px] w-[12.5px] shrink-0" />
                     </button>
                   </div>
                 ) : null}
               </div>
+              {showAssistantCopy ? (
+                <button
+                  type="button"
+                  onClick={handleCopy}
+                  className={cx(
+                    "inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full p-0 leading-none transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1",
+                    dark
+                      ? "text-gray-400 hover:bg-white/10 focus-visible:ring-gray-500/70 focus-visible:ring-offset-gray-900"
+                      : "text-gray-500 hover:bg-gray-100 focus-visible:ring-gray-400/70 focus-visible:ring-offset-white",
+                  )}
+                  aria-label={copied ? copiedLabel : copyLabel}
+                  title={copied ? copiedLabel : copyLabel}
+                >
+                  {copied ? (
+                    <svg className="block h-[14px] w-[14px] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                  ) : (
+                    <CopyGlyph className="block h-[14px] w-[14px] shrink-0" />
+                  )}
+                </button>
+              ) : null}
             </div>
           ) : null}
         </div>

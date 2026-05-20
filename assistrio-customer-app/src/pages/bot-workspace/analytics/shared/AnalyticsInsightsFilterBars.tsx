@@ -22,10 +22,17 @@ import {
   seedCustomRangeIfEmpty,
   type StandardDateControlValues,
 } from './analyticsFilterCapsuleUtils';
+import {
+  WIDGET_CHANNEL_FIELD_LABEL,
+  WIDGET_CHANNEL_SECTIONS,
+  widgetStartedFromUiLabel,
+} from './widgetChannelLabels';
+
+export { WIDGET_CHANNEL_FIELD_LABEL, WIDGET_CHANNEL_SECTIONS, widgetStartedFromUiLabel };
 
 type CapsuleKey = string | null;
 
-const DEVICE_OPTIONS: { value: string; label: string }[] = [
+export const ANALYTICS_DEVICE_FILTER_OPTIONS: { value: string; label: string }[] = [
   { value: 'desktop', label: 'Desktop' },
   { value: 'mobile', label: 'Mobile' },
   { value: 'tablet', label: 'Tablet' },
@@ -33,38 +40,10 @@ const DEVICE_OPTIONS: { value: string; label: string }[] = [
 
 const PREVIEW_CHANNEL_IDS: CustomerChatsAnalyticsStartedFromKey[] = ['shared_preview', 'playground_preview'];
 
-const WIDGET_CHANNEL_SECTIONS: {
-  title: string;
-  options: { id: CustomerChatsAnalyticsStartedFromKey; label: string }[];
-}[] = [
-  {
-    title: 'Live',
-    options: [
-      { id: 'runtime_iframe', label: 'Runtime IFrame' },
-      { id: 'runtime_widget', label: 'Runtime Widget' },
-    ],
-  },
-  {
-    title: 'Preview',
-    options: [
-      { id: 'shared_preview', label: 'Shared Preview' },
-      { id: 'playground_preview', label: 'Playground Preview' },
-    ],
-  },
-];
-
-function channelOptionLabel(id: CustomerChatsAnalyticsStartedFromKey): string {
-  for (const s of WIDGET_CHANNEL_SECTIONS) {
-    const o = s.options.find((x) => x.id === id);
-    if (o) return o.label;
-  }
-  return id === 'unknown' ? 'Unknown' : id.replace(/_/g, ' ');
-}
-
 export function widgetChannelValueLabel(v: StandardDateControlValues): string {
   if (!v.includePreview && v.startedFromKeys.length === 0) return 'No preview traffic';
   if (v.startedFromKeys.length > 0) {
-    const labels = v.startedFromKeys.map((id) => channelOptionLabel(id));
+    const labels = v.startedFromKeys.map((id) => widgetStartedFromUiLabel(id));
     if (labels.length <= 3) return labels.join(', ');
     return `${labels.slice(0, 2).join(', ')} +${labels.length - 2}`;
   }
@@ -287,7 +266,7 @@ export function CoreDateGranularityPreviewCapsules({
 
       {widgetSourceVariant !== 'hidden' ? (
       <FilterCapsule
-        title="Widget Channel"
+        title={WIDGET_CHANNEL_FIELD_LABEL}
         valueLabel={widgetChannelLabel}
         applied={false}
         quietValueRow={widgetQuiet}
@@ -518,13 +497,14 @@ export function CountryCapsule({
   );
 }
 
-function DeviceCapsule({
+export function DeviceCapsule({
   value,
   onChange,
   disabled,
   open,
   setOpen,
   closeAll,
+  deviceOptions = ANALYTICS_DEVICE_FILTER_OPTIONS,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -532,10 +512,11 @@ function DeviceCapsule({
   open: CapsuleKey;
   setOpen: (k: CapsuleKey) => void;
   closeAll: () => void;
+  deviceOptions?: { value: string; label: string }[];
 }) {
   const trimmed = value.trim();
   const applied = Boolean(trimmed);
-  const label = applied ? DEVICE_OPTIONS.find((d) => d.value === trimmed)?.label ?? trimmed : 'All';
+  const label = applied ? deviceOptions.find((d) => d.value === trimmed)?.label ?? trimmed : 'All';
   const quietValueRow = !applied;
 
   return (
@@ -555,7 +536,7 @@ function DeviceCapsule({
       }}
     >
       <ul className="m-0 max-h-52 min-w-[11rem] list-none space-y-0.5 overflow-y-auto p-0 py-0.5">
-        {DEVICE_OPTIONS.map((opt) => {
+        {deviceOptions.map((opt) => {
           const selected = value === opt.value;
           return (
             <li key={opt.value}>

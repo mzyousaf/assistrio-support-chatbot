@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useId, useState, type FormEvent } from 'react';
 import { Info, Loader2, Save } from 'lucide-react';
-import { patchCustomerBot } from '../../api/customerApi';
-import { Button, Card, CardBody, Range, Switch, Tooltip } from '@/components/ui';
+import { patchCustomerBot, type RefineResponseStyleResult } from '../../api/customerApi';
+import { Button, Card, CardBody, Range, RangeMarkerRow, Switch, Tooltip } from '@/components/ui';
+import { BOT_FIELD_MAX } from '@/lib/botFieldLimits';
 import { buildAiAdvancedChatUiSavePayload, mergeChatUiFromBot } from './chatUiPayload';
 import { cn } from '@/lib/utils';
 import { toastPlaygroundSectionSaveFailed, toastPlaygroundSectionSaved } from '@/lib/playgroundSectionSaveToasts';
@@ -9,22 +10,36 @@ import { useBotWorkspace } from './BotWorkspaceContext';
 import { useCustomerWidgetPreview } from './CustomerWidgetPreviewContext';
 import { registerManualSaveGuard } from './workspaceManualSaveGuard';
 import {
+  buildAiIntegrationsPreviewDraftSlice,
   clampCreativity,
   CREATIVITY_MARKER_LABELS,
+  CREATIVITY_MARKER_POSITIONS,
   CREATIVITY_MARKER_VALUES,
-  LENGTH_MARKER_LABELS,
-  LENGTH_MARKER_TOKENS,
+  CREATIVITY_MAX,
+  CREATIVITY_MIN,
+  CREATIVITY_STEP,
+  normalizeResponseStyleDescription,
+  normalizeResponseStyleInstructions,
+  resolveStructuredResponseFormatEnabledFromConfig,
+  ANSWER_MODE_OPTIONS,
+  normalizeAnswerMode,
+  type AnswerMode,
+  LENGTH_PRIMARY_MARKER_LABELS,
+  LENGTH_PRIMARY_MARKER_POSITIONS,
+  LENGTH_PRIMARY_MARKER_TOKENS,
+  RESPONSE_LENGTH_RECOMMENDED_TOKENS,
   maxTokensToResponseLength,
-  MAX_TOKENS_MAX,
-  MAX_TOKENS_MIN,
-  MAX_TOKENS_STEP,
+  maxTokensToPresetIndex,
+  presetIndexToMaxTokens,
+  primaryPresetGroupIndex,
+  RESPONSE_LENGTH_PRESET_COUNT,
   CREATIVITY_TOOLTIP_LINES,
   RESPONSE_LENGTH_TOOLTIP_LINES,
   snapMaxTokens,
 } from './aiIntegrationsConstants';
 import { WorkspaceSectionHeader } from './WorkspaceSectionHeader';
+import { ResponseStyleSection } from './ResponseStyleSection';
 import { ws } from './workspace';
-import { Link } from 'react-router-dom';
 
 const PAGE_TITLE = 'AI & Advanced';
 const SECTION_NAV_LABEL = 'AI & Advanced';
@@ -44,16 +59,19 @@ function rangeDetailTooltip(lines: readonly string[]) {
 const cardClass =
   'w-full min-w-0 overflow-visible border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)] ring-1 ring-slate-900/[0.035]';
 
-const AI_INTEGRATIONS_PREVIEW_DEBOUNCE_MS = 150;
-
 export function AiIntegrationsSection() {
   const creativityId = useId();
   const lengthId = useId();
   const { bot, botId, softReload } = useBotWorkspace();
-  const { setAiIntegrationsDraftSlice } = useCustomerWidgetPreview();
+  const { setAiIntegrationsDraftSlice, reloadPreviewWidget } = useCustomerWidgetPreview();
 
   const [creativity, setCreativity] = useState(0.5);
-  const [maxTokens, setMaxTokens] = useState(512);
+  const [maxTokens, setMaxTokens] = useState(160);
+  const [answerMode, setAnswerMode] = useState<AnswerMode>('knowledge_first');
+  const [structuredResponseFormatEnabled, setStructuredResponseFormatEnabled] = useState(false);
+  const [responseStyleDescription, setResponseStyleDescription] = useState('');
+  const [responseStyleInstructions, setResponseStyleInstructions] = useState('');
+  const [responseStyleRefinedAt, setResponseStyleRefinedAt] = useState<string | undefined>();
 
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -76,8 +94,29 @@ export function AiIntegrationsSection() {
     const m =
       typeof rawM === 'number' && Number.isFinite(rawM)
         ? snapMaxTokens(rawM)
-        : snapMaxTokens(512);
+        : snapMaxTokens(160);
     setMaxTokens(m);
+
+    const cfg = c as Record<string, unknown>;
+    const enabled = resolveStructuredResponseFormatEnabledFromConfig(cfg);
+    setAnswerMode(normalizeAnswerMode(cfg.answerMode));
+    setStructuredResponseFormatEnabled(enabled);
+    const rawDesc = c.responseStyleDescription;
+    setResponseStyleDescription(
+      enabled && typeof rawDesc === 'string'
+        ? rawDesc.slice(0, BOT_FIELD_MAX.responseStyleDescription)
+        : '',
+    );
+    const rawStyle = c.responseStyleInstructions;
+    setResponseStyleInstructions(
+      enabled && typeof rawStyle === 'string'
+        ? rawStyle.slice(0, BOT_FIELD_MAX.responseStyleInstructions)
+        : '',
+    );
+    const rawRefined = c.responseStyleRefinedAt;
+    setResponseStyleRefinedAt(
+      enabled && typeof rawRefined === 'string' ? rawRefined : undefined,
+    );
 
     setAllowFileUpload(ui.allowFileUpload === true);
     setShowMic(ui.showMic === true);
@@ -100,20 +139,32 @@ export function AiIntegrationsSection() {
       setAiIntegrationsDraftSlice(null);
       return;
     }
-    const id = window.setTimeout(() => {
-      const mt = snapMaxTokens(maxTokens);
-      setAiIntegrationsDraftSlice({
-        personality: {},
-        config: {
-          temperature: clampCreativity(creativity),
-          maxTokens: mt,
-          responseLength: maxTokensToResponseLength(mt),
-        },
-        chatUiAdvanced: { allowFileUpload, showMic, showVoice },
-      });
-    }, AI_INTEGRATIONS_PREVIEW_DEBOUNCE_MS);
-    return () => window.clearTimeout(id);
-  }, [bot, creativity, maxTokens, allowFileUpload, showMic, showVoice, setAiIntegrationsDraftSlice]);
+    setAiIntegrationsDraftSlice(
+      buildAiIntegrationsPreviewDraftSlice({
+        creativity,
+        maxTokens,
+        answerMode,
+        structuredResponseFormatEnabled,
+        responseStyleDescription,
+        responseStyleInstructions,
+        allowFileUpload,
+        showMic,
+        showVoice,
+      }),
+    );
+  }, [
+    bot,
+    creativity,
+    maxTokens,
+    answerMode,
+    structuredResponseFormatEnabled,
+    responseStyleDescription,
+    responseStyleInstructions,
+    allowFileUpload,
+    showMic,
+    showVoice,
+    setAiIntegrationsDraftSlice,
+  ]);
 
   useEffect(() => {
     return () => setAiIntegrationsDraftSlice(null);
@@ -132,12 +183,28 @@ export function AiIntegrationsSection() {
       setSaveError(null);
 
       const mt = snapMaxTokens(maxTokens);
+      const style = normalizeResponseStyleInstructions(responseStyleInstructions);
+      const desc = normalizeResponseStyleDescription(responseStyleDescription);
+      const configPayload: Record<string, unknown> = {
+        temperature: clampCreativity(creativity),
+        maxTokens: mt,
+        responseLength: maxTokensToResponseLength(mt),
+        answerMode,
+      };
+      if (structuredResponseFormatEnabled && style) {
+        configPayload.responseStyleMode = 'structured';
+        configPayload.responseStyleInstructions = style;
+        if (desc) configPayload.responseStyleDescription = desc;
+        configPayload.responseStyleRefinedAt =
+          responseStyleRefinedAt ?? new Date().toISOString();
+      } else {
+        configPayload.responseStyleMode = null;
+        configPayload.responseStyleInstructions = null;
+        configPayload.responseStyleDescription = null;
+        configPayload.responseStyleRefinedAt = null;
+      }
       const res = await patchCustomerBot(botId, {
-        config: {
-          temperature: clampCreativity(creativity),
-          maxTokens: mt,
-          responseLength: maxTokensToResponseLength(mt),
-        },
+        config: configPayload,
         chatUI: buildAiAdvancedChatUiSavePayload(bot.chatUI, { allowFileUpload, showMic, showVoice }),
       });
       setSaving(false);
@@ -149,8 +216,26 @@ export function AiIntegrationsSection() {
       toastPlaygroundSectionSaved('aiIntegrations');
       setDirty(false);
       await softReload();
+      reloadPreviewWidget();
     },
-    [bot, botId, creativity, dirty, maxTokens, allowFileUpload, showMic, showVoice, softReload, saving],
+    [
+      bot,
+      botId,
+      creativity,
+      dirty,
+      maxTokens,
+      answerMode,
+      structuredResponseFormatEnabled,
+      responseStyleDescription,
+      responseStyleInstructions,
+      responseStyleRefinedAt,
+      allowFileUpload,
+      showMic,
+      showVoice,
+      softReload,
+      reloadPreviewWidget,
+      saving,
+    ],
   );
 
   if (!bot || !botId) return null;
@@ -214,23 +299,6 @@ export function AiIntegrationsSection() {
           <div className={ws.workspaceEditorCardGap}>
             <Card className={cardClass}>
               <CardBody className="w-full min-w-0 px-5 py-5 sm:px-6 sm:py-6">
-                <section className={ws.workspaceEditorCardSection} aria-labelledby="translation-settings-link">
-                  <WorkspaceSectionHeader
-                    id="translation-settings-link"
-                    title="Translation settings"
-                    description="Language behavior moved to a dedicated Translation page."
-                  />
-                  <div className="mt-3">
-                    <Link to={`/bots/${botId}/playground/translation`} className="text-sm font-medium text-teal-700 hover:text-teal-800">
-                      Manage translation settings
-                    </Link>
-                  </div>
-                </section>
-              </CardBody>
-            </Card>
-
-            <Card className={cardClass}>
-              <CardBody className="w-full min-w-0 px-5 py-5 sm:px-6 sm:py-6">
                 <section className={ws.workspaceEditorCardSection} aria-labelledby="ai-response-style">
                   <WorkspaceSectionHeader
                     id="ai-response-style"
@@ -238,102 +306,141 @@ export function AiIntegrationsSection() {
                     description="Adjust creativity and how much detail the assistant uses in replies."
                   />
 
-                  <div className={cn('mt-4', ws.workspaceEditorFieldPairGrid)}>
-                    <div className="min-w-0">
+                  <div className="mt-4 grid grid-cols-1 gap-x-6 gap-y-8 md:grid-cols-2 md:items-start">
+                    <div className="flex min-w-0 flex-col gap-3">
                       <Range
                         id={creativityId}
                         label="Creativity"
                         labelTooltip={rangeDetailTooltip(CREATIVITY_TOOLTIP_LINES)}
                         hint="Lower values keep answers more consistent. Higher values allow more variation."
-                        min={0}
-                        max={1}
-                        step={0.05}
+                        variant="sliderOnly"
+                        min={CREATIVITY_MIN}
+                        max={CREATIVITY_MAX}
+                        step={CREATIVITY_STEP}
                         value={creativity}
                         onValueChange={(v) => {
                           setCreativity(v);
                           markDirty();
                         }}
                       />
-                      <div className="mt-2 flex justify-between gap-1 px-0.5">
-                        {CREATIVITY_MARKER_LABELS.map((label, i) => {
+                      <RangeMarkerRow
+                        positions={CREATIVITY_MARKER_POSITIONS}
+                        markers={CREATIVITY_MARKER_LABELS.map((label, i) => {
                           const at = CREATIVITY_MARKER_VALUES[i];
-                          const isBalanced = label === 'Balanced';
-                          return (
-                            <div
-                              key={label}
-                              className="flex min-w-0 flex-1 flex-col items-center gap-0.5 text-center"
-                            >
-                              <button
-                                type="button"
-                                className="text-[0.625rem] font-medium text-slate-500 underline-offset-2 hover:text-slate-700 hover:underline"
-                                onClick={() => {
-                                  setCreativity(at);
-                                  markDirty();
-                                }}
-                              >
-                                {label}
-                              </button>
-                              {isBalanced ? (
-                                <span className="text-[0.5625rem] font-medium uppercase tracking-wide text-slate-400">
-                                  Recommended
-                                </span>
-                              ) : (
-                                <span className="h-3.5" />
-                              )}
-                            </div>
-                          );
+                          return {
+                            label,
+                            recommended: label === 'Balanced',
+                            active: Math.abs(clampCreativity(creativity) - at) < 0.026,
+                            onSelect: () => {
+                              setCreativity(at);
+                              markDirty();
+                            },
+                          };
                         })}
-                      </div>
+                      />
                     </div>
 
-                    <div className="min-w-0">
+                    <div className="flex min-w-0 flex-col gap-3">
                       <Range
                         id={lengthId}
                         label="Response length"
                         labelTooltip={rangeDetailTooltip(RESPONSE_LENGTH_TOOLTIP_LINES)}
                         hint="Control how short or detailed responses should be."
-                        min={MAX_TOKENS_MIN}
-                        max={MAX_TOKENS_MAX}
-                        step={MAX_TOKENS_STEP}
-                        value={maxTokens}
-                        onValueChange={(v) => {
-                          setMaxTokens(v);
+                        variant="trackBadges"
+                        showTrackValue={false}
+                        min={0}
+                        max={RESPONSE_LENGTH_PRESET_COUNT - 1}
+                        step={1}
+                        value={maxTokensToPresetIndex(maxTokens)}
+                        onValueChange={(presetIndex) => {
+                          setMaxTokens(presetIndexToMaxTokens(presetIndex));
                           markDirty();
                         }}
-                        valueSuffix="tokens"
                       />
-                      <div className="mt-2 flex justify-between gap-1 px-0.5">
-                        {LENGTH_MARKER_LABELS.map((label, i) => {
-                          const at = LENGTH_MARKER_TOKENS[i];
-                          const isStandard = label === 'Standard';
-                          return (
-                            <div
-                              key={label}
-                              className="flex min-w-0 flex-1 flex-col items-center gap-0.5 text-center"
-                            >
-                              <button
-                                type="button"
-                                className="text-[0.625rem] font-medium text-slate-500 underline-offset-2 hover:text-slate-700 hover:underline"
-                                onClick={() => {
-                                  setMaxTokens(at);
-                                  markDirty();
-                                }}
-                              >
-                                {label}
-                              </button>
-                              {isStandard ? (
-                                <span className="text-[0.5625rem] font-medium uppercase tracking-wide text-slate-400">
-                                  Recommended
-                                </span>
-                              ) : (
-                                <span className="h-3.5" />
-                              )}
-                            </div>
-                          );
+                      <RangeMarkerRow
+                        positions={LENGTH_PRIMARY_MARKER_POSITIONS}
+                        markers={LENGTH_PRIMARY_MARKER_LABELS.map((label, i) => {
+                          const at = LENGTH_PRIMARY_MARKER_TOKENS[i];
+                          return {
+                            label,
+                            recommended: at === RESPONSE_LENGTH_RECOMMENDED_TOKENS,
+                            active: primaryPresetGroupIndex(maxTokens) === i,
+                            onSelect: () => {
+                              setMaxTokens(at);
+                              markDirty();
+                            },
+                          };
                         })}
-                      </div>
+                      />
                     </div>
                   </div>
+
+                  <div className="mt-8 border-t border-slate-100 pt-6" data-testid="answer-behavior-section">
+                    <p className={ws.workspaceEditorControlLabel}>Answer behavior</p>
+                    <p className={cn(ws.workspaceEditorControlHint, 'mt-1')}>
+                      Control whether the assistant can answer general or creative questions that are not
+                      explicitly in the knowledge base.
+                    </p>
+                    <div
+                      className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2"
+                      role="radiogroup"
+                      aria-label="Answer behavior"
+                    >
+                      {ANSWER_MODE_OPTIONS.map((opt) => {
+                        const selected = answerMode === opt.value;
+                        return (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            role="radio"
+                            aria-checked={selected}
+                            data-testid={`answer-mode-${opt.value}`}
+                            className={cn(
+                              'rounded-xl border px-4 py-3 text-left transition-colors',
+                              selected
+                                ? 'border-teal-600 bg-teal-50/80 ring-1 ring-teal-600/30'
+                                : 'border-slate-200 bg-white hover:border-slate-300',
+                            )}
+                            onClick={() => {
+                              setAnswerMode(opt.value);
+                              markDirty();
+                            }}
+                          >
+                            <span className="text-sm font-semibold text-slate-900">{opt.label}</span>
+                            {opt.recommended ? (
+                              <span className="ml-2 text-[0.625rem] font-semibold uppercase tracking-wide text-teal-700">
+                                Recommended
+                              </span>
+                            ) : null}
+                            <p className={cn(ws.workspaceEditorControlHint, 'mt-1.5')}>{opt.description}</p>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {botId ? (
+                    <ResponseStyleSection
+                      botId={botId}
+                      enabled={structuredResponseFormatEnabled}
+                      description={responseStyleDescription}
+                      instructions={responseStyleInstructions}
+                      onEnabledChange={setStructuredResponseFormatEnabled}
+                      onRefined={(result: RefineResponseStyleResult) => {
+                        setStructuredResponseFormatEnabled(true);
+                        setResponseStyleDescription(result.description);
+                        setResponseStyleInstructions(result.instructions);
+                        setResponseStyleRefinedAt(new Date().toISOString());
+                      }}
+                      onTurnOff={() => {
+                        setStructuredResponseFormatEnabled(false);
+                        setResponseStyleDescription('');
+                        setResponseStyleInstructions('');
+                        setResponseStyleRefinedAt(undefined);
+                      }}
+                      markDirty={markDirty}
+                    />
+                  ) : null}
                 </section>
               </CardBody>
             </Card>

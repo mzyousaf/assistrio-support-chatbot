@@ -33,6 +33,7 @@ import { buildRuntimeWidgetConversationOrigin } from "@acw/lib/runtimeWidgetConv
 import { runtimeEmbedSpeechPost } from "@acw/lib/runtimeEmbedSpeechPost";
 import { speechEndpointFromChatUrl } from "@acw/lib/speechEndpoint";
 import { createTranscriptionUploadFile } from "@acw/lib/transcriptionUploadFile";
+import { sanitizeChatMessageContent } from "@acw/lib/chatMessageDisplay.util";
 import { streamAssistantReply } from "@acw/lib/streamAssistantReply";
 import { mergeWidgetStrings, type WidgetStrings } from "@acw/lib/widgetStrings";
 import { resolveWelcomeMessage } from "@acw/lib/welcomeMessage";
@@ -219,7 +220,7 @@ function mapEmbedApiRowsToChatUIMessages(
       return {
         id: resolvePersistedEmbedHistoryMessageId(m.id),
         role: m.role as "user" | "assistant",
-        content: String(m.content ?? ""),
+        content: sanitizeChatMessageContent(m.role as "user" | "assistant", String(m.content ?? "")),
         createdAt: m.createdAt || isoNow(),
         status: "sent" as const,
         ...(feedbackRating ? { feedbackRating } : {}),
@@ -799,12 +800,11 @@ export function AdminLiveChatAdapter({
           if (fromApi && fromApi.length > 0) {
             setIncludeWelcomeInMessages(false);
             setMessages(fromApi);
+            setMessagesLoading(false);
             return;
           }
         } catch {
           /* fall through to session / welcome */
-        } finally {
-          setMessagesLoading(false);
         }
         const key = `assistrio_preview_msgs:${botId}:${previewVisitorStorageKey}:${conversationId}`;
         try {
@@ -822,6 +822,7 @@ export function AdminLiveChatAdapter({
               if (mapped.length > 0) {
                 setIncludeWelcomeInMessages(false);
                 setMessages(mapped);
+                setMessagesLoading(false);
                 return;
               }
             }
@@ -831,6 +832,7 @@ export function AdminLiveChatAdapter({
         }
         setIncludeWelcomeInMessages(true);
         setMessages(welcomeMsg ? [welcomeMsg] : []);
+        setMessagesLoading(false);
         return;
       }
       const base = apiBaseUrl ? apiBaseUrl.replace(/\/+$/, "") : "";
@@ -1055,6 +1057,20 @@ export function AdminLiveChatAdapter({
           ...analyticsOptional,
           ...messageAnalyticsOptional,
         };
+        if (
+          mode === "preview" &&
+          import.meta.env.DEV &&
+          import.meta.env.VITE_DEBUG_CHAT_AI_SETTINGS === "true"
+        ) {
+          const cfg = (
+            previewOverrides as { config?: Record<string, unknown> } | undefined
+          )?.config;
+          console.info("[DEBUG_CHAT_AI_SETTINGS] preview-chat-send", {
+            temperature: cfg?.temperature,
+            maxTokens: cfg?.maxTokens,
+            responseLength: cfg?.responseLength,
+          });
+        }
         const bodyCore = {
           message: value,
           ...(startNew ? { startNewConversation: true as const } : {}),
@@ -1214,7 +1230,10 @@ export function AdminLiveChatAdapter({
 
         if (!res.ok) {
           const assistantErrId = generateId();
-          const errText = typeof content === "string" ? content : "No response.";
+          const errText = sanitizeChatMessageContent(
+            "assistant",
+            typeof content === "string" ? content : "No response.",
+          );
           setMessages((prev) => {
             const withUser = prev.map((m) =>
               m.id === userMessageId ? { ...m, status: "error" as const } : m,
@@ -1236,7 +1255,10 @@ export function AdminLiveChatAdapter({
         }
 
         const assistantId = resolveAssistantClientMessageId(data.assistantMessageId);
-        const fullContent = typeof content === "string" ? content : "No response.";
+        const fullContent = sanitizeChatMessageContent(
+          "assistant",
+          typeof content === "string" ? content : "No response.",
+        );
 
         setMessages((prev) => {
           const withUser = prev.map((m) =>
@@ -1496,7 +1518,7 @@ export function AdminLiveChatAdapter({
       const userMsg: ChatUIMessage = {
         id: userMessageId,
         role: "user",
-        content: value,
+        content: sanitizeChatMessageContent("user", value),
         createdAt: isoNow(),
         status: "sending",
         ...(optimisticAttachments ? { attachments: optimisticAttachments } : {}),

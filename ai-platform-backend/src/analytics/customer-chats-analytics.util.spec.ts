@@ -95,7 +95,7 @@ describe('enumerateBucketStarts', () => {
 
 describe('labels', () => {
   it('maps startedFrom to product labels', () => {
-    expect(startedFromLabel('runtime_widget')).toBe('Runtime Widget');
+    expect(startedFromLabel('runtime_widget')).toBe('Chat Widget');
     expect(startedFromLabel('playground_preview')).toBe('Playground Preview');
   });
 

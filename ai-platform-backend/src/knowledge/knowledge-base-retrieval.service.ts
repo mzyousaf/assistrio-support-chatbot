@@ -36,14 +36,36 @@ import {
   normalizeKnowledgeReplyPrioritySettings,
   sourcePriorityRankMap,
 } from './knowledge-reply-priority.util';
+import {
+  getChatMaxEvidenceItems,
+  getChatMaxEvidenceTokens,
+  getChatMaxItemsToScore,
+} from '../chat/chat-retrieval-config.util';
+import { embedQueryWithCache } from '../rag/embed-query-with-cache.util';
+import {
+  applyRetrievalResultCacheHitTiming,
+  retrievalResultCache,
+  type RetrievalResultCacheKeyInput,
+} from '../rag/retrieval-result-cache.util';
+import { logChatRetrievalMongoDebug } from './chat-retrieval-mongo-debug.util';
+import { buildRetrievalKnowledgeVersionStamp } from './knowledge-retrieval-version.util';
+import {
+  logRetrievalCacheDebug,
+  type RetrievalCacheMissReason,
+} from '../rag/retrieval-cache-debug.util';
+import {
+  loadChunksWithPerItemCap,
+  mergeChunksFairRoundRobin,
+  shouldUseSimpleChunkLoad,
+  type ChunkRow,
+} from './knowledge-chunk-load.util';
 
 const DEFAULT_LIMIT = 20;
-const MAX_ITEMS_TO_SCORE = 300;
 
 /**
  * Legacy global `.limit(500)` applied to the whole bot; with many KB items, early rows (often one huge
  * document) could consume the entire cap and starve later items. Per-item budgets guarantee each eligible
- * source contributes candidates; round-robin merge ensures {@link MAX_ITEMS_TO_SCORE} sees a mix of items,
+ * source contributes candidates; round-robin merge ensures the scoring cap sees a mix of items,
  * not only the first KB item in cursor order.
  */
 const SINGLE_ELIGIBLE_ITEM_CHUNK_CAP = 500;
@@ -62,45 +84,6 @@ function multiItemPerItemChunkBudget(itemCount: number): number {
   if (itemCount <= 0) return MULTI_ITEM_PER_ITEM_MAX;
   const split = Math.ceil(MULTI_ITEM_TOTAL_CANDIDATE_CAP / itemCount);
   return Math.min(MULTI_ITEM_PER_ITEM_MAX, Math.max(MULTI_ITEM_PER_ITEM_MIN, split));
-}
-
-/**
- * Deterministic interleaving: round 0 takes chunk 0 from every item (in stable item order), then round 1, etc.,
- * until `maxTotal` or all lists exhausted. Keeps scoring fair when {@link MAX_ITEMS_TO_SCORE} < candidate count.
- */
-function mergeChunksFairRoundRobin(
-  chunks: ChunkRow[],
-  itemOrder: Types.ObjectId[],
-  maxTotal: number,
-): ChunkRow[] {
-  const byItem = new Map<string, ChunkRow[]>();
-  for (const id of itemOrder) {
-    byItem.set(id.toString(), []);
-  }
-  for (const c of chunks) {
-    const key = c.knowledgeBaseItemId.toString();
-    const bucket = byItem.get(key);
-    if (bucket) bucket.push(c);
-  }
-  for (const list of byItem.values()) {
-    list.sort((a, b) => a.chunkIndex - b.chunkIndex);
-  }
-  const out: ChunkRow[] = [];
-  let round = 0;
-  let progressed = true;
-  while (out.length < maxTotal && progressed) {
-    progressed = false;
-    for (const id of itemOrder) {
-      if (out.length >= maxTotal) break;
-      const list = byItem.get(id.toString())!;
-      if (round < list.length) {
-        out.push(list[round]);
-        progressed = true;
-      }
-    }
-    round++;
-  }
-  return out;
 }
 
 function cosineSimilarity(a: number[], b: number[]): number {
@@ -127,15 +110,6 @@ type ItemRow = {
   faqMeta?: { questions?: string[] };
 };
 
-type ChunkRow = {
-  _id: Types.ObjectId;
-  knowledgeBaseItemId: Types.ObjectId;
-  text: string;
-  embedding: number[];
-  chunkIndex: number;
-  heading?: string;
-};
-
 @Injectable()
 export class KnowledgeBaseRetrievalService {
   constructor(
@@ -155,7 +129,6 @@ export class KnowledgeBaseRetrievalService {
     query: string,
     options: UnifiedRetrievalOptions = {},
   ): Promise<UnifiedRetrievalResult> {
-    const limit = options.limit ?? DEFAULT_LIMIT;
     const queryTrimmed = (query ?? '').trim();
     const emptyCounts = (): UnifiedRetrievalEligibleCounts => ({
       document: 0,
@@ -176,7 +149,61 @@ export class KnowledgeBaseRetrievalService {
       .findById(botOid)
       .select('includeNotesInKnowledge knowledgeReplyPriority')
       .lean();
+
     const includeNotes = (botFlags?.includeNotesInKnowledge as boolean | undefined) !== false;
+    const knowledgeVersion = await buildRetrievalKnowledgeVersionStamp(this.itemModel, botOid, {
+      includeNotesInKnowledge: includeNotes,
+      knowledgeReplyPriority: (botFlags as { knowledgeReplyPriority?: unknown } | null)
+        ?.knowledgeReplyPriority,
+    });
+    const retrievalLimit = options.limit ?? DEFAULT_LIMIT;
+    const cacheKeyInput: RetrievalResultCacheKeyInput | undefined =
+      options.disableRetrievalResultCache
+        ? undefined
+        : {
+            botId,
+            query: queryTrimmed,
+            answerMode: options.answerMode ?? 'knowledge_first',
+            retrievalLimit,
+            maxItemsToScore: getChatMaxItemsToScore(),
+            maxEvidenceItems: options.maxEvidenceItems ?? getChatMaxEvidenceItems(),
+            maxEvidenceTokens: options.maxEvidenceTokens ?? getChatMaxEvidenceTokens(),
+            knowledgeVersion,
+            restrictToKnowledgeBaseItemId: options.restrictToKnowledgeBaseItemId,
+          };
+    if (!cacheKeyInput) {
+      logRetrievalCacheDebug(
+        {
+          botId,
+          query: queryTrimmed,
+          answerMode: options.answerMode ?? 'knowledge_first',
+          retrievalLimit,
+          maxItemsToScore: getChatMaxItemsToScore(),
+          maxEvidenceItems: options.maxEvidenceItems ?? getChatMaxEvidenceItems(),
+          maxEvidenceTokens: options.maxEvidenceTokens ?? getChatMaxEvidenceTokens(),
+          knowledgeVersion,
+        },
+        '',
+        { cacheHit: false, cacheMissReason: 'cache_disabled' },
+      );
+    } else if (!queryTrimmed) {
+      const cacheKey = retrievalResultCache.buildKey(cacheKeyInput);
+      logRetrievalCacheDebug(cacheKeyInput, cacheKey, {
+        cacheHit: false,
+        cacheMissReason: 'empty_query',
+      });
+    } else {
+      const cacheKey = retrievalResultCache.buildKey(cacheKeyInput);
+      const lookup = retrievalResultCache.lookup(cacheKey);
+      if (lookup.result) {
+        logRetrievalCacheDebug(cacheKeyInput, cacheKey, { cacheHit: true });
+        return applyRetrievalResultCacheHitTiming(lookup.result);
+      }
+      logRetrievalCacheDebug(cacheKeyInput, cacheKey, {
+        cacheHit: false,
+        cacheMissReason: (lookup.missReason ?? 'not_found') as RetrievalCacheMissReason,
+      });
+    }
     const replyPrioritySettings = normalizeKnowledgeReplyPrioritySettings(
       (botFlags as { knowledgeReplyPriority?: unknown } | null)?.knowledgeReplyPriority,
     );
@@ -232,37 +259,31 @@ export class KnowledgeBaseRetrievalService {
         ? SINGLE_ELIGIBLE_ITEM_CHUNK_CAP
         : multiItemPerItemChunkBudget(itemIds.length);
 
-    const rawChunks = await this.chunkModel
-      .aggregate<ChunkRow & { rowNumber?: number }>([
-        { $match: { botId: botOid, knowledgeBaseItemId: { $in: itemIds } } },
-        { $sort: { knowledgeBaseItemId: 1, chunkIndex: 1 } },
-        {
-          $setWindowFields: {
-            partitionBy: '$knowledgeBaseItemId',
-            sortBy: { chunkIndex: 1 },
-            output: {
-              rowNumber: { $documentNumber: {} },
-            },
-          },
-        },
-        { $match: { rowNumber: { $lte: perItemCap } } },
-        {
-          $project: {
-            _id: 1,
-            knowledgeBaseItemId: 1,
-            text: 1,
-            embedding: 1,
-            chunkIndex: 1,
-            heading: 1,
-          },
-        },
-      ])
-      .exec();
-
-    const chunks: ChunkRow[] =
-      itemIds.length <= 1
-        ? (rawChunks as ChunkRow[])
-        : mergeChunksFairRoundRobin(rawChunks as ChunkRow[], itemIdsStable, MULTI_ITEM_TOTAL_CANDIDATE_CAP);
+    const {
+      chunks,
+      chunkAggregateMs,
+      usedSetWindowFields,
+      aggregateStrategy,
+      candidateChunkCount,
+    } = await this.loadCandidateChunks(
+      botOid,
+      itemIds,
+      itemIdsStable,
+      perItemCap,
+      itemIds.length,
+    );
+    logChatRetrievalMongoDebug({
+      botId,
+      collection: this.chunkModel.collection.name,
+      candidateChunkCount,
+      aggregateDurationMs: chunkAggregateMs,
+      usedSetWindowFields,
+      aggregateStrategy,
+      botIdFilterPresent: true,
+      eligibleItemCount: itemIds.length,
+      perItemCap,
+      indexHint: 'botId_1_knowledgeBaseItemId_1_chunkIndex_1',
+    });
 
     const itemMap = new Map<string, ItemRow>();
     for (const i of items) {
@@ -327,20 +348,40 @@ export class KnowledgeBaseRetrievalService {
     eligibleCounts.table = items.filter((i) => (i as ItemRow).sourceType === 'table').length;
     eligibleCounts.suggestion = items.filter((i) => (i as ItemRow).sourceType === 'suggestion').length;
 
+    const candidateChunksCount = itemsWithEmbedding.length;
+
     if (itemsWithEmbedding.length === 0) {
-      return this.emptyResult(eligibleCounts, options.debug ?? false);
+      return this.emptyResult(eligibleCounts, options.debug ?? false, {
+        queryEmbeddingMs: 0,
+        chunkAggregateMs,
+        scoringMs: 0,
+        diversityDedupMs: 0,
+        candidateChunksCount: 0,
+        scoredChunksCount: 0,
+        queryEmbeddingCacheHit: false,
+      });
     }
 
     let queryEmbedding: number[] = [];
+    let queryEmbeddingMs = 0;
+    let queryEmbeddingCacheHit = false;
     try {
-      queryEmbedding = await this.ragService.embedText(queryTrimmed, options.apiKeyOverride);
+      const embedResult = await embedQueryWithCache(this.ragService, queryTrimmed, {
+        apiKeyOverride: options.apiKeyOverride,
+        cacheScope: botId,
+      });
+      queryEmbedding = embedResult.embedding;
+      queryEmbeddingMs = embedResult.durationMs;
+      queryEmbeddingCacheHit = embedResult.cacheHit;
     } catch {
       queryEmbedding = [];
     }
 
+    const maxItemsToScore = getChatMaxItemsToScore();
+    const scoringStart = Date.now();
     const weights = options.weights ?? DEFAULT_UNIFIED_RETRIEVAL_WEIGHTS;
     const scored: Array<{ item: KnowledgeItem; breakdown: UnifiedScoreBreakdown }> = [];
-    const toScore = itemsWithEmbedding.slice(0, MAX_ITEMS_TO_SCORE);
+    const toScore = itemsWithEmbedding.slice(0, maxItemsToScore);
     for (const { item, embedding } of toScore) {
       const semanticScore =
         embedding && queryEmbedding.length ? cosineSimilarity(queryEmbedding, embedding) : 0;
@@ -364,7 +405,8 @@ export class KnowledgeBaseRetrievalService {
       if (rankA !== rankB) return rankA - rankB;
       return scoreDiff;
     });
-    const top = scored.slice(0, limit);
+    const scoringMs = Date.now() - scoringStart;
+    const top = scored.slice(0, retrievalLimit);
 
     const rankedItems: RankedKnowledgeItem[] = top.map(({ item, breakdown }) => ({
       ...item,
@@ -379,10 +421,23 @@ export class KnowledgeBaseRetrievalService {
       combinedScore: breakdown.combinedScore,
     }));
 
+    const diversityStart = Date.now();
     const { selected: itemsSelected, removedAsDuplicate, skippedByCap } = applyDiversityAndDedup(
       rankedItems,
       options.diversity,
     );
+    const diversityDedupMs = Date.now() - diversityStart;
+
+    const timing = {
+      queryEmbeddingMs,
+      chunkAggregateMs,
+      scoringMs,
+      diversityDedupMs,
+      candidateChunksCount,
+      scoredChunksCount: toScore.length,
+      queryEmbeddingCacheHit,
+      retrievalResultCacheHit: false,
+    };
 
     const debug: UnifiedRetrievalDebug | undefined = options.debug
       ? {
@@ -411,12 +466,112 @@ export class KnowledgeBaseRetrievalService {
         }
       : undefined;
 
-    return { items: itemsSelected, debug };
+    const result: UnifiedRetrievalResult = { items: itemsSelected, debug, timing };
+    if (cacheKeyInput && queryTrimmed) {
+      const cacheKey = retrievalResultCache.buildKey(cacheKeyInput);
+      if (itemsSelected.length > 0) {
+        retrievalResultCache.set(cacheKey, result);
+        logRetrievalCacheDebug(cacheKeyInput, cacheKey, { cacheHit: false, cacheSet: true });
+      } else {
+        logRetrievalCacheDebug(cacheKeyInput, cacheKey, {
+          cacheHit: false,
+          cacheMissReason: 'set_skipped_empty_items',
+          cacheSet: false,
+        });
+      }
+    }
+    return result;
+  }
+
+  private async loadCandidateChunks(
+    botOid: Types.ObjectId,
+    itemIds: Types.ObjectId[],
+    itemIdsStable: Types.ObjectId[],
+    perItemCap: number,
+    itemCount: number,
+  ): Promise<{
+    chunks: ChunkRow[];
+    chunkAggregateMs: number;
+    usedSetWindowFields: boolean;
+    aggregateStrategy: 'window_fields' | 'simple_find';
+    candidateChunkCount: number;
+  }> {
+    const useSimple = shouldUseSimpleChunkLoad(itemCount, perItemCap);
+    const chunkAggregateStart = Date.now();
+
+    if (useSimple) {
+      const rows = (await this.chunkModel
+        .find({
+          botId: botOid,
+          knowledgeBaseItemId: { $in: itemIds },
+        })
+        .select('_id knowledgeBaseItemId text embedding chunkIndex heading')
+        .sort({ knowledgeBaseItemId: 1, chunkIndex: 1 })
+        .lean()) as ChunkRow[];
+      const chunkAggregateMs = Date.now() - chunkAggregateStart;
+      const chunks =
+        itemCount <= 1
+          ? loadChunksWithPerItemCap(rows, itemIdsStable, perItemCap, SINGLE_ELIGIBLE_ITEM_CHUNK_CAP)
+          : loadChunksWithPerItemCap(
+              rows,
+              itemIdsStable,
+              perItemCap,
+              MULTI_ITEM_TOTAL_CANDIDATE_CAP,
+            );
+      return {
+        chunks,
+        chunkAggregateMs,
+        usedSetWindowFields: false,
+        aggregateStrategy: 'simple_find',
+        candidateChunkCount: rows.length,
+      };
+    }
+
+    const rawChunks = await this.chunkModel
+      .aggregate<ChunkRow & { rowNumber?: number }>([
+        { $match: { botId: botOid, knowledgeBaseItemId: { $in: itemIds } } },
+        { $sort: { knowledgeBaseItemId: 1, chunkIndex: 1 } },
+        {
+          $setWindowFields: {
+            partitionBy: '$knowledgeBaseItemId',
+            sortBy: { chunkIndex: 1 },
+            output: {
+              rowNumber: { $documentNumber: {} },
+            },
+          },
+        },
+        { $match: { rowNumber: { $lte: perItemCap } } },
+        {
+          $project: {
+            _id: 1,
+            knowledgeBaseItemId: 1,
+            text: 1,
+            embedding: 1,
+            chunkIndex: 1,
+            heading: 1,
+          },
+        },
+      ])
+      .exec();
+    const chunkAggregateMs = Date.now() - chunkAggregateStart;
+    const chunks: ChunkRow[] =
+      itemCount <= 1
+        ? (rawChunks as ChunkRow[])
+        : mergeChunksFairRoundRobin(rawChunks as ChunkRow[], itemIdsStable, MULTI_ITEM_TOTAL_CANDIDATE_CAP);
+
+    return {
+      chunks,
+      chunkAggregateMs,
+      usedSetWindowFields: true,
+      aggregateStrategy: 'window_fields',
+      candidateChunkCount: rawChunks.length,
+    };
   }
 
   private emptyResult(
     eligibleCounts: UnifiedRetrievalEligibleCounts,
     includeDebug: boolean,
+    timing?: UnifiedRetrievalResult['timing'],
   ): UnifiedRetrievalResult {
     const debug: UnifiedRetrievalDebug | undefined = includeDebug
       ? {
@@ -425,7 +580,7 @@ export class KnowledgeBaseRetrievalService {
           eligibleCountBySourceType: eligibleCounts,
         }
       : undefined;
-    return { items: [], debug };
+    return { items: [], debug, timing };
   }
 
   private groupBySourceType(

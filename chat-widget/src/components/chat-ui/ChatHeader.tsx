@@ -9,6 +9,7 @@ import {
   MoreVertical,
 } from "lucide-react";
 import { getQuickLinkIcon } from "../../lib/quickLinkIcons";
+import { AssistrioPageLoaderSpinner } from "./AssistrioPageLoaderSpinner";
 import { cx } from "./utils";
 
 export interface ChatMenuQuickLink {
@@ -32,10 +33,8 @@ export interface ChatHeaderProps {
   title?: string;
   /** Subtitle under title */
   subtitle?: string;
-  /** Inline spinner in the title row while the conversation is loading (matches message-area loader). */
+  /** Inline loader in the title row while the conversation is loading (brand spinner, same as dashboard). */
   conversationLoading?: boolean;
-  /** Spinner stroke color when {@link conversationLoading} is true */
-  accentColor?: string;
   /** Status indicator: "live" | "active" | "none". When "none", no indicator is shown. */
   statusIndicator?: "live" | "active" | "none";
   /** "label" = dot + label text next to title; "dot-only" = dot overlapping avatar */
@@ -138,7 +137,6 @@ export function ChatHeader({
   title,
   subtitle,
   conversationLoading = false,
-  accentColor = "#6366f1",
   statusIndicator = "none",
   liveIndicatorStyle = "label",
   statusDotStyle = "blinking",
@@ -231,7 +229,6 @@ export function ChatHeader({
     dark ? "text-gray-400" : "text-gray-500"
   );
   const QuickLinksMenuButtonIcon = getQuickLinkIcon(quickLinksMenuIcon ?? "link-2");
-  const spinnerTone = (accentColor ?? "").trim() || "#6366f1";
   return (
     <header
       className={cx(
@@ -288,25 +285,8 @@ export function ChatHeader({
             </h2>
           ) : null}
           {conversationLoading ? (
-            <span className="inline-flex shrink-0" role="status" aria-label="Loading messages">
-              <svg
-                className="h-4 w-4 shrink-0 animate-spin motion-reduce:animate-none"
-                viewBox="0 0 24 24"
-                fill="none"
-                aria-hidden
-                style={{ color: spinnerTone }}
-              >
-                <circle
-                  cx="12"
-                  cy="12"
-                  r="9"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeDasharray="26 58"
-                  className={dark ? "opacity-90" : "opacity-85"}
-                />
-              </svg>
+            <span className="inline-flex shrink-0 items-center" role="status" aria-label="Loading messages">
+              <AssistrioPageLoaderSpinner size="compact" decorative />
             </span>
           ) : null}
           {showStatusLabel ? (

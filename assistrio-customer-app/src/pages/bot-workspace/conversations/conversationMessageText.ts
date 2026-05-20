@@ -1,9 +1,10 @@
 import type { CustomerConversationMessage } from '@/api/types';
+import { prepareChatMessagePlainText } from '@acw/lib/chatMessageDisplay.util';
 
 export function conversationMessageBodyText(m: CustomerConversationMessage): string {
   const c = m.content?.trim();
-  if (c) return m.content;
-  return m.text ?? '';
+  const raw = c ? m.content! : (m.text ?? '');
+  return prepareChatMessagePlainText(raw);
 }
 
 /** Nearest preceding message with role `user` (for FAQ question prefill). */

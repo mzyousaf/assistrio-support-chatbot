@@ -49,6 +49,10 @@ export const BOT_FIELD_MAX = {
   menuQuickLinkText: 120,
   /** Path or full URL for a quick link */
   menuQuickLinkRoute: 2000,
+  /** `config.responseStyleDescription` — structured mode user description */
+  responseStyleDescription: 1500,
+  /** `config.responseStyleInstructions` — customer output formatting preferences */
+  responseStyleInstructions: 1200,
 } as const;
 
 export function clampStr(s: string, max: number): string {

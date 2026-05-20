@@ -1391,11 +1391,24 @@ export class BotsService {
       updateDoc.chatUI = patch.chatUI;
     }
     if (patch.touched.has('personality')) {
-      /** Replace subdocument (same as pre-partial PATCH): sparse normalized object overwrites stored personality. */
-      updateDoc.personality = patch.personality && typeof patch.personality === 'object' ? patch.personality : {};
+      const existingPersonality =
+        ex.personality && typeof ex.personality === 'object' && !Array.isArray(ex.personality)
+          ? (ex.personality as Record<string, unknown>)
+          : {};
+      const incomingPersonality =
+        patch.personality && typeof patch.personality === 'object' ? patch.personality : {};
+      updateDoc.personality = { ...existingPersonality, ...incomingPersonality };
     }
     if (patch.touched.has('config')) {
-      updateDoc.config = patch.config && typeof patch.config === 'object' ? patch.config : {};
+      const existingConfig =
+        ex.config && typeof ex.config === 'object' && !Array.isArray(ex.config)
+          ? (ex.config as Record<string, unknown>)
+          : {};
+      const incomingConfig = patch.config && typeof patch.config === 'object' ? patch.config : {};
+      updateDoc.config = { ...existingConfig, ...incomingConfig };
+      for (const key of patch.unsetConfigKeys ?? []) {
+        delete (updateDoc.config as Record<string, unknown>)[key];
+      }
     }
     if (patch.touched.has('translationSettings')) {
       updateDoc.translationSettings =

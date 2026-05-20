@@ -57,6 +57,7 @@ export type MessageInputType =
   | 'attachment'
   | 'quick_reply'
   | 'suggested_question'
+  | 'welcome'
   | 'unknown';
 
 export type MessageInputMethod =
@@ -335,9 +336,13 @@ export class Message {
   previewOrigin?: string;
 
   @Prop({
-    enum: ['text', 'voice', 'dictation', 'attachment', 'quick_reply', 'suggested_question', 'unknown'],
+    enum: ['text', 'voice', 'dictation', 'attachment', 'quick_reply', 'suggested_question', 'welcome', 'unknown'],
   })
   inputType?: MessageInputType;
+
+  /** True for the auto-sent opening assistant line when a conversation is created. */
+  @Prop()
+  isWelcomeMessage?: boolean;
 
   @Prop({
     enum: [

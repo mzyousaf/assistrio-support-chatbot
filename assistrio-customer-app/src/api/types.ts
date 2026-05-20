@@ -116,8 +116,23 @@ export type CustomerBotConversationsListParams = {
   hasVoice?: boolean;
   hasDictation?: boolean;
   hasAttachment?: boolean;
+  /** Inclusive bounds on rolling `totalCreditsUsed` (0 if unset on document). Overrides creditsGtZero/creditsZero. */
+  minCredits?: number;
+  maxCredits?: number;
+  /** Preset: strictly more than zero total credits spent. */
+  creditsGtZero?: boolean;
+  /** Preset: no credits spent (treat missing as zero). */
+  creditsZero?: boolean;
+  /** Minimum thread message count (inclusive); unset / omitted = any. */
+  minMessages?: number;
   deviceType?: string;
   countryCode?: string;
+  /** Comma-separated main topic taxonomy ids (`conversationTopics.primaryTopic`, OR). */
+  primaryTopics?: string;
+  /** Comma-separated ids matched against `conversationTopics.topicLabels` (OR). */
+  secondaryTopics?: string;
+  /** Comma-separated `conversationSentiment.label` values (OR). */
+  sentiments?: string;
 };
 
 export type CustomerBotConversationsListResponse = {
@@ -488,6 +503,8 @@ export type CustomerConversationMessage = {
   sources?: CustomerConversationMessageSource[];
   aiMeta?: CustomerConversationMessageAiMeta;
   feedback?: CustomerConversationMessageFeedback | null;
+  /** Opening assistant line persisted when a conversation is created. */
+  isWelcomeMessage?: boolean;
 };
 
 /** POST /api/customer/bots/:id/datasheets/preview (multipart `file`) */

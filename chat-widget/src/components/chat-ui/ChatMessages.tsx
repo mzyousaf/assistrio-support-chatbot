@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ScrollChromeStyle, UserBubbleStyle } from "../../models/botChatUI";
 import type { SuggestedQuestionChip } from "../../types";
 import type { ChatUIMessage, ChatUISource } from "./types";
@@ -7,6 +7,32 @@ import { cx } from "./utils";
 
 const SCROLL_THRESHOLD = 80;
 const DEFAULT_SCROLL_TO_BOTTOM_TEXT = "Scroll to latest";
+
+/** Pin the message row to the top of the conversation scroller (`listRef` when it overflows; else nearest overflow ancestor). */
+function scrollAnchorRowToTopOfScroller(anchorEl: HTMLElement, list: HTMLElement | null, marginTop = 8): void {
+  const apply = (scroller: HTMLElement) => {
+    const c = scroller.getBoundingClientRect();
+    const r = anchorEl.getBoundingClientRect();
+    scroller.scrollTop = Math.max(0, scroller.scrollTop + (r.top - c.top) - marginTop);
+  };
+  if (list && list.contains(anchorEl) && list.scrollHeight > list.clientHeight) {
+    apply(list);
+    return;
+  }
+  let parent = anchorEl.parentElement;
+  while (parent) {
+    if (parent === document.body || parent === document.documentElement) break;
+    const st = getComputedStyle(parent);
+    const oy = st.overflowY;
+    const scrollsY = oy === "auto" || oy === "scroll" || oy === "overlay";
+    if (scrollsY && parent.scrollHeight > parent.clientHeight) {
+      apply(parent);
+      return;
+    }
+    parent = parent.parentElement;
+  }
+  if (list && list.contains(anchorEl)) apply(list);
+}
 
 function resolveScrollChromeColor(
   dark: boolean | undefined,
@@ -103,39 +129,43 @@ export interface ChatMessagesProps {
   messageListOverflow?: "auto" | "hidden";
 }
 
-/** Centered indeterminate loader while conversation messages are fetched. */
-function ConversationLoadingIndicator({
-  dark = true,
-  accentColor = "#6366f1",
-}: {
-  dark?: boolean;
-  accentColor?: string;
-}) {
-  const tone = (accentColor ?? "").trim() || "#6366f1";
+function ConversationMessagesSkeleton({ dark, compact }: { dark?: boolean; compact?: boolean }) {
+  const row = (align: "end" | "start", wClass: string, hClass: string) => (
+    <div className={cx("flex w-full", align === "end" ? "justify-end" : "justify-start")}>
+      <div
+        className={cx(
+          "max-w-[min(100%,22rem)] rounded-2xl",
+          hClass,
+          wClass,
+          "animate-pulse",
+          dark ? "bg-gray-700/55" : "bg-gray-200/90",
+        )}
+        aria-hidden
+      />
+    </div>
+  );
   return (
     <div
-      className="flex h-full min-h-[10rem] w-full flex-1 flex-col items-center justify-center px-4"
+      className={cx("flex min-h-0 w-full flex-1 flex-col gap-3", compact ? "gap-2.5" : "gap-3.5")}
+      role="status"
+      aria-live="polite"
       aria-busy="true"
       aria-label="Loading messages"
     >
-      <svg
-        className="h-10 w-10 shrink-0 animate-spin motion-reduce:animate-none"
-        viewBox="0 0 24 24"
-        fill="none"
-        aria-hidden
-        style={{ color: tone }}
-      >
-        <circle
-          cx="12"
-          cy="12"
-          r="9"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeDasharray="26 58"
-          className={dark ? "opacity-90" : "opacity-85"}
-        />
-      </svg>
+      {row("end", "w-[82%]", "h-10")}
+      {row("start", "w-[92%]", "h-14")}
+      {row("end", "w-[58%]", "h-10")}
+      {row("start", "w-[76%]", "h-12")}
+      {row("end", "w-[72%]", "h-9")}
+    </div>
+  );
+}
+
+/** Customer-dashboard style: message-area skeleton while history is fetched. */
+function ConversationLoadingIndicator({ dark, compact }: { dark?: boolean; compact?: boolean }) {
+  return (
+    <div className="flex h-full min-h-[10rem] w-full flex-1 flex-col justify-stretch py-0">
+      <ConversationMessagesSkeleton dark={dark} compact={compact} />
     </div>
   );
 }
@@ -193,6 +223,8 @@ export function ChatMessages({
   const userHasScrolledRef = useRef(false);
   const prevScrollHeightRef = useRef(0);
   const anchoredUserSendIdRef = useRef<string | null>(null);
+  /** User message id we already aligned to top for the current assistant streaming turn. */
+  const pinnedStreamingUserIdRef = useRef<string | null>(null);
   const [scrollButtonVisible, setScrollButtonVisible] = useState(false);
 
   const scrollBarChromeColor = useMemo(
@@ -254,7 +286,7 @@ export function ChatMessages({
 
   const assistantStreaming = messages.some((m) => m.role === "assistant" && m.status === "streaming");
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (messageListOverflow === "hidden") return;
     const list = listRef.current;
 
@@ -262,21 +294,39 @@ export function ChatMessages({
     const lastUser = users[users.length - 1];
     if (lastUser?.status === "sending" && anchoredUserSendIdRef.current !== lastUser.id) {
       anchoredUserSendIdRef.current = lastUser.id;
-      const el = list?.querySelector(`[data-message-id="${lastUser.id}"]`);
-      requestAnimationFrame(() => {
-        el?.scrollIntoView({ behavior: "smooth", block: "start" });
-      });
+      const id = CSS.escape(String(lastUser.id));
+      const el = list?.querySelector(`[data-message-id="${id}"]`) as HTMLElement | null;
+      if (el) scrollAnchorRowToTopOfScroller(el, list, 8);
       return;
     }
 
     if (assistantStreaming) {
-      if (!userHasScrolledRef.current) {
-        endRef.current?.scrollIntoView({ behavior: "smooth" });
+      const vm = visibleMessages;
+      const lastMsg = vm[vm.length - 1];
+      const prevMsg = vm.length >= 2 ? vm[vm.length - 2] : undefined;
+      if (
+        lastMsg?.role === "assistant" &&
+        lastMsg.status === "streaming" &&
+        prevMsg?.role === "user" &&
+        pinnedStreamingUserIdRef.current !== prevMsg.id
+      ) {
+        pinnedStreamingUserIdRef.current = prevMsg.id;
+        const id = CSS.escape(String(prevMsg.id));
+        const el = list?.querySelector(`[data-message-id="${id}"]`) as HTMLElement | null;
+        if (el) scrollAnchorRowToTopOfScroller(el, list, 8);
       }
       if (list) prevScrollHeightRef.current = list.scrollHeight;
       return;
     }
 
+    pinnedStreamingUserIdRef.current = null;
+  }, [assistantStreaming, visibleMessages, messages, messageListOverflow]);
+
+  useEffect(() => {
+    if (messageListOverflow === "hidden") return;
+    if (assistantStreaming) return;
+
+    const list = listRef.current;
     if (!list) return;
     const prevHeight = prevScrollHeightRef.current;
     const nowHeight = list.scrollHeight;
@@ -304,6 +354,7 @@ export function ChatMessages({
         )}
         style={{
           ["--chat-accent" as string]: scrollBarChromeColor,
+          overflowAnchor: "none",
           ...(showScrollbar
             ? { scrollbarColor: `${scrollBarChromeColor} transparent` as const }
             : { scrollbarColor: "transparent transparent" as const }),
@@ -316,11 +367,11 @@ export function ChatMessages({
         {conversationLoading ? (
           <div
             className={cx(
-              "absolute inset-0 z-[1] flex min-h-0 flex-col",
+              "absolute inset-0 z-[1] flex min-h-0 flex-col bg-inherit",
               compact ? "p-2" : "p-4",
             )}
           >
-            <ConversationLoadingIndicator dark={dark} accentColor={accentColor} />
+            <ConversationLoadingIndicator dark={dark} compact={compact} />
           </div>
         ) : null}
         {!conversationLoading && visibleMessages.length === 0 && !showSuggestedBlock ? (
@@ -345,9 +396,10 @@ export function ChatMessages({
             return (
               <div
                 key={msg.id}
+                data-message-id={msg.id}
                 className={cx(
                   "flex w-full min-w-0 max-w-full flex-col",
-                  msg.role === "user" ? "items-end" : "items-start"
+                  msg.role === "user" ? "items-end scroll-mt-3" : "items-start",
                 )}
               >
                 <div

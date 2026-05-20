@@ -68,7 +68,7 @@ export function ConversationRollupTopicSentiment({ topics, sentiment, className 
         <TopicRollupDetailsModal
           open={open}
           onClose={() => setOpen(false)}
-          title="Conversation topics"
+          title="Chat topics"
           primaryTopicId={mainId}
           subTopicIds={subIds}
         />

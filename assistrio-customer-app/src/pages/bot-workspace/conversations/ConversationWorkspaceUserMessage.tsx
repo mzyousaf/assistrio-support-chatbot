@@ -1,5 +1,5 @@
 import { FileText } from 'lucide-react';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import type { CustomerConversationMessage } from '@/api/types';
 import {
   AttachmentCountBadge,
@@ -7,7 +7,8 @@ import {
   ChatVoiceMessageDetailScreen,
   VoiceTranscriptPreview,
 } from './conversation-message-ui';
-import { Modal } from '@/components/ui';
+import { Modal, Tooltip } from '@/components/ui';
+import { formatConversationAbsolute } from '@/lib/conversationDateFormat';
 import { cn } from '@/lib/utils';
 import { conversationMessageBodyText } from './conversationMessageText';
 import { MessageCreditBadge, shouldShowMessageCreditBadge } from './MessageCreditBadge';
@@ -15,8 +16,53 @@ import { MessageCreditBreakdownModal } from './MessageCreditBreakdownModal';
 import { MessageTopicSentimentTags, messageShouldShowTopicSentimentTags } from './MessageTopicSentimentTags';
 import { WorkspaceMessageAttachmentsModal } from './WorkspaceMessageAttachmentsModal';
 
+type Props = {
+  message: CustomerConversationMessage;
+  /** Playground chat logs: absolute sent time when hovering the message bubble. */
+  showBubbleSentTimeTooltip?: boolean;
+};
+
+function UserMessageBubbleSurface({
+  showSentTimeTooltip,
+  createdAt,
+  className,
+  fullWidthTooltip = false,
+  children,
+}: {
+  showSentTimeTooltip?: boolean;
+  createdAt: string;
+  className?: string;
+  fullWidthTooltip?: boolean;
+  children: ReactNode;
+}) {
+  const surface = (
+    <div className={className} role="article">
+      {children}
+    </div>
+  );
+  if (!showSentTimeTooltip) return surface;
+  return (
+    <Tooltip
+      content={formatConversationAbsolute(createdAt)}
+      side="top"
+      panelClassName="max-w-xs text-xs"
+      fullWidth={fullWidthTooltip}
+    >
+      <span
+        className={cn(
+          fullWidthTooltip ? 'block min-w-0 max-w-full' : 'inline-block max-w-full',
+          className,
+        )}
+        role="article"
+      >
+        {children}
+      </span>
+    </Tooltip>
+  );
+}
+
 /** Mirrors chat-widget `ChatBubble` user rows: text, voice player + transcript, attachment count badge. */
-export function ConversationWorkspaceUserMessage({ message }: { message: CustomerConversationMessage }) {
+export function ConversationWorkspaceUserMessage({ message, showBubbleSentTimeTooltip = false }: Props) {
   const msgKey = message.messageId || message.id || `${message.createdAt}-user`;
   const si = message.speechInput;
   const isUserVoice =
@@ -47,7 +93,6 @@ export function ConversationWorkspaceUserMessage({ message }: { message: Custome
 
   const audioUrl = si?.audioUrl?.trim() ?? '';
   const isVoiceMessage = Boolean(isUserVoice && audioUrl);
-
   const showCredits = shouldShowMessageCreditBadge(message.creditCost, message.creditReason, message.creditBreakdown);
   const openCreditModal = showCredits ? () => setCreditDetailsOpen(true) : undefined;
   const creditBadge = showCredits ? (
@@ -73,19 +118,23 @@ export function ConversationWorkspaceUserMessage({ message }: { message: Custome
   const showTopicSentimentTags = messageShouldShowTopicSentimentTags(message);
   const showFooterMeta = showCredits || attachmentCount > 0;
 
-  return (
-    <>
-      <div
-        className={cn(
-          'flex min-w-0 flex-col gap-0.5',
-          isVoiceMessage
-            ? 'box-border self-end w-[350px] min-w-[350px] max-w-[350px] items-stretch'
-            : 'w-fit max-w-full items-end',
-        )}
-      >
+  const messageColumn = (
+    <div
+      className={cn(
+        'flex min-w-0 flex-col gap-0.5',
+        isVoiceMessage
+          ? 'box-border self-end w-[350px] min-w-[350px] max-w-[350px] items-stretch'
+          : 'w-fit max-w-full items-end',
+      )}
+    >
         {isVoiceMessage ? (
           <div className="w-full max-w-full min-w-0 shrink-0">
-            <div className={cn(bubbleSurfaceClass, 'block w-full min-w-0 box-border')} role="article">
+            <UserMessageBubbleSurface
+              showSentTimeTooltip={showBubbleSentTimeTooltip}
+              createdAt={message.createdAt}
+              fullWidthTooltip
+              className={cn(bubbleSurfaceClass, 'block w-full min-w-0 box-border')}
+            >
               <ChatUserVoiceMessage
                 messageId={msgKey}
                 audioUrl={audioUrl}
@@ -96,7 +145,7 @@ export function ConversationWorkspaceUserMessage({ message }: { message: Custome
                 accentColor="#14b8a6"
                 className="w-full min-w-0 !max-w-none"
               />
-            </div>
+            </UserMessageBubbleSurface>
             {voiceToolbarVisible ? (
               <div className={userTagsRowClass}>
                 {voiceTranscript && showCredits ? (
@@ -182,7 +231,11 @@ export function ConversationWorkspaceUserMessage({ message }: { message: Custome
           </div>
         ) : (
           <>
-            <div className={cn(bubbleSurfaceClass, 'w-fit max-w-full')} role="article">
+            <UserMessageBubbleSurface
+              showSentTimeTooltip={showBubbleSentTimeTooltip}
+              createdAt={message.createdAt}
+              className={cn(bubbleSurfaceClass, 'w-fit max-w-full')}
+            >
               {textBody ? (
                 <p className={plainTextClass}>{textBody}</p>
               ) : (
@@ -190,7 +243,7 @@ export function ConversationWorkspaceUserMessage({ message }: { message: Custome
                   Empty message
                 </span>
               )}
-            </div>
+            </UserMessageBubbleSurface>
             {showFooterMeta || showTopicSentimentTags ? (
               <div className={userTagsRowClass}>
                 <div
@@ -227,7 +280,12 @@ export function ConversationWorkspaceUserMessage({ message }: { message: Custome
             ) : null}
           </>
         )}
-      </div>
+    </div>
+  );
+
+  return (
+    <>
+      {messageColumn}
 
       {attachmentCount > 0 ? (
         <WorkspaceMessageAttachmentsModal

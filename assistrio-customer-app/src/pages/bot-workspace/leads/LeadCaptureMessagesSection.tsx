@@ -128,7 +128,7 @@ export function LeadCaptureMessagesSection({ botId, detail, definitions, message
   if (msgLoadState === 'error') {
     return (
       <ConversationInsightsSheetSection title={LEAD_FIELDS_FROM_MESSAGES_TITLE} className={leadDetailSheetSectionClassName}>
-        <p className="m-0 text-[13px] text-slate-500">Could not load transcript for this conversation.</p>
+        <p className="m-0 text-[13px] text-slate-500">Could not load transcript for this chat.</p>
       </ConversationInsightsSheetSection>
     );
   }

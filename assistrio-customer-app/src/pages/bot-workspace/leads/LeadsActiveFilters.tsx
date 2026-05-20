@@ -52,7 +52,7 @@ export function listLeadsFilterChips(
   if (!matchesDefaultLeadsWidgetFilters(draft)) {
     chips.push({
       id: 'widgetChannel',
-      label: `Widget channel: ${widgetChannelValueLabel(curStd)}`,
+      label: `Widget Channel: ${widgetChannelValueLabel(curStd)}`,
     });
   }
 

@@ -199,8 +199,18 @@ export function getCustomerBotConversations(id: string, params?: CustomerBotConv
   if (params?.hasDictation === false) q.set('hasDictation', 'false');
   if (params?.hasAttachment === true) q.set('hasAttachment', 'true');
   if (params?.hasAttachment === false) q.set('hasAttachment', 'false');
+  if (params?.minCredits != null && Number.isFinite(params.minCredits)) q.set('minCredits', String(params.minCredits));
+  if (params?.maxCredits != null && Number.isFinite(params.maxCredits)) q.set('maxCredits', String(params.maxCredits));
+  if (params?.creditsGtZero === true) q.set('creditsGtZero', 'true');
+  if (params?.creditsZero === true) q.set('creditsZero', 'true');
+  if (params?.minMessages != null && Number.isFinite(params.minMessages) && params.minMessages > 0) {
+    q.set('minMessages', String(Math.floor(params.minMessages)));
+  }
   if (params?.deviceType?.trim()) q.set('deviceType', params.deviceType.trim());
   if (params?.countryCode?.trim()) q.set('countryCode', params.countryCode.trim());
+  if (params?.primaryTopics?.trim()) q.set('primaryTopics', params.primaryTopics.trim());
+  if (params?.secondaryTopics?.trim()) q.set('secondaryTopics', params.secondaryTopics.trim());
+  if (params?.sentiments?.trim()) q.set('sentiments', params.sentiments.trim());
   const qs = q.toString();
   return customerFetch<CustomerBotConversationsListResponse>(
     `${P}/bots/${encodeURIComponent(id)}/conversations${qs ? `?${qs}` : ''}`,
@@ -276,6 +286,25 @@ export function patchCustomerBot(id: string, body: Record<string, unknown>) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
+}
+
+export type RefineResponseStyleResult = {
+  mode: 'structured';
+  description: string;
+  instructions: string;
+  preview: { title: string; example: string };
+};
+
+/** POST refine response style (does not persist; caller saves via PATCH). */
+export function refineCustomerBotResponseStyle(botId: string, description: string) {
+  return customerFetch<RefineResponseStyleResult>(
+    `${P}/bots/${encodeURIComponent(botId)}/ai/response-style/refine`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ description }),
+    },
+  );
 }
 
 function customerKnowledgePath(botId: string) {

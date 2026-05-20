@@ -1,6 +1,8 @@
 import { Sparkles } from 'lucide-react';
 import type { CustomerConversationMessageCreditBreakdownRow } from '@/api/types';
+import { Tooltip } from '@/components/ui';
 import { cn } from '@/lib/utils';
+import { chatLogListChipClass } from './conversationTopicSentimentDisplay';
 import { breakdownRowVisitorLabel } from './creditBreakdownDisplay';
 
 function isBillableBlockedReason(reason: string): boolean {
@@ -29,14 +31,25 @@ function formatSpendLabel(cost: number, creditReason?: string): string {
   return `${cost % 1 === 0 ? String(Math.round(cost)) : String(cost)} AI Credits`;
 }
 
-function breakdownHintTitle(rows: CustomerConversationMessageCreditBreakdownRow[]): string | undefined {
-  if (!rows.length) return undefined;
-  const lines = rows.map((r) => {
+export const CREDITS_USAGE_TOOLTIP_TITLE = 'Credits usage';
+
+export function creditBreakdownTooltipLines(
+  rows: CustomerConversationMessageCreditBreakdownRow[],
+): string[] {
+  return rows.map((r) => {
     const n = r.creditsUsed % 1 === 0 ? String(Math.round(r.creditsUsed)) : String(r.creditsUsed);
     const lab = breakdownRowVisitorLabel(r);
     return `${lab}: ${n}`;
   });
-  return ['Credit breakdown', ...lines].join('\n');
+}
+
+/** Plain-text tooltip for native `title` (e.g. chat log list chips). */
+export function creditBreakdownTooltipText(
+  rows: CustomerConversationMessageCreditBreakdownRow[],
+): string | undefined {
+  const lines = creditBreakdownTooltipLines(rows);
+  if (!lines.length) return undefined;
+  return [CREDITS_USAGE_TOOLTIP_TITLE, ...lines].join('\n');
 }
 
 type Props = {
@@ -44,9 +57,17 @@ type Props = {
   creditReason?: string;
   creditBreakdown?: CustomerConversationMessageCreditBreakdownRow[] | null;
   className?: string;
+  /** Match neutral chip styling used in Insights chat logs. */
+  chatLogList?: boolean;
 };
 
-export function MessageCreditBadge({ creditCost, creditReason, creditBreakdown, className }: Props) {
+export function MessageCreditBadge({
+  creditCost,
+  creditReason,
+  creditBreakdown,
+  className,
+  chatLogList,
+}: Props) {
   const reasonStr = String(creditReason ?? '').trim();
   const costKnown = typeof creditCost === 'number' && Number.isFinite(creditCost);
   if (!costKnown && !reasonStr && !(creditBreakdown && creditBreakdown.length)) return null;
@@ -55,12 +76,28 @@ export function MessageCreditBadge({ creditCost, creditReason, creditBreakdown, 
   const label = costKnown ? formatSpendLabel(finiteCost, reasonStr) : 'Unknown billing';
   const muted = label === 'Not billable' || label === 'Unknown billing';
 
-  const titleHint =
-    breakdownHintTitle(Array.isArray(creditBreakdown) ? creditBreakdown : []) ?? (reasonStr ? reasonStr : undefined);
+  const breakdownRows = Array.isArray(creditBreakdown) ? creditBreakdown : [];
+  const breakdownLines = creditBreakdownTooltipLines(breakdownRows);
+  const breakdownTooltip = creditBreakdownTooltipText(breakdownRows);
 
-  return (
+  if (chatLogList) {
+    return (
+      <span
+        title={breakdownTooltip}
+        className={cn(
+          chatLogListChipClass,
+          muted ? 'border-slate-200/85 text-slate-600' : 'text-slate-800',
+          className,
+        )}
+      >
+        <Sparkles className={cn('size-3 shrink-0', muted ? 'text-slate-500' : 'text-teal-600')} strokeWidth={2} aria-hidden />
+        <span className="tabular-nums">{label}</span>
+      </span>
+    );
+  }
+
+  const badge = (
     <span
-      title={titleHint}
       className={cn(
         'inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-semibold tracking-tight shadow-sm',
         muted
@@ -73,4 +110,29 @@ export function MessageCreditBadge({ creditCost, creditReason, creditBreakdown, 
       <span className="tabular-nums">{label}</span>
     </span>
   );
+
+  if (breakdownLines.length) {
+    return (
+      <Tooltip
+        side="top"
+        panelClassName="max-w-xs text-left text-xs"
+        content={
+          <>
+            <span className="text-slate-400">{CREDITS_USAGE_TOOLTIP_TITLE}</span>
+            <span className="mt-1 block space-y-0.5 font-medium text-slate-50">
+              {breakdownLines.map((line) => (
+                <span key={line} className="block">
+                  {line}
+                </span>
+              ))}
+            </span>
+          </>
+        }
+      >
+        <span className="inline-flex min-w-0">{badge}</span>
+      </Tooltip>
+    );
+  }
+
+  return badge;
 }

@@ -27,6 +27,7 @@ import { runtimeEmbedMultipartPost } from "../lib/runtimeEmbedMultipartPost";
 import { runtimeEmbedSpeechPost } from "../lib/runtimeEmbedSpeechPost";
 import { speechEndpointFromChatUrl } from "../lib/speechEndpoint";
 import { createTranscriptionUploadFile } from "../lib/transcriptionUploadFile";
+import { sanitizeChatMessageContent } from "../lib/chatMessageDisplay.util";
 import { streamAssistantReply } from "../lib/streamAssistantReply";
 import { mergeWidgetStrings, type WidgetStrings } from "../lib/widgetStrings";
 import { resolveWelcomeMessage } from "../lib/welcomeMessage";
@@ -195,7 +196,7 @@ function mapEmbedApiRowsToChatUIMessages(
       return {
         id: resolvePersistedEmbedHistoryMessageId(m.id),
         role: m.role as "user" | "assistant",
-        content: String(m.content ?? ""),
+        content: sanitizeChatMessageContent(m.role as "user" | "assistant", String(m.content ?? "")),
         createdAt: m.createdAt || isoNow(),
         status: "sent" as const,
         ...(feedbackRating ? { feedbackRating } : {}),
@@ -1157,7 +1158,10 @@ export function AdminLiveChatAdapter({
 
         if (!res.ok) {
           const assistantErrId = generateId();
-          const errText = typeof content === "string" ? content : "No response.";
+          const errText = sanitizeChatMessageContent(
+            "assistant",
+            typeof content === "string" ? content : "No response.",
+          );
           setMessages((prev) => {
             const withUser = prev.map((m) =>
               m.id === userMessageId ? { ...m, status: "error" as const } : m,
@@ -1179,7 +1183,10 @@ export function AdminLiveChatAdapter({
         }
 
         const assistantId = resolveAssistantClientMessageId(data.assistantMessageId);
-        const fullContent = typeof content === "string" ? content : "No response.";
+        const fullContent = sanitizeChatMessageContent(
+          "assistant",
+          typeof content === "string" ? content : "No response.",
+        );
 
         setMessages((prev) => {
           const withUser = prev.map((m) =>
@@ -1417,7 +1424,7 @@ export function AdminLiveChatAdapter({
       const userMsg: ChatUIMessage = {
         id: userMessageId,
         role: "user",
-        content: value,
+        content: sanitizeChatMessageContent("user", value),
         createdAt: isoNow(),
         status: "sending",
         ...(optimisticAttachments ? { attachments: optimisticAttachments } : {}),

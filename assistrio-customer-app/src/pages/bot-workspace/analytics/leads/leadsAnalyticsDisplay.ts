@@ -1,4 +1,5 @@
 import type { CustomerChatsAnalyticsStartedFromKey, CustomerLeadsStartedFromBreakdownItem } from '@/api/types';
+import { widgetStartedFromUiLabel } from '@/pages/bot-workspace/analytics/shared/AnalyticsInsightsFilterBars';
 
 /** Stable source order for charts (matches product surfaces). */
 export const LEADS_SOURCE_KEYS_ORDER: readonly CustomerChatsAnalyticsStartedFromKey[] = [
@@ -10,18 +11,7 @@ export const LEADS_SOURCE_KEYS_ORDER: readonly CustomerChatsAnalyticsStartedFrom
 ] as const;
 
 export function displayLabelForLeadsSourceKey(key: CustomerChatsAnalyticsStartedFromKey): string {
-  switch (key) {
-    case 'runtime_widget':
-      return 'Runtime Widget';
-    case 'runtime_iframe':
-      return 'Runtime IFrame';
-    case 'shared_preview':
-      return 'Shared Preview';
-    case 'playground_preview':
-      return 'Playground Preview';
-    case 'unknown':
-      return 'Unknown';
-  }
+  return widgetStartedFromUiLabel(key);
 }
 
 export type NormalizedLeadSourceRow = {

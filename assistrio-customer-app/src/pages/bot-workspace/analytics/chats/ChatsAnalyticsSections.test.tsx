@@ -177,7 +177,7 @@ describe('ChatsWidgetSourceChart', () => {
     const rows: CustomerChatsAnalyticsStartedFromBreakdownItem[] = [
       {
         key: 'runtime_widget',
-        label: 'Runtime Widget',
+        label: 'Chat Widget',
         conversations: 5,
         messages: 12,
       },
@@ -189,8 +189,8 @@ describe('ChatsWidgetSourceChart', () => {
       },
     ];
     const html = renderToStaticMarkup(<ChatsWidgetSourceChart rows={rows} />);
-    expect(html).toContain('Runtime Widget');
-    expect(html).toContain('Embedded iframe');
+    expect(html).toContain('Chat Widget');
+    expect(html).toContain('Iframe');
     expect(html).not.toContain('runtime_widget');
     expect(html).not.toContain('runtime_iframe');
     expect(html).toContain('data-testid="pie-chart"');

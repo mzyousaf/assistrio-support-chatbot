@@ -45,6 +45,9 @@ type RegistryEntry = {
 type CustomerWidgetPreviewContextValue = {
   /** Bump whenever registry or overrides change so hosts recompute. */
   previewEpoch: number;
+  /** Increment to remount the playground embed (`/preview/init` + fresh session). */
+  previewWidgetGeneration: number;
+  reloadPreviewWidget: () => void;
   registerSurface: (reg: PreviewSurfaceRegistration) => () => void;
   /** Active portal target, or null if none qualify (host uses off-screen fallback). */
   getActiveSurfaceElement: () => HTMLElement | null;
@@ -114,6 +117,7 @@ export function CustomerWidgetPreviewProvider({ children }: { children: ReactNod
   const registrationsRef = useRef(new Map<string, RegistryEntry>());
   const seqRef = useRef(0);
   const [previewEpoch, setPreviewEpoch] = useState(0);
+  const [previewWidgetGeneration, setPreviewWidgetGeneration] = useState(0);
   const [behaviorDraft, setBehaviorDraftSlice] = useState<BehaviorPreviewDraftSlice | null>(null);
   const [appearanceChatUiDraft, setAppearanceChatUiDraft] = useState<Record<string, unknown> | null>(null);
   const [profileDraft, setProfileDraftSlice] = useState<ProfilePreviewDraftSlice | null>(null);
@@ -126,6 +130,11 @@ export function CustomerWidgetPreviewProvider({ children }: { children: ReactNod
   const bump = useCallback(() => {
     setPreviewEpoch((n) => n + 1);
   }, []);
+
+  const reloadPreviewWidget = useCallback(() => {
+    setPreviewWidgetGeneration((n) => n + 1);
+    bump();
+  }, [bump]);
 
   const registerSurface = useCallback((reg: PreviewSurfaceRegistration) => {
     const { id, element, priority = 0 } = reg;
@@ -166,6 +175,8 @@ export function CustomerWidgetPreviewProvider({ children }: { children: ReactNod
   const value = useMemo(
     (): CustomerWidgetPreviewContextValue => ({
       previewEpoch,
+      previewWidgetGeneration,
+      reloadPreviewWidget,
       registerSurface,
       getActiveSurfaceElement,
       inlineSlotWantsContained,
@@ -182,6 +193,8 @@ export function CustomerWidgetPreviewProvider({ children }: { children: ReactNod
     }),
     [
       previewEpoch,
+      previewWidgetGeneration,
+      reloadPreviewWidget,
       registerSurface,
       getActiveSurfaceElement,
       inlineSlotWantsContained,
