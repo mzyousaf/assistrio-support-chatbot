@@ -28,8 +28,8 @@ export type CustomerAuthValue = {
   needsOnboarding: boolean | null;
   bootstrapError: string | null;
   refresh: () => Promise<void>;
-  /** Clears session on success. Returns whether local state was cleared (API succeeded). */
-  logout: () => Promise<boolean>;
+  /** Best-effort backend logout; always clears local customer auth state. */
+  logout: () => Promise<void>;
   logoutInFlight: boolean;
   logoutError: string | null;
   clearLogoutError: () => void;
@@ -131,27 +131,24 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
 
   const clearLogoutError = useCallback(() => setLogoutError(null), []);
 
-  const logout = useCallback(async (): Promise<boolean> => {
-    setLogoutError(null);
-    setLogoutInFlight(true);
-    const res = await postCustomerLogout();
-    if (!res.ok) {
-      setLogoutInFlight(false);
-      setLogoutError(
-        res.status === 0
-          ? 'Could not reach the server. Check your connection and try signing out again.'
-          : 'Could not sign you out. Please try again.',
-      );
-      return false;
-    }
+  const clearLocalCustomerAuthState = useCallback(() => {
     setCustomer(null);
     setStatus('anonymous');
     setNeedsOnboarding(null);
     setBootstrapError(null);
     setSessionInvalidatedByApi(false);
-    setLogoutInFlight(false);
-    return true;
   }, []);
+
+  const logout = useCallback(async (): Promise<void> => {
+    setLogoutError(null);
+    setLogoutInFlight(true);
+    try {
+      await postCustomerLogout();
+    } finally {
+      clearLocalCustomerAuthState();
+      setLogoutInFlight(false);
+    }
+  }, [clearLocalCustomerAuthState]);
 
   const value = useMemo(
     () => ({

@@ -33,6 +33,7 @@ import { AgentWorkspaceSidebar } from '../pages/bot-workspace/AgentWorkspaceSide
 import { SharePreviewModal } from '../pages/bot-workspace/SharePreviewModal';
 import { useWorkspaceDiscardModal } from '../pages/bot-workspace/WorkspaceDiscardModal';
 import { useCustomerAuth } from '../auth/CustomerAuthContext';
+import { useCustomerLogout } from '../auth/useCustomerLogout';
 import { customerInitials } from '../lib/customerDisplay';
 import { widgetSnippet } from '../lib/embedOrigin';
 import { BotLifecycleModal } from '../components/BotLifecycleModal';
@@ -348,8 +349,8 @@ export function AppShell() {
 
   const sidebarPeeking = sidebarCollapsed && sidebarHovered;
 
-  const { customer, needsOnboarding, logout, logoutInFlight, logoutError, clearLogoutError } =
-    useCustomerAuth();
+  const { customer, needsOnboarding } = useCustomerAuth();
+  const { signOut, logoutInFlight, logoutError, clearLogoutError } = useCustomerLogout();
 
   const wsName = navbarWorkspaceLabel(customer);
   const initials = customer ? customerInitials(customer) : '?';
@@ -561,10 +562,12 @@ export function AppShell() {
   }, [agentId]);
 
   async function handleSignOut() {
-    const ok = await logout();
-    workspaceDetailsRef.current?.removeAttribute('open');
-    topUserDetailsRef.current?.removeAttribute('open');
-    if (ok) navigate('/login', { replace: true });
+    await signOut({
+      beforeNavigate: () => {
+        workspaceDetailsRef.current?.removeAttribute('open');
+        topUserDetailsRef.current?.removeAttribute('open');
+      },
+    });
   }
 
   function closeAllMenus() {

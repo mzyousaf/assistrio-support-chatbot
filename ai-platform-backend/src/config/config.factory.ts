@@ -27,6 +27,11 @@ export function configFactory() {
     /** Customer web app origin, no trailing slash (e.g. `https://app.assistrio.com`). Used for post-OAuth redirects. */
     customerAppBaseUrl: process.env.CUSTOMER_APP_BASE_URL?.trim().replace(/\/$/, '') ?? '',
     /**
+     * Optional `Domain` attribute for `ar_customer_session` only (e.g. `.assistrio.com`).
+     * Unset → host-only cookie on the API host. Admin session cookies are unaffected.
+     */
+    sessionCookieDomain: process.env.SESSION_COOKIE_DOMAIN?.trim() ?? '',
+    /**
      * POST /api/internal/admin-bootstrap/create-superadmin — header `x-admin-bootstrap-token`.
      * Leave unset to disable the endpoint (503).
      */

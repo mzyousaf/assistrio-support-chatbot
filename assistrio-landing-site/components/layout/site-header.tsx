@@ -3,23 +3,31 @@
 import Image from "next/image";
 import Link from "next/link";
 import { Container } from "@/components/layout/container";
-import { TrackedCtaLink } from "@/components/analytics/tracked-cta-link";
 import { TrackedExternalCtaLink } from "@/components/analytics/tracked-external-cta-link";
 import { useLandingCustomerSession } from "@/contexts/landing-customer-session-context";
 import { SITE_LOGO, SITE_LOGO_WORDMARK_PX } from "@/lib/site-branding";
 import {
-  CONTINUE_WITH_GOOGLE_CTA_LABEL,
-  CONTINUE_WITH_GOOGLE_CTA_LINE,
-  OPEN_CUSTOMER_APP_CTA_LABEL,
-  OPEN_CUSTOMER_APP_CTA_LINE,
-  PRIMARY_NAV_CTA_LABEL,
-  PRIMARY_NAV_CTA_LINE,
+  CUSTOMER_DASHBOARD_CTA_LABEL,
+  CUSTOMER_DASHBOARD_CTA_LINE,
+  HEADER_GET_STARTED_CTA_LABEL,
+  HEADER_GET_STARTED_CTA_LINE,
+  HEADER_SIGN_IN_CTA_LABEL,
+  HEADER_SIGN_IN_CTA_LINE,
 } from "@/lib/primary-cta-label";
+
+const headerPrimaryClass =
+  "btn-primary-shimmer max-w-[min(92vw,14.5rem)] rounded-full px-2.5 py-2 text-center text-[0.65rem] font-semibold leading-snug shadow-[var(--shadow-sm)] ring-1 ring-white/15 sm:max-w-none sm:px-4 sm:py-2.5 sm:text-sm";
+
+const headerSecondaryClass =
+  "max-w-[min(92vw,14.5rem)] rounded-full border border-[var(--border-default)] bg-white/80 px-2.5 py-2 text-center text-[0.65rem] font-semibold leading-snug text-slate-700 shadow-[var(--shadow-xs)] sm:max-w-none sm:px-4 sm:py-2.5 sm:text-sm";
+
+const headerLoadingClass =
+  "max-w-[min(92vw,14.5rem)] rounded-full border border-[var(--border-default)] bg-white/70 px-3 py-2 text-[0.65rem] font-medium text-slate-500 sm:max-w-none sm:px-4 sm:py-2.5 sm:text-sm";
 
 export function SiteHeader() {
   const { status, googleAuthStartUrl, customerAppEntryUrl, apiBaseUrl } = useLandingCustomerSession();
   const showGoogle = Boolean(apiBaseUrl && googleAuthStartUrl);
-  const showOpenApp = Boolean(customerAppEntryUrl);
+  const showDashboard = Boolean(customerAppEntryUrl);
 
   return (
     <header className="sticky top-0 z-40 border-b border-[var(--border-default)] bg-white/92 shadow-[var(--shadow-xs)] backdrop-blur-md supports-[backdrop-filter]:bg-white/78">
@@ -53,43 +61,45 @@ export function SiteHeader() {
           className="flex min-w-0 shrink flex-wrap items-center justify-end gap-2 sm:gap-3"
         >
           {status === "loading" ? (
-            <span className="rounded-full border border-[var(--border-default)] bg-white/70 px-3 py-2 text-[0.65rem] font-medium text-slate-500 sm:px-4 sm:py-2.5 sm:text-sm">
-              …
+            <span
+              className={headerLoadingClass}
+              aria-busy="true"
+              aria-live="polite"
+            >
+              Checking account…
             </span>
-          ) : status === "authenticated" && showOpenApp ? (
+          ) : status === "authenticated" && showDashboard ? (
             <TrackedExternalCtaLink
               href={customerAppEntryUrl!}
-              location="site_header_open_app"
-              label={OPEN_CUSTOMER_APP_CTA_LABEL}
+              location="site_header_dashboard"
+              label={CUSTOMER_DASHBOARD_CTA_LABEL}
               variant="primary"
-              className="btn-primary-shimmer max-w-[min(92vw,14.5rem)] rounded-full px-2.5 py-2 text-center text-[0.65rem] font-semibold leading-snug shadow-[var(--shadow-sm)] ring-1 ring-white/15 sm:max-w-none sm:px-4 sm:py-2.5 sm:text-sm"
+              className={headerPrimaryClass}
             >
-              {OPEN_CUSTOMER_APP_CTA_LINE}
+              {CUSTOMER_DASHBOARD_CTA_LINE}
             </TrackedExternalCtaLink>
           ) : status !== "authenticated" && showGoogle ? (
-            <TrackedExternalCtaLink
-              href={googleAuthStartUrl!}
-              location="site_header_google"
-              label={CONTINUE_WITH_GOOGLE_CTA_LABEL}
-              variant="primary"
-              className="btn-primary-shimmer max-w-[min(92vw,14.5rem)] rounded-full px-2.5 py-2 text-center text-[0.65rem] font-semibold leading-snug shadow-[var(--shadow-sm)] ring-1 ring-white/15 sm:max-w-none sm:px-4 sm:py-2.5 sm:text-sm"
-            >
-              {CONTINUE_WITH_GOOGLE_CTA_LINE}
-            </TrackedExternalCtaLink>
+            <>
+              <TrackedExternalCtaLink
+                href={googleAuthStartUrl!}
+                location="site_header_sign_in"
+                label={HEADER_SIGN_IN_CTA_LABEL}
+                variant="secondary"
+                className={headerSecondaryClass}
+              >
+                {HEADER_SIGN_IN_CTA_LINE}
+              </TrackedExternalCtaLink>
+              <TrackedExternalCtaLink
+                href={googleAuthStartUrl!}
+                location="site_header_get_started"
+                label={HEADER_GET_STARTED_CTA_LABEL}
+                variant="primary"
+                className={headerPrimaryClass}
+              >
+                {HEADER_GET_STARTED_CTA_LINE}
+              </TrackedExternalCtaLink>
+            </>
           ) : null}
-          <TrackedCtaLink
-            href="/contact"
-            location="site_header"
-            label={PRIMARY_NAV_CTA_LABEL}
-            variant={status === "authenticated" || showGoogle ? "secondary" : "primary"}
-            className={
-              status === "authenticated" || showGoogle
-                ? "max-w-[min(92vw,14.5rem)] rounded-full border border-[var(--border-default)] bg-white/80 px-2.5 py-2 text-center text-[0.65rem] font-semibold leading-snug text-slate-700 shadow-[var(--shadow-xs)] sm:max-w-none sm:px-4 sm:py-2.5 sm:text-sm"
-                : "btn-primary-shimmer max-w-[min(92vw,14.5rem)] rounded-full px-2.5 py-2 text-center text-[0.65rem] font-semibold leading-snug shadow-[var(--shadow-sm)] ring-1 ring-white/15 sm:max-w-none sm:px-4 sm:py-2.5 sm:text-sm"
-            }
-          >
-            {PRIMARY_NAV_CTA_LINE}
-          </TrackedCtaLink>
         </nav>
       </Container>
     </header>

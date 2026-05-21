@@ -114,6 +114,9 @@ export async function customerFetch<T>(
   return promise;
 }
 
-export function customerGoogleAuthStartUrl(): string {
-  return buildUrl(`${CUSTOMER_PREFIX}/auth/google`);
+export function customerGoogleAuthStartUrl(options?: { selectAccount?: boolean }): string {
+  const path = options?.selectAccount
+    ? `${CUSTOMER_PREFIX}/auth/google?selectAccount=1`
+    : `${CUSTOMER_PREFIX}/auth/google`;
+  return buildUrl(path);
 }

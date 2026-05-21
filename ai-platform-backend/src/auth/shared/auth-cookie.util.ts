@@ -28,17 +28,33 @@ export function getCookieSecuritySuffix(
 
 const SESSION_PATH = '/';
 
+/** Trim env/config value; empty string → undefined (host-only cookie). */
+export function normalizeSessionCookieDomain(raw: string | undefined | null): string | undefined {
+  const d = String(raw ?? '').trim();
+  return d.length > 0 ? d : undefined;
+}
+
+function sessionCookieDomainSuffix(cookieDomain?: string): string {
+  const domain = normalizeSessionCookieDomain(cookieDomain);
+  return domain ? `; Domain=${domain}` : '';
+}
+
 export function buildSessionSetCookieHeader(
   cookieName: string,
   token: string,
   maxAgeSeconds: number,
   securitySuffix: string,
+  cookieDomain?: string,
 ): string {
-  return `${cookieName}=${encodeURIComponent(token)}; Path=${SESSION_PATH}; ${securitySuffix}; Max-Age=${maxAgeSeconds}`;
+  return `${cookieName}=${encodeURIComponent(token)}; Path=${SESSION_PATH}${sessionCookieDomainSuffix(cookieDomain)}; ${securitySuffix}; Max-Age=${maxAgeSeconds}`;
 }
 
-export function buildSessionClearCookieHeader(cookieName: string, securitySuffix: string): string {
-  return `${cookieName}=; Path=${SESSION_PATH}; Max-Age=0; ${securitySuffix}`;
+export function buildSessionClearCookieHeader(
+  cookieName: string,
+  securitySuffix: string,
+  cookieDomain?: string,
+): string {
+  return `${cookieName}=; Path=${SESSION_PATH}${sessionCookieDomainSuffix(cookieDomain)}; Max-Age=0; ${securitySuffix}`;
 }
 
 /**

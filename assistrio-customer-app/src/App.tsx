@@ -60,6 +60,7 @@ import { OnboardingKnowledgeStep } from './pages/onboarding/OnboardingKnowledgeS
 import { OnboardingGate } from './pages/onboarding/OnboardingGate';
 import { OnboardingLayout } from './pages/onboarding/OnboardingLayout';
 import { PostLoginRedirect } from './routes/PostLoginRedirect';
+import { CUSTOMER_ROUTES } from './routes/customerRoutes';
 import { AppToaster } from './components/AppToaster';
 import { SharedChatPage } from './pages/public/SharedChatPage';
 import { IframeChatPage } from './pages/public/IframeChatPage';
@@ -90,7 +91,7 @@ export function App() {
         <WorkspaceDiscardModalProvider>
         <Routes>
           <Route
-            path="/login"
+            path={CUSTOMER_ROUTES.login}
             element={
               <PublicLoginRoute>
                 <LoginPage />
@@ -99,15 +100,13 @@ export function App() {
           />
           <Route path="/share/:slug" element={<SharedChatPage />} />
           <Route path="/iframe/:botId" element={<IframeChatPage />} />
-          <Route
-            element={
-              <ProtectedRoute>
-                <AppShell />
-              </ProtectedRoute>
-            }
-          >
-            <Route path="/" element={<PostLoginRedirect />} />
-            <Route path="/dashboard" element={<Navigate to="/bots" replace />} />
+          <Route element={<ProtectedRoute />}>
+            <Route path={CUSTOMER_ROUTES.home} element={<PostLoginRedirect />} />
+            <Route
+              path={CUSTOMER_ROUTES.dashboard}
+              element={<Navigate to={CUSTOMER_ROUTES.agents} replace />}
+            />
+            <Route element={<AppShell />}>
             <Route path="/usage" element={<UsagePage />} />
             <Route path="/plans" element={<Navigate to="/settings/plans" replace />} />
             <Route path="/settings" element={<Navigate to="/settings/general" replace />} />
@@ -226,6 +225,7 @@ export function App() {
                 <Route path="knowledge-base" element={<OnboardingKnowledgeStep />} />
                 <Route path="go-live" element={<OnboardingGoLiveStep />} />
               </Route>
+            </Route>
             </Route>
           </Route>
           <Route path="*" element={<NotFoundPage />} />

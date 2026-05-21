@@ -1,18 +1,13 @@
-import { useNavigate } from 'react-router-dom';
 import { useCustomerAuth } from '../auth/CustomerAuthContext';
+import { useCustomerLogout } from '../auth/useCustomerLogout';
 import { DataPageLayout } from '../layout/workspace-layout';
 
 export function SettingsPage() {
-  const navigate = useNavigate();
-  const { customer, refresh, logout, logoutInFlight, bootstrapError } = useCustomerAuth();
+  const { customer, refresh, bootstrapError } = useCustomerAuth();
+  const { signOut, logoutInFlight } = useCustomerLogout();
 
   const email = customer?.email?.trim() || '—';
   const workspaceCount = customer?.workspaceIds?.length ?? 0;
-
-  async function handleSignOut() {
-    const ok = await logout();
-    if (ok) navigate('/login', { replace: true });
-  }
 
   return (
     <DataPageLayout
@@ -104,7 +99,7 @@ export function SettingsPage() {
             type="button"
             className="mt-[0.35rem] cursor-pointer rounded-lg border border-slate-300 bg-white px-4 py-2 text-[0.875rem] font-semibold text-slate-600 transition-colors duration-100 hover:enabled:border-slate-400 hover:enabled:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-65"
             disabled={logoutInFlight}
-            onClick={() => void handleSignOut()}
+            onClick={() => void signOut()}
           >
             {logoutInFlight ? 'Signing out…' : 'Sign out'}
           </button>

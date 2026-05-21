@@ -30,7 +30,7 @@ export type LandingCustomerSessionValue = {
   googleAuthStartUrl: string | null;
   /** Customer app entry (`/`); PostLoginRedirect handles onboarding vs dashboard. */
   customerAppEntryUrl: string | null;
-  /** Non-fatal: e.g. /me returned 5xx; CTAs still work for anonymous. */
+  /** Non-fatal: e.g. session probe returned 5xx; CTAs still work for anonymous. */
   sessionProbeError: string | null;
   refresh: () => Promise<void>;
 };

@@ -20,6 +20,12 @@ import { AR_CUSTOMER_SESSION_COOKIE_NAME } from '../shared/session-cookie.consta
 
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7;
 
+/** True when `selectAccount=1` (or `true` / `yes`) is passed on OAuth start. */
+function parseSelectAccountQuery(raw: string | undefined): boolean {
+  const v = String(raw ?? '').trim().toLowerCase();
+  return v === '1' || v === 'true' || v === 'yes';
+}
+
 /**
  * Customer-only Google OAuth. Admin/staff must not use these routes.
  *
@@ -34,15 +40,20 @@ export class CustomerGoogleOAuthController {
 
   /**
    * Starts OAuth: redirects browser to Google with signed `state` (JWT, short-lived).
+   * Pass `selectAccount=1` to show Google's account chooser (e.g. after Assistrio logout).
    */
   @Get()
-  async start(@Req() request: FastifyRequest, @Res({ passthrough: false }) reply: FastifyReply) {
+  async start(
+    @Query('selectAccount') selectAccount: string | undefined,
+    @Req() request: FastifyRequest,
+    @Res({ passthrough: false }) reply: FastifyReply,
+  ) {
     if (!this.googleOauth.isConfigured()) {
       const loc = this.googleOauth.buildCustomerErrorRedirect('oauth_not_configured');
       return reply.redirect(302, loc);
     }
     const state = this.googleOauth.createStateToken();
-    const url = this.googleOauth.buildGoogleAuthorizeUrl(state);
+    const url = this.googleOauth.buildGoogleAuthorizeUrl(state, parseSelectAccountQuery(selectAccount));
     return reply.redirect(302, url);
   }
 
@@ -71,12 +82,14 @@ export class CustomerGoogleOAuthController {
        * Customer Google login uses only `ar_customer_session` — not legacy `user_token`
        * (legacy remains for password login / migration).
        */
+      const sessionCookieDomain = this.configService.get<string>('sessionCookieDomain');
       applySetCookieHeaders(reply, [
         buildSessionSetCookieHeader(
           AR_CUSTOMER_SESSION_COOKIE_NAME,
           customerSessionJwt,
           SESSION_MAX_AGE_SECONDS,
           securitySuffix,
+          sessionCookieDomain,
         ),
       ]);
       return reply.redirect(302, redirectUrl);

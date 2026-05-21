@@ -83,7 +83,7 @@ export class CustomerGoogleOAuthService {
     }
   }
 
-  buildGoogleAuthorizeUrl(state: string): string {
+  buildGoogleAuthorizeUrl(state: string, selectAccount = false): string {
     const clientId = this.configService.get<string>('googleOauthClientId') ?? '';
     const redirectUri = this.configService.get<string>('googleOauthRedirectUri') ?? '';
     const q = new URLSearchParams({
@@ -95,6 +95,9 @@ export class CustomerGoogleOAuthService {
       access_type: 'online',
       include_granted_scopes: 'true',
     });
+    if (selectAccount) {
+      q.set('prompt', 'select_account');
+    }
     return `${GOOGLE_AUTH_URL}?${q.toString()}`;
   }
 

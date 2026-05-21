@@ -2,16 +2,20 @@ import { tryGetPublicApiBaseUrl } from "@/lib/utils/env";
 
 export type LandingCustomerSessionStatus = "loading" | "anonymous" | "authenticated";
 
-/** Shape returned by `GET /api/customer/me` (customer portal). */
+/** Shape returned by `GET /api/customer/auth/session` (and legacy `/api/customer/me`). */
 export type LandingCustomerMe = {
   id: string;
   email: string;
   role: string;
   workspaceIds: string[];
+  workspaces?: Array<{ id: string; name: string }>;
+  firstName?: string;
+  lastName?: string;
+  picture?: string;
 };
 
 /**
- * Customer product app origin (e.g. https://app.assistrio.com). Used for “Open app” links.
+ * Customer product app origin (e.g. https://app.assistrio.com). Used for Dashboard links.
  * Trailing slash stripped.
  */
 export function tryGetCustomerAppOrigin(): string | undefined {
@@ -24,6 +28,11 @@ export function buildCustomerGoogleAuthStartUrl(apiOrigin: string): string {
   return `${apiOrigin.replace(/\/$/, "")}/api/customer/auth/google`;
 }
 
+export function buildCustomerSessionUrl(apiOrigin: string): string {
+  return `${apiOrigin.replace(/\/$/, "")}/api/customer/auth/session`;
+}
+
+/** @deprecated Prefer {@link buildCustomerSessionUrl}. Kept for callers not yet migrated. */
 export function buildCustomerMeUrl(apiOrigin: string): string {
   return `${apiOrigin.replace(/\/$/, "")}/api/customer/me`;
 }
@@ -38,10 +47,10 @@ export type FetchLandingCustomerMeResult =
   | { ok: false; error: string };
 
 /**
- * Browser-only: credentialed `GET /api/customer/me` against the Nest API (same pattern as the customer app).
+ * Browser-only: credentialed session probe against the Nest API (`GET /api/customer/auth/session`).
  */
 export async function fetchLandingCustomerMe(apiOrigin: string): Promise<FetchLandingCustomerMeResult> {
-  const url = buildCustomerMeUrl(apiOrigin);
+  const url = buildCustomerSessionUrl(apiOrigin);
   try {
     const res = await fetch(url, {
       method: "GET",

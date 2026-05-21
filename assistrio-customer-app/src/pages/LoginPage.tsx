@@ -9,7 +9,9 @@ export function LoginPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { sessionInvalidatedByApi, clearSessionInvalidatedByApi } = useCustomerAuth();
   const [sessionEndedOpen, setSessionEndedOpen] = useState(false);
-  const startUrl = customerGoogleAuthStartUrl();
+  const wantsSelectAccount = searchParams.get('selectAccount') === '1';
+  const googleStartUrl = customerGoogleAuthStartUrl({ selectAccount: wantsSelectAccount });
+  const googleSelectAccountUrl = customerGoogleAuthStartUrl({ selectAccount: true });
 
   const oauthCode = searchParams.get('oauth_error');
   const oauthMessage = useMemo(() => oauthLoginErrorMessage(oauthCode), [oauthCode]);
@@ -89,10 +91,19 @@ export function LoginPage() {
 
         <a
           className="flex w-full items-center justify-center rounded-lg bg-primary px-4 py-[0.65rem] text-[0.9375rem] font-semibold text-white no-underline shadow-[var(--shadow-primary-fill)] transition-colors duration-100 hover:bg-[var(--teal-800)]"
-          href={startUrl}
+          href={googleStartUrl}
         >
           Continue with Google
         </a>
+
+        <p className="mb-0 mt-3 text-center">
+          <a
+            className="text-[0.8125rem] font-medium text-slate-500 no-underline hover:text-primary"
+            href={googleSelectAccountUrl}
+          >
+            Use another Google account
+          </a>
+        </p>
 
         <p className="mb-0 mt-4 text-[0.8125rem] leading-[1.4] text-slate-300">
           First time here? You'll finish a quick setup after you sign in.

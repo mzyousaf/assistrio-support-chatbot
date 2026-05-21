@@ -67,6 +67,7 @@ Some local templates use variable names that **`ai-platform-backend` does not lo
 | Env var | Required? | Secret? | Development value | Production value | Reason / why |
 |--------|-----------|---------|-------------------|------------------|--------------|
 | `JWT_SECRET` | Yes (Joi, min 16) | **Yes** | Long random string (dev-only) | Strong random from secret manager | Signs customer/staff JWTs (`config.factory.ts`). **Boot fails** if missing or too short per Joi. |
+| `SESSION_COOKIE_DOMAIN` | No | No | unset (host-only cookie) | e.g. `.assistrio.com` when marketing + customer app + API share a parent domain | Optional `Domain` attribute on **`ar_customer_session` only** (`auth-cookie.util.ts`, customer OAuth callback + customer logout). Unset preserves host-only cookies on the API host. **Admin `ar_admin_session` is unaffected.** Set and clear must use the same value or logout may not delete the cookie. |
 
 ---
 
@@ -89,6 +90,7 @@ Some local templates use variable names that **`ai-platform-backend` does not lo
 | `GOOGLE_OAUTH_CLIENT_SECRET` | For OAuth flows | **Yes** | Dev secret | Prod secret | Exchanges code for tokens (`customer-google-oauth.service.ts`). |
 | `GOOGLE_OAUTH_REDIRECT_URI` | For OAuth flows | No | e.g. `http://localhost:3001/api/customer/auth/google/callback` | Must match Google Console exactly | Registered redirect (`config.schema.ts` comment). |
 | `CUSTOMER_APP_BASE_URL` | No* | No | e.g. `https://localhost:5173` (no trailing slash) | `https://app.example.com` | Post-OAuth redirects (`config.factory.ts`). If missing, redirects may be wrong or relative flows may fail. |
+| `SESSION_COOKIE_DOMAIN` | No | No | unset | e.g. `.example.com` | See §3 Auth / session — customer cookie `Domain` only. |
 
 ---
 

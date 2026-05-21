@@ -19,12 +19,13 @@ import {
 } from '../shared/auth-cookie.util';
 import type { RequestUser } from '../shared/request-user.types';
 import { CustomerSessionAuthGuard } from './customer-session.guard';
+import { buildCustomerSessionPayload } from './customer-session.payload';
 import { AR_CUSTOMER_SESSION_COOKIE_NAME } from '../shared/session-cookie.constants';
 
 type RequestWithUser = FastifyRequest & { user?: RequestUser };
 
 /**
- * Customer account surface at `/api/customer` (me, logout). Workspace product APIs live under
+ * Customer account surface at `/api/customer` (session, me, logout). Workspace product APIs live under
  * `/api/customer/bots/*` (see `workspace/customer-bots.controller.ts`).
  */
 @Controller('api/customer')
@@ -43,8 +44,9 @@ export class CustomerPortalController {
       request,
       this.configService.get<string>('nodeEnv'),
     );
+    const sessionCookieDomain = this.configService.get<string>('sessionCookieDomain');
     applySetCookieHeaders(reply, [
-      buildSessionClearCookieHeader(AR_CUSTOMER_SESSION_COOKIE_NAME, securitySuffix),
+      buildSessionClearCookieHeader(AR_CUSTOMER_SESSION_COOKIE_NAME, securitySuffix, sessionCookieDomain),
     ]);
     return reply.send({ success: true });
   }
@@ -52,6 +54,20 @@ export class CustomerPortalController {
   @Get('me')
   @UseGuards(CustomerSessionAuthGuard)
   async me(@Req() req: RequestWithUser) {
+    return this.resolveCustomerSession(req);
+  }
+
+  /**
+   * Canonical customer browser session probe (same payload as `/me`).
+   * Prefer this route for new clients; `/me` remains for backward compatibility.
+   */
+  @Get('auth/session')
+  @UseGuards(CustomerSessionAuthGuard)
+  async session(@Req() req: RequestWithUser) {
+    return this.resolveCustomerSession(req);
+  }
+
+  private async resolveCustomerSession(req: RequestWithUser) {
     const user = req.user;
     if (!user) throw new HttpException({ error: 'Unauthorized' }, HttpStatus.UNAUTHORIZED);
     if (user.role !== 'customer') {
@@ -60,18 +76,6 @@ export class CustomerPortalController {
         errorCode: 'CUSTOMER_SESSION_REQUIRED',
       });
     }
-    await this.workspacesService.ensurePersonalWorkspaceForUser(String(user._id));
-    const workspaceIds = await this.workspacesService.getWorkspaceIdsForUser(String(user._id));
-    const workspaces = await this.workspacesService.getWorkspacesSummaryForUser(String(user._id));
-    return {
-      id: String(user._id),
-      email: user.email,
-      role: user.role,
-      workspaceIds: workspaceIds.map((id) => String(id)),
-      workspaces,
-      firstName: user.firstName ?? undefined,
-      lastName: user.lastName ?? undefined,
-      picture: user.picture ?? undefined,
-    };
+    return buildCustomerSessionPayload(user, this.workspacesService);
   }
 }

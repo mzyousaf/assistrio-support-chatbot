@@ -45,6 +45,8 @@ export const configValidationSchema = Joi.object({
   /** Must match Google Cloud Console exactly (any non-empty string when OAuth is used). */
     GOOGLE_OAUTH_REDIRECT_URI: Joi.string().optional().allow(''),
   CUSTOMER_APP_BASE_URL: Joi.string().optional().allow(''),
+  /** Optional `Domain` for customer session cookie (`ar_customer_session`) only. */
+  SESSION_COOKIE_DOMAIN: Joi.string().optional().allow(''),
   TOPIC_SENTIMENT_MODEL: Joi.string().optional().allow(''),
   TOPIC_SENTIMENT_TIMEOUT_MS: Joi.string().optional().allow(''),
   /** Minutes without Mongo activity before KB rows stop counting as pipeline-active on GET `/knowledge/training/status` (presentation-only). */

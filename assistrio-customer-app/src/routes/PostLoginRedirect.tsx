@@ -1,11 +1,26 @@
 import { Navigate } from 'react-router-dom';
 import { useCustomerAuth } from '../auth/CustomerAuthContext';
+import { PageLoader } from '../components/PageLoader';
+import {
+  AUTH_BOOTSTRAP_LOADER_TITLE,
+  CUSTOMER_POST_LOGIN_DEST,
+  CUSTOMER_ROUTES,
+} from './customerRoutes';
 
-/** Uses the same heuristic as backend OAuth redirect: zero assistants ⇒ onboarding. */
+/**
+ * Default destination after sign-in (same client heuristic as backend OAuth redirect).
+ * Full blocking onboarding is deferred to the onboarding epic.
+ */
 export function PostLoginRedirect() {
   const { needsOnboarding } = useCustomerAuth();
-  if (needsOnboarding === true) {
-    return <Navigate to="/onboarding" replace />;
+
+  if (needsOnboarding === null) {
+    return <PageLoader title={AUTH_BOOTSTRAP_LOADER_TITLE} />;
   }
-  return <Navigate to="/bots" replace />;
+
+  if (needsOnboarding) {
+    return <Navigate to={CUSTOMER_ROUTES.onboarding} replace />;
+  }
+
+  return <Navigate to={CUSTOMER_POST_LOGIN_DEST} replace />;
 }
