@@ -25,6 +25,8 @@ type Props = {
   idPrefix?: string;
   heading?: string;
   error?: string | null;
+  /** When false, category selection hint is omitted (e.g. shown on the parent section instead). */
+  showHint?: boolean;
 };
 
 export function AgentCategoryField({
@@ -34,6 +36,7 @@ export function AgentCategoryField({
   idPrefix = 'agent-cat',
   heading = 'Category',
   error = null,
+  showHint = true,
 }: Props) {
   const categorySlotsUsed = value.customMode
     ? value.customText.trim()
@@ -49,9 +52,11 @@ export function AgentCategoryField({
           {categorySlotsUsed}/{MAX_CATEGORY_PILLS}
         </span>
       </div>
-      <p className="m-0 text-[0.8125rem] leading-snug text-slate-500">
-        Pick at least one category (up to three), or switch to custom when your use case isn&apos;t listed.
-      </p>
+      {showHint ? (
+        <p className="m-0 text-[0.8125rem] leading-snug text-slate-500">
+          Pick at least one category (up to three), or switch to custom when your use case isn&apos;t listed.
+        </p>
+      ) : null}
       <div
         className="rounded-lg border border-slate-200 bg-white p-2.5"
         role="group"

@@ -1,7 +1,7 @@
 import type { CustomerBotDetail } from '@/api/types';
 
 /** Paths used when users upload avatar files to platform storage. */
-const USER_AVATAR_UPLOAD_PATH = /\/uploads\/bot-avatars\//i;
+const USER_AVATAR_UPLOAD_PATH = /\/uploads\/(bot-avatars|onboarding-drafts)\//i;
 
 /**
  * User-uploaded avatars are stored under `uploads/bot-avatars/` — always treat as real image, never as "empty stock".

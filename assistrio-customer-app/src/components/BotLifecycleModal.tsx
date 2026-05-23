@@ -148,7 +148,10 @@ export function BotLifecycleModal({
     }
     if (!publishRunner && !botId) return;
     let cancelled = false;
-    const steps = action === 'publish' ? PUBLISH_STEPS : DRAFT_STEPS;
+    const animationCap =
+      action === 'publish' && navigateToDashboardAfterPublish
+        ? PUBLISH_STEPS.length - 1
+        : (action === 'publish' ? PUBLISH_STEPS : DRAFT_STEPS).length - 1;
 
     successFlushGuardRef.current = false;
     setPhase('running');
@@ -166,7 +169,7 @@ export function BotLifecycleModal({
     };
 
     const iv = window.setInterval(() => {
-      setStepIndex((i) => Math.min(i + 1, steps.length - 1));
+      setStepIndex((i) => Math.min(i + 1, animationCap));
     }, 820);
     progressIntervalRef.current = iv;
 
@@ -210,7 +213,7 @@ export function BotLifecycleModal({
         lastStepDwellTimeoutRef.current = null;
       }
     };
-  }, [open, runKey, action, botId, publishRunner, initialDashboardNavigation]);
+  }, [open, runKey, action, botId, publishRunner, initialDashboardNavigation, navigateToDashboardAfterPublish]);
 
   useEffect(() => {
     if (!open || phase !== 'running' || !pendingSuccess || !action) {
@@ -361,7 +364,8 @@ export function BotLifecycleModal({
   }, [result, activeBotId]);
 
   const steps =
-    action === 'publish' && (dashboardNavigationActive || initialDashboardNavigation)
+    action === 'publish' &&
+    (navigateToDashboardAfterPublish || dashboardNavigationActive || initialDashboardNavigation)
       ? [...PUBLISH_STEPS, GOING_TO_DASHBOARD_STEP]
       : action === 'publish'
         ? PUBLISH_STEPS

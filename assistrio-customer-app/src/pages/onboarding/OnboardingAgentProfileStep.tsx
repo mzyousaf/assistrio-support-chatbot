@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Palette, Sparkles, ScanFace, type LucideIcon } from 'lucide-react';
 import { useOnboardingFlow } from '../../onboarding/OnboardingFlowContext';
 import { useOnboardingStepUi } from '../../onboarding/OnboardingStepUiContext';
 import { useRegisterOnboardingStepActions } from '../../onboarding/OnboardingStepActionsContext';
@@ -13,7 +12,6 @@ import { useRegisterOnboardingStepGuard } from '../../onboarding/useRegisterOnbo
 import { styles } from './onboardingStep';
 import { FieldRow, Input } from '@/components/ui';
 import { OnboardingStepPanel } from '@/components/onboarding/OnboardingStepPanel';
-import { OnboardingSectionHeading } from '@/components/onboarding/OnboardingSectionHeading';
 import { AgentCategoryField } from '@/components/agent/AgentCategoryField';
 import {
   AgentAvatarField,
@@ -54,13 +52,11 @@ function CharCounter({ length, max }: { length: number; max: number }) {
 function FormGroup({
   title,
   hint,
-  icon,
   sectionHeading,
   children,
 }: {
   title: string;
   hint?: string;
-  icon: LucideIcon;
   /** Muted non-interactive section label (e.g. Agent Personality). */
   sectionHeading?: boolean;
   children: ReactNode;
@@ -68,13 +64,11 @@ function FormGroup({
   return (
     <section className={styles.formGroup}>
       <div className={styles.formGroupHeader}>
-        <OnboardingSectionHeading
-          icon={icon}
-          as="h3"
-          titleClassName={sectionHeading ? styles.formSectionHeading : styles.formGroupTitle}
+        <h3
+          className={sectionHeading ? styles.formSectionHeading : styles.formGroupTitle}
         >
           {title}
-        </OnboardingSectionHeading>
+        </h3>
         {hint ? <p className={styles.formGroupHint}>{hint}</p> : null}
       </div>
       <div className={styles.formGroupBody}>{children}</div>
@@ -317,7 +311,6 @@ export function OnboardingAgentProfileStep() {
       <div className={styles.formFields}>
         <FormGroup
           title="Identity"
-          icon={ScanFace}
           hint="Give your agent a name and avatar so it feels recognizable from the start."
         >
           <AgentAvatarField
@@ -333,7 +326,7 @@ export function OnboardingAgentProfileStep() {
               label="Agent name"
               required
               error={fieldErrors.name}
-              helperText="The name visitors see when they chat with your agent."
+              labelTooltip="The name visitors see when they chat with your agent."
               labelAddon={<CharCounter length={name.length} max={BOT_FIELD_MAX.name} />}
             >
               <Input
@@ -356,7 +349,7 @@ export function OnboardingAgentProfileStep() {
             </FieldRow>
             <FieldRow
               label="Tagline"
-              helperText="A short one-line intro shown in your workspace or widget."
+              labelTooltip="A short one-line intro shown in your workspace or widget."
               labelAddon={<CharCounter length={tagline.length} max={BOT_FIELD_MAX.shortDescription} />}
             >
               <Input
@@ -374,7 +367,7 @@ export function OnboardingAgentProfileStep() {
 
         <div className={styles.formDivider} aria-hidden />
 
-        <FormGroup title="Appearance" icon={Palette} hint="Set the accent color for your widget and workspace.">
+        <FormGroup title="Appearance" hint="Set the accent color for your widget and workspace.">
           <AgentBrandColorField
             value={brandColor}
             onChange={setBrandColor}
@@ -385,7 +378,11 @@ export function OnboardingAgentProfileStep() {
 
         <div className={styles.formDivider} aria-hidden />
 
-        <FormGroup title="Agent Personality" icon={Sparkles} sectionHeading>
+        <FormGroup
+          title="Agent Personality"
+          sectionHeading
+          hint="Pick at least one category (up to three), or switch to custom when your use case isn't listed."
+        >
           <AgentCategoryField
             value={category}
             onChange={(next) => {
@@ -402,6 +399,7 @@ export function OnboardingAgentProfileStep() {
             idPrefix="onb-profile-cat"
             heading="Category"
             error={fieldErrors.category}
+            showHint={false}
           />
         </FormGroup>
       </div>

@@ -93,12 +93,15 @@ export function AgentAvatarField({
     return () => URL.revokeObjectURL(url);
   }, [value.pendingFile]);
 
+  useLayoutEffect(() => {
+    setPreviewFailed(false);
+  }, [imageObjectUrl, value.imageUrl]);
+
   const preview = useMemo(() => {
     if (imageObjectUrl) return { kind: 'image' as const, src: imageObjectUrl };
     const url = value.imageUrl.trim();
     if (
       url &&
-      value.avatarSource === 'upload' &&
       !(isLegacyStockAssistrioAvatarUrl(url) && !isUserUploadedAvatarUrl(url)) &&
       isSafeImageSrc(url)
     ) {
@@ -107,7 +110,7 @@ export function AgentAvatarField({
     const initials = initialsFromName(agentName);
     if (initials) return { kind: 'initials' as const, initials };
     return { kind: 'empty' as const };
-  }, [imageObjectUrl, value.avatarSource, value.imageUrl, agentName]);
+  }, [imageObjectUrl, value.imageUrl, agentName]);
 
   const showImagePreview = preview.kind === 'image' && !previewFailed;
   const hasAvatarImage = showImagePreview;
@@ -181,7 +184,7 @@ export function AgentAvatarField({
                 <img
                   src={preview.src}
                   alt=""
-                  className="size-full object-contain p-2"
+                  className="size-full object-cover"
                   onError={() => setPreviewFailed(true)}
                 />
               ) : preview.kind === 'initials' ? (

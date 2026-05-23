@@ -1,12 +1,15 @@
 import { useId, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import { Label } from './Label';
+import { Tooltip } from './Tooltip';
 
 type Props = {
   label: string;
   htmlFor?: string;
   required?: boolean;
   helperText?: ReactNode;
+  /** Shown in a tooltip when hovering or focusing the label. */
+  labelTooltip?: ReactNode;
   /** Rendered immediately after the label (e.g. info tooltip trigger). */
   labelTrailing?: ReactNode;
   labelAddon?: ReactNode;
@@ -26,6 +29,7 @@ export function FieldRow({
   htmlFor,
   required,
   helperText,
+  labelTooltip,
   labelTrailing,
   labelAddon,
   labelRowClassName,
@@ -39,13 +43,23 @@ export function FieldRow({
   const autoId = useId();
   const id = htmlFor ?? autoId;
 
+  const labelNode = (
+    <Label htmlFor={id} required={required}>
+      {label}
+    </Label>
+  );
+
   return (
     <div className={cn('flex flex-col gap-1.5', disabled && 'opacity-[0.72]', className)}>
       <div className={cn('flex w-full min-h-[1.125rem] items-center justify-between gap-4', labelRowClassName)}>
         <div className="flex min-w-0 items-center gap-1">
-          <Label htmlFor={id} required={required}>
-            {label}
-          </Label>
+          {labelTooltip ? (
+            <Tooltip content={labelTooltip} panelClassName="max-w-[min(22rem,calc(100vw-16px))]">
+              {labelNode}
+            </Tooltip>
+          ) : (
+            labelNode
+          )}
           {labelTrailing}
         </div>
         {labelAddon}
