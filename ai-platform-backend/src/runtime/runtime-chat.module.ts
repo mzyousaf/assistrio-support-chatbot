@@ -6,9 +6,9 @@ import { SummaryJobModule } from '../chat/summary-job.module';
 import { WorkspacesModule } from '../workspaces/workspaces.module';
 import { ChatController } from '../chat/chat.controller';
 import { WidgetPreviewController } from '../chat/widget-preview.controller';
+import { TranscriptionModule } from '../transcription/transcription.module';
 import { ChatService } from '../chat/chat.service';
 import { ChatEngineService } from '../chat/chat-engine.service';
-import { WhisperTranscriptionService } from '../chat/whisper-transcription.service';
 import { WidgetSpeechService } from '../chat/widget-speech.service';
 import { RuntimeAuthCoreModule } from './runtime-auth-core.module';
 import { RuntimeBotsReadModule } from './runtime-bots-read.module';
@@ -28,6 +28,7 @@ import { WidgetIframeController } from '../bots/widget-iframe.controller';
     RuntimeBotsReadModule,
     RuntimeAuthCoreModule,
     WorkspacesModule,
+    TranscriptionModule,
     VisitorsRuntimeModule,
     KnowledgeModule,
     MongooseModule.forFeature([
@@ -37,7 +38,7 @@ import { WidgetIframeController } from '../bots/widget-iframe.controller';
     ]),
   ],
   controllers: [ChatController, WidgetPreviewController, SharedChatController, WidgetIframeController],
-  providers: [ChatService, ChatEngineService, WhisperTranscriptionService, WidgetSpeechService],
+  providers: [ChatService, ChatEngineService, WidgetSpeechService],
   exports: [ChatEngineService, WidgetSpeechService],
 })
 export class RuntimeChatModule {}

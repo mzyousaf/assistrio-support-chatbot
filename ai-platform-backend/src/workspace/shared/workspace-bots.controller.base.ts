@@ -53,9 +53,9 @@ export abstract class WorkspaceBotsControllerBase {
   constructor(
     protected readonly botsService: BotsService,
     private readonly documentsService: DocumentsService,
-    private readonly botOnboardingService: BotOnboardingService,
+    protected readonly botOnboardingService: BotOnboardingService,
     private readonly knowledgeBaseItemService: KnowledgeBaseItemService,
-    private readonly workspacesService: WorkspacesService,
+    protected readonly workspacesService: WorkspacesService,
     private readonly knowledgeUsageService: KnowledgeUsageService,
   ) {}
 

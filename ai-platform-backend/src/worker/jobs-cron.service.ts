@@ -9,6 +9,7 @@ import { KnowledgeTrainingJobService } from '../knowledge/knowledge-training-job
 import { KnowledgeTrainKbDriftReconcileService } from '../knowledge/knowledge-train-kb-drift-reconcile.service';
 import { KnowledgeItemPurgeService } from '../knowledge/knowledge-item-purge.service';
 import { BotPurgeService } from '../knowledge/bot-purge.service';
+import { WorkspaceOnboardingKbTransferJobService } from '../workspace/workspace-onboarding-kb-transfer-job.service';
 import type { AppMode } from '../config/app-mode.util';
 import {
   logCronError,
@@ -21,6 +22,7 @@ const CRON_CONTENT_EXTRACTION = 'content_extraction';
 const CRON_SUMMARY = 'summary_jobs';
 const CRON_KB_TRAINING = 'knowledge_training';
 const CRON_TABLE_IMPORT = 'table_import';
+const CRON_ONBOARDING_KB_TRANSFER = 'onboarding_kb_transfer';
 const CRON_KB_PURGE = 'knowledge_item_purge';
 const CRON_BOT_PURGE = 'bot_purge';
 
@@ -57,6 +59,7 @@ export class JobsCronService {
     private readonly knowledgeTrainingJobService: KnowledgeTrainingJobService,
     private readonly knowledgeTrainKbDriftReconcileService: KnowledgeTrainKbDriftReconcileService,
     private readonly tableImportService: TableImportService,
+    private readonly workspaceOnboardingKbTransferJobService: WorkspaceOnboardingKbTransferJobService,
     private readonly knowledgeItemPurgeService: KnowledgeItemPurgeService,
     private readonly botPurgeService: BotPurgeService,
   ) {}
@@ -259,6 +262,11 @@ export class JobsCronService {
     let trainDocumentJobs = 0;
     let trainScopesJobs = 0;
     let trainKbDriftReconciled = 0;
+    let onboardingTransferStuckReset = 0;
+    let onboardingTransferRequeued = 0;
+    let onboardingTransferClaimed = 0;
+    let onboardingTransferCompleted = 0;
+    let onboardingTransferFailed = 0;
 
     try {
       trainStuckReset = await this.knowledgeTrainingJobService.resetStuckJobs();
@@ -302,6 +310,46 @@ export class JobsCronService {
           processed: tableJobsCompleted,
           failed: tableJobsFailed,
           skipped: Math.max(0, tableJobsClaimed - tableJobsCompleted - tableJobsFailed),
+        });
+      }
+
+      const onboardingLimitRaw = process.env.ONBOARDING_KB_TRANSFER_JOBS_RUNNER_LIMIT ?? '3';
+      const onboardingLimit = Math.max(1, Math.floor(Number(onboardingLimitRaw)) || 3);
+      logCronStart(CRON_ONBOARDING_KB_TRANSFER, { jobRunnerLimit: onboardingLimit });
+      const tOnboardingTransfer = performance.now();
+      try {
+        onboardingTransferStuckReset = await this.workspaceOnboardingKbTransferJobService.resetStuckTransferJobs();
+        onboardingTransferRequeued =
+          await this.workspaceOnboardingKbTransferJobService.requeueEligibleFailedTransferJobs();
+        for (let i = 0; i < onboardingLimit; i++) {
+          const transferJob = await this.workspaceOnboardingKbTransferJobService.claimQueuedTransferJob();
+          if (!transferJob) break;
+          onboardingTransferClaimed += 1;
+          try {
+            await this.workspaceOnboardingKbTransferJobService.processTransferJob(transferJob);
+            onboardingTransferCompleted += 1;
+          } catch (err) {
+            onboardingTransferFailed += 1;
+            const message = err instanceof Error ? err.message : 'onboarding_kb_transfer_failed';
+            logCronError(CRON_ONBOARDING_KB_TRANSFER, err, {
+              phase: 'process_onboarding_kb_transfer_job',
+              onboardingKbTransferJobId: String(transferJob._id),
+            });
+            await this.workspaceOnboardingKbTransferJobService.markJobFailed(transferJob, message);
+          }
+        }
+      } finally {
+        logCronFinish(CRON_ONBOARDING_KB_TRANSFER, {
+          durationMs: durationSince(tOnboardingTransfer),
+          stuckReset: onboardingTransferStuckReset,
+          requeuedFailed: onboardingTransferRequeued,
+          claimed: onboardingTransferClaimed,
+          processed: onboardingTransferCompleted,
+          failed: onboardingTransferFailed,
+          skipped: Math.max(
+            0,
+            onboardingTransferClaimed - onboardingTransferCompleted - onboardingTransferFailed,
+          ),
         });
       }
 
@@ -352,6 +400,11 @@ export class JobsCronService {
         tableJobsClaimed,
         tableJobsProcessed: tableJobsCompleted,
         tableJobsFailed,
+        onboardingTransferStuckReset,
+        onboardingTransferRequeued,
+        onboardingTransferClaimed,
+        onboardingTransferProcessed: onboardingTransferCompleted,
+        onboardingTransferFailed,
         trainJobsClaimed: trainAttempted,
         trainJobsProcessed: trainProcessed,
         trainJobsFailed: trainFailed,
@@ -369,6 +422,9 @@ export class JobsCronService {
         tableJobsClaimed,
         tableJobsProcessed: tableJobsCompleted,
         tableJobsFailed,
+        onboardingTransferClaimed,
+        onboardingTransferProcessed: onboardingTransferCompleted,
+        onboardingTransferFailed,
         trainJobsClaimed: trainAttempted,
         trainJobsProcessed: trainProcessed,
         trainJobsFailed: trainFailed,

@@ -1,6 +1,6 @@
 export const ONBOARDING_STEPS = [
   { path: 'agent-profile', label: 'Agent Profile' },
-  { path: 'describe-profile', label: 'Describe Profile' },
+  { path: 'describe-profile', label: 'Describe Your AI Agent' },
   { path: 'knowledge-base', label: 'Knowledge Base' },
   { path: 'go-live', label: 'Deploy & Go Live' },
 ] as const;

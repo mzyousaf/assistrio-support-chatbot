@@ -14,6 +14,7 @@ import { TopicSentimentClassificationModule } from './analytics/topic-sentiment-
 import { VisitorsModule } from './visitors/visitors.module';
 import { RateLimitModule } from './rate-limit/rate-limit.module';
 import { KnowledgeModule } from './knowledge/knowledge.module';
+import { OnboardingKbTransferModule } from './workspace/onboarding-kb-transfer.module';
 import { JobsCronService } from './worker/jobs-cron.service';
 import { InternalModule } from './internal/internal.module';
 import { AdminCustomersModule } from './admin-customers/admin-customers.module';
@@ -31,6 +32,7 @@ const registerKbCrons = shouldRegisterKbInProcessCronsForAppModule();
     AdminPlatformBotsModule,
     RateLimitModule,
     KnowledgeModule,
+    OnboardingKbTransferModule,
     WorkspaceModule,
     BotsModule,
     DocumentsModule,

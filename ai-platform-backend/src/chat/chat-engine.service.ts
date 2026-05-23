@@ -115,6 +115,8 @@ import {
 import { getServerLocalMonthlyBillingPeriod } from './chat-billing-period.util';
 import { calculateMessageCreditUsage } from './message-credit.util';
 import type { MessageCreditCalculation } from './message-credit.util';
+import { WorkspaceEntitlementsService } from '../entitlements/workspace-entitlements.service';
+import { resolveUsageLedgerPlanAtTime } from '../entitlements/usage-ledger-plan-at-time.util';
 import { normalizeAssistantMessageSourcesForPersistence } from './assistant-message-sources.normalize';
 import { resolveChatLlmParams, resolveCompletionMaxTokens } from './chat-llm-params.util';
 import {
@@ -370,6 +372,7 @@ export class ChatEngineService {
     @InjectModel(UsageLedger.name) private readonly usageLedgerModel: Model<UsageLedger>,
     private readonly summaryJobService: SummaryJobService,
     private readonly topicSentimentClassificationService: TopicSentimentClassificationService,
+    private readonly workspaceEntitlementsService: WorkspaceEntitlementsService,
   ) { }
 
   private parseOptionalObjectId(s?: string): Types.ObjectId | null {
@@ -446,6 +449,10 @@ export class ChatEngineService {
       const customerOid = previewCust ?? ownerOid;
       const startedFrom = (params.conversation as { startedFrom?: string }).startedFrom;
       const vm = params.voiceMeta;
+      const planAtTime = await resolveUsageLedgerPlanAtTime(
+        this.workspaceEntitlementsService,
+        workspaceOid ? String(workspaceOid) : undefined,
+      );
       await this.usageLedgerModel.create({
         ...(workspaceOid ? { workspaceId: workspaceOid } : {}),
         ...(customerOid ? { customerId: customerOid } : {}),
@@ -456,7 +463,7 @@ export class ChatEngineService {
         usageType: params.credit.usageType,
         creditsUsed: params.credit.creditsUsed,
         creditRule: params.credit.creditRule,
-        planAtTime: 'free',
+        planAtTime,
         billingPeriodStart: params.billingPeriodStart,
         billingPeriodEnd: params.billingPeriodEnd,
         chargedAt: params.now,

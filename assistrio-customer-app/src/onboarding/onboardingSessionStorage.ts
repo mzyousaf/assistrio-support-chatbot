@@ -1,8 +1,14 @@
 const SETUP_FINISHED_KEY = 'assistrio_customer.setup_finished_v1';
 const ONBOARDING_SESSION_KEY = 'assistrio_customer.onboarding_session_v1';
-/** Prevents duplicate POST /bots/draft when onboarding init runs twice (e.g. React Strict Mode). */
-const EPHEMERAL_CLIENT_DRAFT_ID_KEY = 'assistrio_onboarding_ephemeral_client_draft_id_v1';
 
+/** @deprecated Legacy local onboarding session — cleared on sign-out only. */
+export type OnboardingSessionV2 = {
+  v: 2;
+  workspaceId: string;
+  stepsCompleted: string[];
+};
+
+/** @deprecated Bot-first onboarding session — ignored. */
 export type OnboardingSessionV1 = {
   v: 1;
   botId: string;
@@ -10,18 +16,10 @@ export type OnboardingSessionV1 = {
   stepsCompleted: string[];
 };
 
-function safeParse(raw: string | null): OnboardingSessionV1 | null {
-  if (!raw) return null;
-  try {
-    const o = JSON.parse(raw) as OnboardingSessionV1;
-    if (o?.v !== 1 || typeof o.botId !== 'string' || typeof o.clientDraftId !== 'string') return null;
-    const steps = Array.isArray(o.stepsCompleted) ? o.stepsCompleted.filter((x) => typeof x === 'string') : [];
-    return { v: 1, botId: o.botId, clientDraftId: o.clientDraftId, stepsCompleted: steps };
-  } catch {
-    return null;
-  }
-}
+/** @deprecated Legacy type alias. */
+export type OnboardingSession = OnboardingSessionV2;
 
+/** Legacy fallback when workspace has no onboardingStatus (pre-migration accounts). */
 export function readSetupFinished(): boolean {
   try {
     return localStorage.getItem(SETUP_FINISHED_KEY) === '1';
@@ -30,6 +28,7 @@ export function readSetupFinished(): boolean {
   }
 }
 
+/** @deprecated Do not write during active onboarding — backend completion is source of truth. */
 export function markCustomerSetupFinished(): void {
   try {
     localStorage.setItem(SETUP_FINISHED_KEY, '1');
@@ -46,31 +45,27 @@ export function clearCustomerSetupFinished(): void {
   }
 }
 
-export function readOnboardingSession(): OnboardingSessionV1 | null {
+/** @deprecated Onboarding progress is loaded from the backend. */
+export function readOnboardingSession(): OnboardingSessionV2 | null {
   try {
-    return safeParse(localStorage.getItem(ONBOARDING_SESSION_KEY));
+    const raw = localStorage.getItem(ONBOARDING_SESSION_KEY);
+    if (!raw) return null;
+    const o = JSON.parse(raw) as OnboardingSessionV2 | OnboardingSessionV1;
+    if (o?.v === 2 && typeof o.workspaceId === 'string' && o.workspaceId.trim()) {
+      return null;
+    }
+    return null;
   } catch {
     return null;
   }
 }
 
-export function writeOnboardingSession(session: OnboardingSessionV1): void {
-  try {
-    localStorage.setItem(ONBOARDING_SESSION_KEY, JSON.stringify(session));
-  } catch {
-    /* ignore */
-  }
+/** @deprecated No-op — onboarding session is not stored locally. */
+export function writeOnboardingSession(_session: OnboardingSessionV2): void {
+  /* backend-owned */
 }
 
-export function updateOnboardingSession(patch: Partial<Pick<OnboardingSessionV1, 'stepsCompleted'>>): void {
-  const cur = readOnboardingSession();
-  if (!cur) return;
-  writeOnboardingSession({
-    ...cur,
-    ...(patch.stepsCompleted != null ? { stepsCompleted: patch.stepsCompleted } : {}),
-  });
-}
-
+/** Remove legacy onboarding keys (e.g. on sign-out). */
 export function clearOnboardingSession(): void {
   try {
     localStorage.removeItem(ONBOARDING_SESSION_KEY);
@@ -79,23 +74,7 @@ export function clearOnboardingSession(): void {
   }
 }
 
-/** Stable clientDraftId for the in-flight “create draft” step — reuse across duplicate effect runs. */
-export function takeOrCreateEphemeralClientDraftId(): string {
-  try {
-    const x = sessionStorage.getItem(EPHEMERAL_CLIENT_DRAFT_ID_KEY);
-    if (x && x.trim()) return x.trim();
-    const nu = crypto.randomUUID();
-    sessionStorage.setItem(EPHEMERAL_CLIENT_DRAFT_ID_KEY, nu);
-    return nu;
-  } catch {
-    return crypto.randomUUID();
-  }
-}
-
-export function clearEphemeralClientDraftId(): void {
-  try {
-    sessionStorage.removeItem(EPHEMERAL_CLIENT_DRAFT_ID_KEY);
-  } catch {
-    /* ignore */
-  }
+export function clearAllOnboardingLocalStorage(): void {
+  clearOnboardingSession();
+  clearCustomerSetupFinished();
 }

@@ -19,6 +19,8 @@ describe('BotsService.patchWorkspaceBotKnowledgeTableAtIndex datasheet gates', (
       {} as never,
       knowledgeBaseItemService as never,
       {} as never,
+      {} as never,
+      {} as never,
     );
   }
 

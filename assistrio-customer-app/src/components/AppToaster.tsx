@@ -15,6 +15,7 @@ const TOAST_CLASS_NAMES = {
 
 /**
  * Global Sonner host: top-right stack, spacing, and shared toast chrome.
+ * `expand` keeps every toast in the stack fully visible (with expand=false, older toasts are hidden under the front one).
  * Visual design lives in `app-toaster.css` (tokens from `style.css` / `:root`).
  */
 export function AppToaster() {
@@ -24,7 +25,7 @@ export function AppToaster() {
       position="top-right"
       theme="light"
       closeButton
-      expand={false}
+      expand
       richColors={false}
       gap={10}
       visibleToasts={4}

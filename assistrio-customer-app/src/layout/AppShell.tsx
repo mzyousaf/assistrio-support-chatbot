@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type MouseEvent } from 'react';
 import {
-  Check,
   Database,
   CheckCircle2,
   ChevronDown,
@@ -26,6 +25,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { PostGoLiveInstallModalHost } from '@/components/onboarding/PostGoLiveInstallModalHost';
 import { getCustomerBot } from '../api/customerApi';
 import { getCustomerApiOrigin } from '../api/client';
 import type { CustomerBotDetail, CustomerMe, CustomerShareLinkResponse } from '../api/types';
@@ -37,6 +37,11 @@ import { useCustomerLogout } from '../auth/useCustomerLogout';
 import { customerInitials } from '../lib/customerDisplay';
 import { widgetSnippet } from '../lib/embedOrigin';
 import { BotLifecycleModal } from '../components/BotLifecycleModal';
+import { GoLiveConfirmModal } from '@/components/go-live/GoLiveConfirmModal';
+import {
+  WORKSPACE_DRAFT_WHAT_HAPPENS_NEXT,
+  WORKSPACE_PUBLISH_WHAT_HAPPENS_NEXT,
+} from '@/components/go-live/goLiveConfirmCopy';
 import { BotLifecycleProvider } from '../context/BotLifecycleContext';
 import { KbWorkspacePollingProvider } from '../context/KbWorkspacePollingContext';
 import { Modal } from '../components/ui/Modal';
@@ -1594,116 +1599,21 @@ export function AppShell() {
         />
       ) : null}
 
-      <Modal
-        open={lifecycleConfirmOpen}
-        onClose={cancelLifecycleConfirm}
-        tone="default"
-        className="max-w-md"
-        title={
-          lifecycleConfirmAction === 'draft' ? (
-            <span className="inline-flex items-center gap-3">
-              <span
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200/95 bg-slate-100 text-slate-700 shadow-sm ring-1 ring-slate-900/[0.04]"
-                aria-hidden
-              >
-                <PencilLine className="h-5 w-5" strokeWidth={2} />
-              </span>
-              Move to draft
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-3">
-              <span
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-teal-100 bg-teal-50 text-teal-600 shadow-sm"
-                aria-hidden
-              >
-                <Rocket className="h-5 w-5" strokeWidth={1.75} />
-              </span>
-              Go live
-            </span>
-          )
-        }
-        description={
-          lifecycleConfirmAction === 'draft' ? (
-            <span>
-              On your allowed websites, the embed will stop showing this agent until you publish again. You can go live
-              again whenever you are ready.
-            </span>
-          ) : (
-            <span>
-              This turns on your chat widget for the allowed websites you configured. You can return to draft anytime.
-            </span>
-          )
-        }
-        size="md"
-        footer={
-          <>
-            <button
-              type="button"
-              className="inline-flex h-10 min-w-[5.5rem] items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm transition-colors hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400"
-              onClick={cancelLifecycleConfirm}
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              className={cn(
-                'inline-flex h-10 min-w-[8.5rem] items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold text-white shadow-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2',
-                lifecycleConfirmAction === 'draft'
-                  ? 'border border-transparent bg-[var(--color-danger-text-emphasis)] text-white hover:bg-[var(--color-danger-text)] focus-visible:outline-[var(--color-danger-text-emphasis)]'
-                  : 'bg-teal-600 hover:bg-teal-700 focus-visible:outline-teal-600',
-              )}
-              onClick={confirmLifecycleTransition}
-            >
-              {lifecycleConfirmAction === 'draft' ? (
-                <>
-                  <PencilLine size={16} strokeWidth={2} className="shrink-0" aria-hidden />
-                  Move to draft
-                </>
-              ) : (
-                <>
-                  <Rocket size={16} strokeWidth={1.75} className="shrink-0" aria-hidden />
-                  Go live
-                </>
-              )}
-            </button>
-          </>
-        }
-      >
-        <div
-          className={
+      {lifecycleConfirmAction ? (
+        <GoLiveConfirmModal
+          open={lifecycleConfirmOpen}
+          onClose={cancelLifecycleConfirm}
+          onConfirm={confirmLifecycleTransition}
+          action={lifecycleConfirmAction}
+          whatHappensNext={
             lifecycleConfirmAction === 'draft'
-              ? 'rounded-xl border border-slate-200 bg-slate-100/70 p-3.5 ring-1 ring-slate-900/[0.05]'
-              : 'rounded-xl border border-slate-200/90 bg-slate-50/80 p-3.5 ring-1 ring-slate-900/[0.04]'
+              ? WORKSPACE_DRAFT_WHAT_HAPPENS_NEXT
+              : WORKSPACE_PUBLISH_WHAT_HAPPENS_NEXT
           }
-        >
-          <p className="m-0 text-[11px] font-semibold uppercase tracking-wide text-slate-500">What happens next</p>
-          <ul className="mt-2.5 m-0 list-none space-y-2 p-0 text-sm leading-snug text-slate-700">
-            {lifecycleConfirmAction === 'draft' ? (
-              <>
-                <li className="flex gap-2.5">
-                  <Check className="mt-0.5 h-4 w-4 shrink-0 text-slate-600" strokeWidth={2.5} aria-hidden />
-                  <span>Each allowed website stops showing this agent in the embed until you publish again.</span>
-                </li>
-                <li className="flex gap-2.5">
-                  <Check className="mt-0.5 h-4 w-4 shrink-0 text-slate-600" strokeWidth={2.5} aria-hidden />
-                  <span>Your workspace, knowledge, and Deploy & Go Live settings stay as they are.</span>
-                </li>
-              </>
-            ) : (
-              <>
-                <li className="flex gap-2.5">
-                  <Check className="mt-0.5 h-4 w-4 shrink-0 text-teal-600" strokeWidth={2.5} aria-hidden />
-                  <span>The install snippet works only on allowed websites you list under Deploy & Go Live.</span>
-                </li>
-                <li className="flex gap-2.5">
-                  <Check className="mt-0.5 h-4 w-4 shrink-0 text-teal-600" strokeWidth={2.5} aria-hidden />
-                  <span>You can copy the snippet anytime and move back to draft from the nav or this page.</span>
-                </li>
-              </>
-            )}
-          </ul>
-        </div>
-      </Modal>
+        />
+      ) : null}
+
+      <PostGoLiveInstallModalHost />
     </div>
   );
 }

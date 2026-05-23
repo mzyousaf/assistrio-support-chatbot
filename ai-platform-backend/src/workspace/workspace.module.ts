@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
-import { ExtractJob, ExtractJobSchema, TrainJob, TrainJobSchema } from '../models';
+import { ExtractJob, ExtractJobSchema, TrainJob, TrainJobSchema, Bot, BotSchema, Workspace, WorkspaceSchema, WorkspaceOnboardingDraft, WorkspaceOnboardingDraftSchema } from '../models';
 import { BotsModule } from '../bots/bots.module';
 import { ChatModule } from '../chat/chat.module';
 import { DocumentsModule } from '../documents/documents.module';
@@ -8,6 +8,7 @@ import { IngestionModule } from '../ingestion/ingestion.module';
 import { KnowledgeModule } from '../knowledge/knowledge.module';
 import { AnalyticsModule } from '../analytics/analytics.module';
 import { AuthModule } from '../auth/auth.module';
+import { EntitlementsModule } from '../entitlements/entitlements.module';
 import { WorkspacesModule } from '../workspaces/workspaces.module';
 import { AdminBotConversationsController } from './admin-bot-conversations.controller';
 import { AdminBotsController } from './admin-bots.controller';
@@ -17,6 +18,8 @@ import { AdminSeedController } from './admin-seed.controller';
 import { AdminUploadController } from './admin-upload.controller';
 import { AdminKnowledgeController } from './admin-knowledge.controller';
 import { CustomerKnowledgeController } from './customer-knowledge.controller';
+import { CustomerWorkspaceEntitlementsController } from './customer-workspace-entitlements.controller';
+import { CustomerWorkspaceOnboardingController } from './customer-workspace-onboarding.controller';
 import { CustomerBotsController } from './customer-bots.controller';
 import { CustomerBotAiController } from './customer-bot-ai.controller';
 import { CustomerBotInsightsController } from './customer-bot-insights.controller';
@@ -35,6 +38,8 @@ import { BotOnboardingService } from './shared/bot-onboarding.service';
 import { ShowcaseAgentsPackService } from './shared/showcase-agents-pack.service';
 import { KnowledgeOverviewService } from './knowledge-overview.service';
 import { KnowledgeItemManualRetryService } from './knowledge-item-manual-retry.service';
+import { WorkspaceOnboardingGoLiveService } from './workspace-onboarding-go-live.service';
+import { OnboardingKbTransferModule } from './onboarding-kb-transfer.module';
 
 /**
  * Browser workspace product surface: `/api/admin/*` and `/api/customer/*` bot/document/chat routes.
@@ -43,7 +48,9 @@ import { KnowledgeItemManualRetryService } from './knowledge-item-manual-retry.s
 @Module({
   imports: [
     AuthModule,
+    EntitlementsModule,
     WorkspacesModule,
+    OnboardingKbTransferModule,
     BotsModule,
     ChatModule,
     DocumentsModule,
@@ -54,6 +61,9 @@ import { KnowledgeItemManualRetryService } from './knowledge-item-manual-retry.s
     MongooseModule.forFeature([
       { name: ExtractJob.name, schema: ExtractJobSchema },
       { name: TrainJob.name, schema: TrainJobSchema },
+      { name: Bot.name, schema: BotSchema },
+      { name: Workspace.name, schema: WorkspaceSchema },
+      { name: WorkspaceOnboardingDraft.name, schema: WorkspaceOnboardingDraftSchema },
     ]),
   ],
   controllers: [
@@ -65,6 +75,8 @@ import { KnowledgeItemManualRetryService } from './knowledge-item-manual-retry.s
     AdminSeedController,
     AdminUploadController,
     CustomerBotsController,
+    CustomerWorkspaceEntitlementsController,
+    CustomerWorkspaceOnboardingController,
     CustomerBotAiController,
     CustomerKnowledgeController,
     CustomerBotInsightsController,
@@ -85,6 +97,7 @@ import { KnowledgeItemManualRetryService } from './knowledge-item-manual-retry.s
     OperatorWorkspaceUploadService,
     KnowledgeOverviewService,
     KnowledgeItemManualRetryService,
+    WorkspaceOnboardingGoLiveService,
   ],
   exports: [],
 })

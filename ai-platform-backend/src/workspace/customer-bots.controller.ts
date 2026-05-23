@@ -21,6 +21,8 @@ import {
   readDatasheetFileFromMultipart,
 } from './datasheet-import-request.util';
 import { BotOnboardingService } from './shared/bot-onboarding.service';
+import { normalizeBotPayload } from './shared/bot-payload';
+import { assertAllowedOriginsPolicy } from './shared/allowed-origins-policy';
 import { parseBotLifecycleActionBody } from './shared/bot-lifecycle-action.dto';
 import { publicApiBaseUrlFromRequest } from './shared/public-api-url.util';
 import { WorkspaceBotsControllerBase } from './shared/workspace-bots.controller.base';
@@ -85,6 +87,65 @@ export class CustomerBotsController extends WorkspaceBotsControllerBase {
     );
   }
 
+  @Post('draft')
+  override async createDraft(@Body() body: { clientDraftId?: string }, @Req() req: RequestWithUser) {
+    const clientDraftId = String(body?.clientDraftId ?? '').trim();
+    if (!clientDraftId) {
+      throw new HttpException({ error: 'clientDraftId is required' }, HttpStatus.BAD_REQUEST);
+    }
+    const createdByUserId = req.user?._id != null ? String(req.user._id) : undefined;
+    try {
+      const result = await this.botsService.createDraft(clientDraftId, createdByUserId, {
+        enforceWorkspaceBotLimit: true,
+        applyWorkspaceEntitlements: true,
+      });
+      await this.botOnboardingService.onboardNewBot(result.botId);
+      return result;
+    } catch (err) {
+      if (err instanceof HttpException) throw err;
+      console.error('Create draft bot failed', err);
+      throw new HttpException({ error: 'Internal server error' }, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  @Post('draft/finalize')
+  override async finalizeDraft(
+    @Body() body: { clientDraftId?: string; payload?: Record<string, unknown> },
+    @Req() req: RequestWithUser,
+  ) {
+    const clientDraftId = String(body?.clientDraftId ?? '').trim();
+    if (!clientDraftId) {
+      throw new HttpException({ error: 'clientDraftId is required' }, HttpStatus.BAD_REQUEST);
+    }
+    const draftBot = await this.botsService.findWorkspaceByClientDraftId(clientDraftId);
+    if (draftBot?._id != null) {
+      await this.assertCanAccessWorkspaceBot(req, String(draftBot._id));
+    }
+    const normalized = normalizeBotPayload(body?.payload ?? {});
+    if (normalized.allowedOrigins !== undefined) {
+      assertAllowedOriginsPolicy(normalized.allowedOrigins.length, req.user?.role);
+    }
+    const createdByUserId = req.user?._id != null ? String(req.user._id) : undefined;
+    try {
+      return await this.botsService.finalizeDraft(clientDraftId, normalized, createdByUserId, {
+        enforceWorkspaceBotLimit: true,
+        applyWorkspaceEntitlements: true,
+      });
+    } catch (err) {
+      if (err instanceof HttpException) throw err;
+      console.error('Finalize draft bot failed', err);
+      const msg = err instanceof Error ? err.message : '';
+      if (
+        msg.includes('allowed origin') ||
+        msg.includes('allowed embed origin') ||
+        msg.includes('Document extraction is still in progress')
+      ) {
+        throw new HttpException({ error: msg }, HttpStatus.BAD_REQUEST);
+      }
+      throw new HttpException({ error: 'Internal server error' }, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
   /**
    * Dedicated publish/draft lifecycle (not sparse PATCH). Validates business rules, updates `status`, returns embed snippet on publish.
    */
@@ -109,8 +170,10 @@ export class CustomerBotsController extends WorkspaceBotsControllerBase {
       return await this.botsService.customerBotLifecycleAction(id, parsed.action, {
         publicApiBaseUrl: publicApiBase,
         widgetAssetOrigin: widgetAsset,
+        enforceWorkspaceBotLimit: true,
       });
     } catch (err) {
+      if (err instanceof HttpException) throw err;
       const msg = err instanceof Error ? err.message : 'Lifecycle action failed';
       if (msg === 'Bot not found') {
         throw new HttpException({ error: 'Bot not found', errorCode: 'bot_not_found' }, HttpStatus.NOT_FOUND);

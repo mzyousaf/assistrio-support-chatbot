@@ -43,6 +43,8 @@ import type {
   CustomerWorkspaceDocument,
   CustomerShareLinkResponse,
   CustomerShareLinkStatus,
+  WorkspaceOnboardingGoLiveResponse,
+  WorkspaceOnboardingResponse,
   SharedBotInitPayload,
   WidgetIframeInitPayload,
   ApiResult,
@@ -1008,4 +1010,281 @@ export function regenerateSharePreviewToken(botId: string, expiresInHours: numbe
 /** Permanently invalidate the current preview link and clear stored token material. */
 export function revokeSharePreview(botId: string) {
   return patchCustomerBotShareLink(botId, { revoke: true });
+}
+
+function workspaceOnboardingPath(workspaceId: string) {
+  return `${P}/workspaces/${encodeURIComponent(workspaceId)}/onboarding`;
+}
+
+/** GET workspace onboarding draft (creates draft server-side when missing). */
+export function getCustomerWorkspaceOnboarding(workspaceId: string) {
+  return customerFetch<WorkspaceOnboardingResponse>(workspaceOnboardingPath(workspaceId));
+}
+
+export function patchCustomerWorkspaceOnboardingProfile(
+  workspaceId: string,
+  body: Record<string, unknown>,
+) {
+  return customerFetch<WorkspaceOnboardingResponse>(`${workspaceOnboardingPath(workspaceId)}/profile`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+export function patchCustomerWorkspaceOnboardingInstructions(
+  workspaceId: string,
+  body: Record<string, unknown>,
+) {
+  return customerFetch<WorkspaceOnboardingResponse>(
+    `${workspaceOnboardingPath(workspaceId)}/instructions`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    },
+  );
+}
+
+export function patchCustomerWorkspaceOnboardingKnowledge(
+  workspaceId: string,
+  body: Record<string, unknown>,
+) {
+  return customerFetch<WorkspaceOnboardingResponse>(`${workspaceOnboardingPath(workspaceId)}/knowledge`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+export function patchCustomerWorkspaceOnboardingGoLive(
+  workspaceId: string,
+  body: Record<string, unknown>,
+) {
+  return customerFetch<WorkspaceOnboardingResponse>(`${workspaceOnboardingPath(workspaceId)}/go-live`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+export function patchCustomerWorkspaceOnboardingProgress(
+  workspaceId: string,
+  body: { currentStep?: string; completedStep?: string },
+) {
+  return customerFetch<WorkspaceOnboardingResponse>(`${workspaceOnboardingPath(workspaceId)}/progress`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+/** Create/publish bot from workspace onboarding draft. */
+export function postCustomerWorkspaceOnboardingGoLive(
+  workspaceId: string,
+  body?: { origin?: string; label?: string; idempotencyKey?: string },
+) {
+  return customerFetch<WorkspaceOnboardingGoLiveResponse>(
+    `${workspaceOnboardingPath(workspaceId)}/go-live`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body ?? {}),
+    },
+  );
+}
+
+/** Mark workspace onboarding completed after install step. */
+export function postCustomerWorkspaceOnboardingComplete(workspaceId: string) {
+  return customerFetch<WorkspaceOnboardingResponse>(`${workspaceOnboardingPath(workspaceId)}/complete`, {
+    method: 'POST',
+  });
+}
+
+/** Multipart avatar upload for workspace onboarding draft (PNG/JPEG/WebP, max 2MB). */
+export function postCustomerWorkspaceOnboardingAvatar(workspaceId: string, formData: FormData) {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), 120_000);
+  return customerFetch<WorkspaceOnboardingResponse>(`${workspaceOnboardingPath(workspaceId)}/avatar`, {
+    method: 'POST',
+    body: formData,
+    signal: controller.signal,
+  }).finally(() => {
+    window.clearTimeout(timer);
+  });
+}
+
+function onboardingKnowledgeUpload(
+  workspaceId: string,
+  kind: 'documents' | 'datasheets',
+  formData: FormData,
+) {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), 120_000);
+  return customerFetch<WorkspaceOnboardingResponse>(
+    `${workspaceOnboardingPath(workspaceId)}/knowledge/${kind}`,
+    {
+      method: 'POST',
+      body: formData,
+      signal: controller.signal,
+    },
+  ).finally(() => {
+    window.clearTimeout(timer);
+  });
+}
+
+/** Stage document uploads against workspace onboarding draft (no bot). */
+export function postCustomerWorkspaceOnboardingDocuments(workspaceId: string, files: File[]) {
+  const fd = new FormData();
+  for (const file of files) fd.append('file', file);
+  return onboardingKnowledgeUpload(workspaceId, 'documents', fd);
+}
+
+/** Stage a single datasheet against workspace onboarding draft (no bot). */
+export function postCustomerWorkspaceOnboardingDatasheet(workspaceId: string, file: File) {
+  const fd = new FormData();
+  fd.append('file', file);
+  return onboardingKnowledgeUpload(workspaceId, 'datasheets', fd);
+}
+
+export function deleteCustomerWorkspaceOnboardingDocument(workspaceId: string, stagedItemId: string) {
+  return customerFetch<WorkspaceOnboardingResponse>(
+    `${workspaceOnboardingPath(workspaceId)}/knowledge/documents/${encodeURIComponent(stagedItemId)}`,
+    { method: 'DELETE' },
+  );
+}
+
+export function postCustomerWorkspaceOnboardingDocumentsBulkDelete(workspaceId: string, ids: string[]) {
+  return postOnboardingKnowledgeBulkDelete(workspaceId, 'documents', ids);
+}
+
+export function deleteCustomerWorkspaceOnboardingDatasheet(workspaceId: string, stagedItemId: string) {
+  return customerFetch<WorkspaceOnboardingResponse>(
+    `${workspaceOnboardingPath(workspaceId)}/knowledge/datasheets/${encodeURIComponent(stagedItemId)}`,
+    { method: 'DELETE' },
+  );
+}
+
+export function postCustomerWorkspaceOnboardingDatasheetsBulkDelete(workspaceId: string, ids: string[]) {
+  return postOnboardingKnowledgeBulkDelete(workspaceId, 'datasheets', ids);
+}
+
+function onboardingKnowledgeJson<T = WorkspaceOnboardingResponse>(
+  workspaceId: string,
+  path: string,
+  method: 'POST' | 'PATCH' | 'DELETE',
+  body?: Record<string, unknown>,
+) {
+  return customerFetch<T>(`${workspaceOnboardingPath(workspaceId)}/knowledge/${path}`, {
+    method,
+    ...(body ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}),
+  });
+}
+
+export type WorkspaceOnboardingBulkDeleteResponse = WorkspaceOnboardingResponse & {
+  deletedCount?: number;
+};
+
+function postOnboardingKnowledgeBulkDelete(
+  workspaceId: string,
+  kind: 'documents' | 'datasheets' | 'snippets' | 'qas',
+  ids: string[],
+) {
+  return onboardingKnowledgeJson<WorkspaceOnboardingBulkDeleteResponse>(
+    workspaceId,
+    `${kind}/bulk-delete`,
+    'POST',
+    { ids },
+  );
+}
+
+export function postCustomerWorkspaceOnboardingSnippet(
+  workspaceId: string,
+  body: { title: string; description: string },
+) {
+  return onboardingKnowledgeJson(workspaceId, 'snippets', 'POST', body);
+}
+
+export function patchCustomerWorkspaceOnboardingSnippet(
+  workspaceId: string,
+  snippetId: string,
+  body: Partial<{ title: string; description: string }>,
+) {
+  return onboardingKnowledgeJson(
+    workspaceId,
+    `snippets/${encodeURIComponent(snippetId)}`,
+    'PATCH',
+    body,
+  );
+}
+
+export function deleteCustomerWorkspaceOnboardingSnippet(workspaceId: string, snippetId: string) {
+  return onboardingKnowledgeJson(workspaceId, `snippets/${encodeURIComponent(snippetId)}`, 'DELETE');
+}
+
+export function postCustomerWorkspaceOnboardingSnippetsBulkDelete(workspaceId: string, ids: string[]) {
+  return postOnboardingKnowledgeBulkDelete(workspaceId, 'snippets', ids);
+}
+
+export function postCustomerWorkspaceOnboardingQa(
+  workspaceId: string,
+  body: { title: string; questions: string[]; answer: string },
+) {
+  return onboardingKnowledgeJson(workspaceId, 'qas', 'POST', body);
+}
+
+export function patchCustomerWorkspaceOnboardingQa(
+  workspaceId: string,
+  qaId: string,
+  body: Partial<{ title: string; questions: string[]; answer: string }>,
+) {
+  return onboardingKnowledgeJson(workspaceId, `qas/${encodeURIComponent(qaId)}`, 'PATCH', body);
+}
+
+export function deleteCustomerWorkspaceOnboardingQa(workspaceId: string, qaId: string) {
+  return onboardingKnowledgeJson(workspaceId, `qas/${encodeURIComponent(qaId)}`, 'DELETE');
+}
+
+export function postCustomerWorkspaceOnboardingQasBulkDelete(workspaceId: string, ids: string[]) {
+  return postOnboardingKnowledgeBulkDelete(workspaceId, 'qas', ids);
+}
+
+export function postCustomerWorkspaceOnboardingQaImport(workspaceId: string, file: File) {
+  const fd = new FormData();
+  fd.append('file', file);
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), 120_000);
+  return customerFetch<
+    WorkspaceOnboardingResponse & { imported?: number; skippedCount?: number; skippedReason?: string }
+  >(`${workspaceOnboardingPath(workspaceId)}/knowledge/qas/import`, {
+    method: 'POST',
+    body: fd,
+    signal: controller.signal,
+  }).finally(() => window.clearTimeout(timer));
+}
+
+export function postCustomerWorkspaceOnboardingSnippetImport(workspaceId: string, file: File) {
+  const fd = new FormData();
+  fd.append('file', file);
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), 120_000);
+  return customerFetch<
+    WorkspaceOnboardingResponse & { imported?: number; skippedCount?: number; skippedReason?: string }
+  >(`${workspaceOnboardingPath(workspaceId)}/knowledge/snippets/import`, {
+    method: 'POST',
+    body: fd,
+    signal: controller.signal,
+  }).finally(() => window.clearTimeout(timer));
+}
+
+/** Transcribe audio for Describe Your AI Agent (does not save draft). */
+export function postCustomerWorkspaceOnboardingDictation(workspaceId: string, file: File) {
+  const fd = new FormData();
+  fd.append('file', file);
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), 60_000);
+  return customerFetch<{ text: string }>(
+    `${workspaceOnboardingPath(workspaceId)}/dictation/describe-agent`,
+    { method: 'POST', body: fd, signal: controller.signal },
+  ).finally(() => window.clearTimeout(timer));
 }

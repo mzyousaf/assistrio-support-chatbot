@@ -34,6 +34,7 @@ import {
 import { KnowledgeModule } from '../knowledge/knowledge.module';
 import { VisitorsModule } from '../visitors/visitors.module';
 import { WorkspacesModule } from '../workspaces/workspaces.module';
+import { EntitlementsModule } from '../entitlements/entitlements.module';
 import { DocumentsModule } from '../documents/documents.module';
 /**
  * Bot-related HTTP surfaces include:
@@ -45,6 +46,7 @@ import { DocumentsModule } from '../documents/documents.module';
   imports: [
     AuthModule,
     WorkspacesModule,
+    EntitlementsModule,
     MongooseModule.forFeature([
       { name: User.name, schema: UserSchema },
       { name: Bot.name, schema: BotSchema },

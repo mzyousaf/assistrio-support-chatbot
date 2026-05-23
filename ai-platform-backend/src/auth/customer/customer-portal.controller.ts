@@ -12,6 +12,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { WorkspacesService } from '../../workspaces/workspaces.service';
+import { WorkspaceEntitlementsService } from '../../entitlements/workspace-entitlements.service';
 import {
   applySetCookieHeaders,
   buildSessionClearCookieHeader,
@@ -32,6 +33,7 @@ type RequestWithUser = FastifyRequest & { user?: RequestUser };
 export class CustomerPortalController {
   constructor(
     private readonly workspacesService: WorkspacesService,
+    private readonly entitlementsService: WorkspaceEntitlementsService,
     private readonly configService: ConfigService,
   ) {}
 
@@ -76,6 +78,6 @@ export class CustomerPortalController {
         errorCode: 'CUSTOMER_SESSION_REQUIRED',
       });
     }
-    return buildCustomerSessionPayload(user, this.workspacesService);
+    return buildCustomerSessionPayload(user, this.workspacesService, this.entitlementsService);
   }
 }

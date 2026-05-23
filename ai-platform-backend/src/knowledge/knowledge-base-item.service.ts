@@ -16,6 +16,7 @@ import {
 } from '../workspace/shared/example-questions.util';
 import type { KnowledgeTrainingScope } from '../models/train-job.schema';
 import { computeAutomaticItemRunAfter, getKnowledgeTrainingSettings } from './bot-knowledge-training-settings.util';
+import type { KnowledgeBotUpsertOptions } from './knowledge-bot-upsert.options';
 import type { KnowledgeSmartScheduleContext } from './knowledge-smart-schedule.util';
 import { normalizeKnowledgeTrainingStatus } from './knowledge-training-status.util';
 import {
@@ -836,6 +837,109 @@ export class KnowledgeBaseItemService {
   }
 
   /**
+   * Onboarding go-live: queue first training immediately (`runAfter = now`) regardless of autoTrainEnabled.
+   * Preserves in-flight rows (queued/processing) on idempotent retry.
+   */
+  private buildForcedInitialTrainingStatus(args: {
+    needsRetrain: boolean;
+    now: Date;
+    hasTrainedBefore: boolean;
+    currentStatus?: KnowledgeBaseItemTrainingStatus | null;
+  }):
+    | { $set: Record<string, unknown>; $unset?: Record<string, 1>; preserveTrainingLifecycle?: false }
+    | { $set: Record<string, unknown>; $unset?: Record<string, 1>; preserveTrainingLifecycle: true } {
+    if (!args.needsRetrain) {
+      if (args.hasTrainedBefore) {
+        return { $set: { status: 'ready' as const }, $unset: { lastQueuedAt: 1, runAfter: 1 } };
+      }
+      const cur = normalizeKnowledgeTrainingStatus(args.currentStatus ?? undefined);
+      if (cur === 'queued' || cur === 'processing') {
+        return { $set: {}, preserveTrainingLifecycle: true };
+      }
+    }
+    return {
+      $set: {
+        status: 'queued' as const,
+        lastQueuedAt: args.now,
+        runAfter: args.now,
+      },
+    };
+  }
+
+  private resolveTrainableContentStatusPatch(
+    settings: ReturnType<typeof getKnowledgeTrainingSettings>,
+    args: {
+      needsRetrain: boolean;
+      now: Date;
+      hasTrainedBefore: boolean;
+      smartSchedule?: KnowledgeSmartScheduleContext;
+      currentStatus?: KnowledgeBaseItemTrainingStatus | null;
+    },
+    options?: KnowledgeBotUpsertOptions,
+  ) {
+    if (options?.forceInitialTraining) {
+      return this.buildForcedInitialTrainingStatus(args);
+    }
+    return this.buildTrainableContentStatus(settings, args);
+  }
+
+  private newKbItemTrainingFields(
+    settings: ReturnType<typeof getKnowledgeTrainingSettings>,
+    now: Date,
+    opts: {
+      forceInitialTraining?: boolean;
+      hasContent: boolean;
+      active?: boolean;
+      smartSchedule?: KnowledgeSmartScheduleContext;
+    },
+  ): Record<string, unknown> {
+    const active = opts.active !== false;
+    if (!opts.hasContent) {
+      return { status: 'ready' as const, active };
+    }
+    if (opts.forceInitialTraining) {
+      return {
+        status: 'queued' as const,
+        active,
+        lastQueuedAt: now,
+        runAfter: now,
+      };
+    }
+    if (settings.autoTrainEnabled) {
+      return {
+        status: 'queued' as const,
+        active,
+        lastQueuedAt: now,
+        runAfter: computeAutomaticItemRunAfter(
+          now,
+          settings.trainingDelayMinutes,
+          false,
+          opts.smartSchedule,
+        ),
+      };
+    }
+    return { status: 'pending' as const, active };
+  }
+
+  private async scheduleScopeTrainingAfterUpsert(
+    botId: string,
+    scope: KnowledgeTrainingScope,
+    settings: ReturnType<typeof getKnowledgeTrainingSettings>,
+    options?: KnowledgeBotUpsertOptions,
+  ): Promise<void> {
+    if (settings.autoTrainEnabled) {
+      await this.knowledgeTrainingJobService.scheduleTrainingForScopes(botId, [scope]);
+      return;
+    }
+    if (options?.forceInitialTraining) {
+      await this.knowledgeTrainingJobService.scheduleTrainingForScopes(botId, [scope], {
+        bypassAutoTrainGate: true,
+        immediateJob: true,
+      });
+    }
+  }
+
+  /**
    * Manual Retrain / train-now: match Auto Train spacing ({@link computeAutomaticItemRunAfter}) per row instead of forcing `runAfter = now`.
    */
   private manualRetrainSmartScheduleFromLeanScopeRow(row: Record<string, unknown>): KnowledgeSmartScheduleContext {
@@ -1308,7 +1412,7 @@ export class KnowledgeBaseItemService {
       answer: string;
       active?: boolean;
     }>,
-    options?: { skipKbTotalLimitAssert?: boolean },
+    options?: KnowledgeBotUpsertOptions,
   ): Promise<{ upserted: number; deactivated: number }> {
     if (!options?.skipKbTotalLimitAssert) {
       await this.botKbTotalLimit.assertWithinLimit(botId, {
@@ -1372,17 +1476,21 @@ export class KnowledgeBaseItemService {
           .select('contentHash lastTrainedAt')
           .lean();
         const sameHash = (current as { contentHash?: string } | null)?.contentHash === hash;
-        const stPatch = this.buildTrainableContentStatus(trainingSettings, {
-          needsRetrain: !sameHash,
-          now: contentNow,
-          hasTrainedBefore: this.hasTrainedBeforeFromLean(
-            current as { lastTrainedAt?: Date } | null,
-          ),
-          smartSchedule: { kind: 'faq' },
-          currentStatus: normalizeKnowledgeTrainingStatus(
-            (current as { status?: string } | null)?.status,
-          ) as KnowledgeBaseItemTrainingStatus,
-        });
+        const stPatch = this.resolveTrainableContentStatusPatch(
+          trainingSettings,
+          {
+            needsRetrain: !sameHash,
+            now: contentNow,
+            hasTrainedBefore: this.hasTrainedBeforeFromLean(
+              current as { lastTrainedAt?: Date } | null,
+            ),
+            smartSchedule: { kind: 'faq' },
+            currentStatus: normalizeKnowledgeTrainingStatus(
+              (current as { status?: string } | null)?.status,
+            ) as KnowledgeBaseItemTrainingStatus,
+          },
+          options,
+        );
         const $set: Record<string, unknown> = {
           title: itemTitle,
           content,
@@ -1408,22 +1516,12 @@ export class KnowledgeBaseItemService {
         continue;
       }
 
-      const stNew = (() => {
-        if (trainingSettings.autoTrainEnabled) {
-          return {
-            row: {
-              status: 'queued' as const,
-              lastQueuedAt: contentNow,
-              runAfter: computeAutomaticItemRunAfter(
-                contentNow,
-                trainingSettings.trainingDelayMinutes,
-                false,
-              ),
-            },
-          };
-        }
-        return { row: { status: 'pending' as const } };
-      })();
+      const stNew = this.newKbItemTrainingFields(trainingSettings, contentNow, {
+        forceInitialTraining: options?.forceInitialTraining,
+        hasContent: Boolean(primaryQ || answer || groupTitle),
+        active,
+        smartSchedule: { kind: 'faq' },
+      });
 
       await this.itemModel.create({
         botId: botOid,
@@ -1436,16 +1534,14 @@ export class KnowledgeBaseItemService {
         characterCount: m.characterCount,
         lastContentUpdatedAt: contentNow,
         extractionStatus: 'not_required',
-        ...stNew.row,
+        ...stNew,
       });
       upserted++;
     }
 
     const deactivated = await this.deactivateMissingFaqKnowledgeItemsForBot(botId, faqs.length);
     await this.refreshBotKnowledgeStats(botId);
-    if (trainingSettings.autoTrainEnabled) {
-      await this.knowledgeTrainingJobService.scheduleTrainingForScopes(botId, ['faq']);
-    }
+    await this.scheduleScopeTrainingAfterUpsert(botId, 'faq', trainingSettings, options);
     await this.kickOosReconcile(botId, 'kb_faq_upsert');
     return { upserted, deactivated };
   }
@@ -1465,7 +1561,7 @@ export class KnowledgeBaseItemService {
   async upsertSnippetKnowledgeItemsForBot(
     botId: string,
     snippets: Array<{ title: string; snippet: string; active?: boolean }>,
-    options?: { skipKbTotalLimitAssert?: boolean },
+    options?: KnowledgeBotUpsertOptions,
   ): Promise<{ upserted: number; deactivated: number }> {
     if (!options?.skipKbTotalLimitAssert) {
       await this.botKbTotalLimit.assertWithinLimit(botId, {
@@ -1512,17 +1608,21 @@ export class KnowledgeBaseItemService {
           .select('contentHash lastTrainedAt')
           .lean();
         const sameHash = (current as { contentHash?: string } | null)?.contentHash === hash;
-        const stPatch = this.buildTrainableContentStatus(trainingSettingsSn, {
-          needsRetrain: !sameHash,
-          now: contentNow,
-          hasTrainedBefore: this.hasTrainedBeforeFromLean(
-            current as { lastTrainedAt?: Date } | null,
-          ),
-          smartSchedule: { kind: 'note' },
-          currentStatus: normalizeKnowledgeTrainingStatus(
-            (current as { status?: string } | null)?.status,
-          ) as KnowledgeBaseItemTrainingStatus,
-        });
+        const stPatch = this.resolveTrainableContentStatusPatch(
+          trainingSettingsSn,
+          {
+            needsRetrain: !sameHash,
+            now: contentNow,
+            hasTrainedBefore: this.hasTrainedBeforeFromLean(
+              current as { lastTrainedAt?: Date } | null,
+            ),
+            smartSchedule: { kind: 'note' },
+            currentStatus: normalizeKnowledgeTrainingStatus(
+              (current as { status?: string } | null)?.status,
+            ) as KnowledgeBaseItemTrainingStatus,
+          },
+          options,
+        );
         const $set: Record<string, unknown> = {
           title: stitle,
           content: hasContent ? content : '',
@@ -1549,27 +1649,12 @@ export class KnowledgeBaseItemService {
         continue;
       }
 
-      const stNoteNew = (() => {
-        const a = hasContent && active;
-        if (!hasContent) {
-          return { row: { status: 'ready' as const, active: a } };
-        }
-        if (trainingSettingsSn.autoTrainEnabled) {
-          return {
-            row: {
-              status: 'queued' as const,
-              active: a,
-              lastQueuedAt: contentNow,
-              runAfter: computeAutomaticItemRunAfter(
-                contentNow,
-                trainingSettingsSn.trainingDelayMinutes,
-                false,
-              ),
-            },
-          };
-        }
-        return { row: { status: 'pending' as const, active: a } };
-      })();
+      const stNoteNew = this.newKbItemTrainingFields(trainingSettingsSn, contentNow, {
+        forceInitialTraining: options?.forceInitialTraining,
+        hasContent,
+        active: hasContent && active,
+        smartSchedule: { kind: 'note' },
+      });
 
       await this.itemModel.create({
         botId: botOid,
@@ -1582,7 +1667,7 @@ export class KnowledgeBaseItemService {
         characterCount: m.characterCount,
         lastContentUpdatedAt: contentNow,
         extractionStatus: 'not_required',
-        ...stNoteNew.row,
+        ...stNoteNew,
       });
       upserted++;
     }
@@ -1593,9 +1678,7 @@ export class KnowledgeBaseItemService {
     });
     const deactivated = await this.deactivateMissingSnippetKnowledgeItemsForBot(botId, snippets.length);
     await this.refreshBotKnowledgeStats(botId);
-    if (trainingSettingsSn.autoTrainEnabled) {
-      await this.knowledgeTrainingJobService.scheduleTrainingForScopes(botId, ['note']);
-    }
+    await this.scheduleScopeTrainingAfterUpsert(botId, 'note', trainingSettingsSn, options);
     await this.kickOosReconcile(botId, 'kb_snippet_upsert');
     return { upserted, deactivated: deactivatedLegacy + deactivated };
   }
@@ -1647,7 +1730,7 @@ export class KnowledgeBaseItemService {
       importFileSize?: number;
       importFileName?: string;
     }>,
-    options?: { skipKbTotalLimitAssert?: boolean },
+    options?: KnowledgeBotUpsertOptions,
   ): Promise<{ upserted: number; deactivated: number }> {
     if (!options?.skipKbTotalLimitAssert) {
       await this.botKbTotalLimit.assertWithinLimit(botId, {
@@ -1738,19 +1821,23 @@ export class KnowledgeBaseItemService {
         if (mergedName) tableMeta.importFileName = mergedName;
 
         const trainedRow = current as { lastTrainedAt?: Date } | null;
-        const stPatch = this.buildTrainableContentStatus(trainingSettingsTbl, {
-          needsRetrain: !sameHash,
-          now: contentNow,
-          hasTrainedBefore: this.hasTrainedBeforeFromLean(trainedRow),
-          smartSchedule: {
-            kind: 'table',
-            rowCount: rows.length,
-            approxChars: typeof m.characterCount === 'number' ? m.characterCount : 0,
+        const stPatch = this.resolveTrainableContentStatusPatch(
+          trainingSettingsTbl,
+          {
+            needsRetrain: !sameHash,
+            now: contentNow,
+            hasTrainedBefore: this.hasTrainedBeforeFromLean(trainedRow),
+            smartSchedule: {
+              kind: 'table',
+              rowCount: rows.length,
+              approxChars: typeof m.characterCount === 'number' ? m.characterCount : 0,
+            },
+            currentStatus: normalizeKnowledgeTrainingStatus(
+              (current as { status?: string } | null)?.status,
+            ) as KnowledgeBaseItemTrainingStatus,
           },
-          currentStatus: normalizeKnowledgeTrainingStatus(
-            (current as { status?: string } | null)?.status,
-          ) as KnowledgeBaseItemTrainingStatus,
-        });
+          options,
+        );
         const $set: Record<string, unknown> = {
           title,
           content: hasContent ? content : '',
@@ -1794,27 +1881,16 @@ export class KnowledgeBaseItemService {
       if (cSize != null) createTableMeta.importFileSize = cSize;
       if (cName) createTableMeta.importFileName = cName;
 
-      const stTableNew = (() => {
-        const a = hasContent && active;
-        if (!hasContent) {
-          return { row: { status: 'ready' as const, active: a } };
-        }
-        if (trainingSettingsTbl.autoTrainEnabled) {
-          return {
-            row: {
-              status: 'queued' as const,
-              active: a,
-              lastQueuedAt: contentNow,
-              runAfter: computeAutomaticItemRunAfter(
-                contentNow,
-                trainingSettingsTbl.trainingDelayMinutes,
-                false,
-              ),
-            },
-          };
-        }
-        return { row: { status: 'pending' as const, active: a } };
-      })();
+      const stTableNew = this.newKbItemTrainingFields(trainingSettingsTbl, contentNow, {
+        forceInitialTraining: options?.forceInitialTraining,
+        hasContent,
+        active: hasContent && active,
+        smartSchedule: {
+          kind: 'table',
+          rowCount: rows.length,
+          approxChars: typeof m.characterCount === 'number' ? m.characterCount : 0,
+        },
+      });
 
       await this.itemModel.create({
         botId: botOid,
@@ -1827,16 +1903,14 @@ export class KnowledgeBaseItemService {
         characterCount: m.characterCount,
         lastContentUpdatedAt: contentNow,
         extractionStatus: 'not_required',
-        ...stTableNew.row,
+        ...stTableNew,
       });
       upserted++;
     }
 
     const deactivated = await this.deactivateMissingTableKnowledgeItemsForBot(botId, tables.length);
     await this.refreshBotKnowledgeStats(botId);
-    if (trainingSettingsTbl.autoTrainEnabled) {
-      await this.knowledgeTrainingJobService.scheduleTrainingForScopes(botId, ['table']);
-    }
+    await this.scheduleScopeTrainingAfterUpsert(botId, 'table', trainingSettingsTbl, options);
     await this.kickOosReconcile(botId, 'kb_table_upsert');
     return { upserted, deactivated };
   }

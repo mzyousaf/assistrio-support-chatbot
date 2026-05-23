@@ -15,13 +15,14 @@ import { BotsModule } from '../bots/bots.module';
 import { VisitorsModule } from '../visitors/visitors.module';
 import { AuthModule } from '../auth/auth.module';
 import { WorkspacesModule } from '../workspaces/workspaces.module';
+import { EntitlementsModule } from '../entitlements/entitlements.module';
 import { ChatController } from './chat.controller';
 import { WidgetPreviewController } from './widget-preview.controller';
 import { ChatEngineService } from './chat-engine.service';
 import { ChatService } from './chat.service';
 import { ResponseStyleRefineService } from './response-style-refine.service';
 import { SummaryJobModule } from './summary-job.module';
-import { WhisperTranscriptionService } from './whisper-transcription.service';
+import { TranscriptionModule } from '../transcription/transcription.module';
 import { WidgetSpeechService } from './widget-speech.service';
 import { KnowledgeModule } from '../knowledge/knowledge.module';
 import { SharedChatController } from '../bots/shared-chat.controller';
@@ -35,7 +36,9 @@ import { TopicSentimentClassificationModule } from '../analytics/topic-sentiment
     VisitorsModule,
     AuthModule,
     WorkspacesModule,
+    EntitlementsModule,
     SummaryJobModule,
+    TranscriptionModule,
     TopicSentimentClassificationModule,
     MongooseModule.forFeature([
       { name: Conversation.name, schema: ConversationSchema },
@@ -48,7 +51,6 @@ import { TopicSentimentClassificationModule } from '../analytics/topic-sentiment
   providers: [
     ChatService,
     ChatEngineService,
-    WhisperTranscriptionService,
     WidgetSpeechService,
     ResponseStyleRefineService,
   ],

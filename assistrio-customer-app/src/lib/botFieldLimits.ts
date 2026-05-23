@@ -19,6 +19,15 @@ export const BOT_FIELD_MAX = {
   thingsToAvoid: 4000,
   welcomeMessage: 2000,
   knowledgeDescription: 2000,
+  /** Titled knowledge snippet (title) */
+  knowledgeSnippetTitle: 200,
+  /** Single snippet / cell text */
+  knowledgeSnippetBody: 12_000,
+  /** Q&A group title */
+  knowledgeQaTitle: 200,
+  /** One phrasing in a Q&A group */
+  knowledgeQaQuestion: 2000,
+  knowledgeQaAnswer: 12_000,
   exampleQuestion: 140,
   /** Scoped facts when a suggestion chip is used (first reply; no full KB). */
   exampleQuestionContext: 4000,

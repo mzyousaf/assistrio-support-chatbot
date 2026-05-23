@@ -1,156 +1,477 @@
-import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
 import { useOnboardingFlow } from '../../onboarding/OnboardingFlowContext';
-import { prevStepPath } from '../../onboarding/onboardingState';
+import { useOnboardingStepUi } from '../../onboarding/OnboardingStepUiContext';
+import { useRegisterOnboardingStepActions } from '../../onboarding/OnboardingStepActionsContext';
+import {
+  hasOnboardingKnowledgeFromDraft,
+  hasValidQa,
+  hasValidSnippet,
+  stagedDocumentsFromOnboarding,
+  sortedStagedDocumentItemsFromOnboarding,
+  stagedDatasheetsFromOnboarding,
+  sortedOnboardingSnippets,
+  sortedOnboardingQas,
+  onboardingKbItemsSortFingerprint,
+} from '../../onboarding/onboardingKnowledge';
 
 import { styles } from './onboardingStep';
-import { Button, Input, Textarea } from '@/components/ui';
-
-const dangerLinkBtn =
-  'h-auto min-h-0 px-0 py-0 text-[0.8125rem] font-normal text-[var(--color-danger-text-emphasis)] underline hover:bg-transparent';
+import { OnboardingStepPanel } from '@/components/onboarding/OnboardingStepPanel';
+import {
+  OnboardingKnowledgeTabs,
+  type OnboardingKnowledgeTabCounts,
+  type OnboardingKnowledgeTabId,
+} from '@/components/onboarding/OnboardingKnowledgeTabs';
+import {
+  OnboardingKnowledgeFileTab,
+  validateKnowledgeUploadFiles,
+} from '@/components/onboarding/OnboardingKnowledgeFileTab';
+import {
+  OnboardingKnowledgeDatasheetTab,
+  validateDatasheetUploadFile,
+  isOnboardingDatasheetHeaderOnlyError,
+} from '@/components/onboarding/OnboardingKnowledgeDatasheetTab';
+import { OnboardingKnowledgeSnippetTab } from '@/components/onboarding/OnboardingKnowledgeSnippetTab';
+import { OnboardingKnowledgeQaTab } from '@/components/onboarding/OnboardingKnowledgeQaTab';
+import { OnboardingKnowledgeRequirementBanner } from '@/components/onboarding/OnboardingKnowledgeShared';
+import {
+  toastOnboardingDatasheetUploaded,
+  toastOnboardingDatasheetUploadFailed,
+  toastOnboardingDocumentsUploaded,
+  toastOnboardingDocumentsUploadFailed,
+  toastOnboardingKnowledgeDeleteFailed,
+  toastOnboardingKnowledgeBulkDeletePartial,
+  toastOnboardingKnowledgeItemDeleted,
+  toastOnboardingKnowledgeItemSaveFailed,
+  toastOnboardingKnowledgeItemSaved,
+  toastOnboardingQaImportFailed,
+  toastOnboardingQaImportSkipped,
+  toastOnboardingQaImported,
+  toastOnboardingSnippetImportFailed,
+  toastOnboardingSnippetImportSkipped,
+  toastOnboardingSnippetImported,
+} from '@/lib/onboardingActionToasts';
+import { appToast } from '@/lib/app-toast';
 
 const STEP = 'knowledge-base';
 
-type FaqRow = { question: string; answer: string };
+function tabPanelLabel(tab: OnboardingKnowledgeTabId): string {
+  switch (tab) {
+    case 'file':
+      return 'Documents';
+    case 'snippet':
+      return 'Snippets';
+    case 'qa':
+      return 'Q&A';
+    case 'datasheet':
+      return 'Datasheets';
+  }
+}
 
 export function OnboardingKnowledgeStep() {
-  const { bot, patchDraft, markStepDone, goToNextAfter } = useOnboardingFlow();
-  const [snippet, setSnippet] = useState('');
-  const [faqs, setFaqs] = useState<FaqRow[]>([{ question: '', answer: '' }]);
-  const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
+  const flow = useOnboardingFlow();
+  const { markStepAttemptFailed, clearStepAttempt, attemptedStepIds, setSavingStepId } = useOnboardingStepUi();
+  const {
+    onboarding,
+    markStepDone,
+    goToNextAfter,
+    uploadOnboardingDocuments,
+    uploadOnboardingDatasheet,
+    deleteOnboardingDocument,
+    deleteOnboardingDocuments,
+    deleteOnboardingDatasheet,
+    deleteOnboardingDatasheets,
+    createOnboardingSnippet,
+    updateOnboardingSnippet,
+    deleteOnboardingSnippet,
+    deleteOnboardingSnippets,
+    createOnboardingQa,
+    updateOnboardingQa,
+    deleteOnboardingQa,
+    deleteOnboardingQas,
+    importOnboardingQas,
+    importOnboardingSnippets,
+    reloadOnboarding,
+  } = flow;
 
   useEffect(() => {
-    if (!bot) return;
-    setSnippet(String(bot.knowledgeDescription ?? ''));
-    const raw = Array.isArray(bot.faqs) ? bot.faqs : [];
-    const rows: FaqRow[] = raw
-      .map((f) => ({
-        question: String(f.question ?? ''),
-        answer: String(f.answer ?? ''),
-      }))
-      .filter((f) => f.question || f.answer);
-    setFaqs(rows.length ? rows : [{ question: '', answer: '' }]);
-  }, [bot?.id, bot]);
+    void reloadOnboarding();
+  }, [reloadOnboarding]);
 
-  function addFaq() {
-    setFaqs((prev) => [...prev, { question: '', answer: '' }]);
+  const knowledge = onboarding?.draft.knowledge;
+  const stagedKnowledge = onboarding?.stagedKnowledge;
+  const [activeTab, setActiveTab] = useState<OnboardingKnowledgeTabId>('file');
+  const [error, setError] = useState<string | null>(null);
+  const [docUploading, setDocUploading] = useState(false);
+  const [docDeleting, setDocDeleting] = useState(false);
+  const [docUploadError, setDocUploadError] = useState<string | null>(null);
+  const [sheetUploading, setSheetUploading] = useState(false);
+  const [sheetDeleting, setSheetDeleting] = useState(false);
+  const [sheetUploadError, setSheetUploadError] = useState<string | null>(null);
+  const [kbBusy, setKbBusy] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const stagedDocumentItems = useMemo(
+    () => sortedStagedDocumentItemsFromOnboarding(stagedKnowledge),
+    [stagedKnowledge],
+  );
+  const stagedDocuments = useMemo(
+    () => stagedDocumentsFromOnboarding(stagedKnowledge),
+    [stagedKnowledge],
+  );
+  const stagedDatasheets = useMemo(
+    () => stagedDatasheetsFromOnboarding(stagedKnowledge),
+    [stagedKnowledge],
+  );
+  const snippetSortKey = onboardingKbItemsSortFingerprint(knowledge?.snippets);
+  const qaSortKey = onboardingKbItemsSortFingerprint(knowledge?.qas);
+  const snippets = useMemo(
+    () => sortedOnboardingSnippets(knowledge?.snippets),
+    [knowledge?.snippets, snippetSortKey],
+  );
+  const qas = useMemo(
+    () => sortedOnboardingQas(knowledge?.qas),
+    [knowledge?.qas, qaSortKey],
+  );
+
+  const tabCounts: OnboardingKnowledgeTabCounts = {
+    file: stagedDocuments.length,
+    snippet: snippets.filter(hasValidSnippet).length,
+    qa: qas.filter(hasValidQa).length,
+    datasheet: stagedDatasheets.length,
+  };
+
+  async function onDocumentUpload(files: File[]) {
+    setDocUploadError(null);
+    const validated = validateKnowledgeUploadFiles(files);
+    if (!validated.ok) {
+      setDocUploadError(validated.error);
+      appToast.warning('Could not upload documents', { description: validated.error });
+      return;
+    }
+    setDocUploading(true);
+    const res = await uploadOnboardingDocuments(validated.files);
+    setDocUploading(false);
+    if (!res.ok) {
+      setDocUploadError(res.error);
+      toastOnboardingDocumentsUploadFailed(res.error);
+      return;
+    }
+    toastOnboardingDocumentsUploaded(validated.files.length);
+    clearStepAttempt(STEP);
   }
 
-  function removeFaq(i: number) {
-    setFaqs((prev) => prev.filter((_, idx) => idx !== i));
+  async function onDocumentDelete(id: string) {
+    setDocDeleting(true);
+    const res = await deleteOnboardingDocument(id);
+    setDocDeleting(false);
+    if (!res.ok) {
+      toastOnboardingKnowledgeDeleteFailed('document', res.error);
+      return { ok: false, error: res.error };
+    }
+    toastOnboardingKnowledgeItemDeleted('document');
+    return { ok: true };
+  }
+
+  async function onDocumentsBulkDelete(ids: string[]) {
+    setDocDeleting(true);
+    const res = await deleteOnboardingDocuments(ids);
+    setDocDeleting(false);
+    if (!res.ok) {
+      toastOnboardingKnowledgeDeleteFailed('document', res.error);
+      return { ok: false, error: res.error };
+    }
+    if (res.deletedCount <= 0) {
+      toastOnboardingKnowledgeDeleteFailed('document', 'No items were removed.');
+      return { ok: false, error: 'No items were removed.' };
+    }
+    if (res.deletedCount < ids.length) {
+      toastOnboardingKnowledgeBulkDeletePartial(res.deletedCount, ids.length);
+    } else {
+      toastOnboardingKnowledgeItemDeleted('document', res.deletedCount);
+    }
+    return { ok: true, deletedCount: res.deletedCount };
+  }
+
+  async function onDatasheetUpload(file: File) {
+    setSheetUploadError(null);
+    const validated = validateDatasheetUploadFile(file);
+    if (!validated.ok) {
+      setSheetUploadError(validated.error);
+      appToast.warning('Could not upload datasheet', { description: validated.error });
+      return;
+    }
+    setSheetUploading(true);
+    const res = await uploadOnboardingDatasheet(validated.file);
+    setSheetUploading(false);
+    if (!res.ok) {
+      if (!isOnboardingDatasheetHeaderOnlyError(res.error)) {
+        setSheetUploadError(res.error);
+      }
+      toastOnboardingDatasheetUploadFailed(res.error);
+      return;
+    }
+    toastOnboardingDatasheetUploaded(validated.file.name);
+    clearStepAttempt(STEP);
+  }
+
+  async function onDatasheetDelete(id: string) {
+    setSheetDeleting(true);
+    const res = await deleteOnboardingDatasheet(id);
+    setSheetDeleting(false);
+    if (!res.ok) {
+      toastOnboardingKnowledgeDeleteFailed('datasheet', res.error);
+      return { ok: false, error: res.error };
+    }
+    toastOnboardingKnowledgeItemDeleted('datasheet');
+    return { ok: true };
+  }
+
+  async function onDatasheetsBulkDelete(ids: string[]) {
+    setSheetDeleting(true);
+    const res = await deleteOnboardingDatasheets(ids);
+    setSheetDeleting(false);
+    if (!res.ok) {
+      toastOnboardingKnowledgeDeleteFailed('datasheet', res.error);
+      return { ok: false, error: res.error };
+    }
+    if (res.deletedCount <= 0) {
+      toastOnboardingKnowledgeDeleteFailed('datasheet', 'No items were removed.');
+      return { ok: false, error: 'No items were removed.' };
+    }
+    if (res.deletedCount < ids.length) {
+      toastOnboardingKnowledgeBulkDeletePartial(res.deletedCount, ids.length);
+    } else {
+      toastOnboardingKnowledgeItemDeleted('datasheet', res.deletedCount);
+    }
+    return { ok: true, deletedCount: res.deletedCount };
+  }
+
+  async function onSnippetsBulkDelete(ids: string[]) {
+    setKbBusy(true);
+    const res = await deleteOnboardingSnippets(ids);
+    setKbBusy(false);
+    if (!res.ok) {
+      toastOnboardingKnowledgeDeleteFailed('snippet', res.error);
+      return { ok: false, error: res.error };
+    }
+    if (res.deletedCount <= 0) {
+      toastOnboardingKnowledgeDeleteFailed('snippet', 'No items were removed.');
+      return { ok: false, error: 'No items were removed.' };
+    }
+    if (res.deletedCount < ids.length) {
+      toastOnboardingKnowledgeBulkDeletePartial(res.deletedCount, ids.length);
+    } else {
+      toastOnboardingKnowledgeItemDeleted('snippet', res.deletedCount);
+    }
+    clearStepAttempt(STEP);
+    return { ok: true, deletedCount: res.deletedCount };
+  }
+
+  async function onQasBulkDelete(ids: string[]) {
+    setKbBusy(true);
+    const res = await deleteOnboardingQas(ids);
+    setKbBusy(false);
+    if (!res.ok) {
+      toastOnboardingKnowledgeDeleteFailed('Q&A', res.error);
+      return { ok: false, error: res.error };
+    }
+    if (res.deletedCount <= 0) {
+      toastOnboardingKnowledgeDeleteFailed('Q&A', 'No items were removed.');
+      return { ok: false, error: 'No items were removed.' };
+    }
+    if (res.deletedCount < ids.length) {
+      toastOnboardingKnowledgeBulkDeletePartial(res.deletedCount, ids.length);
+    } else {
+      toastOnboardingKnowledgeItemDeleted('Q&A', res.deletedCount);
+    }
+    clearStepAttempt(STEP);
+    return { ok: true, deletedCount: res.deletedCount };
+  }
+
+  async function wrapKbAction<T extends { ok: boolean; error?: string }>(
+    fn: () => Promise<T>,
+    toast?: {
+      onSuccess?: () => void;
+      onError?: (error?: string) => void;
+    },
+  ): Promise<T> {
+    setKbBusy(true);
+    const res = await fn();
+    setKbBusy(false);
+    if (res.ok) {
+      toast?.onSuccess?.();
+      clearStepAttempt(STEP);
+    } else {
+      toast?.onError?.(res.error);
+    }
+    return res;
   }
 
   async function onContinue(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    const sn = snippet.trim();
-    const cleanedFaqs = faqs
-      .map((f) => ({
-        question: f.question.trim(),
-        answer: f.answer.trim(),
-        active: true as const,
-      }))
-      .filter((f) => f.question && f.answer);
-    if (!sn && cleanedFaqs.length === 0) {
-      setError('Add a text snippet and/or at least one FAQ with both question and answer.');
+    if (!hasOnboardingKnowledgeFromDraft(onboarding?.draft ?? null, stagedKnowledge)) {
+      setError('Add at least one knowledge source — a file, datasheet, snippet, or Q&A.');
+      markStepAttemptFailed(STEP);
       return;
     }
+    clearStepAttempt(STEP);
     setSaving(true);
-    const res = await patchDraft({
-      knowledgeDescription: sn,
-      faqs: cleanedFaqs,
-    });
-    setSaving(false);
-    if (!res.ok) {
-      setError(res.error);
-      return;
+    setSavingStepId(STEP);
+    try {
+      await markStepDone(STEP);
+      goToNextAfter(STEP);
+    } finally {
+      setSaving(false);
+      setSavingStepId(null);
     }
-    markStepDone(STEP);
-    goToNextAfter(STEP);
   }
 
-  const back = prevStepPath(STEP);
+  const hasKnowledge = hasOnboardingKnowledgeFromDraft(onboarding?.draft ?? null, stagedKnowledge);
+  const busy =
+    saving || docUploading || docDeleting || sheetUploading || sheetDeleting || kbBusy;
+  const showRequirementBanner = !hasKnowledge;
+  const bannerEmphasized = attemptedStepIds.has(STEP) || Boolean(error);
+
+  useRegisterOnboardingStepActions({
+    primaryLabel: saving ? 'Saving…' : 'Continue',
+    primaryLoading: saving,
+    primaryDisabled: busy && !saving,
+  });
 
   return (
-    <form className={styles.step} onSubmit={(e) => void onContinue(e)}>
-      <h2 className={styles.h2}>Knowledge base</h2>
-      <p className={styles.p}>
-        Free-form notes and Q&amp;A pairs are embedded with your assistant. File uploads can be added
-        later from the assistant workspace.
-      </p>
+    <OnboardingStepPanel
+      stepId={STEP}
+      headerClassName="onboarding-knowledge-header"
+      eyebrow="Knowledge base"
+      title="Setup Knowledge for Your AI Agent"
+      description="Add documents, snippets, Q&A pairs, or datasheets so your AI agent can answer with your own content."
+      helperLine="You only need one source to continue. Changes save automatically."
+      formProps={{ onSubmit: onContinue, className: 'onboarding-knowledge-stack' }}
+    >
       {error ? (
         <div className={styles.errBanner} role="alert">
           {error}
         </div>
       ) : null}
-      <label className={styles.label} htmlFor="onb-kb-snippet">
-        Text snippet (optional if you add FAQs below)
-      </label>
-      <Textarea
-        id="onb-kb-snippet"
-        quiet
-        rows={4}
-        value={snippet}
-        onChange={(e) => setSnippet(e.target.value)}
-        placeholder="Facts, policies, product notes, or anything the assistant should know."
+
+      {showRequirementBanner ? (
+        <OnboardingKnowledgeRequirementBanner emphasized={bannerEmphasized} />
+      ) : null}
+
+      <OnboardingKnowledgeTabs
+        value={activeTab}
+        onChange={setActiveTab}
+        counts={tabCounts}
+        disabled={busy}
       />
-      <div className={styles.faqBlock}>
-        <div className={styles.faqHead}>
-          <span className={styles.faqTitle}>FAQ / Q&amp;A</span>
-          <Button type="button" variant="secondary" size="sm" onClick={addFaq}>
-            Add pair
-          </Button>
-        </div>
-        {faqs.map((row, i) => (
-          <div key={i} className={styles.faqRow}>
-            <label className={styles.label} htmlFor={`onb-kb-q-${i}`}>
-              Question
-            </label>
-            <Input
-              id={`onb-kb-q-${i}`}
-              quiet
-              value={row.question}
-              onChange={(e) =>
-                setFaqs((prev) =>
-                  prev.map((r, j) => (j === i ? { ...r, question: e.target.value } : r)),
-                )
-              }
+
+      <div className="knowledge-workspace" role="tabpanel" aria-label={tabPanelLabel(activeTab)}>
+        {activeTab === 'file' ? (
+            <OnboardingKnowledgeFileTab
+              documents={[]}
+              stagedDocuments={stagedDocumentItems}
+              uploading={docUploading}
+              deleting={docDeleting}
+              uploadError={docUploadError}
+              disabled={busy}
+              onUpload={onDocumentUpload}
+              onDelete={onDocumentDelete}
+              onBulkDelete={onDocumentsBulkDelete}
             />
-            <label className={styles.label} htmlFor={`onb-kb-a-${i}`}>
-              Answer
-            </label>
-            <Textarea
-              id={`onb-kb-a-${i}`}
-              quiet
-              rows={2}
-              value={row.answer}
-              onChange={(e) =>
-                setFaqs((prev) =>
-                  prev.map((r, j) => (j === i ? { ...r, answer: e.target.value } : r)),
-                )
+          ) : null}
+
+          {activeTab === 'snippet' ? (
+            <OnboardingKnowledgeSnippetTab
+              snippets={snippets}
+              disabled={busy}
+              busy={kbBusy}
+              onCreate={(body) =>
+                wrapKbAction(() => createOnboardingSnippet(body), {
+                  onSuccess: () => toastOnboardingKnowledgeItemSaved('snippet', 'create'),
+                  onError: (err) => toastOnboardingKnowledgeItemSaveFailed('snippet', err),
+                })
               }
+              onUpdate={(id, body) =>
+                wrapKbAction(() => updateOnboardingSnippet(id, body), {
+                  onSuccess: () => toastOnboardingKnowledgeItemSaved('snippet', 'update'),
+                  onError: (err) => toastOnboardingKnowledgeItemSaveFailed('snippet', err),
+                })
+              }
+              onDelete={(id) =>
+                wrapKbAction(() => deleteOnboardingSnippet(id), {
+                  onSuccess: () => toastOnboardingKnowledgeItemDeleted('snippet'),
+                  onError: (err) => toastOnboardingKnowledgeDeleteFailed('snippet', err),
+                })
+              }
+              onBulkDelete={onSnippetsBulkDelete}
+              onImport={async (file) => {
+                const res = await wrapKbAction(() => importOnboardingSnippets(file));
+                if (res.ok && 'imported' in res) {
+                  const imported = res.imported ?? 0;
+                  const skipped = res.skippedCount ?? 0;
+                  if (imported > 0) toastOnboardingSnippetImported(imported);
+                  if (skipped > 0) toastOnboardingSnippetImportSkipped(skipped, res.skippedReason);
+                } else if (!res.ok) {
+                  toastOnboardingSnippetImportFailed(res.error);
+                }
+                return res;
+              }}
             />
-            {faqs.length > 1 ? (
-              <Button type="button" variant="ghost" className={dangerLinkBtn} onClick={() => removeFaq(i)}>
-                Remove
-              </Button>
-            ) : null}
-          </div>
-        ))}
+          ) : null}
+
+          {activeTab === 'qa' ? (
+            <OnboardingKnowledgeQaTab
+              qas={qas}
+              disabled={busy}
+              busy={kbBusy}
+              onCreate={(body) =>
+                wrapKbAction(() => createOnboardingQa(body), {
+                  onSuccess: () => toastOnboardingKnowledgeItemSaved('Q&A', 'create'),
+                  onError: (err) => toastOnboardingKnowledgeItemSaveFailed('Q&A', err),
+                })
+              }
+              onUpdate={(id, body) =>
+                wrapKbAction(() => updateOnboardingQa(id, body), {
+                  onSuccess: () => toastOnboardingKnowledgeItemSaved('Q&A', 'update'),
+                  onError: (err) => toastOnboardingKnowledgeItemSaveFailed('Q&A', err),
+                })
+              }
+              onDelete={(id) =>
+                wrapKbAction(() => deleteOnboardingQa(id), {
+                  onSuccess: () => toastOnboardingKnowledgeItemDeleted('Q&A'),
+                  onError: (err) => toastOnboardingKnowledgeDeleteFailed('Q&A', err),
+                })
+              }
+              onBulkDelete={onQasBulkDelete}
+              onImport={async (file) => {
+                const res = await wrapKbAction(() => importOnboardingQas(file));
+                if (res.ok && 'imported' in res) {
+                  const imported = res.imported ?? 0;
+                  const skipped = res.skippedCount ?? 0;
+                  if (imported > 0) toastOnboardingQaImported(imported);
+                  if (skipped > 0) toastOnboardingQaImportSkipped(skipped, res.skippedReason);
+                } else if (!res.ok) {
+                  toastOnboardingQaImportFailed(res.error);
+                }
+                return res;
+              }}
+            />
+          ) : null}
+
+          {activeTab === 'datasheet' ? (
+            <OnboardingKnowledgeDatasheetTab
+              datasheets={stagedDatasheets}
+              uploading={sheetUploading}
+              deleting={sheetDeleting}
+              uploadError={sheetUploadError}
+              disabled={busy}
+              onUpload={onDatasheetUpload}
+              onDelete={onDatasheetDelete}
+              onBulkDelete={onDatasheetsBulkDelete}
+            />
+          ) : null}
       </div>
-      <div className={styles.actions}>
-        {back ? (
-          <Link to={`/onboarding/${back}`} className={styles.back}>
-            Back
-          </Link>
-        ) : (
-          <span />
-        )}
-        <Button type="submit" variant="primary" disabled={saving}>
-          {saving ? 'Saving…' : 'Save & continue'}
-        </Button>
-      </div>
-    </form>
+    </OnboardingStepPanel>
   );
 }

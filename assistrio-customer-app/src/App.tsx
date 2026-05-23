@@ -4,6 +4,7 @@ import { CustomerAuthProvider } from './auth/CustomerAuthContext';
 import { AppShell } from './layout/AppShell';
 import { WorkspaceDiscardModalProvider } from './pages/bot-workspace/WorkspaceDiscardModal';
 import { ProtectedRoute } from './layout/ProtectedRoute';
+import { OnboardingCompleteRoute } from './layout/OnboardingCompleteRoute';
 import { PublicLoginRoute } from './layout/PublicLoginRoute';
 import { BotWorkspaceLayout } from './pages/bot-workspace/BotWorkspaceLayout';
 import { PlaygroundLayout } from './pages/bot-workspace/PlaygroundLayout';
@@ -56,9 +57,11 @@ import { UsagePage } from './pages/UsagePage';
 import { OnboardingAgentProfileStep } from './pages/onboarding/OnboardingAgentProfileStep';
 import { OnboardingDescribeStep } from './pages/onboarding/OnboardingDescribeStep';
 import { OnboardingGoLiveStep } from './pages/onboarding/OnboardingGoLiveStep';
+import { OnboardingYouAreLiveStep } from './pages/onboarding/OnboardingYouAreLiveStep';
 import { OnboardingKnowledgeStep } from './pages/onboarding/OnboardingKnowledgeStep';
 import { OnboardingGate } from './pages/onboarding/OnboardingGate';
 import { OnboardingLayout } from './pages/onboarding/OnboardingLayout';
+import { OnboardingResumeRedirect } from './pages/onboarding/OnboardingResumeRedirect';
 import { PostLoginRedirect } from './routes/PostLoginRedirect';
 import { CUSTOMER_ROUTES } from './routes/customerRoutes';
 import { AppToaster } from './components/AppToaster';
@@ -102,10 +105,18 @@ export function App() {
           <Route path="/iframe/:botId" element={<IframeChatPage />} />
           <Route element={<ProtectedRoute />}>
             <Route path={CUSTOMER_ROUTES.home} element={<PostLoginRedirect />} />
-            <Route
-              path={CUSTOMER_ROUTES.dashboard}
-              element={<Navigate to={CUSTOMER_ROUTES.agents} replace />}
-            />
+            <Route path={CUSTOMER_ROUTES.dashboard} element={<PostLoginRedirect />} />
+            <Route path="/onboarding" element={<OnboardingGate />}>
+              <Route element={<OnboardingLayout />}>
+                <Route index element={<OnboardingResumeRedirect />} />
+                <Route path="agent-profile" element={<OnboardingAgentProfileStep />} />
+                <Route path="describe-profile" element={<OnboardingDescribeStep />} />
+                <Route path="knowledge-base" element={<OnboardingKnowledgeStep />} />
+                <Route path="go-live" element={<OnboardingGoLiveStep />} />
+                <Route path="you-are-live" element={<OnboardingYouAreLiveStep />} />
+              </Route>
+            </Route>
+            <Route element={<OnboardingCompleteRoute />}>
             <Route element={<AppShell />}>
             <Route path="/usage" element={<UsagePage />} />
             <Route path="/plans" element={<Navigate to="/settings/plans" replace />} />
@@ -217,14 +228,6 @@ export function App() {
               <Route path="analytics/topics" element={<TopicsAnalyticsPage />} />
               <Route path="analytics/sentiment" element={<SentimentAnalyticsPage />} />
             </Route>
-            <Route path="/onboarding" element={<OnboardingGate />}>
-              <Route element={<OnboardingLayout />}>
-                <Route index element={<Navigate to="agent-profile" replace />} />
-                <Route path="agent-profile" element={<OnboardingAgentProfileStep />} />
-                <Route path="describe-profile" element={<OnboardingDescribeStep />} />
-                <Route path="knowledge-base" element={<OnboardingKnowledgeStep />} />
-                <Route path="go-live" element={<OnboardingGoLiveStep />} />
-              </Route>
             </Route>
             </Route>
           </Route>

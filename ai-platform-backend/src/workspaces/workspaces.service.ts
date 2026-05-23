@@ -2,6 +2,13 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { User, Workspace, WorkspaceMembership, type UserRole, type WorkspaceMemberRole } from '../models';
+import {
+  DEFAULT_WORKSPACE_ONBOARDING_STATUS,
+  DEFAULT_WORKSPACE_ONBOARDING_STEP,
+  type WorkspaceOnboardingStatus,
+  type WorkspaceOnboardingStep,
+} from '../models/workspace-onboarding.constants';
+import { WorkspaceSubscriptionsService } from '../entitlements/workspace-subscriptions.service';
 import { resolvePersonalWorkspaceDisplayName } from './workspace-personal-name.util';
 import { ASSISTRIO_PLATFORM_WORKSPACE_NAME } from '../platform-bots/platform-bot.util';
 
@@ -18,6 +25,7 @@ export class WorkspacesService {
     @InjectModel(User.name) private readonly userModel: Model<User>,
     @InjectModel(Workspace.name) private readonly workspaceModel: Model<Workspace>,
     @InjectModel(WorkspaceMembership.name) private readonly membershipModel: Model<WorkspaceMembership>,
+    private readonly workspaceSubscriptionsService: WorkspaceSubscriptionsService,
   ) {}
 
   /**
@@ -45,6 +53,7 @@ export class WorkspacesService {
       userId,
       role: 'admin' as WorkspaceMemberRole,
     });
+    await this.workspaceSubscriptionsService.ensureFreeSubscriptionForWorkspace(workspaceId);
     return { workspaceId };
   }
 
@@ -74,6 +83,7 @@ export class WorkspacesService {
       });
       workspaceId = (ws as { _id: Types.ObjectId })._id;
     }
+    await this.workspaceSubscriptionsService.ensureFreeSubscriptionForWorkspace(workspaceId);
     const membership = await this.membershipModel
       .findOne({ workspaceId, userId: uid })
       .select('_id')
@@ -95,7 +105,9 @@ export class WorkspacesService {
     const uid = new Types.ObjectId(userId);
     const existing = await this.membershipModel.findOne({ userId: uid }).select('workspaceId').lean();
     if (existing && (existing as { workspaceId?: Types.ObjectId }).workspaceId) {
-      return (existing as { workspaceId: Types.ObjectId }).workspaceId;
+      const workspaceId = (existing as { workspaceId: Types.ObjectId }).workspaceId;
+      await this.workspaceSubscriptionsService.ensureFreeSubscriptionForWorkspace(workspaceId);
+      return workspaceId;
     }
     const { workspaceId } = await this.createWorkspaceWithAdminMember(uid);
     return workspaceId;
@@ -110,24 +122,52 @@ export class WorkspacesService {
     return (rows as { workspaceId: Types.ObjectId }[]).map((r) => r.workspaceId).filter(Boolean);
   }
 
-  /** Id + display name for each workspace the user belongs to (membership order). */
-  async getWorkspacesSummaryForUser(userId: string): Promise<{ id: string; name: string }[]> {
+  /** Id + display name + onboarding summary for each workspace the user belongs to (membership order). */
+  async getWorkspacesSummaryForUser(userId: string): Promise<
+    Array<{
+      id: string;
+      name: string;
+      onboardingStatus: WorkspaceOnboardingStatus;
+      onboardingCurrentStep: WorkspaceOnboardingStep;
+      onboardingCreatedBotId: string | null;
+    }>
+  > {
     const ids = await this.getWorkspaceIdsForUser(userId);
     if (!ids.length) return [];
     const docs = await this.workspaceModel
       .find({ _id: { $in: ids } })
-      .select('name')
+      .select('name onboardingStatus onboardingCurrentStep onboardingCreatedBotId')
       .lean();
     const byId = new Map(
-      (docs as { _id: Types.ObjectId; name?: string }[]).map((d) => [
+      (docs as {
+        _id: Types.ObjectId;
+        name?: string;
+        onboardingStatus?: WorkspaceOnboardingStatus;
+        onboardingCurrentStep?: WorkspaceOnboardingStep;
+        onboardingCreatedBotId?: Types.ObjectId;
+      }[]).map((d) => [
         String(d._id),
-        String(d.name ?? '').trim() || 'Workspace',
+        {
+          name: String(d.name ?? '').trim() || 'Workspace',
+          onboardingStatus: d.onboardingStatus ?? DEFAULT_WORKSPACE_ONBOARDING_STATUS,
+          onboardingCurrentStep: d.onboardingCurrentStep ?? DEFAULT_WORKSPACE_ONBOARDING_STEP,
+          onboardingCreatedBotId:
+            d.onboardingCreatedBotId != null && Types.ObjectId.isValid(String(d.onboardingCreatedBotId))
+              ? String(d.onboardingCreatedBotId)
+              : null,
+        },
       ]),
     );
-    return ids.map((id) => ({
-      id: String(id),
-      name: byId.get(String(id)) ?? 'Workspace',
-    }));
+    return ids.map((id) => {
+      const row = byId.get(String(id));
+      return {
+        id: String(id),
+        name: row?.name ?? 'Workspace',
+        onboardingStatus: row?.onboardingStatus ?? DEFAULT_WORKSPACE_ONBOARDING_STATUS,
+        onboardingCurrentStep: row?.onboardingCurrentStep ?? DEFAULT_WORKSPACE_ONBOARDING_STEP,
+        onboardingCreatedBotId: row?.onboardingCreatedBotId ?? null,
+      };
+    });
   }
 
   async isUserMemberOfWorkspace(userId: string, workspaceId: string): Promise<boolean> {

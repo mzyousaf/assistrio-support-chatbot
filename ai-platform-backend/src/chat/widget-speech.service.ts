@@ -14,7 +14,7 @@ import {
 } from '../bots/origin-validation.util';
 import { resolveEmbedChatVisitorIdFromBody } from '../bots/widget-embed-identity.util';
 import { uploadPublic } from '../lib/s3';
-import { WhisperTranscriptionService } from './whisper-transcription.service';
+import { WhisperTranscriptionService } from '../transcription/whisper-transcription.service';
 import { normalizeWhisperUploadForOpenai } from './widget-speech-whisper-normalize.util';
 import { probeAudioForWhisperExtension } from './widget-speech-audio-validate.util';
 

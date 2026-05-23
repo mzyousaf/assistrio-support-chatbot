@@ -82,11 +82,51 @@ export {
 export type { UserRole, AccountAuthProvider } from './user.schema';
 export { Workspace, WorkspaceSchema } from './workspace.schema';
 export {
+  WORKSPACE_ONBOARDING_STATUSES,
+  WORKSPACE_ONBOARDING_STEPS,
+  DEFAULT_WORKSPACE_ONBOARDING_STATUS,
+  DEFAULT_WORKSPACE_ONBOARDING_STEP,
+  isWorkspaceOnboardingStatus,
+  isWorkspaceOnboardingStep,
+} from './workspace-onboarding.constants';
+export type {
+  WorkspaceOnboardingStatus,
+  WorkspaceOnboardingStep,
+} from './workspace-onboarding.constants';
+export {
+  WorkspaceOnboardingDraft,
+  WorkspaceOnboardingDraftSchema,
+  WorkspaceOnboardingDraftProfile,
+  WorkspaceOnboardingDraftInstructions,
+  WorkspaceOnboardingDraftKnowledge,
+  WorkspaceOnboardingDraftGoLive,
+  WorkspaceOnboardingDraftAllowedOrigin,
+} from './workspace-onboarding-draft.schema';
+export {
+  WorkspaceOnboardingDraftFaq,
+  WorkspaceOnboardingDraftSnippet,
+  WorkspaceOnboardingDraftQa,
+} from './workspace-onboarding-knowledge.schema';
+export {
+  WorkspaceOnboardingKnowledgeStaging,
+  WorkspaceOnboardingKnowledgeStagingSchema,
+} from './workspace-onboarding-knowledge-staging.schema';
+export type {
+  OnboardingKnowledgeStagingSourceType,
+  OnboardingKnowledgeStagingStatus,
+} from './workspace-onboarding-knowledge-staging.schema';
+export {
   WorkspaceMembership,
   WorkspaceMembershipSchema,
   WORKSPACE_MEMBER_ROLES,
 } from './workspace-membership.schema';
 export type { WorkspaceMemberRole } from './workspace-membership.schema';
+export {
+  WorkspaceSubscription,
+  WorkspaceSubscriptionSchema,
+  WORKSPACE_SUBSCRIPTION_STATUSES,
+} from './workspace-subscription.schema';
+export type { WorkspaceSubscriptionStatus } from './workspace-subscription.schema';
 export {
   ExtractJob,
   ExtractJobSchema,
@@ -121,6 +161,13 @@ export {
   TABLE_IMPORT_JOB_MONGO_COLLECTION,
 } from './table-import-job.schema';
 export type { TableImportJobStatus } from './table-import-job.schema';
+export {
+  OnboardingKbTransferJob,
+  OnboardingKbTransferJobSchema,
+  ONBOARDING_KB_TRANSFER_JOB_MONGO_COLLECTION,
+  ONBOARDING_KB_TRANSFER_JOB_TYPE,
+} from './onboarding-kb-transfer-job.schema';
+export type { OnboardingKbTransferJobStatus } from './onboarding-kb-transfer-job.schema';
 export {
   KnowledgeBaseItem,
   KnowledgeBaseItemSchema,

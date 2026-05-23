@@ -21,10 +21,17 @@ import { KnowledgeBaseItemService } from '../knowledge/knowledge-base-item.servi
 import { effectiveKbDocumentFileMetaLean } from '../knowledge/knowledge-base-document-sync-fields.util';
 import { generateBotAccessKey, generateBotSecretKey } from './bot-keys.util';
 import type { AllowedOrigin } from './origin-validation.util';
+import { coerceAllowedOriginsFromBotDoc } from './origin-validation.util';
 import { normalizeVisitorMultiChatMax } from './visitor-multi-chat.util';
 import { KNOWLEDGE_QA_MAX, KNOWLEDGE_SNIPPETS_MAX, KNOWLEDGE_TABLES_MAX } from '../workspace/shared/bot-field-limits';
 import { incomingTableSectionUtf8Bytes } from '../knowledge/bot-knowledge-total-incoming.util';
 import { WorkspacesService } from '../workspaces/workspaces.service';
+import { WorkspaceBotLimitService } from '../entitlements/workspace-bot-limit.service';
+import { WorkspaceEntitlementsService } from '../entitlements/workspace-entitlements.service';
+import {
+  botKnowledgeSizeConfigIsMissing,
+  buildBotKnowledgeSizeFromEntitlements,
+} from '../entitlements/bot-knowledge-size-from-entitlements.util';
 import {
   normalizeWorkspaceBotPatch,
   normalizeWorkspaceKnowledgeDatasheetsArray,
@@ -185,6 +192,13 @@ const BOTS_COLLECTION = 'bots';
 /** Max characters of note `content` exposed on public list (gallery cards). */
 const KNOWLEDGE_NOTE_PREVIEW_MAX = 800;
 
+export type CustomerBotCreateOptions = {
+  /** When true, enforce workspace plan bot limit (customer API only). */
+  enforceWorkspaceBotLimit?: boolean;
+  /** When true, set botConfig.knowledgeSize from workspace plan entitlements (customer API only). */
+  applyWorkspaceEntitlements?: boolean;
+};
+
 @Injectable()
 export class BotsService {
   constructor(
@@ -201,7 +215,14 @@ export class BotsService {
     @InjectModel(TableImportJob.name) private readonly tableImportJobModel: Model<TableImportJob>,
     private readonly knowledgeBaseItemService: KnowledgeBaseItemService,
     private readonly workspacesService: WorkspacesService,
+    private readonly workspaceBotLimitService: WorkspaceBotLimitService,
+    private readonly workspaceEntitlementsService: WorkspaceEntitlementsService,
   ) { }
+
+  private async buildCustomerBotConfigFromWorkspace(workspaceId: string) {
+    const entitlements = await this.workspaceEntitlementsService.resolveForWorkspace(workspaceId);
+    return { knowledgeSize: buildBotKnowledgeSizeFromEntitlements(entitlements) };
+  }
 
   private async superadminUserObjectIds(): Promise<Types.ObjectId[]> {
     const rows = await this.userModel.find({ role: 'superadmin' }).select('_id').lean();
@@ -1129,6 +1150,7 @@ export class BotsService {
   async createDraft(
     clientDraftId: string,
     createdByUserId?: string,
+    options?: CustomerBotCreateOptions,
   ): Promise<{ botId: string; slug: string }> {
     const existing = await this.botModel
       .findOne({ $and: [{ clientDraftId, status: 'draft' }, botNotDeletedClause()] })
@@ -1145,6 +1167,13 @@ export class BotsService {
     if (creatorOid) {
       workspaceOid = await this.workspacesService.ensurePersonalWorkspaceForUser(String(creatorOid));
     }
+    if (options?.enforceWorkspaceBotLimit && workspaceOid) {
+      await this.workspaceBotLimitService.assertCanAddBotToWorkspace(String(workspaceOid));
+    }
+    let botConfigForCreate: Awaited<ReturnType<BotsService['buildCustomerBotConfigFromWorkspace']>> | undefined;
+    if (options?.applyWorkspaceEntitlements && workspaceOid) {
+      botConfigForCreate = await this.buildCustomerBotConfigFromWorkspace(String(workspaceOid));
+    }
     for (let attempt = 0; attempt < 5; attempt++) {
       const slug = await this.generateUniqueSlug('ai-support-assistant');
       try {
@@ -1154,6 +1183,7 @@ export class BotsService {
           ...getCreatorDefaultsForUserFlow(creatorOid),
           ...(creatorOid ? { createdByUserId: creatorOid } : {}),
           ...(workspaceOid ? { workspaceId: workspaceOid } : {}),
+          ...(botConfigForCreate ? { botConfig: botConfigForCreate } : {}),
         });
         return { botId: String((created as { _id: unknown })._id), slug: (created as { slug: string }).slug };
       } catch (err: unknown) {
@@ -1199,6 +1229,7 @@ export class BotsService {
       allowedOrigins?: AllowedOrigin[];
     },
     createdByUserId?: string,
+    options?: CustomerBotCreateOptions,
   ): Promise<{ botId: string; slug: string }> {
     const finalName = normalized.name || 'Draft bot';
     const finalDescription = normalized.description || '';
@@ -1211,7 +1242,7 @@ export class BotsService {
         : undefined;
     const existing = await this.botModel
       .findOne({ $and: [{ clientDraftId }, botNotDeletedClause()] })
-      .select('_id slug name createdAt createdByUserId accessKey secretKey ownerId visibility workspaceId')
+      .select('_id slug name createdAt createdByUserId accessKey secretKey ownerId visibility workspaceId botConfig')
       .lean();
     if (existing) {
       let finalSlug = (existing as { slug: string }).slug;
@@ -1231,6 +1262,16 @@ export class BotsService {
           const workspaceIdResolved =
             existingWs ??
             (creatorOid ? await this.workspacesService.ensurePersonalWorkspaceForUser(String(creatorOid)) : undefined);
+          let botConfigPatch: Record<string, unknown> = {};
+          if (
+            options?.applyWorkspaceEntitlements &&
+            workspaceIdResolved &&
+            botKnowledgeSizeConfigIsMissing(existing as { botConfig?: { knowledgeSize?: { maxBytes?: number } } })
+          ) {
+            botConfigPatch = {
+              botConfig: await this.buildCustomerBotConfigFromWorkspace(String(workspaceIdResolved)),
+            };
+          }
           await this.botModel.updateOne(
             { _id: (existing as { _id: unknown })._id },
             {
@@ -1267,6 +1308,7 @@ export class BotsService {
               ...(normalized.allowedOrigins !== undefined ? { allowedOrigins: normalized.allowedOrigins } : {}),
               ...(workspaceIdResolved ? { workspaceId: workspaceIdResolved } : {}),
               ...setCreatedBy,
+              ...botConfigPatch,
             },
           );
           const finalFaqs = Array.isArray(normalized.faqs) ? normalized.faqs : [];
@@ -1310,6 +1352,13 @@ export class BotsService {
       try {
         const wsForCreate =
           creatorOid ? await this.workspacesService.ensurePersonalWorkspaceForUser(String(creatorOid)) : undefined;
+        if (options?.enforceWorkspaceBotLimit && wsForCreate) {
+          await this.workspaceBotLimitService.assertCanAddBotToWorkspace(String(wsForCreate));
+        }
+        let botConfigForCreate: Awaited<ReturnType<BotsService['buildCustomerBotConfigFromWorkspace']>> | undefined;
+        if (options?.applyWorkspaceEntitlements && wsForCreate) {
+          botConfigForCreate = await this.buildCustomerBotConfigFromWorkspace(String(wsForCreate));
+        }
         const created = await this.create({
           name: finalName,
           slug,
@@ -1341,6 +1390,7 @@ export class BotsService {
           ...(normalized.visibility ? { visibility: normalized.visibility } : {}),
           ...(normalized.allowedOrigins !== undefined ? { allowedOrigins: normalized.allowedOrigins } : {}),
           ...(wsForCreate ? { workspaceId: wsForCreate } : {}),
+          ...(botConfigForCreate ? { botConfig: botConfigForCreate } : {}),
           createdAt: new Date(),
           ...(creatorOid ? { createdByUserId: creatorOid } : {}),
         });
@@ -2039,7 +2089,7 @@ export class BotsService {
   async customerBotLifecycleAction(
     id: string,
     action: BotLifecycleAction,
-    opts: { publicApiBaseUrl: string; widgetAssetOrigin: string },
+    opts: { publicApiBaseUrl: string; widgetAssetOrigin: string; enforceWorkspaceBotLimit?: boolean },
   ): Promise<
     | {
         ok: true;
@@ -2071,6 +2121,20 @@ export class BotsService {
     }
 
     await this.assertExistingWorkspaceBotPublishableForLifecycle(ex);
+    if (opts.enforceWorkspaceBotLimit) {
+      const wsRaw = (ex as { workspaceId?: Types.ObjectId }).workspaceId;
+      let workspaceId = wsRaw != null ? String(wsRaw) : '';
+      if (!workspaceId && (ex as { createdByUserId?: Types.ObjectId }).createdByUserId) {
+        workspaceId = String(
+          await this.workspacesService.ensurePersonalWorkspaceForUser(
+            String((ex as { createdByUserId: Types.ObjectId }).createdByUserId),
+          ),
+        );
+      }
+      if (workspaceId) {
+        await this.workspaceBotLimitService.assertCanAddBotToWorkspace(workspaceId, { excludeBotId: id });
+      }
+    }
     if (currentStatus !== 'published') {
       await this.botModel.updateOne(
         { $and: [{ _id: new Types.ObjectId(id) }, botNotDeletedClause()] },
@@ -2182,5 +2246,131 @@ export class BotsService {
       })
       .lean();
     return bot ? (bot as Record<string, unknown>) : null;
+  }
+
+  /**
+   * Creates a published customer bot from workspace onboarding draft data (Epic 3B).
+   * Does not use clientDraftId or template onboarding seeding.
+   */
+  async createPublishedBotFromWorkspaceOnboarding(input: {
+    workspaceId: string;
+    createdByUserId: string;
+    profile: {
+      name: string;
+      shortDescription: string;
+      description: string;
+      brandColor?: string;
+      categories: string[];
+      avatarSource: string;
+      imageUrl: string;
+      avatarEmoji: string;
+    };
+    instructions: {
+      description: string;
+      systemPrompt: string;
+      tone: string;
+      behaviorPreset: string;
+      responseLength: string;
+      maxTokens: number;
+    };
+    allowedOrigins: AllowedOrigin[];
+  }): Promise<{
+    botId: string;
+    slug: string;
+    name: string;
+    status: 'published';
+    accessKey: string;
+    secretKey: string;
+    visibility: 'public' | 'private';
+    allowedOrigins: AllowedOrigin[];
+  }> {
+    if (!hasActiveAllowedOrigin(input.allowedOrigins)) {
+      throw new Error('At least one active allowed embed origin is required to publish.');
+    }
+    if (!Types.ObjectId.isValid(input.workspaceId) || !Types.ObjectId.isValid(input.createdByUserId)) {
+      throw new Error('Invalid workspace or user id.');
+    }
+
+    await this.workspaceBotLimitService.assertCanAddBotToWorkspace(input.workspaceId);
+
+    const workspaceOid = new Types.ObjectId(input.workspaceId);
+    const creatorOid = new Types.ObjectId(input.createdByUserId);
+    const botConfigForCreate = await this.buildCustomerBotConfigFromWorkspace(input.workspaceId);
+    const categories = input.profile.categories.filter(Boolean);
+    const avatarSourceRaw = input.profile.avatarSource.trim().toLowerCase();
+    const avatarSource =
+      avatarSourceRaw === 'upload' ||
+      avatarSourceRaw === 'url' ||
+      avatarSourceRaw === 'emoji' ||
+      avatarSourceRaw === 'none'
+        ? avatarSourceRaw
+        : undefined;
+    const responseLength =
+      input.instructions.responseLength === 'short' ||
+      input.instructions.responseLength === 'long' ||
+      input.instructions.responseLength === 'medium'
+        ? input.instructions.responseLength
+        : 'medium';
+    const botDescription = input.instructions.description.trim();
+    const brandRaw = String(input.profile.brandColor ?? '').trim();
+    const primaryColor = /^#[0-9A-Fa-f]{6}$/.test(brandRaw) ? brandRaw.toUpperCase() : undefined;
+
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const slug = await this.generateUniqueSlug(input.profile.name || 'ai-assistant');
+      const defaults = getDefaultBotCreatePayload(slug, `ws-onboarding-${input.workspaceId}`);
+      try {
+        const created = await this.create({
+          ...defaults,
+          clientDraftId: undefined,
+          status: 'published',
+          name: input.profile.name,
+          slug,
+          shortDescription: input.profile.shortDescription || undefined,
+          description: botDescription,
+          categories,
+          category: categories[0],
+          imageUrl: input.profile.imageUrl || undefined,
+          avatarEmoji: input.profile.avatarEmoji || undefined,
+          ...(avatarSource ? { avatarSource } : {}),
+          personality: {
+            description: input.instructions.description,
+            systemPrompt: input.instructions.systemPrompt || input.instructions.description,
+            tone: input.instructions.tone || 'friendly',
+            behaviorPreset: input.instructions.behaviorPreset || 'default',
+          },
+          chatUI: {
+            ...((defaults.chatUI as Record<string, unknown> | undefined) ?? {}),
+            ...(primaryColor ? { primaryColor } : {}),
+          },
+          config: {
+            ...(defaults.config as Record<string, unknown>),
+            maxTokens: input.instructions.maxTokens,
+            responseLength,
+          },
+          allowedOrigins: input.allowedOrigins,
+          workspaceId: workspaceOid,
+          ...getCreatorDefaultsForUserFlow(creatorOid),
+          createdByUserId: creatorOid,
+          ownerId: creatorOid,
+          botConfig: botConfigForCreate,
+          createdAt: new Date(),
+        });
+        const bot = created as unknown as Record<string, unknown>;
+        return {
+          botId: String(bot._id),
+          slug: String(bot.slug ?? slug),
+          name: String(bot.name ?? input.profile.name),
+          status: 'published',
+          accessKey: String(bot.accessKey ?? ''),
+          secretKey: String(bot.secretKey ?? ''),
+          visibility: bot.visibility === 'private' ? 'private' : 'public',
+          allowedOrigins: coerceAllowedOriginsFromBotDoc(bot.allowedOrigins),
+        };
+      } catch (err: unknown) {
+        const e = err as { code?: number; keyPattern?: Record<string, number> };
+        if (!(e.code === 11000 && (e.keyPattern?.slug || e.keyPattern?.accessKey))) throw err;
+      }
+    }
+    throw new Error('Failed to allocate unique slug.');
   }
 }

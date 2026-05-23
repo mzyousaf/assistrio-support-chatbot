@@ -1,11 +1,182 @@
 /** GET /api/customer/me */
+export type WorkspaceOnboardingStatus =
+  | 'not_started'
+  | 'in_progress'
+  | 'live_pending_install'
+  | 'completed';
+
+export type WorkspaceOnboardingStep =
+  | 'agent-profile'
+  | 'describe-profile'
+  | 'knowledge-base'
+  | 'go-live'
+  | 'you-are-live';
+
+export type CustomerWorkspaceSummary = {
+  id: string;
+  name: string;
+  planKey: string;
+  planName: string;
+  subscriptionStatus: string;
+  botLimit: number;
+  memberLimit: number;
+  monthlyAiCredits: number;
+  kbStorageMbPerBot: number;
+  analyticsHistoryDays: number | null;
+  canExportReports: boolean;
+  showPoweredByAssistrio: boolean;
+  onboardingStatus?: WorkspaceOnboardingStatus;
+  onboardingCurrentStep?: WorkspaceOnboardingStep;
+  onboardingCreatedBotId?: string | null;
+};
+
+export type WorkspaceOnboardingDraftProfile = {
+  name: string;
+  shortDescription: string;
+  description: string;
+  brandColor: string;
+  categories: string[];
+  avatarSource: string;
+  imageUrl: string;
+  avatarEmoji: string;
+  avatarStorageKey: string;
+};
+
+export type WorkspaceOnboardingDraftInstructions = {
+  description: string;
+  systemPrompt: string;
+  tone: string;
+  behaviorPreset: string;
+  responseLength: string;
+  maxTokens: number;
+};
+
+export type WorkspaceOnboardingDraftFaq = {
+  question: string;
+  answer: string;
+};
+
+export type WorkspaceOnboardingDraftKnowledge = {
+  snippets: WorkspaceOnboardingDraftSnippet[];
+  qas: WorkspaceOnboardingDraftQa[];
+  /** Legacy — derived from snippets when present. */
+  knowledgeDescription: string;
+  /** Legacy — derived from qas. */
+  faqs: WorkspaceOnboardingDraftFaq[];
+};
+
+export type WorkspaceOnboardingDraftSnippet = {
+  id: string;
+  title: string;
+  description: string;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  sequence?: number;
+  updateSequence?: number;
+};
+
+export type WorkspaceOnboardingDraftQa = {
+  id: string;
+  title: string;
+  questions: string[];
+  answer: string;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  sequence?: number;
+  updateSequence?: number;
+};
+
+export type WorkspaceOnboardingDraftAllowedOrigin = {
+  origin: string;
+  label?: string;
+  isActive?: boolean;
+};
+
+export type WorkspaceOnboardingDraftGoLive = {
+  allowedOrigins: WorkspaceOnboardingDraftAllowedOrigin[];
+};
+
+export type WorkspaceOnboardingDraftSnapshot = {
+  profile: WorkspaceOnboardingDraftProfile;
+  instructions: WorkspaceOnboardingDraftInstructions;
+  knowledge: WorkspaceOnboardingDraftKnowledge;
+  goLive: WorkspaceOnboardingDraftGoLive;
+  stepsCompleted: string[];
+  createdAt: string | null;
+  updatedAt: string | null;
+};
+
+export type WorkspaceOnboardingStagedKnowledgeItem = {
+  id: string;
+  sourceType: 'document' | 'datasheet';
+  originalName: string;
+  mimeType: string;
+  sizeBytes: number;
+  status: string;
+  errorMessage?: string;
+  createdAt: string | null;
+  updatedAt?: string | null;
+  metadata?: Record<string, unknown>;
+};
+
+export type WorkspaceOnboardingStagedKnowledge = {
+  documents: WorkspaceOnboardingStagedKnowledgeItem[];
+  datasheets: WorkspaceOnboardingStagedKnowledgeItem[];
+};
+
+export type WorkspaceOnboardingResponse = {
+  workspaceId: string;
+  onboardingStatus: WorkspaceOnboardingStatus;
+  onboardingCurrentStep: WorkspaceOnboardingStep;
+  onboardingDraftId: string | null;
+  onboardingCreatedBotId: string | null;
+  onboardingCompletedAt: string | null;
+  draft: WorkspaceOnboardingDraftSnapshot;
+  stagedKnowledge?: WorkspaceOnboardingStagedKnowledge;
+};
+
+export type WorkspaceOnboardingGoLiveBot = {
+  id: string;
+  name: string;
+  slug: string;
+  status: 'published';
+  accessKey: string;
+  secretKey?: string;
+  visibility: 'public' | 'private';
+  allowedOrigins: WorkspaceOnboardingDraftAllowedOrigin[];
+};
+
+export type WorkspaceOnboardingGoLiveResponse = {
+  workspaceId: string;
+  onboardingStatus: WorkspaceOnboardingStatus;
+  onboardingCurrentStep: WorkspaceOnboardingStep;
+  bot: WorkspaceOnboardingGoLiveBot;
+  knowledgeProcessingPending?: boolean;
+  knowledgeProcessingMessage?: string;
+};
+
+/** GET /api/customer/workspaces/:workspaceId/usage/ai-credits */
+export type CustomerWorkspaceAiCreditsUsage = {
+  workspaceId: string;
+  billingPeriod: { start: string; end: string };
+  planKey: string;
+  planName: string;
+  monthlyAiCredits: number;
+  monthlyCreditsUsed: number;
+  monthlyCreditsRemaining: number;
+  topUpCreditsRemaining: number;
+  totalCreditsAvailable: number;
+  isOverLimit: boolean;
+  byBot: Array<{ botId: string; creditsUsed: number }>;
+};
+
 export type CustomerMe = {
   id: string;
   email: string;
   role: string;
   workspaceIds: string[];
-  /** Display names for workspaces (same order as `workspaceIds` when present). */
-  workspaces?: Array<{ id: string; name: string }>;
+  /** Workspace summaries with plan/entitlement fields (same order as `workspaceIds` when present). */
+  workspaces?: CustomerWorkspaceSummary[];
   firstName?: string;
   lastName?: string;
   /** Profile image URL (e.g. Google picture). */

@@ -1,10 +1,9 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   AlertTriangle,
   BadgeCheck,
   BookOpen,
   Check,
-  Copy,
   FilePenLine,
   Loader2,
   PencilLine,
@@ -13,6 +12,8 @@ import {
 import { Link } from 'react-router-dom';
 import { postCustomerBotLifecycleAction } from '../api/customerApi';
 import type { CustomerBotLifecycleResponse } from '../api/types';
+import { PostPublishInstallPanel } from '@/components/go-live/PostPublishInstallPanel';
+import { getCustomerAppPublicOrigin, iframeEmbedSnippet } from '@/lib/embedOrigin';
 import { Modal } from '@/components/ui/Modal';
 import { cn } from '@/lib/utils';
 
@@ -23,6 +24,8 @@ const PUBLISH_STEPS = [
   'Preparing deployment settings…',
   'Activating your agent…',
 ] as const;
+
+const GOING_TO_DASHBOARD_STEP = 'Going to dashboard…';
 
 const DRAFT_STEPS = [
   'Deactivating agent…',
@@ -54,35 +57,55 @@ function HeaderIcon({
   );
 }
 
+export type PublishLifecycleResult = Extract<CustomerBotLifecycleResponse, { action: 'publish' }>;
+
+export type BotLifecyclePublishRunnerResult =
+  | { ok: true; botId: string; data: PublishLifecycleResult }
+  | { ok: false; error: string };
+
 export function BotLifecycleModal({
   open,
   runKey,
   action,
   botId,
+  publishRunner,
   onBusyChange,
   onClose,
   onSuccess,
+  openingDashboard = false,
+  navigateToDashboardAfterPublish = false,
+  initialDashboardNavigation = false,
 }: {
   open: boolean;
   runKey: number;
   action: 'publish' | 'draft' | null;
   botId: string | null;
+  /** When set (onboarding go-live), runs instead of POST lifecycle-action. */
+  publishRunner?: () => Promise<BotLifecyclePublishRunnerResult>;
   onBusyChange?: (busy: boolean) => void;
   onClose: () => void;
   onSuccess: () => void;
+  /** Keep success UI visible and block dismiss while routing to dashboard (onboarding). */
+  openingDashboard?: boolean;
+  /** After publish API success, stay on progress UI with a final "Going to dashboard…" step (onboarding). */
+  navigateToDashboardAfterPublish?: boolean;
+  /** Restore the dashboard navigation step after route change (onboarding overlay). */
+  initialDashboardNavigation?: boolean;
 }) {
   const [phase, setPhase] = useState<Phase>('running');
   const [stepIndex, setStepIndex] = useState(0);
   const [errMsg, setErrMsg] = useState<string | null>(null);
   const [result, setResult] = useState<CustomerBotLifecycleResponse | null>(null);
-  const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
   const [pendingSuccess, setPendingSuccess] = useState<CustomerBotLifecycleResponse | null>(null);
+  const [resolvedBotId, setResolvedBotId] = useState<string | null>(botId);
+  const [dashboardNavigationActive, setDashboardNavigationActive] = useState(initialDashboardNavigation);
 
   const progressIntervalRef = useRef<number | null>(null);
   const successFlushGuardRef = useRef(false);
   const lastStepDwellTimeoutRef = useRef<number | null>(null);
 
   const isPublish = action === 'publish';
+  const activeBotId = resolvedBotId ?? botId;
 
   useEffect(() => {
     onBusyChange?.(open && phase === 'running');
@@ -94,24 +117,36 @@ export function BotLifecycleModal({
       setStepIndex(0);
       setErrMsg(null);
       setResult(null);
-      setCopyFeedback(null);
       setPendingSuccess(null);
+      setResolvedBotId(botId);
+      setDashboardNavigationActive(false);
       successFlushGuardRef.current = false;
       if (lastStepDwellTimeoutRef.current != null) {
         window.clearTimeout(lastStepDwellTimeoutRef.current);
         lastStepDwellTimeoutRef.current = null;
       }
     }
-  }, [open]);
+  }, [open, botId]);
 
   useEffect(() => {
-    if (open && (!action || !botId)) {
+    if (open && (!action || (!botId && !publishRunner))) {
       onBusyChange?.(false);
     }
-  }, [open, action, botId, onBusyChange]);
+  }, [open, action, botId, publishRunner, onBusyChange]);
 
   useEffect(() => {
-    if (!open || !action || !botId) return;
+    if (!open || !action) return;
+    if (initialDashboardNavigation) {
+      setPhase('running');
+      setDashboardNavigationActive(true);
+      setStepIndex(PUBLISH_STEPS.length);
+      setResolvedBotId(botId);
+      setErrMsg(null);
+      setPendingSuccess(null);
+      setResult(null);
+      return;
+    }
+    if (!publishRunner && !botId) return;
     let cancelled = false;
     const steps = action === 'publish' ? PUBLISH_STEPS : DRAFT_STEPS;
 
@@ -121,6 +156,7 @@ export function BotLifecycleModal({
     setErrMsg(null);
     setResult(null);
     setPendingSuccess(null);
+    setResolvedBotId(botId);
 
     const clearProgressInterval = () => {
       if (progressIntervalRef.current != null) {
@@ -135,7 +171,24 @@ export function BotLifecycleModal({
     progressIntervalRef.current = iv;
 
     void (async () => {
-      const res = await postCustomerBotLifecycleAction(botId, action);
+      let res:
+        | { ok: true; data: CustomerBotLifecycleResponse }
+        | { ok: false; error: string };
+
+      if (action === 'publish' && publishRunner) {
+        const custom = await publishRunner();
+        if (custom.ok) {
+          setResolvedBotId(custom.botId);
+          res = { ok: true, data: custom.data };
+        } else {
+          res = { ok: false, error: custom.error };
+        }
+      } else if (botId) {
+        res = await postCustomerBotLifecycleAction(botId, action);
+      } else {
+        res = { ok: false, error: 'Agent is not ready.' };
+      }
+
       if (cancelled) {
         clearProgressInterval();
         return;
@@ -157,7 +210,7 @@ export function BotLifecycleModal({
         lastStepDwellTimeoutRef.current = null;
       }
     };
-  }, [open, runKey, action, botId]);
+  }, [open, runKey, action, botId, publishRunner, initialDashboardNavigation]);
 
   useEffect(() => {
     if (!open || phase !== 'running' || !pendingSuccess || !action) {
@@ -190,6 +243,14 @@ export function BotLifecycleModal({
 
       setResult(pendingSuccess);
       setPendingSuccess(null);
+
+      if (navigateToDashboardAfterPublish && action === 'publish') {
+        setDashboardNavigationActive(true);
+        setStepIndex(PUBLISH_STEPS.length);
+        onSuccess();
+        return;
+      }
+
       setPhase('success');
       onSuccess();
     }, LAST_STEP_DWELL_MS);
@@ -200,7 +261,7 @@ export function BotLifecycleModal({
         lastStepDwellTimeoutRef.current = null;
       }
     };
-  }, [open, phase, pendingSuccess, stepIndex, action, onSuccess]);
+  }, [open, phase, pendingSuccess, stepIndex, action, navigateToDashboardAfterPublish, onSuccess]);
 
   const title =
     action === 'publish'
@@ -256,9 +317,9 @@ export function BotLifecycleModal({
             Paste the snippet on your site, or open{' '}
             <span className="font-medium text-slate-800">Deploy & Go Live</span> anytime to update keys and allowed sites.
           </span>
-          {botId ? (
+          {activeBotId ? (
             <Link
-              to={`/bots/${botId}/playground/deploy`}
+              to={`/bots/${activeBotId}/playground/deploy`}
               className="inline-flex w-fit max-w-full items-center gap-1.5 text-sm font-medium text-primary underline underline-offset-[3px] decoration-primary/35 transition-colors hover:text-[var(--teal-800)] hover:decoration-[var(--teal-800)]/50 focus-visible:rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary)]"
               onClick={onClose}
             >
@@ -273,9 +334,9 @@ export function BotLifecycleModal({
             Your allowed websites no longer show this agent in the embed. You can keep working here; nothing goes live on
             those sites until you publish again.
           </span>
-          {botId ? (
+          {activeBotId ? (
             <Link
-              to={`/bots/${botId}/playground/deploy`}
+              to={`/bots/${activeBotId}/playground/deploy`}
               className="inline-flex w-fit max-w-full items-center gap-1.5 text-sm font-medium text-primary underline underline-offset-[3px] decoration-primary/35 transition-colors hover:text-[var(--teal-800)] hover:decoration-[var(--teal-800)]/50 focus-visible:rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary)]"
               onClick={onClose}
             >
@@ -287,21 +348,26 @@ export function BotLifecycleModal({
       )
     ) : undefined;
 
-  const allowDismiss = phase !== 'running';
+  const allowDismiss =
+    phase !== 'running' && !openingDashboard && !dashboardNavigationActive && !initialDashboardNavigation;
 
-  async function copySnippet() {
-    if (result?.action !== 'publish' || !result.embedSnippet) return;
-    try {
-      await navigator.clipboard.writeText(result.embedSnippet);
-      setCopyFeedback('Copied');
-      window.setTimeout(() => setCopyFeedback(null), 2000);
-    } catch {
-      setCopyFeedback('Copy failed');
-      window.setTimeout(() => setCopyFeedback(null), 2500);
-    }
-  }
+  const publishIframeSnippet = useMemo(() => {
+    if (result?.action !== 'publish' || !activeBotId) return '';
+    return iframeEmbedSnippet({
+      appOrigin: getCustomerAppPublicOrigin(),
+      botId: activeBotId,
+      accessKey: result.accessKey,
+    });
+  }, [result, activeBotId]);
 
-  const steps = action === 'publish' ? PUBLISH_STEPS : action === 'draft' ? DRAFT_STEPS : [];
+  const steps =
+    action === 'publish' && (dashboardNavigationActive || initialDashboardNavigation)
+      ? [...PUBLISH_STEPS, GOING_TO_DASHBOARD_STEP]
+      : action === 'publish'
+        ? PUBLISH_STEPS
+        : action === 'draft'
+          ? DRAFT_STEPS
+          : [];
 
   return (
     <Modal
@@ -311,7 +377,8 @@ export function BotLifecycleModal({
       description={modalDescription}
       size="md"
       allowDismiss={allowDismiss}
-      className="max-w-md"
+      className="max-h-[min(92vh,52rem)] max-w-md"
+      bodyClassName="py-4 sm:py-5"
       footer={
         phase === 'success' && result?.action === 'draft' ? (
           <button
@@ -427,49 +494,12 @@ export function BotLifecycleModal({
             </ul>
           ) : null}
 
-          {result?.action === 'publish' && result.allowedOrigins?.length ? (
-            <div className="rounded-lg border border-slate-200/80 bg-slate-50/50 p-3 ring-1 ring-slate-900/[0.03]">
-              <p className="m-0 mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                Allowed sites
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                {result.allowedOrigins.map((origin, i) => (
-                  <span
-                    key={`${origin}-${i}`}
-                    className="max-w-full truncate rounded-md border border-slate-200/90 bg-white px-2 py-0.5 font-mono text-[11px] text-slate-700 shadow-sm"
-                    title={origin}
-                  >
-                    {origin}
-                  </span>
-                ))}
-              </div>
-            </div>
-          ) : null}
-
           {result?.action === 'publish' && result.embedSnippet ? (
-            <div className="overflow-hidden rounded-lg border border-slate-200 shadow-sm">
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-white px-3 py-2.5">
-                <div>
-                  <p className="m-0 text-xs font-semibold text-slate-800">Embed snippet</p>
-                  <p className="m-0 mt-0.5 text-[11px] text-slate-500">Add this before the closing body tag</p>
-                </div>
-                <button
-                  type="button"
-                  className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-teal-200 bg-teal-50 px-2.5 py-1.5 text-xs font-semibold text-teal-800 transition-colors hover:bg-teal-100"
-                  onClick={() => void copySnippet()}
-                >
-                  {copyFeedback === 'Copied' ? (
-                    <Check size={13} strokeWidth={2.5} className="text-teal-700" aria-hidden />
-                  ) : (
-                    <Copy size={13} strokeWidth={2} aria-hidden />
-                  )}
-                  {copyFeedback ?? 'Copy snippet'}
-                </button>
-              </div>
-              <pre className="m-0 max-h-[min(12rem,38vh)] overflow-auto bg-[#0f172a] px-3 py-3 font-mono text-[0.6875rem] leading-relaxed text-slate-100">
-                {result.embedSnippet}
-              </pre>
-            </div>
+            <PostPublishInstallPanel
+              allowedOrigins={result.allowedOrigins ?? []}
+              widgetSnippet={result.embedSnippet}
+              iframeSnippet={publishIframeSnippet}
+            />
           ) : null}
         </div>
       ) : null}

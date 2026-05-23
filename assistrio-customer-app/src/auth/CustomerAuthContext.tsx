@@ -14,8 +14,10 @@ import {
   unregisterCustomerSessionUnauthorizedGate,
 } from '../api/customerSessionUnauthorized';
 import { getCustomerBots, getCustomerMe, postCustomerLogout } from '../api/customerApi';
-import type { CustomerMe } from '../api/types';
-import { clearCustomerSetupFinished, readSetupFinished } from '../onboarding/onboardingSessionStorage';
+import type { CustomerMe, WorkspaceOnboardingStatus } from '../api/types';
+import {
+  clearAllOnboardingLocalStorage,
+} from '../onboarding/onboardingSessionStorage';
 
 export type AuthStatus = 'loading' | 'anonymous' | 'authenticated';
 
@@ -35,28 +37,57 @@ export type CustomerAuthValue = {
   clearLogoutError: () => void;
   /** Re-run bots list to refresh needsOnboarding (e.g. after creating a draft). */
   refreshOnboardingHeuristic: () => Promise<void>;
+  /** Optimistically sync primary workspace onboarding status after POST /complete. */
+  patchPrimaryWorkspaceOnboardingStatus: (status: WorkspaceOnboardingStatus) => void;
   /** Clears the API-invalidation marker (e.g. after login screen has shown the message). */
   clearSessionInvalidatedByApi: () => void;
 };
 
 const CustomerAuthContext = createContext<CustomerAuthValue | null>(null);
 
-async function loadOnboardingFlags(): Promise<{
+async function loadOnboardingFlags(customer: CustomerMe | null): Promise<{
   needsOnboarding: boolean;
   bootstrapWarn: boolean;
 }> {
+  const ws = customer?.workspaces?.[0];
+  const wsStatus = ws?.onboardingStatus;
+
+  if (wsStatus === 'completed') {
+    return { needsOnboarding: false, bootstrapWarn: false };
+  }
+
+  if (
+    wsStatus === 'live_pending_install' ||
+    wsStatus === 'in_progress' ||
+    wsStatus === 'not_started'
+  ) {
+    return { needsOnboarding: true, bootstrapWarn: false };
+  }
+
+  if (wsStatus != null) {
+    return { needsOnboarding: true, bootstrapWarn: false };
+  }
+
   const allRes = await getCustomerBots();
   if (!allRes.ok) {
-    return { needsOnboarding: !readSetupFinished(), bootstrapWarn: true };
+    const setupFinished = readSetupFinishedLegacy();
+    return { needsOnboarding: !setupFinished, bootstrapWarn: true };
   }
   const publishedCount = allRes.data.filter((b) => b.status === 'published').length;
   const totalCount = allRes.data.length;
   if (totalCount === 0) {
-    clearCustomerSetupFinished();
+    clearAllOnboardingLocalStorage();
   }
-  const setupFinished = readSetupFinished();
-  const needsOnboarding = publishedCount === 0 && !setupFinished;
-  return { needsOnboarding, bootstrapWarn: false };
+  const setupFinished = readSetupFinishedLegacy();
+  return { needsOnboarding: !setupFinished && publishedCount === 0, bootstrapWarn: false };
+}
+
+function readSetupFinishedLegacy(): boolean {
+  try {
+    return localStorage.getItem('assistrio_customer.setup_finished_v1') === '1';
+  } catch {
+    return false;
+  }
 }
 
 export function CustomerAuthProvider({ children }: { children: ReactNode }) {
@@ -100,7 +131,7 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
     if (me.ok) {
       setCustomer(me.data);
       setStatus('authenticated');
-      const { needsOnboarding: need, bootstrapWarn } = await loadOnboardingFlags();
+      const { needsOnboarding: need, bootstrapWarn } = await loadOnboardingFlags(me.data);
       if (bootstrapWarn) {
         setBootstrapError('Could not load assistants. You can retry from the Agents page.');
       }
@@ -121,9 +152,22 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
 
   const refreshOnboardingHeuristic = useCallback(async () => {
     if (status !== 'authenticated') return;
-    const { needsOnboarding: need } = await loadOnboardingFlags();
+    const { needsOnboarding: need } = await loadOnboardingFlags(customer);
     setNeedsOnboarding(need);
-  }, [status]);
+  }, [status, customer]);
+
+  const patchPrimaryWorkspaceOnboardingStatus = useCallback((nextStatus: WorkspaceOnboardingStatus) => {
+    setCustomer((prev) => {
+      if (!prev?.workspaces?.length) return prev;
+      const [primary, ...rest] = prev.workspaces;
+      if (primary.onboardingStatus === nextStatus) return prev;
+      return {
+        ...prev,
+        workspaces: [{ ...primary, onboardingStatus: nextStatus }, ...rest],
+      };
+    });
+    setNeedsOnboarding(nextStatus !== 'completed');
+  }, []);
 
   useEffect(() => {
     void refresh();
@@ -145,6 +189,7 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
     try {
       await postCustomerLogout();
     } finally {
+      clearAllOnboardingLocalStorage();
       clearLocalCustomerAuthState();
       setLogoutInFlight(false);
     }
@@ -163,6 +208,7 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
       logoutError,
       clearLogoutError,
       refreshOnboardingHeuristic,
+      patchPrimaryWorkspaceOnboardingStatus,
       clearSessionInvalidatedByApi,
     }),
     [
@@ -177,6 +223,7 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
       logoutError,
       clearLogoutError,
       refreshOnboardingHeuristic,
+      patchPrimaryWorkspaceOnboardingStatus,
       clearSessionInvalidatedByApi,
     ],
   );

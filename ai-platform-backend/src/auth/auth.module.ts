@@ -13,10 +13,12 @@ import { CustomerPortalController } from './customer/customer-portal.controller'
 import { CustomerSessionAuthGuard } from './customer/customer-session.guard';
 import { AuthService } from './shared/auth.service';
 import { WorkspacesModule } from '../workspaces/workspaces.module';
+import { EntitlementsModule } from '../entitlements/entitlements.module';
 
 @Module({
   imports: [
     WorkspacesModule,
+    EntitlementsModule,
     JwtModule.registerAsync({
       useFactory: (config: ConfigService) => ({
         secret: config.get<string>('jwtSecret'),

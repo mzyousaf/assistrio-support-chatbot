@@ -7,6 +7,7 @@ import { HealthController } from '../health.controller';
 import { IngestionModule } from '../ingestion/ingestion.module';
 import { SummaryJobModule } from '../chat/summary-job.module';
 import { KnowledgeModule } from '../knowledge/knowledge.module';
+import { OnboardingKbTransferModule } from '../workspace/onboarding-kb-transfer.module';
 import { JobsCronService } from './jobs-cron.service';
 
 const registerKbCrons = shouldRegisterKbInProcessCronsForWorkerApp();
@@ -21,6 +22,7 @@ const registerKbCrons = shouldRegisterKbInProcessCronsForWorkerApp();
     AppConfigModule,
     MongooseDbModule,
     KnowledgeModule,
+    OnboardingKbTransferModule,
     IngestionModule.forRoot({ registerHttpControllers: false }),
     SummaryJobModule,
   ],

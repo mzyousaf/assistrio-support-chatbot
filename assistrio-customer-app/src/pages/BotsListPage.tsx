@@ -149,6 +149,7 @@ export function BotsListPage() {
           onCancel={() => setConfirmDelete(null)}
         />
       )}
+
     </DataPageLayout>
   );
 }
