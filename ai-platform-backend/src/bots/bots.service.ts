@@ -19,6 +19,13 @@ import { getDefaultBotCreatePayload } from '../workspace/shared/default-new-bot.
 import { botKnowledgeBootstrapDefaults } from '../workspace/shared/default-bot-knowledge-bootstrap.util';
 import { KnowledgeBaseItemService } from '../knowledge/knowledge-base-item.service';
 import { effectiveKbDocumentFileMetaLean } from '../knowledge/knowledge-base-document-sync-fields.util';
+import { buildOnboardingPersonalityFromDescription } from '../workspaces/build-onboarding-personality-from-description.util';
+import { buildAgentDescriptionFromOnboardingInstructions } from '../workspaces/build-agent-description-from-onboarding-instructions.util';
+import { buildOnboardingExampleQuestionsFromProfile } from '../workspaces/build-onboarding-example-questions.util';
+import {
+  buildDefaultOnboardingBotPreset,
+  buildOnboardingMenuQuickLinksFromAllowedOrigins,
+} from '../workspace/shared/default-onboarding-bot.preset';
 import { generateBotAccessKey, generateBotSecretKey } from './bot-keys.util';
 import type { AllowedOrigin } from './origin-validation.util';
 import { coerceAllowedOriginsFromBotDoc } from './origin-validation.util';
@@ -2305,47 +2312,41 @@ export class BotsService {
       avatarSourceRaw === 'none'
         ? avatarSourceRaw
         : undefined;
-    const responseLength =
-      input.instructions.responseLength === 'short' ||
-      input.instructions.responseLength === 'long' ||
-      input.instructions.responseLength === 'medium'
-        ? input.instructions.responseLength
-        : 'medium';
-    const botDescription = input.instructions.description.trim();
-    const brandRaw = String(input.profile.brandColor ?? '').trim();
-    const primaryColor = /^#[0-9A-Fa-f]{6}$/.test(brandRaw) ? brandRaw.toUpperCase() : undefined;
+    const instructionsSource = input.instructions.description.trim();
+    const onboardingPersonality = buildOnboardingPersonalityFromDescription(instructionsSource);
+    const agentDescription = buildAgentDescriptionFromOnboardingInstructions(instructionsSource);
+    const menuQuickLinks = buildOnboardingMenuQuickLinksFromAllowedOrigins(input.allowedOrigins);
+    const exampleQuestions = buildOnboardingExampleQuestionsFromProfile(categories, instructionsSource);
+    const tone = input.instructions.tone?.trim() || onboardingPersonality.tone;
+    const behaviorPreset =
+      input.instructions.behaviorPreset?.trim() || onboardingPersonality.behaviorPreset;
 
     for (let attempt = 0; attempt < 5; attempt++) {
       const slug = await this.generateUniqueSlug(input.profile.name || 'ai-assistant');
-      const defaults = getDefaultBotCreatePayload(slug, `ws-onboarding-${input.workspaceId}`);
+      const preset = buildDefaultOnboardingBotPreset(slug, input.workspaceId, {
+        brandColor: input.profile.brandColor,
+        menuQuickLinks,
+        exampleQuestions,
+      });
       try {
         const created = await this.create({
-          ...defaults,
-          clientDraftId: undefined,
+          ...preset,
           status: 'published',
           name: input.profile.name,
           slug,
           shortDescription: input.profile.shortDescription || undefined,
-          description: botDescription,
+          description: agentDescription,
           categories,
           category: categories[0],
           imageUrl: input.profile.imageUrl || undefined,
           avatarEmoji: input.profile.avatarEmoji || undefined,
           ...(avatarSource ? { avatarSource } : {}),
           personality: {
-            description: input.instructions.description,
-            systemPrompt: input.instructions.systemPrompt || input.instructions.description,
-            tone: input.instructions.tone || 'friendly',
-            behaviorPreset: input.instructions.behaviorPreset || 'default',
-          },
-          chatUI: {
-            ...((defaults.chatUI as Record<string, unknown> | undefined) ?? {}),
-            ...(primaryColor ? { primaryColor } : {}),
-          },
-          config: {
-            ...(defaults.config as Record<string, unknown>),
-            maxTokens: input.instructions.maxTokens,
-            responseLength,
+            description: onboardingPersonality.instructions,
+            systemPrompt: onboardingPersonality.systemPrompt,
+            tone,
+            behaviorPreset,
+            thingsToAvoid: onboardingPersonality.avoidInstructions,
           },
           allowedOrigins: input.allowedOrigins,
           workspaceId: workspaceOid,

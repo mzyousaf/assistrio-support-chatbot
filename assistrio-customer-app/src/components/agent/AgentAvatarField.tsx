@@ -135,6 +135,8 @@ export function AgentAvatarField({
     setPreviewFailed(false);
 
     if (onUploadFile) {
+      setPreviewFailed(false);
+      patch({ pendingFile: file, avatarSource: 'upload', avatarEmoji: '' });
       setUploading(true);
       const res = await onUploadFile(file);
       setUploading(false);
@@ -142,8 +144,7 @@ export function AgentAvatarField({
         setLocalError(res.error);
         return;
       }
-      // Parent upload handler merges avatar fields from the API; only clear local pending file.
-      patch({ pendingFile: null });
+      // Parent upload handler replaces avatar state from the API response.
       return;
     }
 

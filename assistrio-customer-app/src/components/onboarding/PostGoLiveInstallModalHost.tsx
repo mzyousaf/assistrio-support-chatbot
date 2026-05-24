@@ -1,76 +1,79 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useLocation, useSearchParams } from 'react-router-dom';
 import { YouAreLiveModal } from '@/components/onboarding/YouAreLiveModal';
 import { useGoLivePublishOverlay } from '@/onboarding/goLivePublishOverlay';
+import {
+  clearPostGoLiveInstallModalIntent,
+  postGoLiveInstallIntentMatchesRoute,
+  readPostGoLiveInstallModalIntent,
+} from '@/routes/postGoLiveInstallModalStorage';
 
-export const POST_GO_LIVE_INSTALL_BOT_SESSION_KEY = 'assistrio_post_go_live_install_bot_id';
+export {
+  persistPostGoLiveInstallBotId,
+  persistPostGoLiveInstallModalIntent,
+  POST_GO_LIVE_INSTALL_BOT_SESSION_KEY,
+  POST_GO_LIVE_INSTALL_MODAL_SESSION_KEY,
+} from '@/routes/postGoLiveInstallModalStorage';
 
-export function persistPostGoLiveInstallBotId(botId: string): void {
-  const trimmed = botId.trim();
-  if (!trimmed) return;
-  try {
-    sessionStorage.setItem(POST_GO_LIVE_INSTALL_BOT_SESSION_KEY, trimmed);
-  } catch {
-    /* ignore storage errors */
-  }
-}
-
-/** Opens the install snippet modal from URL params or a sessionStorage fallback after onboarding go-live. */
+/** Opens the install snippet modal from URL params or sessionStorage after onboarding go-live. */
 export function PostGoLiveInstallModalHost() {
+  const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [sessionBotId, setSessionBotId] = useState<string | null>(null);
   const { clearPublishSuccessOverlay } = useGoLivePublishOverlay();
+  const restoredParamsRef = useRef(false);
 
   const showInstall = searchParams.get('showInstall') === '1';
   const urlBotId = searchParams.get('liveBotId')?.trim() || null;
-  const liveBotId = urlBotId ?? sessionBotId;
 
-  useEffect(() => {
-    if (showInstall && urlBotId) {
-      try {
-        sessionStorage.removeItem(POST_GO_LIVE_INSTALL_BOT_SESSION_KEY);
-      } catch {
-        /* ignore storage errors */
-      }
-      return;
-    }
-    try {
-      const stored = sessionStorage.getItem(POST_GO_LIVE_INSTALL_BOT_SESSION_KEY)?.trim();
-      if (!stored) return;
-      sessionStorage.removeItem(POST_GO_LIVE_INSTALL_BOT_SESSION_KEY);
-      setSessionBotId(stored);
-      setSearchParams(
-        (prev) => {
-          const next = new URLSearchParams(prev);
-          next.set('liveBotId', stored);
-          next.set('showInstall', '1');
-          return next;
-        },
-        { replace: true },
-      );
-    } catch {
-      /* ignore storage errors */
-    }
-  }, [setSearchParams, showInstall, urlBotId]);
+  const sessionIntent = useMemo(
+    () => readPostGoLiveInstallModalIntent(),
+    [location.pathname, location.search, showInstall, urlBotId],
+  );
 
-  const liveModalOpen = useMemo(
-    () => Boolean(liveBotId && (showInstall || sessionBotId !== null)),
-    [liveBotId, showInstall, sessionBotId],
+  const intentMatchesRoute = useMemo(
+    () => (sessionIntent ? postGoLiveInstallIntentMatchesRoute(sessionIntent, location.pathname) : false),
+    [sessionIntent, location.pathname],
+  );
+
+  const liveBotId = urlBotId ?? (intentMatchesRoute ? sessionIntent?.botId ?? null : null);
+
+  const liveModalOpen = Boolean(
+    liveBotId && ((showInstall && urlBotId) || (intentMatchesRoute && sessionIntent?.botId === liveBotId)),
   );
 
   useEffect(() => {
-    if (liveModalOpen) {
-      clearPublishSuccessOverlay();
-    }
+    if (!liveModalOpen) return;
+    clearPublishSuccessOverlay();
   }, [clearPublishSuccessOverlay, liveModalOpen]);
 
-  const closeLiveModal = useCallback(() => {
-    setSessionBotId(null);
-    try {
-      sessionStorage.removeItem(POST_GO_LIVE_INSTALL_BOT_SESSION_KEY);
-    } catch {
-      /* ignore storage errors */
+  useEffect(() => {
+    if (showInstall && urlBotId) {
+      restoredParamsRef.current = false;
+      return;
     }
+    if (!sessionIntent || !intentMatchesRoute || restoredParamsRef.current) return;
+
+    restoredParamsRef.current = true;
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set('liveBotId', sessionIntent.botId);
+        next.set('showInstall', '1');
+        return next;
+      },
+      { replace: true },
+    );
+  }, [
+    intentMatchesRoute,
+    sessionIntent,
+    setSearchParams,
+    showInstall,
+    urlBotId,
+  ]);
+
+  const closeLiveModal = useCallback(() => {
+    restoredParamsRef.current = false;
+    clearPostGoLiveInstallModalIntent();
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev);

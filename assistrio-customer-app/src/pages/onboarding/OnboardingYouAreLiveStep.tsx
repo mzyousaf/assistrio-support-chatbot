@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useOnboardingFlow } from '../../onboarding/OnboardingFlowContext';
+import { postOnboardingGoLiveBotDestination } from '@/routes/postGoLiveNavigation';
 
 /**
  * Compatibility redirect for the removed "You are live" onboarding step.
@@ -25,7 +26,7 @@ export function OnboardingYouAreLiveStep() {
 
   if (status === 'completed') {
     if (botId) {
-      return <Navigate to={`/bots?liveBotId=${encodeURIComponent(botId)}&showInstall=1`} replace />;
+      return <Navigate to={postOnboardingGoLiveBotDestination(botId)} replace />;
     }
     return <Navigate to="/bots" replace />;
   }

@@ -45,6 +45,10 @@ import type {
 } from '../api/types';
 import { useCustomerAuth } from '../auth/CustomerAuthContext';
 import { persistPostGoLiveInstallBotId } from '@/components/onboarding/PostGoLiveInstallModalHost';
+import {
+  postOnboardingGoLiveBotDestination,
+  postOnboardingGoLiveBotsListFallback,
+} from '@/routes/postGoLiveNavigation';
 import { isLikelyNetworkFailureMessage } from '@/lib/workspaceLoadFailurePresentation';
 import { buildOnboardingChatWidgetSnippetFromInstallBot } from './onboardingInstallSnippets';
 import { mergeStepsCompletedFromDraft } from './onboardingProgress';
@@ -619,10 +623,21 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
     async (opts?: { liveBotId?: string; showInstall?: boolean; beforeNavigate?: () => void }) => {
       const botId = opts?.liveBotId?.trim();
       const openInstall = opts?.showInstall === true && Boolean(botId);
-      const dashboardPath =
-        openInstall && botId
-          ? `/bots?liveBotId=${encodeURIComponent(botId)}&showInstall=1`
-          : '/bots';
+
+      async function resolveDashboardPath(): Promise<string> {
+        if (!openInstall || !botId) return '/bots';
+        try {
+          const res = await getCustomerBot(botId);
+          if (res.ok) {
+            return postOnboardingGoLiveBotDestination(botId, { showInstall: true });
+          }
+        } catch {
+          /* fall through to list fallback */
+        }
+        return postOnboardingGoLiveBotsListFallback(botId);
+      }
+
+      const dashboardPath = await resolveDashboardPath();
 
       if (!workspaceId) {
         if (openInstall && botId) persistPostGoLiveInstallBotId(botId);

@@ -373,6 +373,11 @@ export function BotLifecycleModal({
           ? DRAFT_STEPS
           : [];
 
+  /** Completed steps only — the active step is in progress and must not count toward 100%. */
+  const completedStepCount = phase === 'running' ? stepIndex : steps.length;
+  const progressPercent =
+    steps.length > 0 ? Math.min(100, Math.round((completedStepCount / steps.length) * 100)) : 0;
+
   return (
     <Modal
       open={open}
@@ -416,9 +421,7 @@ export function BotLifecycleModal({
                   'Progress'
                 )}
               </span>
-              <span className="tabular-nums text-slate-400">
-                {steps.length ? Math.round(((stepIndex + 1) / steps.length) * 100) : 0}%
-              </span>
+              <span className="tabular-nums text-slate-400">{progressPercent}%</span>
             </div>
             <div className="h-2 overflow-hidden rounded-full bg-slate-100 shadow-[inset_0_1px_2px_rgba(15,23,42,0.06)]">
               <div
@@ -429,7 +432,7 @@ export function BotLifecycleModal({
                     : 'bg-gradient-to-r from-slate-500 to-slate-600',
                 )}
                 style={{
-                  width: `${steps.length ? ((stepIndex + 1) / steps.length) * 100 : 0}%`,
+                  width: `${progressPercent}%`,
                 }}
               />
             </div>

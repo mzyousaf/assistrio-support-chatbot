@@ -62,6 +62,7 @@ import { OnboardingKnowledgeStep } from './pages/onboarding/OnboardingKnowledgeS
 import { OnboardingGate } from './pages/onboarding/OnboardingGate';
 import { OnboardingLayout } from './pages/onboarding/OnboardingLayout';
 import { OnboardingResumeRedirect } from './pages/onboarding/OnboardingResumeRedirect';
+import { PreserveSearchNavigate } from './routes/PreserveSearchNavigate';
 import { PostLoginRedirect } from './routes/PostLoginRedirect';
 import { CUSTOMER_ROUTES } from './routes/customerRoutes';
 import { AppToaster } from './components/AppToaster';
@@ -152,11 +153,11 @@ export function App() {
             />
             <Route path="/bots" element={<BotsListPage />} />
             <Route path="/bots/:id" element={<BotWorkspaceLayout />}>
-              <Route index element={<Navigate to="playground/profile" replace />} />
+              <Route index element={<PreserveSearchNavigate to="playground/profile" />} />
 
               {/* Playground: one layout + stable widget preview; nested section routes only swap <Outlet />. */}
               <Route path="playground" element={<PlaygroundLayout />}>
-                <Route index element={<Navigate to="profile" replace />} />
+                <Route index element={<PreserveSearchNavigate to="profile" />} />
                 <Route path="profile" element={<ProfileWorkspacePage />} />
                 <Route path="behavior" element={<BehaviorWorkspacePage />} />
                 <Route path="capture-leads" element={<CaptureLeadsWorkspacePage />} />
