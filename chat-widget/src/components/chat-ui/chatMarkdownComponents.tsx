@@ -62,7 +62,7 @@ export const chatMarkdownComponents: Components = {
     return <code className="chat-md-inline-code">{children}</code>;
   },
   sup: ({ children }) => <>{children}</>,
-  section: ({ className, children, ...rest }) => {
+  section: ({ className, children, ref: _ref, ...rest }) => {
     if (typeof className === "string" && className.includes("footnotes")) return null;
     return (
       <section className={className} {...rest}>

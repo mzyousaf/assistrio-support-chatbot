@@ -1,4 +1,4 @@
-import { Controller, HttpException, HttpStatus, Post, Req } from '@nestjs/common';
+import { Controller, ForbiddenException, HttpException, HttpStatus, Post, Req } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
 import { FastifyRequest } from 'fastify';
@@ -19,6 +19,7 @@ import { resolveChatLlmParams } from './chat-llm-params.util';
 import type { AnalyticsContextPayload, BotLike } from './chat-engine.types';
 import { exampleQuestionsToPublicLabels } from '../workspace/shared/example-questions.util';
 import { WorkspacesService } from '../workspaces/workspaces.service';
+import { botHasWorkspaceScope } from '../workspaces/workspace-bot-member-visibility.util';
 import { normalizeVisitorMultiChatMax } from '../bots/visitor-multi-chat.util';
 import { resolveEmbedChatVisitorIdFromBody } from '../bots/widget-embed-identity.util';
 import { isPreviewRequestOriginAllowed } from '../bots/preview-origin.util';
@@ -380,7 +381,11 @@ export class WidgetPreviewController {
     return { _id: u._id, email: u.email, role: u.role };
   }
 
-  private async verifyPreviewOwnerOrThrow(
+  /**
+   * Workspace bots: owner/admin/member preview rules via `assertCanPreviewWorkspaceBot`.
+   * Legacy personal bots (no workspace): bot owner or superadmin only.
+   */
+  private async verifyPreviewAccessOrThrow(
     request: FastifyRequest,
     bot: Record<string, unknown>,
     authToken?: string,
@@ -393,6 +398,19 @@ export class WidgetPreviewController {
       );
     }
     const userId = normalizeObjectIdString(user._id);
+    if (botHasWorkspaceScope(bot)) {
+      try {
+        await this.workspacesService.assertCanPreviewWorkspaceBot(userId, user.role, bot);
+      } catch (err) {
+        if (err instanceof ForbiddenException) {
+          const response = (err as ForbiddenException).getResponse() as Record<string, unknown>;
+          throw new HttpException(response, HttpStatus.FORBIDDEN);
+        }
+        throw err;
+      }
+      return userId || 'owner';
+    }
+
     const allowed = this.workspacesService.canUserPreviewBotAsOwner(userId, user.role, bot);
     if (!allowed) {
       throw new HttpException(
@@ -596,7 +614,7 @@ export class WidgetPreviewController {
 
     this.assertPreviewWidgetIpRateLimitOrThrow(request, bot as Record<string, unknown>);
 
-    const ownerUserId = await this.verifyPreviewOwnerOrThrow(
+    const ownerUserId = await this.verifyPreviewAccessOrThrow(
       request,
       bot as Record<string, unknown>,
       parsed.authToken,
@@ -638,7 +656,7 @@ export class WidgetPreviewController {
 
     this.assertPreviewWidgetIpRateLimitOrThrow(request, bot as Record<string, unknown>);
 
-    await this.verifyPreviewOwnerOrThrow(request, bot as Record<string, unknown>, parsed.authToken);
+    await this.verifyPreviewAccessOrThrow(request, bot as Record<string, unknown>, parsed.authToken);
 
     const resolvedChatVisitorId = resolveEmbedChatVisitorIdFromBody(
       parsed.chatVisitorId,
@@ -717,7 +735,7 @@ export class WidgetPreviewController {
       );
     }
 
-    const ownerUserId = await this.verifyPreviewOwnerOrThrow(request, bot as Record<string, unknown>, parsed.authToken);
+    const ownerUserId = await this.verifyPreviewAccessOrThrow(request, bot as Record<string, unknown>, parsed.authToken);
 
     let chatVisitorResolved = resolveEmbedChatVisitorIdFromBody(parsed.chatVisitorId, parsed.visitorId)?.trim();
     if (!chatVisitorResolved) {
@@ -799,7 +817,7 @@ export class WidgetPreviewController {
       throw new HttpException({ error: 'Bot not found', errorCode: 'BOT_NOT_FOUND' }, HttpStatus.NOT_FOUND);
     }
     this.assertPreviewWidgetIpRateLimitOrThrow(request, bot as Record<string, unknown>);
-    await this.verifyPreviewOwnerOrThrow(request, bot as Record<string, unknown>, parsed.authToken);
+    await this.verifyPreviewAccessOrThrow(request, bot as Record<string, unknown>, parsed.authToken);
     return this.widgetSpeechService.handlePreview(bot as Record<string, unknown>, parsed);
   }
 }

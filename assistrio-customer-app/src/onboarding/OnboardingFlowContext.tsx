@@ -44,6 +44,7 @@ import type {
   WorkspaceOnboardingResponse,
 } from '../api/types';
 import { useCustomerAuth } from '../auth/CustomerAuthContext';
+import { resolveActiveCustomerWorkspace } from '../lib/resolveActiveCustomerWorkspace';
 import { persistPostGoLiveInstallBotId } from '@/components/onboarding/PostGoLiveInstallModalHost';
 import {
   postOnboardingGoLiveBotDestination,
@@ -169,13 +170,6 @@ export type OnboardingGoLivePublishResult =
     }
   | { ok: false; error: string; recoverable?: boolean };
 
-function resolvePrimaryWorkspaceId(
-  workspaces: Array<{ id: string }> | undefined,
-): string | null {
-  const id = workspaces?.[0]?.id;
-  return id?.trim() || null;
-}
-
 type OnboardingFlowValue = {
   phase: FlowPhase;
   initError: string | null;
@@ -289,7 +283,7 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
     setPhase('loading');
     setInitError(null);
 
-    const wsId = resolvePrimaryWorkspaceId(customerRef.current?.workspaces);
+    const wsId = resolveActiveCustomerWorkspace(customerRef.current).activeWorkspaceId;
     if (!wsId) {
       setInitError('No workspace found for your account.');
       setPhase('error');

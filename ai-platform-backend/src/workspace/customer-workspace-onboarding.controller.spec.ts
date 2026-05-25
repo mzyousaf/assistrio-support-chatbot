@@ -5,7 +5,7 @@ describe('CustomerWorkspaceOnboardingController', () => {
   const workspaceId = '507f1f77bcf86cd799439011';
   const userId = '507f1f77bcf86cd799439012';
 
-  function buildController(overrides?: { isMember?: boolean }) {
+  function buildController(overrides?: { isMember?: boolean; isManager?: boolean }) {
     const workspaceOnboardingService = {
       getOnboardingForWorkspace: jest.fn().mockResolvedValue({
         workspaceId,
@@ -105,6 +105,10 @@ describe('CustomerWorkspaceOnboardingController', () => {
     };
     const workspacesService = {
       isUserMemberOfWorkspace: jest.fn().mockResolvedValue(overrides?.isMember ?? true),
+      assertWorkspaceManager:
+        overrides?.isMember === false || overrides?.isManager === false
+          ? jest.fn().mockRejectedValue(new ForbiddenException({ errorCode: 'workspace_access_denied' }))
+          : jest.fn().mockResolvedValue(undefined),
     };
 
     const workspaceOnboardingDictationService = {};
@@ -202,5 +206,21 @@ describe('CustomerWorkspaceOnboardingController', () => {
     const req = { user: { _id: userId }, isMultipart: () => true, parts: async function* () {} } as never;
 
     await expect(controller.postAvatar(req, workspaceId)).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('allows workspace members to GET onboarding', async () => {
+    const { controller } = buildController({ isMember: true, isManager: false });
+    const req = { user: { _id: userId } } as never;
+
+    await expect(controller.getOnboarding(req, workspaceId)).resolves.toMatchObject({ workspaceId });
+  });
+
+  it('blocks workspace members from mutating onboarding', async () => {
+    const { controller } = buildController({ isMember: true, isManager: false });
+    const req = { user: { _id: userId } } as never;
+
+    await expect(controller.patchProfile(req, workspaceId, { name: 'Bot' })).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
   });
 });

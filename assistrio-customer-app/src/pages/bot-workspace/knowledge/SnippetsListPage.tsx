@@ -19,6 +19,7 @@ import {
 } from '@/lib/customerKnowledgeItemDelete';
 import { requestWorkspaceBotRefresh } from '@/lib/botSyncEvents';
 import { useBotWorkspace } from '../BotWorkspaceContext';
+import { ReadOnlyWorkspaceNotice } from '@/components/workspace/ReadOnlyWorkspaceNotice';
 import { useKnowledgeStorageUx, useDismissKnowledgeCompanionModalsOnStorageClose } from '@/context/KnowledgeStorageUxContext';
 import { Button, Checkbox, FieldRow, Input, Modal, Textarea } from '@/components/ui';
 import { KnowledgeUtf8Meter } from '@/components/knowledge/KnowledgeUtf8Meter';
@@ -80,7 +81,7 @@ export function SnippetsListPage() {
   const pageSelectId = useId();
   const perPageSelectId = useId();
   const importFileRef = useRef<HTMLInputElement | null>(null);
-  const { bot, loadState, softReload } = useBotWorkspace();
+  const { bot, loadState, softReload, canManageBot } = useBotWorkspace();
   const { notifyPlanLimitFromApi, interceptKnowledgeStorageIncrease } = useKnowledgeStorageUx();
   const { knowledgeStatusItems, refreshKnowledgeStatus, refreshTrainingStatus } = useKbWorkspacePolling();
   const fromBot = useMemo(() => snippetsFromBot(bot), [bot]);
@@ -498,6 +499,7 @@ export function SnippetsListPage() {
   return (
     <div className={styles.knowledgeSourcesPageRoot} data-knowledge-snippets-list>
       <div className={styles.knowledgeSourcesPageBody}>
+      {!canManageBot ? <ReadOnlyWorkspaceNotice variant="knowledge" className="shrink-0" /> : null}
       <header className={cn(styles.workspaceEditorPageHeader, 'shrink-0')}>
         <div className={styles.workspaceEditorTitleBlock}>
           <div className={styles.workspaceEditorHeadingStack}>
@@ -506,27 +508,32 @@ export function SnippetsListPage() {
               Add a snippet below, or open an existing one from the list to edit.
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <Button type="button" variant="outlinePrimary" size="sm" onClick={() => setImportOpen(true)}>
-              <Upload size={14} aria-hidden />
-              Import CSV
-            </Button>
-          </div>
+          {canManageBot ? (
+            <div className="flex items-center gap-2">
+              <Button type="button" variant="outlinePrimary" size="sm" onClick={() => setImportOpen(true)}>
+                <Upload size={14} aria-hidden />
+                Import CSV
+              </Button>
+            </div>
+          ) : null}
         </div>
       </header>
-      <input
-        ref={importFileRef}
-        type="file"
-        accept=".csv,text/csv"
-        className="hidden"
-        tabIndex={-1}
-        onChange={(ev) => {
-          const f = ev.target.files?.[0];
-          ev.target.value = '';
-          void importSnippetCsv(f);
-        }}
-      />
+      {canManageBot ? (
+        <input
+          ref={importFileRef}
+          type="file"
+          accept=".csv,text/csv"
+          className="hidden"
+          tabIndex={-1}
+          onChange={(ev) => {
+            const f = ev.target.files?.[0];
+            ev.target.value = '';
+            void importSnippetCsv(f);
+          }}
+        />
+      ) : null}
 
+      {canManageBot ? (
       <div className={styles.knowledgeSourcesAddCard}>
         <p className={styles.knowledgeSourcesAddCardOverline}>Add snippet</p>
         <div className={styles.knowledgeSourcesAddCardFieldStack}>
@@ -586,6 +593,7 @@ export function SnippetsListPage() {
           </div>
         </div>
       </div>
+      ) : null}
 
       <div
         className={cn(
@@ -602,7 +610,7 @@ export function SnippetsListPage() {
             </div>
             <p className="mt-3 text-sm font-semibold text-slate-900">No snippets yet</p>
             <p className="mx-auto mt-1.5 max-w-sm text-sm text-slate-500">
-              Use the form above to add your first snippet.
+              {canManageBot ? 'Use the form above to add your first snippet.' : 'No snippets have been added yet.'}
             </p>
           </div>
         ) : (
@@ -614,7 +622,7 @@ export function SnippetsListPage() {
               inputId={sourcesSearchId}
             />
             <div className={styles.knowledgeSourcesListControlsStack}>
-              {sortedFilteredIndices.length > 0 ? (
+              {canManageBot && sortedFilteredIndices.length > 0 ? (
                 <KnowledgeSourcesPageSelectAll
                   id={pageSelectId}
                   pageIndices={pagedIndices}
@@ -623,14 +631,20 @@ export function SnippetsListPage() {
                   selectionBlocked={isIndexSelectionBlockedForBulk}
                   endSlot={<KnowledgeSortFilterCapsule value={listSort} onChange={setListSort} />}
                 />
+              ) : sortedFilteredIndices.length > 0 ? (
+                <div className="flex justify-end">
+                  <KnowledgeSortFilterCapsule value={listSort} onChange={setListSort} />
+                </div>
               ) : null}
-              <KnowledgeSourcesBulkBar
-                count={selected.size}
-                noun="snippet"
-                busy={bulkDeleting}
-                onRequestDelete={openBulkDeleteModal}
-                onClear={clearSelection}
-              />
+              {canManageBot ? (
+                <KnowledgeSourcesBulkBar
+                  count={selected.size}
+                  noun="snippet"
+                  busy={bulkDeleting}
+                  onRequestDelete={openBulkDeleteModal}
+                  onClear={clearSelection}
+                />
+              ) : null}
             </div>
             {sortedFilteredIndices.length === 0 ? (
               <div className="flex w-full min-w-0 flex-col items-center justify-center px-0 pb-2 pt-10 text-center">
@@ -661,7 +675,8 @@ export function SnippetsListPage() {
                           onClick={(e) => e.stopPropagation()}
                           onKeyDown={(e) => e.stopPropagation()}
                         >
-                          {!deleting &&
+                          {canManageBot &&
+                          !deleting &&
                           !bulkDeleting &&
                           (!isKnowledgeRowDeleteBlocked(noteStatusSlice, s.knowledgeItemId, s) ||
                             selected.has(i)) ? (
@@ -707,8 +722,9 @@ export function SnippetsListPage() {
                             </div>
                           </button>
                         </div>
-                        <div className="absolute right-1 top-1 z-10 sm:right-2 sm:top-2">
-                          <details className="relative isolate inline-block">
+                        {canManageBot ? (
+                          <div className="absolute right-1 top-1 z-10 sm:right-2 sm:top-2">
+                            <details className="relative isolate inline-block">
                             <summary
                               className="relative z-0 flex h-8 w-8 list-none cursor-pointer items-center justify-center rounded-md text-slate-500 hover:text-slate-700 [&::-webkit-details-marker]:hidden"
                               onClick={(e) => e.stopPropagation()}
@@ -756,8 +772,9 @@ export function SnippetsListPage() {
                                 <span className="min-w-0">Delete</span>
                               </button>
                             </div>
-                          </details>
-                        </div>
+                            </details>
+                          </div>
+                        ) : null}
                       </div>
                     </li>
                   );

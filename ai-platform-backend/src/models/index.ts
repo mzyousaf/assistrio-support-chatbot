@@ -119,8 +119,46 @@ export {
   WorkspaceMembership,
   WorkspaceMembershipSchema,
   WORKSPACE_MEMBER_ROLES,
+  WORKSPACE_MANAGER_ROLES,
+  WORKSPACE_OWNER_ROLE,
+  WORKSPACE_ADMIN_ROLE,
+  WORKSPACE_MEMBER_ROLE,
 } from './workspace-membership.schema';
-export type { WorkspaceMemberRole } from './workspace-membership.schema';
+export type { WorkspaceMemberRole, WorkspaceManagerRole } from './workspace-membership.schema';
+export {
+  isWorkspaceOwnerRole,
+  isWorkspaceAdminRole,
+  isWorkspaceManagerRole,
+  isWorkspaceMemberOnlyRole,
+  workspaceManagerRoleRank,
+} from './workspace-membership-role.util';
+export {
+  WORKSPACE_INVITE_STATUSES,
+  WORKSPACE_INVITE_DEFAULT_TTL_MS,
+  WORKSPACE_INVITE_ALREADY_PENDING_CODE,
+  WORKSPACE_INVITE_ALREADY_PENDING_MESSAGE,
+  isWorkspaceInviteStatus,
+  workspaceInviteExpiresAtFromNow,
+  WORKSPACE_INVITE_NOT_FOUND_CODE,
+  WORKSPACE_INVITE_EXPIRED_CODE,
+  WORKSPACE_INVITE_CANCELLED_CODE,
+  WORKSPACE_INVITE_ALREADY_ACCEPTED_CODE,
+  WORKSPACE_INVITE_EMAIL_MISMATCH_CODE,
+  WORKSPACE_INVITE_MEMBER_EXISTS_CODE,
+  WORKSPACE_ACCESS_DENIED_CODE,
+  WORKSPACE_LAST_ADMIN_REQUIRED_CODE,
+  WORKSPACE_LAST_MANAGER_REQUIRED_CODE,
+  WORKSPACE_OWNER_PROTECTED_CODE,
+  WORKSPACE_INVITE_ROLES,
+} from './workspace-invite.constants';
+export type { WorkspaceInviteStatus, WorkspaceInviteRole } from './workspace-invite.constants';
+export { WorkspaceInvite, WorkspaceInviteSchema } from './workspace-invite.schema';
+export {
+  WorkspaceBotAccessGrant,
+  WorkspaceBotAccessGrantSchema,
+  WORKSPACE_BOT_ACCESS_GRANT_SUBJECT_TYPES,
+} from './workspace-bot-access-grant.schema';
+export type { WorkspaceBotAccessGrantSubjectType } from './workspace-bot-access-grant.schema';
 export {
   WorkspaceSubscription,
   WorkspaceSubscriptionSchema,

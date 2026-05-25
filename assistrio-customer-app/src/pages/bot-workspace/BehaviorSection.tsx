@@ -12,10 +12,12 @@ import {
   WELCOME_MESSAGE_MAX,
 } from './behaviorConstants';
 import { useBehaviorWorkspace, type BehaviorSubnav } from './BehaviorWorkspaceContext';
+import { useCanManageBot } from './BotWorkspaceContext';
 import { WELCOME_KEYWORD_PILLS, WelcomeMessageKeywordPreview } from './welcomeMessageKeywords';
 import { WorkspaceSectionHeader } from './WorkspaceSectionHeader';
 import { ws } from './workspace';
 import { Button, Card, CardBody, FieldRow, Input, Label, Select, Switch, Textarea } from '@/components/ui';
+import { BotSettingsFieldset } from '@/components/bot-workspace/BotSettingsFieldset';
 import { BOT_FIELD_MAX } from '@/lib/botFieldLimits';
 import { cn } from '@/lib/utils';
 
@@ -82,6 +84,7 @@ export function BehaviorSection() {
     saveError,
     save,
   } = useBehaviorWorkspace();
+  const canManageBot = useCanManageBot();
 
   function insertWelcomeKeyword(token: string) {
     if (!welcomeMessageEnabled) return;
@@ -124,6 +127,7 @@ export function BehaviorSection() {
               </div>
             </div>
             <div className="flex shrink-0 flex-col sm:pt-0">
+              {canManageBot ? (
               <Button
                 type="submit"
                 variant="primary"
@@ -148,6 +152,7 @@ export function BehaviorSection() {
                   </>
                 )}
               </Button>
+              ) : null}
             </div>
           </header>
 
@@ -203,6 +208,7 @@ export function BehaviorSection() {
             ) : null}
           </div>
 
+          <BotSettingsFieldset canManage={canManageBot}>
           <div className={ws.workspaceEditorCardGap}>
             {activeSubnav === 'personality' ? (
               <div
@@ -536,6 +542,7 @@ export function BehaviorSection() {
               </div>
             ) : null}
           </div>
+          </BotSettingsFieldset>
         </div>
       </form>
     </div>

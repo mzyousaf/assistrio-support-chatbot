@@ -8,9 +8,10 @@ import { InlineLoader } from '../../components/PageLoader';
 import { WorkspaceContentContainer } from '@/layout/workspace-layout';
 import { WorkspaceLoadFailureCard } from '@/components/WorkspaceLoadFailureCard';
 import { resolveBotWorkspaceFailurePresentation } from '@/lib/workspaceLoadFailurePresentation';
+import { ReadOnlyWorkspaceNotice } from '@/components/workspace/ReadOnlyWorkspaceNotice';
 
 function BotWorkspaceShell() {
-  const { bot, loadState, loadMessage, botId, reload } = useBotWorkspace();
+  const { bot, loadState, loadMessage, botId, reload, canManageBot } = useBotWorkspace();
 
   const showStaleWorkspaceWhileRefreshing =
     loadState === 'loading' && Boolean(bot && botId && bot.id === botId);
@@ -58,6 +59,7 @@ function BotWorkspaceShell() {
         always gets a consistent min-h-0 flex column — fixes layout when switching e.g. conversations → profile.
       */}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        {!canManageBot ? <ReadOnlyWorkspaceNotice className="border-b border-[var(--border-soft)] rounded-none bg-slate-50 px-4 py-2.5" /> : null}
         <Outlet />
       </div>
       {/* After route tree: playground preview surface lives in `PlaygroundLayout` (stable mount). */}

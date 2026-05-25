@@ -26,6 +26,7 @@ import { useBotWorkspace } from './BotWorkspaceContext';
 import { useCustomerWidgetPreview } from './CustomerWidgetPreviewContext';
 import { registerManualSaveGuard } from './workspaceManualSaveGuard';
 import { Button, Card, CardBody, Checkbox, FieldRow, Input, Modal, Textarea, Tooltip } from '@/components/ui';
+import { BotSettingsFieldset } from '@/components/bot-workspace/BotSettingsFieldset';
 import { BOT_FIELD_MAX, clampStr } from '@/lib/botFieldLimits';
 import { cn } from '@/lib/utils';
 import {
@@ -78,7 +79,7 @@ function inferAvatarTab(b: BotWithExtras): AvatarTab {
 }
 
 export function ProfileSection() {
-  const { bot, botId, softReload } = useBotWorkspace();
+  const { bot, botId, softReload, canManageBot } = useBotWorkspace();
   const { setProfileDraftSlice } = useCustomerWidgetPreview();
   const knowledgeCheckboxId = useId();
   const avatarTabsId = useId();
@@ -516,6 +517,7 @@ export function ProfileSection() {
               </div>
             </div>
             <div className="flex shrink-0 flex-col sm:pt-0">
+              {canManageBot ? (
               <Button
                 type="submit"
                 variant="primary"
@@ -542,6 +544,7 @@ export function ProfileSection() {
                   </>
                 )}
               </Button>
+              ) : null}
             </div>
           </header>
 
@@ -556,6 +559,7 @@ export function ProfileSection() {
             </div>
           ) : null}
 
+          <BotSettingsFieldset canManage={canManageBot}>
           <div className={ws.workspaceEditorCardGap}>
             {/* Identity */}
             <Card className="w-full min-w-0 overflow-hidden border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)] ring-1 ring-slate-900/[0.035]">
@@ -1006,6 +1010,7 @@ export function ProfileSection() {
               </CardBody>
             </Card>
           </div>
+          </BotSettingsFieldset>
         </div>
       </form>
 

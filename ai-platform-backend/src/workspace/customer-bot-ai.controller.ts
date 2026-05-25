@@ -36,20 +36,18 @@ export class CustomerBotAiController {
     private readonly responseStyleRefineService: ResponseStyleRefineService,
   ) {}
 
-  private async assertCanAccessWorkspaceBot(req: RequestWithUser, botId: string): Promise<void> {
+  private async assertCanManageWorkspaceBot(req: RequestWithUser, botId: string): Promise<void> {
     const bot = await this.botsService.findOne(botId);
     if (!bot) {
       throw new HttpException({ error: 'Bot not found', errorCode: 'bot_not_found' }, HttpStatus.NOT_FOUND);
     }
     const uid = req.user?._id != null ? String(req.user._id) : '';
-    const ok = await this.workspacesService.canUserAccessWorkspaceBot(
-      uid,
-      req.user?.role ?? '',
-      bot as Record<string, unknown>,
-    );
+    const role = req.user?.role ?? '';
+    const ok = await this.workspacesService.canUserAccessWorkspaceBot(uid, role, bot as Record<string, unknown>);
     if (!ok) {
       throw new HttpException({ error: 'Forbidden' }, HttpStatus.FORBIDDEN);
     }
+    await this.workspacesService.assertCanManageWorkspaceBot(uid, role, bot as Record<string, unknown>);
   }
 
   /**
@@ -64,7 +62,7 @@ export class CustomerBotAiController {
     if (!Types.ObjectId.isValid(botId)) {
       throw new HttpException({ error: 'Invalid bot id' }, HttpStatus.BAD_REQUEST);
     }
-    await this.assertCanAccessWorkspaceBot(req, botId);
+    await this.assertCanManageWorkspaceBot(req, botId);
     const parsed = parseRefineBody(body);
     if (!parsed) {
       throw new HttpException({ error: 'description is required' }, HttpStatus.BAD_REQUEST);

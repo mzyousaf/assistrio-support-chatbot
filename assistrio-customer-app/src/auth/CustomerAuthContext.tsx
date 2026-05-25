@@ -13,8 +13,17 @@ import {
   registerCustomerSessionUnauthorizedGate,
   unregisterCustomerSessionUnauthorizedGate,
 } from '../api/customerSessionUnauthorized';
-import { getCustomerBots, getCustomerMe, postCustomerLogout } from '../api/customerApi';
+import { getCustomerBots, getCustomerMe, postCustomerLogout, postCustomerWorkspaceActivate } from '../api/customerApi';
 import type { CustomerMe, WorkspaceOnboardingStatus } from '../api/types';
+import {
+  buildCustomerBotsListQuery,
+  shouldFetchBotsForOnboardingHeuristic,
+} from '../lib/customerBotsQuery';
+import {
+  computeNeedsOnboardingForCustomer,
+  resolveActiveCustomerWorkspace,
+} from '../lib/resolveActiveCustomerWorkspace';
+import { isWorkspaceMemberOnlyRole } from '../lib/workspaceRoles';
 import {
   clearAllOnboardingLocalStorage,
 } from '../onboarding/onboardingSessionStorage';
@@ -39,6 +48,8 @@ export type CustomerAuthValue = {
   refreshOnboardingHeuristic: () => Promise<void>;
   /** Optimistically sync primary workspace onboarding status after POST /complete. */
   patchPrimaryWorkspaceOnboardingStatus: (status: WorkspaceOnboardingStatus) => void;
+  /** Switch active workspace via POST /activate and refresh session + onboarding flags. */
+  activateWorkspace: (workspaceId: string) => Promise<CustomerMe | null>;
   /** Clears the API-invalidation marker (e.g. after login screen has shown the message). */
   clearSessionInvalidatedByApi: () => void;
 };
@@ -49,29 +60,43 @@ async function loadOnboardingFlags(customer: CustomerMe | null): Promise<{
   needsOnboarding: boolean;
   bootstrapWarn: boolean;
 }> {
-  const ws = customer?.workspaces?.[0];
-  const wsStatus = ws?.onboardingStatus;
+  const { onboardingStatus, role, activeWorkspaceId } = resolveActiveCustomerWorkspace(customer);
 
-  if (wsStatus === 'completed') {
+  if (isWorkspaceMemberOnlyRole(role)) {
+    return { needsOnboarding: false, bootstrapWarn: false };
+  }
+
+  if (onboardingStatus === 'completed') {
     return { needsOnboarding: false, bootstrapWarn: false };
   }
 
   if (
-    wsStatus === 'live_pending_install' ||
-    wsStatus === 'in_progress' ||
-    wsStatus === 'not_started'
+    onboardingStatus === 'live_pending_install' ||
+    onboardingStatus === 'in_progress' ||
+    onboardingStatus === 'not_started'
   ) {
     return { needsOnboarding: true, bootstrapWarn: false };
   }
 
-  if (wsStatus != null) {
+  if (onboardingStatus != null) {
     return { needsOnboarding: true, bootstrapWarn: false };
   }
 
-  const allRes = await getCustomerBots();
+  if (!shouldFetchBotsForOnboardingHeuristic({ role: role ?? null, onboardingStatus })) {
+    return { needsOnboarding: false, bootstrapWarn: false };
+  }
+
+  const botsQuery = buildCustomerBotsListQuery({ activeWorkspaceId });
+  const allRes = await getCustomerBots(botsQuery ?? undefined);
   if (!allRes.ok) {
     const setupFinished = readSetupFinishedLegacy();
-    return { needsOnboarding: !setupFinished, bootstrapWarn: true };
+    return {
+      needsOnboarding: computeNeedsOnboardingForCustomer(customer, {
+        setupFinished,
+        publishedCount: 0,
+      }),
+      bootstrapWarn: true,
+    };
   }
   const publishedCount = allRes.data.filter((b) => b.status === 'published').length;
   const totalCount = allRes.data.length;
@@ -79,7 +104,13 @@ async function loadOnboardingFlags(customer: CustomerMe | null): Promise<{
     clearAllOnboardingLocalStorage();
   }
   const setupFinished = readSetupFinishedLegacy();
-  return { needsOnboarding: !setupFinished && publishedCount === 0, bootstrapWarn: false };
+  return {
+    needsOnboarding: computeNeedsOnboardingForCustomer(customer, {
+      setupFinished,
+      publishedCount,
+    }),
+    bootstrapWarn: false,
+  };
 }
 
 function readSetupFinishedLegacy(): boolean {
@@ -159,14 +190,33 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
   const patchPrimaryWorkspaceOnboardingStatus = useCallback((nextStatus: WorkspaceOnboardingStatus) => {
     setCustomer((prev) => {
       if (!prev?.workspaces?.length) return prev;
-      const [primary, ...rest] = prev.workspaces;
-      if (primary.onboardingStatus === nextStatus) return prev;
-      return {
-        ...prev,
-        workspaces: [{ ...primary, onboardingStatus: nextStatus }, ...rest],
-      };
+      const activeId = resolveActiveCustomerWorkspace(prev).activeWorkspaceId;
+      if (!activeId) return prev;
+      const workspaces = prev.workspaces.map((workspace) =>
+        workspace.id === activeId ? { ...workspace, onboardingStatus: nextStatus } : workspace,
+      );
+      const unchanged = workspaces.every((workspace, index) => workspace === prev.workspaces?.[index]);
+      if (unchanged) return prev;
+      return { ...prev, workspaces };
     });
-    setNeedsOnboarding(nextStatus !== 'completed');
+    const activeRole = resolveActiveCustomerWorkspace(customer).role;
+    setNeedsOnboarding(activeRole !== 'member' && nextStatus !== 'completed');
+  }, [customer]);
+
+  const activateWorkspace = useCallback(async (workspaceId: string): Promise<CustomerMe | null> => {
+    const trimmed = workspaceId.trim();
+    if (!trimmed) return null;
+    const result = await postCustomerWorkspaceActivate(trimmed);
+    if (!result.ok) {
+      return null;
+    }
+    setCustomer(result.data);
+    const { needsOnboarding: need, bootstrapWarn } = await loadOnboardingFlags(result.data);
+    if (bootstrapWarn) {
+      setBootstrapError('Could not load assistants. You can retry from the Agents page.');
+    }
+    setNeedsOnboarding(need);
+    return result.data;
   }, []);
 
   useEffect(() => {
@@ -209,6 +259,7 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
       clearLogoutError,
       refreshOnboardingHeuristic,
       patchPrimaryWorkspaceOnboardingStatus,
+      activateWorkspace,
       clearSessionInvalidatedByApi,
     }),
     [
@@ -224,6 +275,7 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
       clearLogoutError,
       refreshOnboardingHeuristic,
       patchPrimaryWorkspaceOnboardingStatus,
+      activateWorkspace,
       clearSessionInvalidatedByApi,
     ],
   );

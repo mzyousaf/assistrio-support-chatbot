@@ -25,6 +25,7 @@ import {
 } from '@/lib/customerKnowledgeItemDelete';
 import { getDatasheetImportConfirmToast, isBenignDatasheetImportCancelResult } from '@/lib/datasheetImportSession';
 import { useBotWorkspace } from '../BotWorkspaceContext';
+import { ReadOnlyWorkspaceNotice } from '@/components/workspace/ReadOnlyWorkspaceNotice';
 import { Button, Checkbox, Modal } from '@/components/ui';
 import { KbTrainingStatusTagWithSchedule } from '@/components/knowledge/KbTrainingStatusTag';
 import { useKbKnowledgeStatusPollInterest, useKbWorkspacePolling } from '@/context/KbWorkspacePollingContext';
@@ -88,7 +89,7 @@ export function DatasheetsListPage() {
   const pageSelectId = useId();
   const perPageSelectId = useId();
   const fileRef = useRef<HTMLInputElement | null>(null);
-  const { bot, softReload } = useBotWorkspace();
+  const { bot, softReload, canManageBot } = useBotWorkspace();
   const { knowledgeStatusItems, refreshKnowledgeStatus, refreshTrainingStatus } = useKbWorkspacePolling();
   const { interceptKnowledgeStorageIncrease, notifyPlanLimitFromApi } = useKnowledgeStorageUx();
   const base = botId ? `/bots/${botId}/playground/knowledgebase` : '';
@@ -559,6 +560,8 @@ export function DatasheetsListPage() {
   return (
     <div className={styles.knowledgeSourcesPageRoot} data-knowledge-datasheets-list>
       <div className="flex w-full min-w-0 flex-1 flex-col gap-4 px-0 pb-10">
+      {!canManageBot ? <ReadOnlyWorkspaceNotice variant="knowledge" className="shrink-0" /> : null}
+      {canManageBot ? (
       <input
         ref={fileRef}
         type="file"
@@ -571,29 +574,32 @@ export function DatasheetsListPage() {
           requestImportFile(f);
         }}
       />
+      ) : null}
       <header className="mb-6 w-full min-w-0 shrink-0">
         <div className="flex w-full min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <h1 className={styles.workspaceEditorH1}>Datasheets</h1>
-          <div className="flex min-w-0 flex-col gap-2 sm:items-end">
-            {!atDatasheetLimit ? (
-              <Button
-                type="button"
-                variant="primary"
-                size="sm"
-                className={cn(styles.knowledgeFormActionPrimary, 'w-full shrink-0 sm:w-auto')}
-                disabled={importSheetBusy}
-                onClick={() => fileRef.current?.click()}
-                aria-busy={importSheetBusy || undefined}
-              >
-                <Upload size={15} strokeWidth={2} aria-hidden />
-                {rows.length > 0 ? 'Import another (CSV / Excel)' : 'Import CSV / Excel'}
-              </Button>
-            ) : (
-              <p className="m-0 max-w-md text-right text-xs leading-snug text-slate-500 sm:max-w-sm">
-                This agent reached the maximum of {KNOWLEDGE_TABLES_MAX} datasheets. Remove one before importing another.
-              </p>
-            )}
-          </div>
+          {canManageBot ? (
+            <div className="flex min-w-0 flex-col gap-2 sm:items-end">
+              {!atDatasheetLimit ? (
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="sm"
+                  className={cn(styles.knowledgeFormActionPrimary, 'w-full shrink-0 sm:w-auto')}
+                  disabled={importSheetBusy}
+                  onClick={() => fileRef.current?.click()}
+                  aria-busy={importSheetBusy || undefined}
+                >
+                  <Upload size={15} strokeWidth={2} aria-hidden />
+                  {rows.length > 0 ? 'Import another (CSV / Excel)' : 'Import CSV / Excel'}
+                </Button>
+              ) : (
+                <p className="m-0 max-w-md text-right text-xs leading-snug text-slate-500 sm:max-w-sm">
+                  This agent reached the maximum of {KNOWLEDGE_TABLES_MAX} datasheets. Remove one before importing another.
+                </p>
+              )}
+            </div>
+          ) : null}
         </div>
         <p className={cn(styles.workspaceEditorLead, 'mt-2')}>
           Tabular data from CSV or Excel—catalogs, pricing, inventory, and more. Import a file below, or open a datasheet
@@ -614,9 +620,16 @@ export function DatasheetsListPage() {
             </div>
             <p className="mt-3 text-sm font-semibold text-slate-900">No datasheets yet</p>
             <p className="mx-auto mt-1.5 max-w-md text-sm text-slate-500">
-              Import a <span className="font-medium">CSV or Excel</span> file—e.g. product sheets, PIM or ERP exports, a database
-              table, or any grid you use.
+              {canManageBot ? (
+                <>
+                  Import a <span className="font-medium">CSV or Excel</span> file—e.g. product sheets, PIM or ERP exports, a database
+                  table, or any grid you use.
+                </>
+              ) : (
+                'No datasheets have been imported yet.'
+              )}
             </p>
+            {canManageBot ? (
             <Button
               type="button"
               variant="primary"
@@ -629,6 +642,7 @@ export function DatasheetsListPage() {
               <Upload size={15} strokeWidth={2} aria-hidden />
               Import CSV / Excel
             </Button>
+            ) : null}
           </div>
         ) : (
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -639,7 +653,7 @@ export function DatasheetsListPage() {
               inputId={sourcesSearchId}
             />
             <div className={styles.knowledgeSourcesListControlsStack}>
-              {sortedFilteredIndices.length > 0 ? (
+              {canManageBot && sortedFilteredIndices.length > 0 ? (
                 <KnowledgeSourcesPageSelectAll
                   id={pageSelectId}
                   pageIndices={pagedIndices}
@@ -648,14 +662,20 @@ export function DatasheetsListPage() {
                   selectionBlocked={isIndexSelectionBlockedForBulk}
                   endSlot={<KnowledgeSortFilterCapsule value={listSort} onChange={setListSort} />}
                 />
+              ) : sortedFilteredIndices.length > 0 ? (
+                <div className="flex justify-end">
+                  <KnowledgeSortFilterCapsule value={listSort} onChange={setListSort} />
+                </div>
               ) : null}
-              <KnowledgeSourcesBulkBar
-                count={selected.size}
-                noun="datasheet"
-                busy={bulkDeleting}
-                onRequestDelete={openBulkDeleteModal}
-                onClear={clearSelection}
-              />
+              {canManageBot ? (
+                <KnowledgeSourcesBulkBar
+                  count={selected.size}
+                  noun="datasheet"
+                  busy={bulkDeleting}
+                  onRequestDelete={openBulkDeleteModal}
+                  onClear={clearSelection}
+                />
+              ) : null}
             </div>
             {sortedFilteredIndices.length === 0 ? (
               <div className="flex min-h-0 min-w-0 flex-1 flex-col items-center justify-center py-10 text-center">
@@ -687,7 +707,8 @@ export function DatasheetsListPage() {
                           onClick={(e) => e.stopPropagation()}
                           onKeyDown={(e) => e.stopPropagation()}
                         >
-                          {!importSheetBusy &&
+                          {canManageBot &&
+                          !importSheetBusy &&
                           !deleting &&
                           !bulkDeleting &&
                           (!isKnowledgeRowDeleteBlocked(tableStatusSlice, t.knowledgeItemId, t) ||
@@ -731,6 +752,7 @@ export function DatasheetsListPage() {
                             </div>
                           </Link>
                         </div>
+                        {canManageBot ? (
                         <div
                           id={`datasheet-row-menu-${i}`}
                           className="absolute right-1 top-1 z-10 sm:right-2 sm:top-2"
@@ -799,6 +821,7 @@ export function DatasheetsListPage() {
                             </div>
                           ) : null}
                         </div>
+                        ) : null}
                       </div>
                     </li>
                   );

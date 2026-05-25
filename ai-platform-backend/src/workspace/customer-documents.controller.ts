@@ -19,6 +19,10 @@ type RequestWithUser = FastifyRequest & { user?: RequestUser };
 @Controller('api/customer/bots/:botId/documents')
 @UseGuards(CustomerSessionAuthGuard)
 export class CustomerDocumentsController extends WorkspaceBotDocumentsControllerBase {
+  protected requiresWorkspaceAdminForMutations(): boolean {
+    return true;
+  }
+
   constructor(
     documentsService: DocumentsService,
     botsService: BotsService,
@@ -31,7 +35,7 @@ export class CustomerDocumentsController extends WorkspaceBotDocumentsController
 
   @Post()
   async uploadDocument(@Param('botId') botId: string, @Req() req: RequestWithUser) {
-    await this.assertBotAccess(botId, req);
+    await this.assertBotManageAccess(botId, req);
     try {
       return await handleWorkspaceBotDocumentUpload({
         botId,

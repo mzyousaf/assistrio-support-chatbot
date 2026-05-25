@@ -70,6 +70,17 @@ export class CustomerWorkspaceOnboardingController {
     return user;
   }
 
+  /** Mutating onboarding endpoints require workspace manager (owner or admin). */
+  private async assertWorkspaceManager(req: RequestWithUser, workspaceId: string): Promise<RequestUser> {
+    const user = req.user;
+    if (!user) {
+      throw new ForbiddenException({ error: 'Customer session required.' });
+    }
+
+    await this.workspacesService.assertWorkspaceManager(String(user._id), workspaceId);
+    return user;
+  }
+
   @Get(':workspaceId/onboarding')
   async getOnboarding(@Req() req: RequestWithUser, @Param('workspaceId') workspaceId: string) {
     await this.assertWorkspaceMember(req, workspaceId);
@@ -83,7 +94,7 @@ export class CustomerWorkspaceOnboardingController {
     @Param('workspaceId') workspaceId: string,
     @Body() body: unknown,
   ) {
-    await this.assertWorkspaceMember(req, workspaceId);
+    await this.assertWorkspaceManager(req, workspaceId);
     const payload = parseWorkspaceOnboardingProfilePatch(body);
     const response = await this.workspaceOnboardingService.patchProfile(workspaceId, payload);
     return this.withStagedKnowledge(response);
@@ -95,7 +106,7 @@ export class CustomerWorkspaceOnboardingController {
     @Param('workspaceId') workspaceId: string,
     @Body() body: unknown,
   ) {
-    await this.assertWorkspaceMember(req, workspaceId);
+    await this.assertWorkspaceManager(req, workspaceId);
     const payload = parseWorkspaceOnboardingInstructionsPatch(body);
     const response = await this.workspaceOnboardingService.patchInstructions(workspaceId, payload);
     return this.withStagedKnowledge(response);
@@ -107,7 +118,7 @@ export class CustomerWorkspaceOnboardingController {
     @Param('workspaceId') workspaceId: string,
     @Body() body: unknown,
   ) {
-    await this.assertWorkspaceMember(req, workspaceId);
+    await this.assertWorkspaceManager(req, workspaceId);
     const payload = parseWorkspaceOnboardingKnowledgePatch(body);
     const response = await this.workspaceOnboardingService.patchKnowledge(workspaceId, payload);
     return this.withStagedKnowledge(response);
@@ -119,7 +130,7 @@ export class CustomerWorkspaceOnboardingController {
     @Param('workspaceId') workspaceId: string,
     @Body() body: unknown,
   ) {
-    await this.assertWorkspaceMember(req, workspaceId);
+    await this.assertWorkspaceManager(req, workspaceId);
     const payload = parseWorkspaceOnboardingGoLivePatch(body);
     const response = await this.workspaceOnboardingService.patchGoLive(workspaceId, payload);
     return this.withStagedKnowledge(response);
@@ -131,7 +142,7 @@ export class CustomerWorkspaceOnboardingController {
     @Param('workspaceId') workspaceId: string,
     @Body() body: unknown,
   ) {
-    const user = await this.assertWorkspaceMember(req, workspaceId);
+    const user = await this.assertWorkspaceManager(req, workspaceId);
     const payload = parseWorkspaceOnboardingGoLivePostBody(body);
     return this.workspaceOnboardingGoLiveService.goLive(workspaceId, String(user._id), payload);
   }
@@ -142,7 +153,7 @@ export class CustomerWorkspaceOnboardingController {
     @Param('workspaceId') workspaceId: string,
     @Body() body: unknown,
   ) {
-    await this.assertWorkspaceMember(req, workspaceId);
+    await this.assertWorkspaceManager(req, workspaceId);
     const payload = parseWorkspaceOnboardingProgressPatch(body);
     const response = await this.workspaceOnboardingService.patchProgress(workspaceId, payload);
     return this.withStagedKnowledge(response);
@@ -150,13 +161,13 @@ export class CustomerWorkspaceOnboardingController {
 
   @Post(':workspaceId/onboarding/complete')
   async postComplete(@Req() req: RequestWithUser, @Param('workspaceId') workspaceId: string) {
-    await this.assertWorkspaceMember(req, workspaceId);
+    await this.assertWorkspaceManager(req, workspaceId);
     return this.workspaceOnboardingService.completeOnboarding(workspaceId);
   }
 
   @Post(':workspaceId/onboarding/avatar')
   async postAvatar(@Req() req: RequestWithUser, @Param('workspaceId') workspaceId: string) {
-    await this.assertWorkspaceMember(req, workspaceId);
+    await this.assertWorkspaceManager(req, workspaceId);
     const file = await parseOnboardingAvatarMultipart(req);
     const response = await this.workspaceOnboardingService.uploadAvatar(workspaceId, file);
     return this.withStagedKnowledge(response);
@@ -164,7 +175,7 @@ export class CustomerWorkspaceOnboardingController {
 
   @Post(':workspaceId/onboarding/knowledge/documents')
   async postKnowledgeDocuments(@Req() req: RequestWithUser, @Param('workspaceId') workspaceId: string) {
-    await this.assertWorkspaceMember(req, workspaceId);
+    await this.assertWorkspaceManager(req, workspaceId);
     const files = await parseOnboardingDocumentMultipart(req);
     return this.workspaceOnboardingKnowledgeStagingService.uploadDocuments(workspaceId, files);
   }
@@ -186,7 +197,7 @@ export class CustomerWorkspaceOnboardingController {
     @Param('workspaceId') workspaceId: string,
     @Param('stagedItemId') stagedItemId: string,
   ) {
-    await this.assertWorkspaceMember(req, workspaceId);
+    await this.assertWorkspaceManager(req, workspaceId);
     return this.workspaceOnboardingKnowledgeStagingService.deleteStagedItem(
       workspaceId,
       stagedItemId,
@@ -200,7 +211,7 @@ export class CustomerWorkspaceOnboardingController {
     @Param('workspaceId') workspaceId: string,
     @Body() body: unknown,
   ) {
-    await this.assertWorkspaceMember(req, workspaceId);
+    await this.assertWorkspaceManager(req, workspaceId);
     const ids = parseOnboardingKnowledgeBulkDeleteBody(body);
     return this.workspaceOnboardingKnowledgeStagingService.bulkDeleteStagedItems(
       workspaceId,
@@ -211,7 +222,7 @@ export class CustomerWorkspaceOnboardingController {
 
   @Post(':workspaceId/onboarding/knowledge/datasheets')
   async postKnowledgeDatasheets(@Req() req: RequestWithUser, @Param('workspaceId') workspaceId: string) {
-    await this.assertWorkspaceMember(req, workspaceId);
+    await this.assertWorkspaceManager(req, workspaceId);
     const file = await readDatasheetFileFromMultipart(req as never, () => undefined);
     return this.workspaceOnboardingKnowledgeStagingService.uploadDatasheet(workspaceId, file);
   }
@@ -233,7 +244,7 @@ export class CustomerWorkspaceOnboardingController {
     @Param('workspaceId') workspaceId: string,
     @Param('stagedItemId') stagedItemId: string,
   ) {
-    await this.assertWorkspaceMember(req, workspaceId);
+    await this.assertWorkspaceManager(req, workspaceId);
     return this.workspaceOnboardingKnowledgeStagingService.deleteStagedItem(
       workspaceId,
       stagedItemId,
@@ -247,7 +258,7 @@ export class CustomerWorkspaceOnboardingController {
     @Param('workspaceId') workspaceId: string,
     @Body() body: unknown,
   ) {
-    await this.assertWorkspaceMember(req, workspaceId);
+    await this.assertWorkspaceManager(req, workspaceId);
     const ids = parseOnboardingKnowledgeBulkDeleteBody(body);
     return this.workspaceOnboardingKnowledgeStagingService.bulkDeleteStagedItems(
       workspaceId,
@@ -268,7 +279,7 @@ export class CustomerWorkspaceOnboardingController {
     @Param('workspaceId') workspaceId: string,
     @Body() body: unknown,
   ) {
-    await this.assertWorkspaceMember(req, workspaceId);
+    await this.assertWorkspaceManager(req, workspaceId);
     const payload = parseOnboardingSnippetBody(body);
     return this.workspaceOnboardingKnowledgeContentService.createSnippet(workspaceId, payload);
   }
@@ -280,7 +291,7 @@ export class CustomerWorkspaceOnboardingController {
     @Param('snippetId') snippetId: string,
     @Body() body: unknown,
   ) {
-    await this.assertWorkspaceMember(req, workspaceId);
+    await this.assertWorkspaceManager(req, workspaceId);
     const payload = parseOnboardingSnippetPatchBody(body);
     return this.workspaceOnboardingKnowledgeContentService.updateSnippet(workspaceId, snippetId, payload);
   }
@@ -291,7 +302,7 @@ export class CustomerWorkspaceOnboardingController {
     @Param('workspaceId') workspaceId: string,
     @Param('snippetId') snippetId: string,
   ) {
-    await this.assertWorkspaceMember(req, workspaceId);
+    await this.assertWorkspaceManager(req, workspaceId);
     return this.workspaceOnboardingKnowledgeContentService.deleteSnippet(workspaceId, snippetId);
   }
 
@@ -301,7 +312,7 @@ export class CustomerWorkspaceOnboardingController {
     @Param('workspaceId') workspaceId: string,
     @Body() body: unknown,
   ) {
-    await this.assertWorkspaceMember(req, workspaceId);
+    await this.assertWorkspaceManager(req, workspaceId);
     const ids = parseOnboardingKnowledgeBulkDeleteBody(body);
     return this.workspaceOnboardingKnowledgeContentService.bulkDeleteSnippets(workspaceId, ids);
   }
@@ -316,7 +327,7 @@ export class CustomerWorkspaceOnboardingController {
 
   @Post(':workspaceId/onboarding/knowledge/snippets/import')
   async importSnippets(@Req() req: RequestWithUser, @Param('workspaceId') workspaceId: string) {
-    await this.assertWorkspaceMember(req, workspaceId);
+    await this.assertWorkspaceManager(req, workspaceId);
     return this.workspaceOnboardingKnowledgeContentService.importSnippets(workspaceId, req);
   }
 
@@ -332,7 +343,7 @@ export class CustomerWorkspaceOnboardingController {
     @Param('workspaceId') workspaceId: string,
     @Body() body: unknown,
   ) {
-    await this.assertWorkspaceMember(req, workspaceId);
+    await this.assertWorkspaceManager(req, workspaceId);
     const payload = parseOnboardingQaBody(body);
     return this.workspaceOnboardingKnowledgeContentService.createQa(workspaceId, payload);
   }
@@ -344,7 +355,7 @@ export class CustomerWorkspaceOnboardingController {
     @Param('qaId') qaId: string,
     @Body() body: unknown,
   ) {
-    await this.assertWorkspaceMember(req, workspaceId);
+    await this.assertWorkspaceManager(req, workspaceId);
     const payload = parseOnboardingQaPatchBody(body);
     return this.workspaceOnboardingKnowledgeContentService.updateQa(workspaceId, qaId, payload);
   }
@@ -355,7 +366,7 @@ export class CustomerWorkspaceOnboardingController {
     @Param('workspaceId') workspaceId: string,
     @Param('qaId') qaId: string,
   ) {
-    await this.assertWorkspaceMember(req, workspaceId);
+    await this.assertWorkspaceManager(req, workspaceId);
     return this.workspaceOnboardingKnowledgeContentService.deleteQa(workspaceId, qaId);
   }
 
@@ -365,7 +376,7 @@ export class CustomerWorkspaceOnboardingController {
     @Param('workspaceId') workspaceId: string,
     @Body() body: unknown,
   ) {
-    await this.assertWorkspaceMember(req, workspaceId);
+    await this.assertWorkspaceManager(req, workspaceId);
     const ids = parseOnboardingKnowledgeBulkDeleteBody(body);
     return this.workspaceOnboardingKnowledgeContentService.bulkDeleteQas(workspaceId, ids);
   }
@@ -380,13 +391,13 @@ export class CustomerWorkspaceOnboardingController {
 
   @Post(':workspaceId/onboarding/knowledge/qas/import')
   async importQas(@Req() req: RequestWithUser, @Param('workspaceId') workspaceId: string) {
-    await this.assertWorkspaceMember(req, workspaceId);
+    await this.assertWorkspaceManager(req, workspaceId);
     return this.workspaceOnboardingKnowledgeContentService.importQas(workspaceId, req);
   }
 
   @Post(':workspaceId/onboarding/dictation/describe-agent')
   async transcribeDescribeAgent(@Req() req: RequestWithUser, @Param('workspaceId') workspaceId: string) {
-    await this.assertWorkspaceMember(req, workspaceId);
+    await this.assertWorkspaceManager(req, workspaceId);
     return this.workspaceOnboardingDictationService.transcribeDescribeAgent(req);
   }
 }

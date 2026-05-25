@@ -204,6 +204,8 @@ export type CustomerBotCreateOptions = {
   enforceWorkspaceBotLimit?: boolean;
   /** When true, set botConfig.knowledgeSize from workspace plan entitlements (customer API only). */
   applyWorkspaceEntitlements?: boolean;
+  /** Target workspace for the new draft (customer API). When omitted, falls back to personal workspace bootstrap. */
+  workspaceId?: string;
 };
 
 @Injectable()
@@ -402,6 +404,30 @@ export class BotsService {
       .findOne({ $and: [{ clientDraftId: trimmed }, botNotDeletedClause()] })
       .lean();
     return b ? (b as Record<string, unknown>) : null;
+  }
+
+  /**
+   * Customer workspace-scoped bot list.
+   * Returns only bots whose `workspaceId` matches the given workspace.
+   * Legacy bots with null/missing `workspaceId` are excluded (they are not mixed into workspace lists).
+   */
+  async findForCustomerWorkspaceList(
+    status: 'draft' | 'published' | 'all',
+    workspaceId: string,
+  ) {
+    if (!Types.ObjectId.isValid(workspaceId)) return [];
+    const base: Record<string, unknown> = {
+      workspaceId: new Types.ObjectId(workspaceId),
+    };
+    if (status && status !== 'all') base.status = status;
+
+    return this.botModel
+      .find({ $and: [base, botNotDeletedClause()] })
+      .sort({ createdAt: -1 })
+      .select(
+        'name agentsPackAgent category status isPublic createdAt _id slug visibility workspaceId workspaceMemberVisibility chatUI avatarEmoji imageUrl shortDescription allowedOrigins leadCapture isPlatformBot platformBotType',
+      )
+      .lean();
   }
 
   /**
@@ -936,7 +962,7 @@ export class BotsService {
     const bot = await this.botModel
       .findOne({ $and: [{ _id: new Types.ObjectId(id) }, botNotDeletedClause()] })
            .select(
-        '_id slug name shortDescription description category avatarEmoji imageUrl openaiApiKeyOverride welcomeMessage leadCapture personality config translationSettings chatUI status isPublic visibility accessKey secretKey ownerId createdByUserId includeNameInKnowledge includeTaglineInKnowledge exampleQuestions allowedOrigins visitorMultiChatEnabled visitorMultiChatMax agentsPackAgent',
+        '_id slug name shortDescription description category avatarEmoji imageUrl openaiApiKeyOverride welcomeMessage leadCapture personality config translationSettings chatUI status isPublic visibility accessKey secretKey ownerId createdByUserId workspaceId workspaceMemberVisibility includeNameInKnowledge includeTaglineInKnowledge exampleQuestions allowedOrigins visitorMultiChatEnabled visitorMultiChatMax agentsPackAgent',
       )
       .lean();
     if (!bot) return null;
@@ -1128,6 +1154,44 @@ export class BotsService {
     };
   }
 
+  async updateWorkspaceMemberVisibility(
+    id: string,
+    patch: { visibleToMembers?: boolean; allowMemberPreview?: boolean },
+  ): Promise<{ ok: true; botId: string; workspaceMemberVisibility: { visibleToMembers: boolean; allowMemberPreview: boolean } }> {
+    if (!Types.ObjectId.isValid(id)) throw new Error('Bot not found');
+    const existing = await this.botModel
+      .findOne({ $and: [{ _id: new Types.ObjectId(id) }, botNotDeletedClause()] })
+      .select('_id workspaceMemberVisibility')
+      .lean();
+    if (!existing) throw new Error('Bot not found');
+
+    const current =
+      (existing as { workspaceMemberVisibility?: { visibleToMembers?: boolean; allowMemberPreview?: boolean } })
+        .workspaceMemberVisibility ?? {};
+    const next = {
+      visibleToMembers:
+        patch.visibleToMembers !== undefined ? patch.visibleToMembers : current.visibleToMembers !== false,
+      allowMemberPreview:
+        patch.allowMemberPreview !== undefined ? patch.allowMemberPreview : current.allowMemberPreview !== false,
+    };
+
+    const updated = await this.botModel
+      .findOneAndUpdate(
+        { $and: [{ _id: new Types.ObjectId(id) }, botNotDeletedClause()] },
+        { workspaceMemberVisibility: next },
+        { new: true },
+      )
+      .select('_id workspaceMemberVisibility')
+      .lean();
+    if (!updated) throw new Error('Bot not found');
+
+    return {
+      ok: true,
+      botId: String((updated as { _id: Types.ObjectId })._id),
+      workspaceMemberVisibility: next,
+    };
+  }
+
   async rotateWorkspaceAccessKey(id: string): Promise<{ ok: true; botId: string; accessKey: string }> {
     const updated = await this.botModel
       .findOneAndUpdate(
@@ -1172,7 +1236,12 @@ export class BotsService {
         : undefined;
     let workspaceOid: Types.ObjectId | undefined;
     if (creatorOid) {
-      workspaceOid = await this.workspacesService.ensurePersonalWorkspaceForUser(String(creatorOid));
+      const explicitWorkspaceId = options?.workspaceId?.trim();
+      if (explicitWorkspaceId && Types.ObjectId.isValid(explicitWorkspaceId)) {
+        workspaceOid = new Types.ObjectId(explicitWorkspaceId);
+      } else {
+        workspaceOid = await this.workspacesService.ensurePersonalWorkspaceForUser(String(creatorOid));
+      }
     }
     if (options?.enforceWorkspaceBotLimit && workspaceOid) {
       await this.workspaceBotLimitService.assertCanAddBotToWorkspace(String(workspaceOid));
@@ -1192,7 +1261,15 @@ export class BotsService {
           ...(workspaceOid ? { workspaceId: workspaceOid } : {}),
           ...(botConfigForCreate ? { botConfig: botConfigForCreate } : {}),
         });
-        return { botId: String((created as { _id: unknown })._id), slug: (created as { slug: string }).slug };
+        const botId = String((created as { _id: unknown })._id);
+        if (workspaceOid && creatorOid) {
+          await this.workspacesService.applyDefaultBotAccessGrantsOnBotCreate({
+            workspaceId: String(workspaceOid),
+            botId,
+            createdByUserId: String(creatorOid),
+          });
+        }
+        return { botId, slug: (created as { slug: string }).slug };
       } catch (err: unknown) {
         const e = err as { code?: number; keyPattern?: Record<string, number> };
         if (e.code === 11000 && e.keyPattern?.clientDraftId) {
@@ -2357,8 +2434,14 @@ export class BotsService {
           createdAt: new Date(),
         });
         const bot = created as unknown as Record<string, unknown>;
+        const botId = String(bot._id);
+        await this.workspacesService.applyDefaultBotAccessGrantsOnBotCreate({
+          workspaceId: input.workspaceId,
+          botId,
+          createdByUserId: input.createdByUserId,
+        });
         return {
-          botId: String(bot._id),
+          botId,
           slug: String(bot.slug ?? slug),
           name: String(bot.name ?? input.profile.name),
           status: 'published',

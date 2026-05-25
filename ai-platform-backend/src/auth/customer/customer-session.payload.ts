@@ -4,6 +4,7 @@ import type {
   WorkspaceOnboardingStatus,
   WorkspaceOnboardingStep,
 } from '../../models/workspace-onboarding.constants';
+import type { WorkspaceMemberRole } from '../../models/workspace-membership.schema';
 import type { WorkspaceEntitlementsService } from '../../entitlements/workspace-entitlements.service';
 import type { WorkspacesService } from '../../workspaces/workspaces.service';
 import type { RequestUser } from '../shared/request-user.types';
@@ -12,6 +13,7 @@ import type { RequestUser } from '../shared/request-user.types';
 export type CustomerSessionWorkspaceSummary = {
   id: string;
   name: string;
+  role: WorkspaceMemberRole;
   planKey: PlanKey;
   planName: string;
   subscriptionStatus: WorkspaceSubscriptionStatus;
@@ -32,6 +34,7 @@ export type CustomerSessionPayload = {
   id: string;
   email: string;
   role: string;
+  activeWorkspaceId: string | null;
   workspaceIds: string[];
   workspaces: CustomerSessionWorkspaceSummary[];
   firstName?: string;
@@ -43,6 +46,7 @@ async function buildWorkspaceSummaries(
   workspaces: Array<{
     id: string;
     name: string;
+    role: WorkspaceMemberRole;
     onboardingStatus: CustomerSessionWorkspaceSummary['onboardingStatus'];
     onboardingCurrentStep: CustomerSessionWorkspaceSummary['onboardingCurrentStep'];
     onboardingCreatedBotId: string | null;
@@ -57,6 +61,7 @@ async function buildWorkspaceSummaries(
       return {
         id: workspace.id,
         name: workspace.name,
+        role: workspace.role,
         planKey: entitlements.planKey,
         planName: entitlements.planName,
         subscriptionStatus: entitlements.subscriptionStatus,
@@ -77,8 +82,8 @@ async function buildWorkspaceSummaries(
 
 /**
  * Replace client-side onboarding heuristic with workspace onboarding state in onboarding epic.
- * `needsOnboarding` is intentionally omitted until workspace onboarding fields exist.
- * `activeWorkspaceId` is deferred to workspace switcher / invite epic.
+ * `needsOnboarding` is intentionally omitted; the customer app derives it from
+ * `activeWorkspaceId`, `workspaces[].role`, and `workspaces[].onboardingStatus`.
  */
 export async function buildCustomerSessionPayload(
   user: RequestUser,
@@ -87,15 +92,16 @@ export async function buildCustomerSessionPayload(
 ): Promise<CustomerSessionPayload> {
   const userId = String(user._id);
   await workspacesService.ensurePersonalWorkspaceForUser(userId);
-  const workspaceIds = await workspacesService.getWorkspaceIdsForUser(userId);
-  const workspaceNames = await workspacesService.getWorkspacesSummaryForUser(userId);
-  const workspaces = await buildWorkspaceSummaries(workspaceNames, entitlementsService);
+  const activeWorkspaceId = await workspacesService.resolveActiveWorkspaceForUser(userId);
+  const workspaceSummaries = await workspacesService.getWorkspacesSummaryForUser(userId, activeWorkspaceId);
+  const workspaces = await buildWorkspaceSummaries(workspaceSummaries, entitlementsService);
 
   return {
     id: userId,
     email: user.email,
     role: user.role,
-    workspaceIds: workspaceIds.map((id) => String(id)),
+    activeWorkspaceId,
+    workspaceIds: workspaceSummaries.map((workspace) => workspace.id),
     workspaces,
     firstName: user.firstName ?? undefined,
     lastName: user.lastName ?? undefined,

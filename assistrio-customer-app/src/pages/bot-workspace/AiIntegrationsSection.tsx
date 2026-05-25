@@ -2,6 +2,7 @@ import { useCallback, useEffect, useId, useState, type FormEvent } from 'react';
 import { Info, Loader2, Save } from 'lucide-react';
 import { patchCustomerBot, type RefineResponseStyleResult } from '../../api/customerApi';
 import { Button, Card, CardBody, Range, RangeMarkerRow, Switch, Tooltip } from '@/components/ui';
+import { BotSettingsFieldset } from '@/components/bot-workspace/BotSettingsFieldset';
 import { BOT_FIELD_MAX } from '@/lib/botFieldLimits';
 import { buildAiAdvancedChatUiSavePayload, mergeChatUiFromBot } from './chatUiPayload';
 import { cn } from '@/lib/utils';
@@ -62,7 +63,7 @@ const cardClass =
 export function AiIntegrationsSection() {
   const creativityId = useId();
   const lengthId = useId();
-  const { bot, botId, softReload } = useBotWorkspace();
+  const { bot, botId, softReload, canManageBot } = useBotWorkspace();
   const { setAiIntegrationsDraftSlice, reloadPreviewWidget } = useCustomerWidgetPreview();
 
   const [creativity, setCreativity] = useState(0.5);
@@ -258,6 +259,7 @@ export function AiIntegrationsSection() {
               </div>
             </div>
             <div className="flex shrink-0 flex-col sm:pt-0">
+              {canManageBot ? (
               <Button
                 type="submit"
                 variant="primary"
@@ -282,6 +284,7 @@ export function AiIntegrationsSection() {
                   </>
                 )}
               </Button>
+              ) : null}
             </div>
           </header>
 
@@ -296,6 +299,7 @@ export function AiIntegrationsSection() {
             </div>
           ) : null}
 
+          <BotSettingsFieldset canManage={canManageBot}>
           <div className={ws.workspaceEditorCardGap}>
             <Card className={cardClass}>
               <CardBody className="w-full min-w-0 px-5 py-5 sm:px-6 sm:py-6">
@@ -553,6 +557,7 @@ export function AiIntegrationsSection() {
             </Card>
 
           </div>
+          </BotSettingsFieldset>
         </div>
       </form>
     </div>

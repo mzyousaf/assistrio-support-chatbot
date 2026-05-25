@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { postCustomerBotChat } from '../../api/customerApi';
+import { resolveChatRuntimeErrorMessage } from '../../lib/resolveChatRuntimeErrorMessage';
 import { useBotWorkspace } from './BotWorkspaceContext';
 import { ws } from './workspace';
 import { PageIntroStrip, SplitPanelLayout, SupportPanel, WorkspaceContentContainer } from '@/layout/workspace-layout';
@@ -51,7 +52,10 @@ export function PlaygroundSection() {
     setSending(true);
     const res = await postCustomerBotChat(id, { message: text });
     setSending(false);
-    if (!res.ok) { setErr(res.error); return; }
+    if (!res.ok) {
+      setErr(resolveChatRuntimeErrorMessage(res));
+      return;
+    }
     const asst: Turn = { id: crypto.randomUUID(), role: 'assistant', text: res.data.assistantMessage ?? '' };
     const withAsst = [...next, asst];
     setMessages(withAsst);

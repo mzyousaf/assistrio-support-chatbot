@@ -17,6 +17,7 @@ describe('CustomerGoogleOAuthService', () => {
       {} as JwtService,
       {} as AuthService,
       {} as WorkspacesService,
+      {} as import('../../workspaces/workspace-invite.service').WorkspaceInviteService,
       {} as Model<Bot>,
     );
   }

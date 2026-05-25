@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Check, Code2, ExternalLink, FileText, Globe, GraduationCap, HelpCircle, Link2,
-  Lock, MessagesSquare, MessageSquare, MoreHorizontal,
+  Lock, MessagesSquare, MessageSquare, MoreHorizontal, Share2,
   StickyNote, Table2, Trash2, UserCheck,
 } from 'lucide-react';
 import { getCustomerApiOrigin } from '../api/client';
@@ -125,7 +125,7 @@ function CopyEmbed({ bot }: { bot: CustomerBotListItem }) {
 
 /* ── dropdown menu ───────────────────────────────────────────────── */
 
-function CardMenu({ href, onDelete }: { href: string; onDelete: () => void }) {
+function CardMenu({ href, onDelete, canDelete = true }: { href: string; onDelete: () => void; canDelete?: boolean }) {
   const [open, setOpen] = useState(false);
   const close = () => setOpen(false);
 
@@ -151,6 +151,7 @@ function CardMenu({ href, onDelete }: { href: string; onDelete: () => void }) {
             >
               <ExternalLink size={13} strokeWidth={2} /> Open in new tab
             </a>
+            {canDelete ? (
             <button
               type="button"
               onClick={(e) => { e.preventDefault(); e.stopPropagation(); close(); onDelete(); }}
@@ -158,6 +159,7 @@ function CardMenu({ href, onDelete }: { href: string; onDelete: () => void }) {
             >
               <Trash2 size={13} strokeWidth={2} /> Delete
             </button>
+            ) : null}
           </div>
         </>
       )}
@@ -187,9 +189,15 @@ export function DeleteAgentDialog({ name, onConfirm, onCancel }: { name: string;
 
 /* ── agent card ──────────────────────────────────────────────────── */
 
-export type AgentCardProps = { bot: CustomerBotListItem; deleting?: boolean; onDelete: (b: CustomerBotListItem) => void };
+export type AgentCardProps = {
+  bot: CustomerBotListItem;
+  deleting?: boolean;
+  onDelete: (b: CustomerBotListItem) => void;
+  canDelete?: boolean;
+  onShare?: (b: CustomerBotListItem) => void;
+};
 
-export function AgentCard({ bot, deleting, onDelete }: AgentCardProps) {
+export function AgentCard({ bot, deleting, onDelete, canDelete = true, onShare }: AgentCardProps) {
   const st = stInfo(bot.status);
   const p = isPriv(bot);
   const tags = catTags(bot.category);
@@ -243,7 +251,23 @@ export function AgentCard({ bot, deleting, onDelete }: AgentCardProps) {
           {st.label}
         </span>
 
-        <CardMenu href={href} onDelete={() => onDelete(bot)} />
+        {onShare ? (
+          <button
+            type="button"
+            title="Share agent access"
+            aria-label="Share agent access"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onShare(bot);
+            }}
+            className="flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md border-none bg-transparent text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+          >
+            <Share2 size={15} strokeWidth={2} />
+          </button>
+        ) : null}
+
+        <CardMenu href={href} onDelete={() => onDelete(bot)} canDelete={canDelete} />
       </div>
 
       {/* ─── Category tags ─── */}

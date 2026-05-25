@@ -207,9 +207,26 @@ export class CustomerKnowledgeController {
     }
   }
 
+  private async assertCanManage(req: RequestWithUser, botId: string): Promise<void> {
+    if (!Types.ObjectId.isValid(botId)) {
+      throw new HttpException({ error: 'Invalid id' }, HttpStatus.BAD_REQUEST);
+    }
+    const bot = await this.botsService.findOne(botId);
+    if (!bot) {
+      throw new HttpException({ error: 'Bot not found' }, HttpStatus.NOT_FOUND);
+    }
+    const uid = req.user?._id != null ? String(req.user._id) : '';
+    const role = req.user?.role ?? '';
+    const ok = await this.workspacesService.canUserAccessWorkspaceBot(uid, role, bot as Record<string, unknown>);
+    if (!ok) {
+      throw new HttpException({ error: 'Forbidden' }, HttpStatus.FORBIDDEN);
+    }
+    await this.workspacesService.assertCanManageWorkspaceBot(uid, role, bot as Record<string, unknown>);
+  }
+
   @Post('items/bulk-delete')
   async bulkDeleteKnowledgeItems(@Param('id') id: string, @Body() body: unknown, @Req() req: RequestWithUser) {
-    await this.assertCanAccess(req, id);
+    await this.assertCanManage(req, id);
     try {
       const itemIds = parseKnowledgeBulkDeleteItemIdsBody(body);
       return await this.knowledgeBaseItemService.workspaceBulkDeleteKnowledgeItemsByRouteIds(id, itemIds);
@@ -226,7 +243,7 @@ export class CustomerKnowledgeController {
     @Param('itemId') itemId: string,
     @Req() req: RequestWithUser,
   ) {
-    await this.assertCanAccess(req, id);
+    await this.assertCanManage(req, id);
     try {
       return await this.knowledgeItemManualRetry.manualRetry(id, itemId);
     } catch (e) {
@@ -242,7 +259,7 @@ export class CustomerKnowledgeController {
     @Param('itemId') itemId: string,
     @Req() req: RequestWithUser,
   ) {
-    await this.assertCanAccess(req, id);
+    await this.assertCanManage(req, id);
     try {
       return await this.knowledgeBaseItemService.workspaceDeleteKnowledgeItemByRouteId(id, itemId);
     } catch (e) {
@@ -259,7 +276,7 @@ export class CustomerKnowledgeController {
     @Body() body: unknown,
     @Req() req: RequestWithUser,
   ) {
-    await this.assertCanAccess(req, id);
+    await this.assertCanManage(req, id);
     try {
       const o = parseJsonObjectBody(body);
       const useInReplies = o.useInReplies;
@@ -340,7 +357,7 @@ export class CustomerKnowledgeController {
 
   @Post('training/retrain-agent')
   async retrainAgent(@Param('id') id: string, @Body() body: unknown, @Req() req: RequestWithUser) {
-    await this.assertCanAccess(req, id);
+    await this.assertCanManage(req, id);
     await assertKnowledgeTrainQueueRateLimit(
       this.rateLimitService,
       id,
@@ -386,7 +403,7 @@ export class CustomerKnowledgeController {
 
   @Post('faqs')
   async postFaqAppend(@Param('id') id: string, @Body() body: unknown, @Req() req: RequestWithUser) {
-    await this.assertCanAccess(req, id);
+    await this.assertCanManage(req, id);
     try {
       const payload = parseJsonObjectBody(body);
       return await this.botsService.postWorkspaceBotKnowledgeFaqAppend(id, payload);
@@ -404,7 +421,7 @@ export class CustomerKnowledgeController {
     @Body() body: unknown,
     @Req() req: RequestWithUser,
   ) {
-    await this.assertCanAccess(req, id);
+    await this.assertCanManage(req, id);
     try {
       const idx = parseKbRowIndexParam(faqIndex, 'FAQ index');
       const payload = parseJsonObjectBody(body);
@@ -428,7 +445,7 @@ export class CustomerKnowledgeController {
 
   @Post('faqs/import-csv')
   async importFaqsCsv(@Param('id') id: string, @Req() req: RequestWithUser) {
-    await this.assertCanAccess(req, id);
+    await this.assertCanManage(req, id);
     const { buffer, fileName } = await readSingleCsvFileFromMultipart(req);
     const csvRows = parseCsvBufferToRows(buffer);
     if (csvRows.length < 2) {
@@ -511,7 +528,7 @@ export class CustomerKnowledgeController {
 
   @Post('snippets')
   async postSnippetAppend(@Param('id') id: string, @Body() body: unknown, @Req() req: RequestWithUser) {
-    await this.assertCanAccess(req, id);
+    await this.assertCanManage(req, id);
     try {
       const payload = parseJsonObjectBody(body);
       return await this.botsService.postWorkspaceBotKnowledgeSnippetAppend(id, payload);
@@ -529,7 +546,7 @@ export class CustomerKnowledgeController {
     @Body() body: unknown,
     @Req() req: RequestWithUser,
   ) {
-    await this.assertCanAccess(req, id);
+    await this.assertCanManage(req, id);
     try {
       const idx = parseKbRowIndexParam(snippetIndex, 'snippet index');
       const payload = parseJsonObjectBody(body);
@@ -553,7 +570,7 @@ export class CustomerKnowledgeController {
 
   @Post('snippets/import-csv')
   async importSnippetsCsv(@Param('id') id: string, @Req() req: RequestWithUser) {
-    await this.assertCanAccess(req, id);
+    await this.assertCanManage(req, id);
     const { buffer, fileName } = await readSingleCsvFileFromMultipart(req);
     const csvRows = parseCsvBufferToRows(buffer);
     if (csvRows.length < 2) {
@@ -621,7 +638,7 @@ export class CustomerKnowledgeController {
 
   @Post('datasheets')
   async postDatasheetAppend(@Param('id') id: string, @Body() body: unknown, @Req() req: RequestWithUser) {
-    await this.assertCanAccess(req, id);
+    await this.assertCanManage(req, id);
     try {
       const payload = parseJsonObjectBody(body);
       return await this.botsService.postWorkspaceBotKnowledgeDatasheetAppend(id, payload);
@@ -639,7 +656,7 @@ export class CustomerKnowledgeController {
     @Body() body: unknown,
     @Req() req: RequestWithUser,
   ) {
-    await this.assertCanAccess(req, id);
+    await this.assertCanManage(req, id);
     try {
       const idx = parseKbRowIndexParam(tableIndex, 'datasheet index');
       const payload = parseJsonObjectBody(body);
@@ -654,7 +671,7 @@ export class CustomerKnowledgeController {
 
   @Post('suggestions/sync')
   async postSuggestionsSync(@Param('id') id: string, @Body() body: unknown, @Req() req: RequestWithUser) {
-    await this.assertCanAccess(req, id);
+    await this.assertCanManage(req, id);
     try {
       const list = parseJsonArrayBody(body);
       await this.botsService.syncWorkspaceBotKnowledgeSuggestionsFromPayload(id, list);
@@ -668,7 +685,7 @@ export class CustomerKnowledgeController {
 
   @Post('suggestions')
   async postSuggestionAppend(@Param('id') id: string, @Body() body: unknown, @Req() req: RequestWithUser) {
-    await this.assertCanAccess(req, id);
+    await this.assertCanManage(req, id);
     try {
       const payload = parseJsonObjectBody(body);
       return await this.botsService.postWorkspaceBotKnowledgeSuggestionAppend(id, payload);
@@ -681,7 +698,7 @@ export class CustomerKnowledgeController {
 
   @Patch('description')
   async patchKnowledgeDescription(@Param('id') id: string, @Body() body: unknown, @Req() req: RequestWithUser) {
-    await this.assertCanAccess(req, id);
+    await this.assertCanManage(req, id);
     try {
       await this.botsService.patchWorkspaceBotKnowledgeDescription(id, body);
       return { ok: true as const };
@@ -699,7 +716,7 @@ export class CustomerKnowledgeController {
     @Body() body: unknown,
     @Req() req: RequestWithUser,
   ) {
-    await this.assertCanAccess(req, id);
+    await this.assertCanManage(req, id);
     try {
       const idx = parseSuggestionIndexParam(suggestionIndex);
       const label = parseSuggestionLabelBody(body);
@@ -719,7 +736,7 @@ export class CustomerKnowledgeController {
     @Body() body: unknown,
     @Req() req: RequestWithUser,
   ) {
-    await this.assertCanAccess(req, id);
+    await this.assertCanManage(req, id);
     try {
       const idx = parseSuggestionIndexParam(suggestionIndex);
       const context = parseSuggestionScopeBody(body);
@@ -739,7 +756,7 @@ export class CustomerKnowledgeController {
     @Body() body: unknown,
     @Req() req: RequestWithUser,
   ) {
-    await this.assertCanAccess(req, id);
+    await this.assertCanManage(req, id);
     try {
       const idx = parseSuggestionIndexParam(suggestionIndex);
       const hideChipTextInChat = parseSuggestionHideChipTextBody(body);
@@ -754,7 +771,7 @@ export class CustomerKnowledgeController {
 
   @Patch('training-settings')
   async patchTrainingSettings(@Param('id') id: string, @Body() body: unknown, @Req() req: RequestWithUser) {
-    await this.assertCanAccess(req, id);
+    await this.assertCanManage(req, id);
     try {
       return await this.knowledgeOverview.patchTrainingSettings(id, body);
     } catch (e) {

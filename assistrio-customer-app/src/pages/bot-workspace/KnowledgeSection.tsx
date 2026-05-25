@@ -74,6 +74,7 @@ import {
 } from './knowledge/knowledgeViewTypes';
 import { useKbTrainingStartedStatusRefetch } from './knowledge/useKbTrainingStartedStatusRefetch';
 import { useBotWorkspace } from './BotWorkspaceContext';
+import { ReadOnlyWorkspaceNotice } from '@/components/workspace/ReadOnlyWorkspaceNotice';
 import { cn } from '@/lib/utils';
 import { ws as styles } from './workspace';
 import {
@@ -364,7 +365,7 @@ function fileDocumentFileIconProps(
 }
 
 export function KnowledgeBaseSection() {
-  const { bot, botId } = useBotWorkspace();
+  const { bot, botId, canManageBot } = useBotWorkspace();
   const { knowledgeStatusItems, refreshKnowledgeStatus, refreshTrainingStatus } = useKbWorkspacePolling();
   const {
     notifyPlanLimitFromApi,
@@ -1153,6 +1154,7 @@ export function KnowledgeBaseSection() {
 
   return (
     <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col" data-knowledge-base-editor>
+      {canManageBot ? (
       <input
         ref={fileInputRef}
         type="file"
@@ -1162,8 +1164,10 @@ export function KnowledgeBaseSection() {
         tabIndex={-1}
         onChange={(ev) => void onUploadFileChange(ev)}
       />
+      ) : null}
       <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col">
         <div className="w-full min-w-0 flex-1 pb-10">
+          {!canManageBot ? <ReadOnlyWorkspaceNotice variant="knowledge" className="mb-4 shrink-0" /> : null}
           <header className={styles.workspaceEditorPageHeader}>
             <div className={styles.workspaceEditorTitleBlock}>
               <div className={styles.workspaceEditorHeadingStack}>
@@ -1171,6 +1175,7 @@ export function KnowledgeBaseSection() {
                 <p className={styles.workspaceEditorLead}>{knowledgePageMeta.pageLead}</p>
               </div>
             </div>
+            {canManageBot ? (
             <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-end sm:pt-0">
               <Button
                 type="button"
@@ -1188,6 +1193,7 @@ export function KnowledgeBaseSection() {
                 {uploading ? 'Uploading' : atDocumentCapacity ? 'Document limit reached' : 'Add files'}
               </Button>
             </div>
+            ) : null}
           </header>
 
           {docErr ? (
@@ -1207,6 +1213,7 @@ export function KnowledgeBaseSection() {
             aria-label={knowledgePageMeta.pageTitle}
           >
             <div className="flex flex-col gap-5">
+                {canManageBot ? (
                 <Card className={uploadDocumentsCardClass}>
                   <CardBody className="w-full min-w-0 px-0 py-0 sm:px-0 sm:py-0">
                     <div
@@ -1301,6 +1308,7 @@ export function KnowledgeBaseSection() {
                     </div>
                   </CardBody>
                 </Card>
+                ) : null}
 
                 <Card className={cardClass}>
                   <CardBody className="w-full min-w-0 px-0 py-0 sm:px-0 sm:py-0">
@@ -1511,7 +1519,7 @@ export function KnowledgeBaseSection() {
                       </div>
                     </div>
 
-                    {!docLoading && rows.length > 0 && selectedDocIds.length > 0 ? (
+                    {!canManageBot ? null : !docLoading && rows.length > 0 && selectedDocIds.length > 0 ? (
                       <div
                         className={cn(
                           styles.knowledgeSourcesListControlsStack,
@@ -1567,7 +1575,7 @@ export function KnowledgeBaseSection() {
                           <thead>
                             <tr className="border-b border-slate-200 bg-slate-50/80">
                               <th className="w-12 py-2.5 pl-4 pr-2 align-middle sm:pl-5 sm:pr-3">
-                                {docBulkSelectablePageIds.length > 0 ? (
+                                {canManageBot && docBulkSelectablePageIds.length > 0 ? (
                                   <Checkbox
                                     ref={tableSelectAllRef}
                                     checked={docAllOnPageSelected}
@@ -1679,6 +1687,7 @@ export function KnowledgeBaseSection() {
                                 row,
                               );
                               const showDocSelectCheckbox =
+                                canManageBot &&
                                 !isDocUploadInProgress &&
                                 (!trainingBlocksDelete || selected);
                               return (
@@ -1759,6 +1768,7 @@ export function KnowledgeBaseSection() {
                                   </td>
                                   <td className="px-2 py-2.5 align-middle sm:px-3">
                                     <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                      {canManageBot ? (
                                       <Switch
                                         checked={active}
                                         disabled={patchBusy || isDocUploadInProgress}
@@ -1772,6 +1782,9 @@ export function KnowledgeBaseSection() {
                                             : 'Use in replies: No. Click to set to Yes.'
                                         }
                                       />
+                                      ) : (
+                                        <span className="text-xs font-medium text-slate-600">{active ? 'Yes' : 'No'}</span>
+                                      )}
                                     </div>
                                   </td>
                                   <td className="min-w-0 px-2 py-2.5 align-middle sm:px-3">
@@ -1797,7 +1810,7 @@ export function KnowledgeBaseSection() {
                                         </span>
                                       ) : (
                                         <div className="inline-flex flex-wrap items-center justify-end gap-0.5">
-                                          {canShowDocumentRowDelete(docRow, isPendingRow) ? (
+                                          {canManageBot && canShowDocumentRowDelete(docRow, isPendingRow) ? (
                                             <Button
                                               type="button"
                                               variant="ghost"

@@ -26,6 +26,12 @@ export function configFactory() {
     googleOauthRedirectUri: process.env.GOOGLE_OAUTH_REDIRECT_URI?.trim() ?? '',
     /** Customer web app origin, no trailing slash (e.g. `https://app.assistrio.com`). Used for post-OAuth redirects. */
     customerAppBaseUrl: process.env.CUSTOMER_APP_BASE_URL?.trim().replace(/\/$/, '') ?? '',
+    /** Resend API key for transactional email (workspace invites, etc.). */
+    resendApiKey: process.env.RESEND_API_KEY?.trim() ?? '',
+    /** From address for transactional email (e.g. `Assistrio <noreply@assistrio.com>`). */
+    emailFrom: process.env.EMAIL_FROM?.trim() ?? '',
+    /** Optional reply-to for transactional email. */
+    emailReplyTo: process.env.EMAIL_REPLY_TO?.trim() ?? '',
     /**
      * Optional `Domain` attribute for `ar_customer_session` only (e.g. `.assistrio.com`).
      * Unset → host-only cookie on the API host. Admin session cookies are unaffected.

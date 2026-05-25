@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react
 import { Check, Globe2, Loader2, Save } from 'lucide-react';
 import { patchCustomerBot } from '../../api/customerApi';
 import { Button, Card, CardBody, SearchableSelect } from '@/components/ui';
+import { BotSettingsFieldset } from '@/components/bot-workspace/BotSettingsFieldset';
 import { Modal } from '@/components/ui/Modal';
 import { useBotWorkspace } from './BotWorkspaceContext';
 import { registerManualSaveGuard } from './workspaceManualSaveGuard';
@@ -34,7 +35,7 @@ const MODE_OPTIONS: Array<{ value: TranslationMode; label: string; helper: strin
 ];
 
 export function TranslationSection() {
-  const { bot, botId, softReload } = useBotWorkspace();
+  const { bot, botId, softReload, canManageBot } = useBotWorkspace();
   const [enabled, setEnabled] = useState(false);
   const [mode, setMode] = useState<TranslationMode>('english_only');
   const [fixedLanguage, setFixedLanguage] = useState('English');
@@ -133,6 +134,7 @@ export function TranslationSection() {
               >
                 How this works
               </Button>
+              {canManageBot ? (
               <Button
                 type="submit"
                 variant="primary"
@@ -156,11 +158,13 @@ export function TranslationSection() {
                   </>
                 )}
               </Button>
+              ) : null}
             </div>
           </header>
 
           {saveError ? <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{saveError}</div> : null}
 
+          <BotSettingsFieldset canManage={canManageBot}>
           <div className={ws.workspaceEditorCardGap}>
             <Card className="overflow-hidden rounded-2xl border-slate-200/90 bg-[linear-gradient(180deg,#ffffff_0%,#f7fffd_100%)] shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
               <CardBody className="p-6 sm:p-7">
@@ -310,6 +314,7 @@ export function TranslationSection() {
             </Card>
 
           </div>
+          </BotSettingsFieldset>
         </div>
       </form>
 

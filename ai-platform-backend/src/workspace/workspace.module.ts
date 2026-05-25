@@ -19,6 +19,10 @@ import { AdminUploadController } from './admin-upload.controller';
 import { AdminKnowledgeController } from './admin-knowledge.controller';
 import { CustomerKnowledgeController } from './customer-knowledge.controller';
 import { CustomerWorkspaceEntitlementsController } from './customer-workspace-entitlements.controller';
+import { CustomerWorkspaceActiveController } from './customer-workspace-active.controller';
+import { CustomerWorkspaceMembersController } from './customer-workspace-members.controller';
+import { CustomerWorkspaceSettingsController } from './customer-workspace-settings.controller';
+import { CustomerWorkspaceInviteController } from './customer-workspace-invite.controller';
 import { CustomerWorkspaceOnboardingController } from './customer-workspace-onboarding.controller';
 import { CustomerBotsController } from './customer-bots.controller';
 import { CustomerBotAiController } from './customer-bot-ai.controller';
@@ -76,6 +80,10 @@ import { OnboardingKbTransferModule } from './onboarding-kb-transfer.module';
     AdminUploadController,
     CustomerBotsController,
     CustomerWorkspaceEntitlementsController,
+    CustomerWorkspaceActiveController,
+    CustomerWorkspaceMembersController,
+    CustomerWorkspaceSettingsController,
+    CustomerWorkspaceInviteController,
     CustomerWorkspaceOnboardingController,
     CustomerBotAiController,
     CustomerKnowledgeController,

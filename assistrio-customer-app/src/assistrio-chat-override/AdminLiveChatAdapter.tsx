@@ -41,6 +41,11 @@ import { resolveComposerControlStyle, resolveSpeechRecordingWaveStyle } from "@a
 import type { BotChatUI, ScrollChromeStyle, UserBubbleStyle } from "@acw/models/botChatUI";
 import type { SuggestedQuestionChip, WidgetPreviewOverrides } from "@acw/types";
 
+import {
+  WORKSPACE_BOT_PREVIEW_ACCESS_DENIED_CODE,
+  WORKSPACE_BOT_PREVIEW_ACCESS_DENIED_MESSAGE,
+} from '@/lib/botsListMessages';
+
 function generateId(): string {
   return `msg_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 }
@@ -183,6 +188,8 @@ function getRuntimeErrorMessage(
     case "EMBED_NO_ALLOWLIST":
     case "PREVIEW_ORIGIN_NOT_ALLOWED":
       return "This chat widget is not allowed on this site.";
+    case WORKSPACE_BOT_PREVIEW_ACCESS_DENIED_CODE:
+      return WORKSPACE_BOT_PREVIEW_ACCESS_DENIED_MESSAGE;
     default:
       return "No response.";
   }

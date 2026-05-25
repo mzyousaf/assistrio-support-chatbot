@@ -34,6 +34,10 @@ export abstract class WorkspaceBotDocumentsControllerBase {
     protected readonly ingestionService: IngestionService,
   ) {}
 
+  protected requiresWorkspaceAdminForMutations(): boolean {
+    return false;
+  }
+
   protected async assertBotAccess(botId: string, req: RequestWithUser): Promise<void> {
     const bot = await this.botsService.findOne(botId);
     if (!bot) {
@@ -47,6 +51,22 @@ export abstract class WorkspaceBotDocumentsControllerBase {
     );
     if (!ok) {
       throw new HttpException({ error: 'Forbidden' }, HttpStatus.FORBIDDEN);
+    }
+  }
+
+  protected async assertBotManageAccess(botId: string, req: RequestWithUser): Promise<void> {
+    const bot = await this.botsService.findOne(botId);
+    if (!bot) {
+      throw new HttpException({ error: 'Bot not found', errorCode: 'bot_not_found' }, HttpStatus.NOT_FOUND);
+    }
+    const uid = req.user?._id != null ? String(req.user._id) : '';
+    const role = req.user?.role ?? 'customer';
+    const ok = await this.workspacesService.canUserAccessWorkspaceBot(uid, role, bot as Record<string, unknown>);
+    if (!ok) {
+      throw new HttpException({ error: 'Forbidden' }, HttpStatus.FORBIDDEN);
+    }
+    if (this.requiresWorkspaceAdminForMutations()) {
+      await this.workspacesService.assertCanManageWorkspaceBot(uid, role, bot as Record<string, unknown>);
     }
   }
 
@@ -88,7 +108,7 @@ export abstract class WorkspaceBotDocumentsControllerBase {
     @Body() body: { docIds?: unknown },
     @Req() req: RequestWithUser,
   ) {
-    await this.assertBotAccess(botId, req);
+    await this.assertBotManageAccess(botId, req);
     const raw = body?.docIds;
     if (!Array.isArray(raw) || raw.length === 0) {
       throw new HttpException({ error: 'docIds must be a non-empty array' }, HttpStatus.BAD_REQUEST);
@@ -157,7 +177,7 @@ export abstract class WorkspaceBotDocumentsControllerBase {
 
   @Delete(':id')
   async remove(@Param('botId') botId: string, @Param('id') id: string, @Req() req: RequestWithUser) {
-    await this.assertBotAccess(botId, req);
+    await this.assertBotManageAccess(botId, req);
     if (!Types.ObjectId.isValid(id)) {
       throw new HttpException({ error: 'Invalid document id' }, HttpStatus.BAD_REQUEST);
     }
@@ -172,7 +192,7 @@ export abstract class WorkspaceBotDocumentsControllerBase {
     @Body() body: { active?: boolean; title?: string; text?: string },
     @Req() req: RequestWithUser,
   ) {
-    await this.assertBotAccess(botId, req);
+    await this.assertBotManageAccess(botId, req);
     if (!Types.ObjectId.isValid(id)) {
       throw new HttpException({ error: 'Invalid document id' }, HttpStatus.BAD_REQUEST);
     }

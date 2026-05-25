@@ -173,7 +173,7 @@ function StepIndicator({
 
   const indicatorNode =
     state === 'error' ? (
-      <Tooltip content={ERROR_STEP_TOOLTIP} side="right" panelClassName="max-w-[14rem]">
+      <Tooltip content={ERROR_STEP_TOOLTIP} side="bottom" panelClassName="max-w-[14rem]">
         <span
           className="inline-flex shrink-0 overflow-visible rounded-full"
           role="img"

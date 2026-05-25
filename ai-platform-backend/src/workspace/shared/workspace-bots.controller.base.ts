@@ -1,6 +1,7 @@
 import {
   Body,
   Delete,
+  ForbiddenException,
   Get,
   HttpException,
   HttpStatus,
@@ -24,6 +25,11 @@ import { assertAllowedOriginsPolicy } from './allowed-origins-policy';
 import { BotOnboardingService } from './bot-onboarding.service';
 import type { RequestUser } from '../../auth/shared/request-user.types';
 import { WorkspacesService } from '../../workspaces/workspaces.service';
+import {
+  normalizeBotWorkspaceMemberVisibilityPatch,
+  resolveBotWorkspaceMemberVisibility,
+} from '../../workspaces/workspace-bot-member-visibility.util';
+import { parseAccessGrantPatch } from '../../workspaces/workspace-bot-access-grant.util';
 import { uploadPublic } from '../../lib/s3';
 import { parseExampleQuestionsFromDoc } from './example-questions.util';
 import { botIsEffectivelyDeleted } from '../../bots/bot-not-deleted.util';
@@ -59,15 +65,43 @@ export abstract class WorkspaceBotsControllerBase {
     private readonly knowledgeUsageService: KnowledgeUsageService,
   ) {}
 
+  protected requiresWorkspaceAdminForMutations(): boolean {
+    return false;
+  }
+
   protected async assertCanAccessWorkspaceBot(req: RequestWithUser, botId: string): Promise<void> {
     const bot = await this.botsService.findOne(botId);
     if (!bot) {
       throw new HttpException({ error: 'Bot not found', errorCode: 'bot_not_found' }, HttpStatus.NOT_FOUND);
     }
     const uid = req.user?._id != null ? String(req.user._id) : '';
-    const ok = await this.workspacesService.canUserAccessWorkspaceBot(uid, req.user?.role ?? '', bot as Record<string, unknown>);
+    try {
+      await this.workspacesService.assertCanAccessWorkspaceBot(uid, req.user?.role ?? '', bot as Record<string, unknown>);
+    } catch (err) {
+      if (err instanceof ForbiddenException) {
+        const response = (err as ForbiddenException).getResponse() as Record<string, unknown>;
+        throw new HttpException(response, HttpStatus.FORBIDDEN);
+      }
+      throw err;
+    }
+  }
+
+  protected async assertCanManageWorkspaceBot(req: RequestWithUser, botId: string): Promise<void> {
+    if (!Types.ObjectId.isValid(botId)) {
+      throw new HttpException({ error: 'Invalid id' }, HttpStatus.BAD_REQUEST);
+    }
+    const bot = await this.botsService.findOne(botId);
+    if (!bot) {
+      throw new HttpException({ error: 'Bot not found', errorCode: 'bot_not_found' }, HttpStatus.NOT_FOUND);
+    }
+    const uid = req.user?._id != null ? String(req.user._id) : '';
+    const role = req.user?.role ?? 'customer';
+    const ok = await this.workspacesService.canUserAccessWorkspaceBot(uid, role, bot as Record<string, unknown>);
     if (!ok) {
       throw new HttpException({ error: 'Forbidden' }, HttpStatus.FORBIDDEN);
+    }
+    if (this.requiresWorkspaceAdminForMutations()) {
+      await this.workspacesService.assertCanManageWorkspaceBot(uid, role, bot as Record<string, unknown>);
     }
   }
 
@@ -99,7 +133,7 @@ export abstract class WorkspaceBotsControllerBase {
     }
     const draftBot = await this.botsService.findWorkspaceByClientDraftId(clientDraftId);
     if (draftBot?._id != null) {
-      await this.assertCanAccessWorkspaceBot(req, String(draftBot._id));
+      await this.assertCanManageWorkspaceBot(req, String(draftBot._id));
     }
     const normalized = normalizeBotPayload(body?.payload ?? {});
     if (normalized.allowedOrigins !== undefined) {
@@ -122,23 +156,12 @@ export abstract class WorkspaceBotsControllerBase {
     }
   }
 
-  @Get()
-  async listBots(@Req() req: RequestWithUser, @Query('status') status?: string) {
-    const filter = status === 'draft' || status === 'published' ? status : 'all';
-    const userId = req?.user?._id != null ? String(req.user._id) : '';
-    const role = req?.user?.role ?? 'customer';
-    await this.workspacesService.ensurePersonalWorkspaceForUser(userId);
-    const workspaceIds = await this.workspacesService.getWorkspaceIdsForUser(userId);
-    const bots = await this.botsService.findForAdminList(filter, {
-      userId,
-      platformRole: role,
-      workspaceIds,
-    });
-
-    const botIds = (bots as Record<string, unknown>[]).map((b) => String(b._id));
-    const statsMap = await this.botsService.getListStatsForBots(botIds);
-
-    return (bots as Record<string, unknown>[]).map((b) => {
+  protected mapBotRecordsToListResponse(
+    bots: Record<string, unknown>[],
+    statsMap: Awaited<ReturnType<BotsService['getListStatsForBots']>>,
+    listContext?: { workspaceName?: string },
+  ) {
+    return bots.map((b) => {
       const chatUI =
         b.chatUI && typeof b.chatUI === 'object' ? (b.chatUI as Record<string, unknown>) : {};
       const rawPrimary = typeof chatUI.primaryColor === 'string' ? chatUI.primaryColor.trim() : '';
@@ -167,6 +190,7 @@ export abstract class WorkspaceBotsControllerBase {
 
       const id = String(b._id);
       const stats = statsMap.get(id);
+      const workspaceId = b.workspaceId != null ? String(b.workspaceId) : undefined;
 
       return {
         _id: id,
@@ -197,8 +221,29 @@ export abstract class WorkspaceBotsControllerBase {
           typeof (b as { platformBotType?: unknown }).platformBotType === 'string'
             ? (b as { platformBotType: string }).platformBotType
             : undefined,
+        ...(workspaceId ? { workspaceId } : {}),
+        ...(listContext?.workspaceName ? { workspaceName: listContext.workspaceName } : {}),
       };
     });
+  }
+
+  @Get()
+  async listBots(@Req() req: RequestWithUser, @Query('status') status?: string) {
+    const filter = status === 'draft' || status === 'published' ? status : 'all';
+    const userId = req?.user?._id != null ? String(req.user._id) : '';
+    const role = req?.user?.role ?? 'customer';
+    await this.workspacesService.ensurePersonalWorkspaceForUser(userId);
+    const workspaceIds = await this.workspacesService.getWorkspaceIdsForUser(userId);
+    const bots = await this.botsService.findForAdminList(filter, {
+      userId,
+      platformRole: role,
+      workspaceIds,
+    });
+
+    const botIds = (bots as Record<string, unknown>[]).map((b) => String(b._id));
+    const statsMap = await this.botsService.getListStatsForBots(botIds);
+
+    return this.mapBotRecordsToListResponse(bots as Record<string, unknown>[], statsMap);
   }
 
   /**
@@ -231,11 +276,10 @@ export abstract class WorkspaceBotsControllerBase {
           continue;
         }
         const uid = req.user?._id != null ? String(req.user._id) : '';
-        const ok = await this.workspacesService.canUserAccessWorkspaceBot(
-          uid,
-          req.user?.role ?? '',
-          botDoc as Record<string, unknown>,
-        );
+        const role = req.user?.role ?? '';
+        const ok = this.requiresWorkspaceAdminForMutations()
+          ? await this.workspacesService.canUserManageWorkspaceBot(uid, role, botDoc as Record<string, unknown>)
+          : await this.workspacesService.canUserAccessWorkspaceBot(uid, role, botDoc as Record<string, unknown>);
         if (!ok) {
           failed.push({ id, error: 'forbidden' });
           continue;
@@ -327,7 +371,7 @@ export abstract class WorkspaceBotsControllerBase {
     if (!Types.ObjectId.isValid(id)) {
       throw new HttpException({ error: 'Invalid id' }, HttpStatus.BAD_REQUEST);
     }
-    await this.assertCanAccessWorkspaceBot(req, id);
+    await this.assertCanManageWorkspaceBot(req, id);
 
     const r = req;
     if (!r.isMultipart()) {
@@ -649,7 +693,7 @@ export abstract class WorkspaceBotsControllerBase {
     if (!Types.ObjectId.isValid(id)) {
       throw new HttpException({ error: 'Invalid id' }, HttpStatus.BAD_REQUEST);
     }
-    await this.assertCanAccessWorkspaceBot(req, id);
+    await this.assertCanManageWorkspaceBot(req, id);
     const botForType = await this.botsService.findOneWorkspaceForAdmin(id);
     if (!botForType) {
       throw new HttpException({ error: 'Bot not found', errorCode: 'bot_not_found' }, HttpStatus.NOT_FOUND);
@@ -702,7 +746,7 @@ export abstract class WorkspaceBotsControllerBase {
     if (!Types.ObjectId.isValid(id)) {
       throw new HttpException({ error: 'Invalid id' }, HttpStatus.BAD_REQUEST);
     }
-    await this.assertCanAccessWorkspaceBot(req, id);
+    await this.assertCanManageWorkspaceBot(req, id);
     const visibility = body?.visibility === 'private' ? 'private' : body?.visibility === 'public' ? 'public' : null;
     if (!visibility) {
       throw new HttpException({ error: 'visibility must be public or private.' }, HttpStatus.BAD_REQUEST);
@@ -724,10 +768,92 @@ export abstract class WorkspaceBotsControllerBase {
     }
   }
 
+  @Get(':id/access-grants')
+  async getAccessGrants(@Param('id') id: string, @Req() req: RequestWithUser) {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new HttpException({ error: 'Invalid id' }, HttpStatus.BAD_REQUEST);
+    }
+    const bot = await this.botsService.findOne(id);
+    if (!bot) {
+      throw new HttpException({ error: 'Bot not found', errorCode: 'bot_not_found' }, HttpStatus.NOT_FOUND);
+    }
+    const wsId = (bot as { workspaceId?: unknown }).workspaceId;
+    if (wsId == null || !Types.ObjectId.isValid(String(wsId))) {
+      throw new HttpException({ error: 'Bot is not a workspace bot.' }, HttpStatus.BAD_REQUEST);
+    }
+    const workspaceId = String(wsId);
+    const uid = req.user?._id != null ? String(req.user._id) : '';
+    await this.workspacesService.assertWorkspaceOwner(uid, workspaceId);
+    const rows = await this.workspacesService.listBotAccessGrantRows(workspaceId, id);
+    return { botId: id, workspaceId, grants: rows };
+  }
+
+  @Patch(':id/access-grants')
+  async patchAccessGrants(
+    @Param('id') id: string,
+    @Body() body: unknown,
+    @Req() req: RequestWithUser,
+  ) {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new HttpException({ error: 'Invalid id' }, HttpStatus.BAD_REQUEST);
+    }
+    const grants = parseAccessGrantPatch(body);
+    if (!grants) {
+      throw new HttpException({ error: 'grants array is required.' }, HttpStatus.BAD_REQUEST);
+    }
+    const bot = await this.botsService.findOne(id);
+    if (!bot) {
+      throw new HttpException({ error: 'Bot not found', errorCode: 'bot_not_found' }, HttpStatus.NOT_FOUND);
+    }
+    const wsId = (bot as { workspaceId?: unknown }).workspaceId;
+    if (wsId == null || !Types.ObjectId.isValid(String(wsId))) {
+      throw new HttpException({ error: 'Bot is not a workspace bot.' }, HttpStatus.BAD_REQUEST);
+    }
+    const workspaceId = String(wsId);
+    const uid = req.user?._id != null ? String(req.user._id) : '';
+    await this.workspacesService.assertWorkspaceOwner(uid, workspaceId);
+    const rows = await this.workspacesService.upsertBotAccessGrants({
+      workspaceId,
+      botId: id,
+      createdByUserId: uid,
+      grants,
+    });
+    return { botId: id, workspaceId, grants: rows };
+  }
+
+  /** @deprecated Use PATCH :id/access-grants */
+  @Patch(':id/member-access')
+  async patchMemberAccess(
+    @Param('id') id: string,
+    @Body() body: { workspaceMemberVisibility?: unknown },
+    @Req() req: RequestWithUser,
+  ) {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new HttpException({ error: 'Invalid id' }, HttpStatus.BAD_REQUEST);
+    }
+    await this.assertCanManageWorkspaceBot(req, id);
+    const patch = normalizeBotWorkspaceMemberVisibilityPatch(body?.workspaceMemberVisibility);
+    if (!patch) {
+      throw new HttpException(
+        { error: 'workspaceMemberVisibility with visibleToMembers and/or allowMemberPreview is required.' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    try {
+      return await this.botsService.updateWorkspaceMemberVisibility(id, patch);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Update failed';
+      if (msg === 'Bot not found') {
+        throw new HttpException({ error: 'Bot not found', errorCode: 'bot_not_found' }, HttpStatus.NOT_FOUND);
+      }
+      throw new HttpException({ error: 'Internal server error' }, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
   @Post(':id/rotate-access-key')
   async rotateAccessKey(@Param('id') id: string, @Req() req: RequestWithUser) {
     if (!Types.ObjectId.isValid(id)) throw new HttpException({ error: 'Invalid id' }, HttpStatus.BAD_REQUEST);
-    await this.assertCanAccessWorkspaceBot(req, id);
+    await this.assertCanManageWorkspaceBot(req, id);
     try {
       return await this.botsService.rotateWorkspaceAccessKey(id);
     } catch (err) {
@@ -741,7 +867,7 @@ export abstract class WorkspaceBotsControllerBase {
   @Post(':id/rotate-secret-key')
   async rotateSecretKey(@Param('id') id: string, @Req() req: RequestWithUser) {
     if (!Types.ObjectId.isValid(id)) throw new HttpException({ error: 'Invalid id' }, HttpStatus.BAD_REQUEST);
-    await this.assertCanAccessWorkspaceBot(req, id);
+    await this.assertCanManageWorkspaceBot(req, id);
     try {
       return await this.botsService.rotateWorkspaceSecretKey(id);
     } catch (err) {
@@ -766,7 +892,7 @@ export abstract class WorkspaceBotsControllerBase {
   @Post(':id/embed/retry-faq')
   async retryFaqEmbedding(@Param('id') id: string, @Req() req: RequestWithUser) {
     if (!Types.ObjectId.isValid(id)) throw new HttpException({ error: 'Invalid id' }, HttpStatus.BAD_REQUEST);
-    await this.assertCanAccessWorkspaceBot(req, id);
+    await this.assertCanManageWorkspaceBot(req, id);
     const bot = await this.botsService.findOne(id);
     if (!bot) {
       throw new HttpException({ error: 'Bot not found', errorCode: 'bot_not_found' }, HttpStatus.NOT_FOUND);
@@ -785,7 +911,7 @@ export abstract class WorkspaceBotsControllerBase {
   @Post(':id/embed/retry-note')
   async retryNoteEmbedding(@Param('id') id: string, @Req() req: RequestWithUser) {
     if (!Types.ObjectId.isValid(id)) throw new HttpException({ error: 'Invalid id' }, HttpStatus.BAD_REQUEST);
-    await this.assertCanAccessWorkspaceBot(req, id);
+    await this.assertCanManageWorkspaceBot(req, id);
     const bot = await this.botsService.findOne(id);
     if (!bot) {
       throw new HttpException({ error: 'Bot not found', errorCode: 'bot_not_found' }, HttpStatus.NOT_FOUND);
@@ -802,7 +928,7 @@ export abstract class WorkspaceBotsControllerBase {
   @Post(':id/embed/retry-table')
   async retryTableEmbedding(@Param('id') id: string, @Req() req: RequestWithUser) {
     if (!Types.ObjectId.isValid(id)) throw new HttpException({ error: 'Invalid id' }, HttpStatus.BAD_REQUEST);
-    await this.assertCanAccessWorkspaceBot(req, id);
+    await this.assertCanManageWorkspaceBot(req, id);
     const bot = await this.botsService.findOne(id);
     if (!bot) {
       throw new HttpException({ error: 'Bot not found', errorCode: 'bot_not_found' }, HttpStatus.NOT_FOUND);
@@ -824,15 +950,7 @@ export abstract class WorkspaceBotsControllerBase {
     if (!botDoc) {
       throw new HttpException({ error: 'Bot not found', errorCode: 'bot_not_found' }, HttpStatus.NOT_FOUND);
     }
-    const uid = req.user?._id != null ? String(req.user._id) : '';
-    const ok = await this.workspacesService.canUserAccessWorkspaceBot(
-      uid,
-      req.user?.role ?? '',
-      botDoc as Record<string, unknown>,
-    );
-    if (!ok) {
-      throw new HttpException({ error: 'Forbidden' }, HttpStatus.FORBIDDEN);
-    }
+    await this.assertCanManageWorkspaceBot(req, id);
     if (botIsEffectivelyDeleted(botDoc as { active?: boolean; deletedAt?: Date | null })) {
       return { ok: true, deleted: id, alreadyDeleted: true };
     }

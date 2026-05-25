@@ -3,7 +3,6 @@ import {
   Database,
   CheckCircle2,
   ChevronDown,
-  ChevronsUpDown,
   Copy,
   CreditCard,
   Gem,
@@ -46,25 +45,15 @@ import { BotLifecycleProvider } from '../context/BotLifecycleContext';
 import { KbWorkspacePollingProvider } from '../context/KbWorkspacePollingContext';
 import { Modal } from '../components/ui/Modal';
 import { ASSISTRIO_NAVBAR_BOT_REFRESH, requestWorkspaceBotRefresh } from '../lib/botSyncEvents';
+import { WorkspaceSwitcher } from '@/components/workspace/WorkspaceSwitcher';
+import { canManageActiveWorkspace } from '@/lib/canManageActiveWorkspace';
+
 import { cn } from '@/lib/utils';
 
 const CREDITS_USED = 10;
 const CREDITS_TOTAL = 50;
 
-function navbarWorkspaceLabel(customer: CustomerMe | null): string {
-  if (!customer) return 'My workspace';
-  const list = customer.workspaces;
-  if (list && list.length === 1) return list[0].name?.trim() || 'My workspace';
-  if (list && list.length > 1) {
-    const first = list[0].name?.trim() || 'Workspace';
-    return `${first} (+${list.length - 1})`;
-  }
-  const fn = customer.firstName?.trim();
-  const ln = customer.lastName?.trim();
-  if (fn && ln) return `${fn} ${ln}'s workspace`;
-  if (fn) return `${fn}'s workspace`;
-  return 'My workspace';
-}
+// TODO(epic-4): Filter bot list by active workspace when backend supports workspace-scoped bot listing.
 
 function extractAgentId(pathname: string): string | null {
   const m = /^\/bots\/([^/]+)(?:\/|$)/.exec(pathname);
@@ -139,6 +128,7 @@ function AgentInfoPopover({
   onCopyEmbed,
   disableCopyEmbed,
   copyEmbedTitle,
+  canManageLifecycle = true,
 }: {
   agentTitle: string | null;
   currentStatus: 'draft' | 'published';
@@ -158,6 +148,7 @@ function AgentInfoPopover({
   onCopyEmbed: () => void;
   disableCopyEmbed: boolean;
   copyEmbedTitle: string;
+  canManageLifecycle?: boolean;
 }) {
   return (
     <div
@@ -189,6 +180,7 @@ function AgentInfoPopover({
 
       <div className="mt-4 grid grid-cols-[5.25rem_1fr] gap-x-4 gap-y-3 text-xs leading-snug">
         <span className="inline-flex h-6 items-center font-medium text-slate-500">Status</span>
+        {canManageLifecycle ? (
         <span
           className="inline-flex h-6 min-w-[8.6rem] items-center justify-self-end rounded-md border border-slate-200/90 bg-white p-0.5 shadow-[0_1px_2px_rgba(15,23,42,0.05)]"
           role="radiogroup"
@@ -242,6 +234,11 @@ function AgentInfoPopover({
             Go Live
           </button>
         </span>
+        ) : (
+          <span className="inline-flex h-6 items-center justify-self-end text-xs font-semibold text-slate-700">
+            {currentStatus === 'published' ? 'Live' : 'Draft'}
+          </span>
+        )}
         <span className="font-medium text-slate-500">Visibility</span>
         <span className="inline-flex items-center justify-self-end gap-1.5 text-right font-semibold text-slate-600">
           <Globe2 size={12} strokeWidth={1.9} aria-hidden />
@@ -322,7 +319,6 @@ function UserAvatar({
 export function AppShell() {
   const location = useLocation();
   const navigate = useNavigate();
-  const workspaceMenuId = useId();
   const topUserMenuId = useId();
 
   const workspaceDetailsRef = useRef<HTMLDetailsElement>(null);
@@ -354,14 +350,14 @@ export function AppShell() {
 
   const sidebarPeeking = sidebarCollapsed && sidebarHovered;
 
-  const { customer, needsOnboarding } = useCustomerAuth();
+  const { customer, needsOnboarding, activateWorkspace } = useCustomerAuth();
   const { signOut, logoutInFlight, logoutError, clearLogoutError } = useCustomerLogout();
 
-  const wsName = navbarWorkspaceLabel(customer);
   const initials = customer ? customerInitials(customer) : '?';
   const picture = customer?.picture?.trim();
   const profileName = useMemo(() => accountDisplayName(customer), [customer]);
   const profileEmail = customer?.email?.trim() ?? '';
+  const canManageWorkspaceBot = canManageActiveWorkspace(customer);
   const agentId = extractAgentId(location.pathname);
   const isAgentWorkspace = Boolean(agentId);
 
@@ -817,65 +813,12 @@ export function AppShell() {
             <span className="shrink-0 select-none text-sm text-slate-200" aria-hidden>/</span>
 
             {/* Workspace selector */}
-            <div className="inline-flex min-w-0 items-center gap-1.5">
-              <span
-                className="min-w-0 max-w-[14rem] overflow-hidden text-ellipsis whitespace-nowrap text-sm font-medium text-slate-800"
-                title={wsName}
-              >
-                {wsName}
-              </span>
-              <span className="shrink-0 rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[0.65rem] font-semibold uppercase tracking-wide text-slate-500">
-                Free
-              </span>
-              <details ref={workspaceDetailsRef} className="relative min-w-0">
-                <summary
-                  className="inline-flex cursor-pointer list-none items-center justify-center rounded-md p-1 text-slate-400 transition-colors nav-hover [&::-webkit-details-marker]:hidden"
-                  aria-label="Workspace menu"
-                >
-                  <ChevronsUpDown size={13} strokeWidth={1.9} aria-hidden />
-                </summary>
-                <div
-                  id={workspaceMenuId}
-                  className="absolute left-0 top-[calc(100%+0.5rem)] z-50 min-w-[14rem] rounded-xl bg-white p-1.5 shadow-[var(--shadow-dropdown)]"
-                  style={{ border: '1px solid var(--border-soft)' }}
-                  role="region"
-                  aria-label="Workspaces"
-                >
-                  <p className="mb-1 px-2.5 text-[0.65rem] font-semibold uppercase tracking-widest text-slate-400">
-                    Workspaces
-                  </p>
-                  {customer?.workspaces && customer.workspaces.length > 0 ? (
-                    <ul className="m-0 flex flex-col gap-0.5 p-0 list-none">
-                      {customer.workspaces.map((w) => (
-                        <li
-                          key={w.id}
-                          className="flex items-center justify-between gap-2 rounded-md px-2.5 py-1.5 hover:bg-slate-100"
-                        >
-                          <span className="overflow-hidden text-ellipsis whitespace-nowrap text-sm font-medium text-slate-900">
-                            {w.name}
-                          </span>
-                          <span className="shrink-0 rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[0.65rem] font-semibold uppercase tracking-wide text-slate-500">
-                            Free
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <div className="flex items-center justify-between gap-2 rounded-md bg-slate-50 px-2.5 py-1.5">
-                      <span className="overflow-hidden text-ellipsis whitespace-nowrap text-sm font-medium text-slate-900">
-                        {wsName}
-                      </span>
-                      <span className="shrink-0 rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[0.65rem] font-semibold uppercase tracking-wide text-slate-500">
-                        Free
-                      </span>
-                    </div>
-                  )}
-                  <p className="mt-1.5 px-2.5 text-xs leading-snug text-slate-400">
-                    Workspace switching coming soon.
-                  </p>
-                </div>
-              </details>
-            </div>
+            <WorkspaceSwitcher
+              ref={workspaceDetailsRef}
+              customer={customer}
+              activateWorkspace={activateWorkspace}
+              navigate={navigate}
+            />
 
             {agentTitle ? (
               <>
@@ -922,6 +865,7 @@ export function AppShell() {
                           ? 'Copy embed code'
                           : 'Publish this agent to copy the embed code.'
                       }
+                      canManageLifecycle={canManageWorkspaceBot}
                     />
                   </details>
                 </span>
@@ -943,6 +887,7 @@ export function AppShell() {
                   <Link2 size={14} strokeWidth={2} className="shrink-0 text-slate-600" aria-hidden />
                   Share Agent Preview
                 </button>
+                {canManageWorkspaceBot ? (
                 <div
                   className="inline-flex h-8 min-w-[9.5rem] items-center rounded-lg border border-slate-200/90 bg-white p-0.5 shadow-[0_1px_2px_rgba(15,23,42,0.05)]"
                   role="radiogroup"
@@ -991,6 +936,7 @@ export function AppShell() {
                     {lifecycleBusy && lifecycleAction === 'publish' ? 'Going live…' : 'Go Live'}
                   </button>
                 </div>
+                ) : null}
                 {statusToast ? (
                   <span className="hidden items-center gap-1 text-xs text-teal-700 sm:inline-flex" role="status" aria-live="polite">
                     <CheckCircle2 size={13} strokeWidth={2} aria-hidden />

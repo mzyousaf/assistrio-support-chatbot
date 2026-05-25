@@ -57,6 +57,8 @@ import { KnowledgeStorageUsagePanel } from '@/components/knowledge/KnowledgeStor
 import { knowledgeOverviewResponseCache } from './knowledgeRouteDataCache';
 import { KnowledgeOverviewSkeleton } from './knowledgeScreenSkeletons';
 import { KnowledgeTrainingStatusesModal } from './KnowledgeTrainingStatusesModal';
+import { useCanManageBot } from '../BotWorkspaceContext';
+import { ReadOnlyWorkspaceNotice } from '@/components/workspace/ReadOnlyWorkspaceNotice';
 
 function formatDateTimeLabel(iso: string | null | undefined): string {
   if (typeof iso !== 'string' || !iso.trim()) return 'never';
@@ -124,6 +126,7 @@ function CardSectionHeader({
 
 export function KnowledgeOverviewPage() {
   const { id: botId } = useParams<{ id: string }>();
+  const canManageBot = useCanManageBot();
   const {
     trainingStatus: agentTs,
     trainingStatusError: agentTsError,
@@ -450,6 +453,7 @@ export function KnowledgeOverviewPage() {
       className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col gap-6 px-0 pb-16"
       data-knowledge-overview
     >
+      {!canManageBot ? <ReadOnlyWorkspaceNotice variant="knowledge" className="shrink-0" /> : null}
       <header className={cn(styles.workspaceEditorPageHeader, 'shrink-0')}>
         <div className={styles.workspaceEditorTitleBlock}>
           <div className={styles.workspaceEditorHeadingStack}>
@@ -523,7 +527,7 @@ export function KnowledgeOverviewPage() {
             </div>
             {!agentTsError && overviewStatusSubline}
           </div>
-          {data?.knowledgeTraining?.autoTrainEnabled !== true ? (
+          {canManageBot && data?.knowledgeTraining?.autoTrainEnabled !== true ? (
             <Button
               type="button"
               variant="primary"
@@ -608,12 +612,14 @@ export function KnowledgeOverviewPage() {
                       >
                         {tr.autoTrainEnabled ? 'On' : 'Off'}
                       </span>
+                      {canManageBot ? (
                       <Switch
                         checked={tr.autoTrainEnabled}
                         onCheckedChange={(next) => onAutoTrainSwitchIntent(next)}
                         disabled={settingsBusy}
                         aria-label="Auto Train"
                       />
+                      ) : null}
                     </div>
                   </div>
                   <p className={styles.workspaceEditorSectionDescription}>
@@ -724,7 +730,7 @@ export function KnowledgeOverviewPage() {
                     >
                       How it works?
                     </button>
-                    {replyPriority.mode === 'priority' ? (
+                    {canManageBot && replyPriority.mode === 'priority' ? (
                       <Button
                         type="button"
                         variant="primary"
@@ -743,6 +749,7 @@ export function KnowledgeOverviewPage() {
                 </p>
               </div>
 
+              {canManageBot ? (
               <div className="mt-4 grid grid-cols-1 gap-2.5 md:grid-cols-2">
                 <button
                   type="button"
@@ -803,6 +810,14 @@ export function KnowledgeOverviewPage() {
                   </p>
                 </button>
               </div>
+              ) : (
+                <p className="mt-4 m-0 text-sm text-slate-600">
+                  {replyPriority.mode === 'priority'
+                    ? REPLY_PRIORITY_SECTION_COPY.priorityTitle
+                    : REPLY_PRIORITY_SECTION_COPY.defaultTitle}{' '}
+                  ranking is active.
+                </p>
+              )}
 
               <div className="mt-2.5 min-h-1" />
 

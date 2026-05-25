@@ -412,6 +412,20 @@ export const BotKnowledgeReplyPrioritySettingsSchema = SchemaFactory.createForCl
   BotKnowledgeReplyPrioritySettings,
 );
 
+/** Workspace member access to this bot in the customer app (list visibility + playground preview). */
+@Schema({ _id: false })
+export class BotWorkspaceMemberVisibility {
+  /** When false, workspace members do not see this bot in /bots or open its workspace. */
+  @Prop({ default: true })
+  visibleToMembers?: boolean;
+
+  /** When false, members may view settings read-only but cannot use playground/preview chat. */
+  @Prop({ default: true })
+  allowMemberPreview?: boolean;
+}
+
+export const BotWorkspaceMemberVisibilitySchema = SchemaFactory.createForClass(BotWorkspaceMemberVisibility);
+
 @Schema({ timestamps: false })
 export class Bot {
   @Prop({ required: true })
@@ -529,6 +543,16 @@ export class Bot {
   /** Tenant workspace for showcase bots (multi-user edit via membership). */
   @Prop({ type: Types.ObjectId, ref: 'Workspace', index: true })
   workspaceId?: Types.ObjectId;
+
+  /**
+   * Member list/preview access (owner/admin always have full access).
+   * Defaults preserve backward compatibility: members see and can preview all bots.
+   */
+  @Prop({
+    type: BotWorkspaceMemberVisibilitySchema,
+    default: () => ({ visibleToMembers: true, allowMemberPreview: true }),
+  })
+  workspaceMemberVisibility?: BotWorkspaceMemberVisibility;
   /**
    * Runtime embed allowlist: exact origins only (`https://host[:port]`). Inactive rows are ignored.
    */

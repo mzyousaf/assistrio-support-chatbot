@@ -57,7 +57,10 @@ describe('BotsService.createDraft workspace bot limit', () => {
     const assertCanAdd = jest.fn().mockResolvedValue(undefined);
     const { svc, workspaceBotLimitService } = buildService({ assertCanAdd });
 
-    const result = await svc.createDraft(clientDraftId, userId, { enforceWorkspaceBotLimit: true });
+    const result = await svc.createDraft(clientDraftId, userId, {
+      enforceWorkspaceBotLimit: true,
+      workspaceId: String(workspaceId),
+    });
 
     expect(workspaceBotLimitService.assertCanAddBotToWorkspace).toHaveBeenCalledWith(String(workspaceId));
     expect(result.slug).toBe('new-bot');
@@ -68,7 +71,10 @@ describe('BotsService.createDraft workspace bot limit', () => {
     const { svc } = buildService({ assertCanAdd });
 
     await expect(
-      svc.createDraft('another-draft-id', userId, { enforceWorkspaceBotLimit: true }),
+      svc.createDraft('another-draft-id', userId, {
+        enforceWorkspaceBotLimit: true,
+        workspaceId: String(workspaceId),
+      }),
     ).rejects.toThrow('plan limit');
   });
 
@@ -77,7 +83,10 @@ describe('BotsService.createDraft workspace bot limit', () => {
     const assertCanAdd = jest.fn();
     const { svc, workspaceBotLimitService } = buildService({ existingDraft: existing, assertCanAdd });
 
-    const result = await svc.createDraft(clientDraftId, userId, { enforceWorkspaceBotLimit: true });
+    const result = await svc.createDraft(clientDraftId, userId, {
+      enforceWorkspaceBotLimit: true,
+      workspaceId: String(workspaceId),
+    });
 
     expect(result).toEqual({ botId: String(existing._id), slug: 'existing-slug' });
     expect(workspaceBotLimitService.assertCanAddBotToWorkspace).not.toHaveBeenCalled();

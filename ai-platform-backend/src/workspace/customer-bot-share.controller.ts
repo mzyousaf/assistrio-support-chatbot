@@ -72,6 +72,13 @@ export class CustomerBotShareController {
     return bot as Record<string, unknown>;
   }
 
+  private async requireWorkspaceBotManage(req: RequestWithUser, botId: string) {
+    const bot = await this.requireWorkspaceBot(req, botId);
+    const uid = req.user?._id != null ? String(req.user._id) : '';
+    await this.workspacesService.assertCanManageWorkspaceBot(uid, req.user?.role ?? '', bot);
+    return bot;
+  }
+
   private safeShareResponse(
     bot: Record<string, unknown>,
     extra?: { previewToken?: string | null; expiresInHours?: number },
@@ -140,7 +147,7 @@ export class CustomerBotShareController {
     @Body() body: { expiresInHours?: number },
   ) {
     const hours = assertAllowedSharePreviewExpiresInHours(body?.expiresInHours);
-    const bot = await this.requireWorkspaceBot(req, id);
+    const bot = await this.requireWorkspaceBotManage(req, id);
     const now = new Date();
     const prev =
       bot.shareChat != null && typeof bot.shareChat === 'object'
@@ -191,7 +198,7 @@ export class CustomerBotShareController {
       expiresInHours?: number;
     },
   ) {
-    const bot = await this.requireWorkspaceBot(req, id);
+    const bot = await this.requireWorkspaceBotManage(req, id);
     const now = new Date();
     const sc =
       bot.shareChat != null && typeof bot.shareChat === 'object'
@@ -316,7 +323,7 @@ export class CustomerBotShareController {
 
   @Delete(':id/share-link')
   async deleteShareLink(@Req() req: RequestWithUser, @Param('id') id: string) {
-    const bot = await this.requireWorkspaceBot(req, id);
+    const bot = await this.requireWorkspaceBotManage(req, id);
     const sc =
       bot.shareChat != null && typeof bot.shareChat === 'object'
         ? ({ ...(bot.shareChat as Record<string, unknown>) } as Record<string, unknown>)

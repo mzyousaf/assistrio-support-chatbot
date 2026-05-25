@@ -15,6 +15,7 @@ export type WorkspaceOnboardingStep =
 export type CustomerWorkspaceSummary = {
   id: string;
   name: string;
+  role?: WorkspaceMemberRole;
   planKey: string;
   planName: string;
   subscriptionStatus: string;
@@ -174,6 +175,7 @@ export type CustomerMe = {
   id: string;
   email: string;
   role: string;
+  activeWorkspaceId?: string | null;
   workspaceIds: string[];
   /** Workspace summaries with plan/entitlement fields (same order as `workspaceIds` when present). */
   workspaces?: CustomerWorkspaceSummary[];
@@ -181,6 +183,93 @@ export type CustomerMe = {
   lastName?: string;
   /** Profile image URL (e.g. Google picture). */
   picture?: string;
+};
+
+export type WorkspaceMemberRole = 'owner' | 'admin' | 'member';
+
+/** Roles assignable via workspace invite (owner is never invitable). */
+export type WorkspaceInviteRole = 'admin' | 'member';
+
+export type WorkspaceInviteStatus = 'pending' | 'accepted' | 'expired' | 'cancelled';
+
+/** GET /api/customer/workspaces/:workspaceId/members */
+export type WorkspaceBotAccessSummary = {
+  viewable: number;
+  previewable: number;
+};
+
+export type WorkspaceMemberSummary = {
+  userId: string;
+  email: string;
+  firstName: string | null;
+  lastName: string | null;
+  picture: string | null;
+  role: WorkspaceMemberRole;
+  joinedAt: string | null;
+  botAccessSummary?: WorkspaceBotAccessSummary;
+};
+
+/** GET /api/customer/workspaces/:workspaceId/invites */
+export type WorkspaceInviteSummary = {
+  id: string;
+  email: string;
+  role: WorkspaceInviteRole;
+  status: WorkspaceInviteStatus;
+  expiresAt: string;
+  invitedByUserId: string;
+  acceptedByUserId: string | null;
+  acceptedAt: string | null;
+  cancelledAt: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+  inviteUrl?: string;
+  botAccessSummary?: WorkspaceBotAccessSummary;
+};
+
+export type BotAccessGrantSubjectType = 'user' | 'invite';
+
+export type BotAccessGrantRow = {
+  subjectType: BotAccessGrantSubjectType;
+  userId?: string;
+  inviteId?: string;
+  email: string;
+  displayName: string;
+  status: 'active' | 'pending_invite' | 'expired' | 'cancelled';
+  role: WorkspaceMemberRole;
+  canView: boolean;
+  canPreview: boolean;
+  locked: boolean;
+};
+
+export type BotAccessGrantsResponse = {
+  botId: string;
+  workspaceId: string;
+  grants: BotAccessGrantRow[];
+};
+
+export type BotAccessGrantPatchItem = {
+  subjectType: BotAccessGrantSubjectType;
+  userId?: string;
+  inviteId?: string;
+  canView: boolean;
+  canPreview: boolean;
+};
+
+/** POST /api/customer/workspaces/:workspaceId/invites */
+export type CreateWorkspaceInviteRequest = {
+  email: string;
+  role?: WorkspaceInviteRole;
+  botGrants?: Array<{ botId: string; canView?: boolean; canPreview?: boolean }>;
+};
+
+/** GET /api/customer/invites/:token/preview */
+export type CustomerInvitePreview = {
+  workspaceName: string;
+  invitedEmail: string;
+  role: WorkspaceInviteRole | 'owner';
+  expiresAt: string;
+  inviterEmail: string | null;
+  inviterName: string | null;
 };
 
 /** GET /api/customer/bots list item */
@@ -208,6 +297,15 @@ export type CustomerBotListItem = {
   knowledgeDatasheets?: number;
   lastActivityAt?: string | null;
   lastTrainedAt?: string | null;
+  workspaceId: string;
+  workspaceName?: string;
+  workspaceMemberVisibility?: BotWorkspaceMemberVisibility;
+};
+
+/** Member visibility / preview access for workspace members (defaults: both true). */
+export type BotWorkspaceMemberVisibility = {
+  visibleToMembers: boolean;
+  allowMemberPreview: boolean;
 };
 
 /** GET /api/customer/bots/:botId/conversations — origin subset on each row */
@@ -1252,6 +1350,7 @@ export type CustomerBotDetail = {
     tokenRevokedAt?: string | null;
   };
   knowledgeReplyPriority?: KnowledgeReplyPrioritySettings;
+  workspaceMemberVisibility?: BotWorkspaceMemberVisibility;
   /** ISO timestamp: last document ingest used as training signal (see list stats). */
   lastTrainedAt?: string | null;
   /** UTF-8 KB storage usage vs agent quota (GET bot). */
@@ -1935,7 +2034,10 @@ export type ChatResponse = {
 
 export type ApiErrorBody = {
   error?: string;
+  message?: string;
   errorCode?: string;
+  invitedEmail?: string;
+  currentEmail?: string;
 };
 
 /** GET/POST/PATCH/DELETE `/api/customer/bots/:id/share-link` */

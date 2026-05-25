@@ -37,6 +37,22 @@ export class Workspace {
 
   @Prop({ type: Date, required: false })
   onboardingCompletedAt?: Date;
+
+  /** Default per-person bot grants applied when a new agent is created in this workspace. */
+  @Prop({
+    type: {
+      grantViewToWorkspacePeopleOnCreate: { type: Boolean, default: false },
+      grantPreviewToWorkspacePeopleOnCreate: { type: Boolean, default: false },
+    },
+    default: () => ({
+      grantViewToWorkspacePeopleOnCreate: false,
+      grantPreviewToWorkspacePeopleOnCreate: false,
+    }),
+  })
+  defaultBotAccessPolicy?: {
+    grantViewToWorkspacePeopleOnCreate: boolean;
+    grantPreviewToWorkspacePeopleOnCreate: boolean;
+  };
 }
 
 export const WorkspaceSchema = SchemaFactory.createForClass(Workspace);

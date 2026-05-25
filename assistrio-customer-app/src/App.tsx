@@ -49,9 +49,11 @@ import { ConversationsInsightsPage } from './pages/bot-workspace/ConversationsIn
 import { CustomerLeadsPage } from './pages/bot-workspace/CustomerLeadsPage';
 import { BotsListPage } from './pages/BotsListPage';
 import { LoginPage } from './pages/LoginPage';
+import { InviteAcceptPage } from './pages/InviteAcceptPage';
 import { PlansPage } from './pages/PlansPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { SettingsMembersPage } from './pages/settings/SettingsMembersPage';
 import { SettingsPlaceholderPage } from './pages/settings/SettingsPlaceholderPage';
 import { UsagePage } from './pages/UsagePage';
 import { OnboardingAgentProfileStep } from './pages/onboarding/OnboardingAgentProfileStep';
@@ -104,6 +106,7 @@ export function App() {
           />
           <Route path="/share/:slug" element={<SharedChatPage />} />
           <Route path="/iframe/:botId" element={<IframeChatPage />} />
+          <Route path="/invite/:token" element={<InviteAcceptPage />} />
           <Route element={<ProtectedRoute />}>
             <Route path={CUSTOMER_ROUTES.home} element={<PostLoginRedirect />} />
             <Route path={CUSTOMER_ROUTES.dashboard} element={<PostLoginRedirect />} />
@@ -123,15 +126,7 @@ export function App() {
             <Route path="/plans" element={<Navigate to="/settings/plans" replace />} />
             <Route path="/settings" element={<Navigate to="/settings/general" replace />} />
             <Route path="/settings/general" element={<SettingsPage />} />
-            <Route
-              path="/settings/members"
-              element={
-                <SettingsPlaceholderPage
-                  title="Members"
-                  description="Invite teammates and manage roles for this workspace."
-                />
-              }
-            />
+            <Route path="/settings/members" element={<SettingsMembersPage />} />
             <Route
               path="/settings/billing"
               element={

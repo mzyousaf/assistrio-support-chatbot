@@ -45,6 +45,7 @@ export class CustomerGoogleOAuthController {
   @Get()
   async start(
     @Query('selectAccount') selectAccount: string | undefined,
+    @Query('inviteToken') inviteToken: string | undefined,
     @Req() request: FastifyRequest,
     @Res({ passthrough: false }) reply: FastifyReply,
   ) {
@@ -52,7 +53,14 @@ export class CustomerGoogleOAuthController {
       const loc = this.googleOauth.buildCustomerErrorRedirect('oauth_not_configured');
       return reply.redirect(302, loc);
     }
-    const state = this.googleOauth.createStateToken();
+    const trimmedInviteToken = String(inviteToken ?? '').trim();
+    if (inviteToken != null && inviteToken !== '' && !trimmedInviteToken) {
+      const loc = this.googleOauth.buildCustomerErrorRedirect('invalid_state');
+      return reply.redirect(302, loc);
+    }
+    const state = this.googleOauth.createStateToken(
+      trimmedInviteToken ? { inviteToken: trimmedInviteToken } : undefined,
+    );
     const url = this.googleOauth.buildGoogleAuthorizeUrl(state, parseSelectAccountQuery(selectAccount));
     return reply.redirect(302, url);
   }

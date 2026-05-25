@@ -9,10 +9,8 @@ import {
 
 /**
  * Guards private dashboard routes (AppShell). Users who still need first-time
- * onboarding are sent to the onboarding flow.
- *
- * TODO(epic-3b-invite): Invited workspace members should bypass this guard and
- * land in their invited workspace dashboard without completing owner onboarding.
+ * onboarding are sent to the onboarding flow. Invited workspace members bypass
+ * via active-workspace role in CustomerAuthContext.
  */
 export function OnboardingCompleteRoute() {
   const { status, needsOnboarding } = useCustomerAuth();

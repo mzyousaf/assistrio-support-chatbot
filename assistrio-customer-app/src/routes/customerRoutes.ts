@@ -8,7 +8,12 @@ export const CUSTOMER_ROUTES = {
   /** Main agents list — default destination after onboarding is complete. */
   agents: '/bots',
   onboarding: '/onboarding',
+  invitePath: '/invite',
 } as const;
+
+export function customerInvitePath(token: string): string {
+  return `/invite/${encodeURIComponent(token)}`;
+}
 
 export const CUSTOMER_POST_LOGIN_DEST = CUSTOMER_ROUTES.agents;
 

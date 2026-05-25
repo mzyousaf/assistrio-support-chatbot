@@ -40,6 +40,10 @@ import type {
   CustomerKnowledgeCsvSampleResponse,
   CustomerKnowledgeItemManualRetryResponse,
   CustomerMe,
+  CustomerInvitePreview,
+  CreateWorkspaceInviteRequest,
+  WorkspaceInviteSummary,
+  WorkspaceMemberSummary,
   CustomerWorkspaceDocument,
   CustomerShareLinkResponse,
   CustomerShareLinkStatus,
@@ -56,6 +60,106 @@ export function getCustomerMe() {
   return customerFetch<CustomerMe>(`${P}/me`);
 }
 
+export function getCustomerInvitePreview(token: string) {
+  return customerFetch<CustomerInvitePreview>(
+    `${P}/invites/${encodeURIComponent(token)}/preview`,
+    {},
+    { skipSessionUnauthorizedHandling: true },
+  );
+}
+
+export function postCustomerInviteAccept(token: string) {
+  return customerFetch<CustomerMe>(`${P}/invites/${encodeURIComponent(token)}/accept`, {
+    method: 'POST',
+  });
+}
+
+function workspacePath(workspaceId: string): string {
+  return `${P}/workspaces/${encodeURIComponent(workspaceId)}`;
+}
+
+/** GET /api/customer/workspaces/:workspaceId/members */
+export function getWorkspaceMembers(workspaceId: string) {
+  return customerFetch<WorkspaceMemberSummary[]>(`${workspacePath(workspaceId)}/members`);
+}
+
+/** GET /api/customer/workspaces/:workspaceId/invites */
+export function getWorkspaceInvites(workspaceId: string) {
+  return customerFetch<WorkspaceInviteSummary[]>(`${workspacePath(workspaceId)}/invites`);
+}
+
+/** POST /api/customer/workspaces/:workspaceId/invites */
+export function postWorkspaceInvite(workspaceId: string, body: CreateWorkspaceInviteRequest) {
+  return customerFetch<WorkspaceInviteSummary>(`${workspacePath(workspaceId)}/invites`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+/** POST /api/customer/workspaces/:workspaceId/invites/:inviteId/cancel */
+export function postWorkspaceInviteCancel(workspaceId: string, inviteId: string) {
+  return customerFetch<{ success: boolean }>(
+    `${workspacePath(workspaceId)}/invites/${encodeURIComponent(inviteId)}/cancel`,
+    { method: 'POST' },
+  );
+}
+
+/** POST /api/customer/workspaces/:workspaceId/invites/:inviteId/resend */
+export function postWorkspaceInviteResend(workspaceId: string, inviteId: string) {
+  return customerFetch<WorkspaceInviteSummary>(
+    `${workspacePath(workspaceId)}/invites/${encodeURIComponent(inviteId)}/resend`,
+    { method: 'POST' },
+  );
+}
+
+/** DELETE /api/customer/workspaces/:workspaceId/members/:userId */
+export function deleteWorkspaceMember(workspaceId: string, userId: string) {
+  return customerFetch<{ success: boolean }>(
+    `${workspacePath(workspaceId)}/members/${encodeURIComponent(userId)}`,
+    { method: 'DELETE' },
+  );
+}
+
+/** PATCH /api/customer/workspaces/:workspaceId/members/:userId/role */
+export function patchWorkspaceMemberRole(
+  workspaceId: string,
+  userId: string,
+  role: import('./types').WorkspaceInviteRole,
+) {
+  return customerFetch<{ success: boolean }>(
+    `${workspacePath(workspaceId)}/members/${encodeURIComponent(userId)}/role`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role }),
+    },
+  );
+}
+
+/** PATCH /api/customer/workspaces/:workspaceId/invites/:inviteId/role */
+export function patchWorkspaceInviteRole(
+  workspaceId: string,
+  inviteId: string,
+  role: import('./types').WorkspaceInviteRole,
+) {
+  return customerFetch<{ success: boolean }>(
+    `${workspacePath(workspaceId)}/invites/${encodeURIComponent(inviteId)}/role`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role }),
+    },
+  );
+}
+
+/** POST /api/customer/workspaces/:workspaceId/activate */
+export function postCustomerWorkspaceActivate(workspaceId: string) {
+  return customerFetch<CustomerMe>(`${workspacePath(workspaceId)}/activate`, {
+    method: 'POST',
+  });
+}
+
 export function postCustomerLogout() {
   return customerFetch<{ success: boolean }>(
     `${P}/auth/logout`,
@@ -64,9 +168,12 @@ export function postCustomerLogout() {
   );
 }
 
-export function getCustomerBots(params?: { status?: 'draft' | 'published' | 'all' }) {
-  const q = params?.status && params.status !== 'all' ? `?status=${encodeURIComponent(params.status)}` : '';
-  return customerFetch<CustomerBotListItem[]>(`${P}/bots${q}`);
+export function getCustomerBots(params?: { status?: 'draft' | 'published' | 'all'; workspaceId?: string }) {
+  const q = new URLSearchParams();
+  if (params?.status && params.status !== 'all') q.set('status', params.status);
+  if (params?.workspaceId?.trim()) q.set('workspaceId', params.workspaceId.trim());
+  const qs = q.toString();
+  return customerFetch<CustomerBotListItem[]>(`${P}/bots${qs ? `?${qs}` : ''}`);
 }
 
 export function getCustomerBot(id: string) {
@@ -262,7 +369,7 @@ export function getCustomerBotConversationMessages(botId: string, conversationId
   );
 }
 
-export function postCustomerBotDraft(body: { clientDraftId: string }) {
+export function postCustomerBotDraft(body: { clientDraftId: string; workspaceId?: string }) {
   return customerFetch<CreateDraftResponse>(`${P}/bots/draft`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -288,6 +395,43 @@ export function patchCustomerBot(id: string, body: Record<string, unknown>) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
+}
+
+/** GET `/api/customer/bots/:id/access-grants` */
+export function getCustomerBotAccessGrants(botId: string) {
+  return customerFetch<import('./types').BotAccessGrantsResponse>(
+    `${P}/bots/${encodeURIComponent(botId)}/access-grants`,
+  );
+}
+
+/** PATCH `/api/customer/bots/:id/access-grants` */
+export function patchCustomerBotAccessGrants(
+  botId: string,
+  grants: import('./types').BotAccessGrantPatchItem[],
+) {
+  return customerFetch<import('./types').BotAccessGrantsResponse>(
+    `${P}/bots/${encodeURIComponent(botId)}/access-grants`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ grants }),
+    },
+  );
+}
+
+/** @deprecated Use patchCustomerBotAccessGrants */
+export function patchCustomerBotMemberAccess(
+  id: string,
+  workspaceMemberVisibility: Partial<import('./types').BotWorkspaceMemberVisibility>,
+) {
+  return customerFetch<{ workspaceMemberVisibility: import('./types').BotWorkspaceMemberVisibility }>(
+    `${P}/bots/${encodeURIComponent(id)}/member-access`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ workspaceMemberVisibility }),
+    },
+  );
 }
 
 export type RefineResponseStyleResult = {

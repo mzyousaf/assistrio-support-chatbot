@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { HttpException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { InjectModel } from '@nestjs/mongoose';
@@ -7,6 +7,7 @@ import { Bot } from '../../models';
 import { AuthService, type GoogleProfileSyncFields } from '../shared/auth.service';
 import { GoogleOAuthFlowError, type GoogleOAuthErrorCode } from '../shared/google-oauth-flow.error';
 import { WorkspacesService } from '../../workspaces/workspaces.service';
+import { WorkspaceInviteService } from '../../workspaces/workspace-invite.service';
 
 const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
@@ -50,6 +51,7 @@ export class CustomerGoogleOAuthService {
     private readonly jwtService: JwtService,
     private readonly authService: AuthService,
     private readonly workspacesService: WorkspacesService,
+    private readonly workspaceInviteService: WorkspaceInviteService,
     @InjectModel(Bot.name) private readonly botModel: Model<Bot>,
   ) {}
 
@@ -61,26 +63,37 @@ export class CustomerGoogleOAuthService {
     return Boolean(c && s && r && app);
   }
 
-  createStateToken(): string {
-    return this.jwtService.sign(
-      { typ: STATE_JWT_TYP, v: 1 },
-      { expiresIn: '10m' },
-    );
+  createStateToken(options?: { inviteToken?: string }): string {
+    const payload: { typ: typeof STATE_JWT_TYP; v: 1; inviteToken?: string } = {
+      typ: STATE_JWT_TYP,
+      v: 1,
+    };
+    const inviteToken = String(options?.inviteToken ?? '').trim();
+    if (inviteToken) {
+      payload.inviteToken = inviteToken;
+    }
+    return this.jwtService.sign(payload, { expiresIn: '10m' });
   }
 
-  verifyStateToken(state: string | undefined): void {
+  parseStateToken(state: string | undefined): { inviteToken?: string } {
     if (!state?.trim()) {
       throw new GoogleOAuthFlowError('invalid_state');
     }
     try {
-      const d = this.jwtService.verify<{ typ?: string; v?: number }>(state.trim());
+      const d = this.jwtService.verify<{ typ?: string; v?: number; inviteToken?: string }>(state.trim());
       if (d.typ !== STATE_JWT_TYP || d.v !== 1) {
         throw new GoogleOAuthFlowError('invalid_state');
       }
+      const inviteToken = String(d.inviteToken ?? '').trim();
+      return inviteToken ? { inviteToken } : {};
     } catch (e) {
       if (e instanceof GoogleOAuthFlowError) throw e;
       throw new GoogleOAuthFlowError('invalid_state');
     }
+  }
+
+  verifyStateToken(state: string | undefined): void {
+    this.parseStateToken(state);
   }
 
   buildGoogleAuthorizeUrl(state: string, selectAccount = false): string {
@@ -109,9 +122,31 @@ export class CustomerGoogleOAuthService {
     return u.toString();
   }
 
-  private buildCustomerSuccessRedirect(path: '/onboarding' | '/dashboard'): string {
+  /** Invite accept failure — return user to invite page with machine-readable error. */
+  buildCustomerInviteErrorRedirect(inviteToken: string, errorCode: string): string {
+    const base = (this.configService.get<string>('customerAppBaseUrl') ?? '').replace(/\/$/, '');
+    const u = new URL(`/invite/${encodeURIComponent(inviteToken)}`, `${base}/`);
+    u.searchParams.set('error', errorCode);
+    return u.toString();
+  }
+
+  private buildCustomerAppPathRedirect(path: '/onboarding' | '/dashboard' | '/bots'): string {
     const base = (this.configService.get<string>('customerAppBaseUrl') ?? '').replace(/\/$/, '');
     return `${base}${path}`;
+  }
+
+  private buildCustomerSuccessRedirect(path: '/onboarding' | '/dashboard'): string {
+    return this.buildCustomerAppPathRedirect(path);
+  }
+
+  private extractHttpExceptionErrorCode(err: unknown): string {
+    if (!(err instanceof HttpException)) return 'workspace_invite_not_found';
+    const response = err.getResponse();
+    if (response && typeof response === 'object' && 'errorCode' in response) {
+      const code = (response as { errorCode?: unknown }).errorCode;
+      if (typeof code === 'string' && code.trim()) return code.trim();
+    }
+    return 'workspace_invite_not_found';
   }
 
   async exchangeAuthorizationCode(code: string): Promise<GoogleTokenResponse> {
@@ -171,7 +206,8 @@ export class CustomerGoogleOAuthService {
     if (params.googleError) {
       throw new GoogleOAuthFlowError('google_denied', params.googleError);
     }
-    this.verifyStateToken(params.state);
+    const statePayload = this.parseStateToken(params.state);
+    const inviteToken = statePayload.inviteToken;
     const code = String(params.code ?? '').trim();
     if (!code) {
       throw new GoogleOAuthFlowError('missing_code');
@@ -217,6 +253,22 @@ export class CustomerGoogleOAuthService {
 
     const role = (user as unknown as { role: 'customer' }).role;
     const jwt = this.authService.signCustomerSessionToken(uid, role);
+
+    if (inviteToken) {
+      try {
+        await this.workspaceInviteService.acceptInviteForUser(inviteToken, uid, email);
+        return {
+          customerSessionJwt: jwt,
+          redirectUrl: this.buildCustomerAppPathRedirect('/bots'),
+        };
+      } catch (e) {
+        const errorCode = this.extractHttpExceptionErrorCode(e);
+        return {
+          customerSessionJwt: jwt,
+          redirectUrl: this.buildCustomerInviteErrorRedirect(inviteToken, errorCode),
+        };
+      }
+    }
 
     const botCount = await this.countBotsInMemberWorkspaces(uid);
     const path: '/onboarding' | '/dashboard' = botCount === 0 ? '/onboarding' : '/dashboard';

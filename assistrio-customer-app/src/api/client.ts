@@ -40,9 +40,12 @@ async function readJson(res: Response): Promise<unknown> {
 }
 
 function errorMessageFromBody(body: unknown, fallback: string): { error: string; errorCode?: string } {
-  if (body && typeof body === 'object' && 'error' in body) {
+  if (body && typeof body === 'object') {
     const b = body as ApiErrorBody;
-    const msg = typeof b.error === 'string' && b.error.trim() ? b.error.trim() : fallback;
+    const msg =
+      (typeof b.error === 'string' && b.error.trim() ? b.error.trim() : '') ||
+      (typeof b.message === 'string' && b.message.trim() ? b.message.trim() : '') ||
+      fallback;
     const code = typeof b.errorCode === 'string' && b.errorCode.trim() ? b.errorCode.trim() : undefined;
     return { error: msg, errorCode: code };
   }
@@ -114,9 +117,14 @@ export async function customerFetch<T>(
   return promise;
 }
 
-export function customerGoogleAuthStartUrl(options?: { selectAccount?: boolean }): string {
-  const path = options?.selectAccount
-    ? `${CUSTOMER_PREFIX}/auth/google?selectAccount=1`
-    : `${CUSTOMER_PREFIX}/auth/google`;
-  return buildUrl(path);
+export function customerGoogleAuthStartUrl(options?: {
+  selectAccount?: boolean;
+  inviteToken?: string;
+}): string {
+  const params = new URLSearchParams();
+  if (options?.selectAccount) params.set('selectAccount', '1');
+  const inviteToken = String(options?.inviteToken ?? '').trim();
+  if (inviteToken) params.set('inviteToken', inviteToken);
+  const qs = params.toString();
+  return buildUrl(`${CUSTOMER_PREFIX}/auth/google${qs ? `?${qs}` : ''}`);
 }

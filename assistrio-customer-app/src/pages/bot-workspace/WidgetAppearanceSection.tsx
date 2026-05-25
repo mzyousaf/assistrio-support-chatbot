@@ -2,6 +2,7 @@ import { useCallback, useEffect, useId, useRef, useState, type FormEvent } from 
 import { Loader2, Palette, Rocket, Save, SeparatorHorizontal, type LucideIcon } from 'lucide-react';
 import { patchCustomerBot } from '../../api/customerApi';
 import { Button, Card, CardBody, FieldRow, Input, Range, Select, Switch, Textarea } from '@/components/ui';
+import { BotSettingsFieldset } from '@/components/bot-workspace/BotSettingsFieldset';
 import { cn } from '@/lib/utils';
 import { toastPlaygroundSectionSaveFailed, toastPlaygroundSectionSaved } from '@/lib/playgroundSectionSaveToasts';
 import {
@@ -125,7 +126,7 @@ const APPEARANCE_PREVIEW_DEBOUNCE_MS = 150;
 export function WidgetAppearanceSection() {
   const subnavId = useId();
   const launcherFileRef = useRef<HTMLInputElement>(null);
-  const { bot, botId, softReload } = useBotWorkspace();
+  const { bot, botId, softReload, canManageBot } = useBotWorkspace();
   const { setAppearanceChatUiDraft } = useCustomerWidgetPreview();
   const [chatUi, setChatUi] = useState<Record<string, unknown>>({});
   const [activeTab, setActiveTab] = useState<WidgetAppearanceTabId>('branding-theme');
@@ -228,6 +229,7 @@ export function WidgetAppearanceSection() {
               </div>
             </div>
             <div className="flex shrink-0 flex-col sm:pt-0">
+              {canManageBot ? (
               <Button
                 type="submit"
                 variant="primary"
@@ -254,6 +256,7 @@ export function WidgetAppearanceSection() {
                   </>
                 )}
               </Button>
+              ) : null}
             </div>
           </header>
 
@@ -307,6 +310,7 @@ export function WidgetAppearanceSection() {
             {activeMeta ? <p className={ws.workspaceEditorTabContext}>{activeMeta.hint}</p> : null}
           </div>
 
+          <BotSettingsFieldset canManage={canManageBot}>
           <div className={ws.workspaceEditorCardGap}>
             {activeTab === 'branding-theme' ? (
               <div
@@ -963,6 +967,7 @@ export function WidgetAppearanceSection() {
               </div>
             ) : null}
           </div>
+          </BotSettingsFieldset>
         </div>
       </form>
     </div>

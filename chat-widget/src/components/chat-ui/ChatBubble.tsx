@@ -126,8 +126,6 @@ export function ChatBubble({
   timePosition = "top",
   bubbleBorderRadius = 20,
   showCopyButton = true,
-  renderCopyInBubble = true,
-  allowMarkdown = false,
   copyLabel = "Copy",
   copiedLabel = "Copied!",
   onCopy,

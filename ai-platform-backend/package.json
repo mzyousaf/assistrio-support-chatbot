@@ -11,7 +11,8 @@
     "test:watch": "jest --watch",
     "test:kb-integration": "jest src/ingestion/kb-training.integration.spec.ts --runInBand",
     "test:kb-audit": "jest src/knowledge/kb-training-codebase-audit.spec.ts src/config/kb-training-app-mode.spec.ts --runInBand",
-    "migrate:dedupe-extract-jobs": "node scripts/dedupe-live-extract-jobs.js"
+    "migrate:dedupe-extract-jobs": "node scripts/dedupe-live-extract-jobs.js",
+    "migrate:backfill-workspace-owner": "node scripts/backfill-workspace-owner-role.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.700.0",
@@ -34,6 +35,7 @@
     "openai": "^4.73.0",
     "pdf-parse": "^2.4.5",
     "reflect-metadata": "^0.2.2",
+    "resend": "^4.8.0",
     "rxjs": "^7.8.1",
     "word-extractor": "^1.0.4",
     "xlsx": "0.18.5"

@@ -38,11 +38,12 @@ describe('buildCustomerSessionPayload', () => {
   function mockWorkspacesService(overrides: Partial<WorkspacesService> = {}): WorkspacesService {
     return {
       ensurePersonalWorkspaceForUser: jest.fn().mockResolvedValue(undefined),
-      getWorkspaceIdsForUser: jest.fn().mockResolvedValue(['ws1']),
+      resolveActiveWorkspaceForUser: jest.fn().mockResolvedValue('ws1'),
       getWorkspacesSummaryForUser: jest.fn().mockResolvedValue([
         {
           id: 'ws1',
           name: 'Ada workspace',
+          role: 'admin',
           onboardingStatus: 'not_started',
           onboardingCurrentStep: 'agent-profile',
           onboardingCreatedBotId: null,
@@ -60,7 +61,7 @@ describe('buildCustomerSessionPayload', () => {
     } as unknown as WorkspaceEntitlementsService;
   }
 
-  it('returns session fields with workspace plan summary and no secrets', async () => {
+  it('returns session fields with activeWorkspaceId, role, and workspace plan summary', async () => {
     const ws = mockWorkspacesService();
     const entitlements = mockEntitlementsService();
     const payload = await buildCustomerSessionPayload(user, ws, entitlements);
@@ -69,11 +70,13 @@ describe('buildCustomerSessionPayload', () => {
       id: '507f1f77bcf86cd799439011',
       email: 'user@example.com',
       role: 'customer',
+      activeWorkspaceId: 'ws1',
       workspaceIds: ['ws1'],
       workspaces: [
         {
           id: 'ws1',
           name: 'Ada workspace',
+          role: 'admin',
           planKey: 'free',
           planName: 'Free',
           subscriptionStatus: 'free',
@@ -94,9 +97,18 @@ describe('buildCustomerSessionPayload', () => {
       picture: 'https://example.com/avatar.png',
     });
     expect(payload).not.toHaveProperty('needsOnboarding');
-    expect(payload).not.toHaveProperty('activeWorkspaceId');
     expect(Object.keys(payload).sort()).toEqual(
-      ['email', 'firstName', 'id', 'lastName', 'picture', 'role', 'workspaceIds', 'workspaces'].sort(),
+      [
+        'activeWorkspaceId',
+        'email',
+        'firstName',
+        'id',
+        'lastName',
+        'picture',
+        'role',
+        'workspaceIds',
+        'workspaces',
+      ].sort(),
     );
   });
 
@@ -135,21 +147,34 @@ describe('buildCustomerSessionPayload', () => {
     });
   });
 
-  it('ensures personal workspace before listing workspaces', async () => {
+  it('ensures personal workspace and resolves active workspace before listing workspaces', async () => {
     const ensure = jest.fn().mockResolvedValue(undefined);
-    const getIds = jest.fn().mockResolvedValue([]);
+    const resolveActive = jest.fn().mockResolvedValue(null);
     const getSummary = jest.fn().mockResolvedValue([]);
     const ws = mockWorkspacesService({
       ensurePersonalWorkspaceForUser: ensure,
-      getWorkspaceIdsForUser: getIds,
+      resolveActiveWorkspaceForUser: resolveActive,
       getWorkspacesSummaryForUser: getSummary,
     });
 
     await buildCustomerSessionPayload(user, ws, mockEntitlementsService());
 
     expect(ensure).toHaveBeenCalledWith('507f1f77bcf86cd799439011');
-    expect(getIds).toHaveBeenCalledWith('507f1f77bcf86cd799439011');
-    expect(getSummary).toHaveBeenCalledWith('507f1f77bcf86cd799439011');
+    expect(resolveActive).toHaveBeenCalledWith('507f1f77bcf86cd799439011');
+    expect(getSummary).toHaveBeenCalledWith('507f1f77bcf86cd799439011', null);
+  });
+
+  it('passes activeWorkspaceId into workspace summary ordering', async () => {
+    const resolveActive = jest.fn().mockResolvedValue('ws2');
+    const getSummary = jest.fn().mockResolvedValue([]);
+    const ws = mockWorkspacesService({
+      resolveActiveWorkspaceForUser: resolveActive,
+      getWorkspacesSummaryForUser: getSummary,
+    });
+
+    await buildCustomerSessionPayload(user, ws, mockEntitlementsService());
+
+    expect(getSummary).toHaveBeenCalledWith('507f1f77bcf86cd799439011', 'ws2');
   });
 
   it('omits optional profile fields when absent', async () => {

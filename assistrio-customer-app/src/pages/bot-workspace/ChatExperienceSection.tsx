@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { patchCustomerBot } from '../../api/customerApi';
 import { Button, Card, CardBody, FieldRow, Input, Select, Switch, Tooltip } from '@/components/ui';
+import { BotSettingsFieldset } from '@/components/bot-workspace/BotSettingsFieldset';
 import { cn } from '@/lib/utils';
 import { toastPlaygroundSectionSaveFailed, toastPlaygroundSectionSaved } from '@/lib/playgroundSectionSaveToasts';
 import { normalizeVisitorMultiChatMax } from '@/lib/visitorMultiChatMax';
@@ -151,7 +152,7 @@ const CHAT_EXPERIENCE_PREVIEW_DEBOUNCE_MS = 150;
 
 export function ChatExperienceSection() {
   const subnavId = useId();
-  const { bot, botId, softReload } = useBotWorkspace();
+  const { bot, botId, softReload, canManageBot } = useBotWorkspace();
   const { setAppearanceChatUiDraft, setChatsDraftSlice } = useCustomerWidgetPreview();
   const [chatUi, setChatUi] = useState<Record<string, unknown>>({});
   const [visitorMultiChatEnabled, setVisitorMultiChatEnabled] = useState(false);
@@ -306,6 +307,7 @@ export function ChatExperienceSection() {
               </div>
             </div>
             <div className="flex shrink-0 flex-col sm:pt-0">
+              {canManageBot ? (
               <Button
                 type="submit"
                 variant="primary"
@@ -330,6 +332,7 @@ export function ChatExperienceSection() {
                   </>
                 )}
               </Button>
+              ) : null}
             </div>
           </header>
 
@@ -383,6 +386,7 @@ export function ChatExperienceSection() {
             {activeMeta ? <p className={ws.workspaceEditorTabContext}>{activeMeta.hint}</p> : null}
           </div>
 
+          <BotSettingsFieldset canManage={canManageBot}>
           <div className={ws.workspaceEditorCardGap}>
             {activeTab === 'input-tools' ? (
               <div
@@ -874,6 +878,7 @@ export function ChatExperienceSection() {
               </div>
             ) : null}
           </div>
+          </BotSettingsFieldset>
         </div>
       </form>
     </div>

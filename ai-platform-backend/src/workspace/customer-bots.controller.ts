@@ -1,4 +1,4 @@
-import { Body, Controller, HttpException, HttpStatus, Logger, Param, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpException, HttpStatus, Logger, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { FastifyRequest } from 'fastify';
 import { Types } from 'mongoose';
 import { CustomerSessionAuthGuard } from '../auth/customer/customer-session.guard';
@@ -26,8 +26,10 @@ import { assertAllowedOriginsPolicy } from './shared/allowed-origins-policy';
 import { parseBotLifecycleActionBody } from './shared/bot-lifecycle-action.dto';
 import { publicApiBaseUrlFromRequest } from './shared/public-api-url.util';
 import { WorkspaceBotsControllerBase } from './shared/workspace-bots.controller.base';
-import { TableImportService } from '../ingestion/table-import.service';
+
+import { isWorkspaceOwnerRole } from '../models/workspace-membership-role.util';
 import { BotKnowledgeTotalLimitService } from '../knowledge/bot-knowledge-total-limit.service';
+import { TableImportService } from '../ingestion/table-import.service';
 
 function parseDatasheetImportCancelBody(body: unknown): { importSessionId: string } | null {
   if (!body || typeof body !== 'object') return null;
@@ -67,6 +69,10 @@ type RequestWithUser = FastifyRequest & { user?: RequestUser };
 export class CustomerBotsController extends WorkspaceBotsControllerBase {
   private readonly importLogger = new Logger(CustomerBotsController.name);
 
+  protected requiresWorkspaceAdminForMutations(): boolean {
+    return true;
+  }
+
   constructor(
     botsService: BotsService,
     documentsService: DocumentsService,
@@ -87,17 +93,99 @@ export class CustomerBotsController extends WorkspaceBotsControllerBase {
     );
   }
 
+  @Get()
+  override async listBots(
+    @Req() req: RequestWithUser,
+    @Query('status') status?: string,
+    @Query('workspaceId') workspaceIdQuery?: string,
+  ) {
+    const filter = status === 'draft' || status === 'published' ? status : 'all';
+    const userId = req?.user?._id != null ? String(req.user._id) : '';
+
+    let workspaceId: string | null;
+    const explicitWorkspaceId = workspaceIdQuery?.trim();
+    if (explicitWorkspaceId) {
+      if (!Types.ObjectId.isValid(explicitWorkspaceId)) {
+        throw new HttpException({ error: 'Invalid workspaceId' }, HttpStatus.BAD_REQUEST);
+      }
+      const isMember = await this.workspacesService.isUserMemberOfWorkspace(userId, explicitWorkspaceId);
+      if (!isMember) {
+        throw new HttpException(
+          { error: 'Workspace access denied.', errorCode: 'workspace_access_denied' },
+          HttpStatus.FORBIDDEN,
+        );
+      }
+      workspaceId = explicitWorkspaceId;
+    } else {
+      workspaceId = await this.workspacesService.resolveActiveWorkspaceForUser(userId);
+    }
+
+    if (!workspaceId) {
+      return [];
+    }
+
+    const memberRole = await this.workspacesService.getUserWorkspaceMemberRole(userId, workspaceId);
+    let bots = await this.botsService.findForCustomerWorkspaceList(filter, workspaceId);
+    if (memberRole == null || !isWorkspaceOwnerRole(memberRole)) {
+      bots = (await this.workspacesService.filterWorkspaceBotsForUser(
+        userId,
+        workspaceId,
+        bots as Record<string, unknown>[],
+      )) as typeof bots;
+    }
+    const botIds = (bots as Record<string, unknown>[]).map((b) => String(b._id));
+    const statsMap = await this.botsService.getListStatsForBots(botIds);
+    const workspaceName = await this.workspacesService.getWorkspaceDisplayName(workspaceId);
+
+    return this.mapBotRecordsToListResponse(bots as Record<string, unknown>[], statsMap, {
+      workspaceName: workspaceName ?? undefined,
+    });
+  }
+
   @Post('draft')
-  override async createDraft(@Body() body: { clientDraftId?: string }, @Req() req: RequestWithUser) {
+  override async createDraft(
+    @Body() body: { clientDraftId?: string; workspaceId?: string },
+    @Req() req: RequestWithUser,
+  ) {
     const clientDraftId = String(body?.clientDraftId ?? '').trim();
     if (!clientDraftId) {
       throw new HttpException({ error: 'clientDraftId is required' }, HttpStatus.BAD_REQUEST);
     }
     const createdByUserId = req.user?._id != null ? String(req.user._id) : undefined;
+    if (!createdByUserId) {
+      throw new HttpException({ error: 'Customer session required.' }, HttpStatus.FORBIDDEN);
+    }
+
+    let targetWorkspaceId: string;
+    const explicitWorkspaceId = body?.workspaceId?.trim();
+    if (explicitWorkspaceId) {
+      if (!Types.ObjectId.isValid(explicitWorkspaceId)) {
+        throw new HttpException({ error: 'Invalid workspaceId' }, HttpStatus.BAD_REQUEST);
+      }
+      const isMember = await this.workspacesService.isUserMemberOfWorkspace(createdByUserId, explicitWorkspaceId);
+      if (!isMember) {
+        throw new HttpException(
+          { error: 'Workspace access denied.', errorCode: 'workspace_access_denied' },
+          HttpStatus.FORBIDDEN,
+        );
+      }
+      targetWorkspaceId = explicitWorkspaceId;
+    } else {
+      const activeWorkspaceId = await this.workspacesService.resolveActiveWorkspaceForUser(createdByUserId);
+      if (activeWorkspaceId) {
+        targetWorkspaceId = activeWorkspaceId;
+      } else {
+        targetWorkspaceId = String(await this.workspacesService.ensurePersonalWorkspaceForUser(createdByUserId));
+      }
+    }
+
+    await this.workspacesService.assertWorkspaceAdmin(createdByUserId, targetWorkspaceId);
+
     try {
       const result = await this.botsService.createDraft(clientDraftId, createdByUserId, {
         enforceWorkspaceBotLimit: true,
         applyWorkspaceEntitlements: true,
+        workspaceId: targetWorkspaceId,
       });
       await this.botOnboardingService.onboardNewBot(result.botId);
       return result;
@@ -119,7 +207,7 @@ export class CustomerBotsController extends WorkspaceBotsControllerBase {
     }
     const draftBot = await this.botsService.findWorkspaceByClientDraftId(clientDraftId);
     if (draftBot?._id != null) {
-      await this.assertCanAccessWorkspaceBot(req, String(draftBot._id));
+      await this.assertCanManageWorkspaceBot(req, String(draftBot._id));
     }
     const normalized = normalizeBotPayload(body?.payload ?? {});
     if (normalized.allowedOrigins !== undefined) {
@@ -162,7 +250,7 @@ export class CustomerBotsController extends WorkspaceBotsControllerBase {
     if (!parsed) {
       throw new HttpException({ error: 'action must be "publish" or "draft"' }, HttpStatus.BAD_REQUEST);
     }
-    await this.assertCanAccessWorkspaceBot(req, id);
+    await this.assertCanManageWorkspaceBot(req, id);
     const publicApiBase = publicApiBaseUrlFromRequest(req);
     const widgetAsset =
       process.env.CHAT_WIDGET_ASSET_ORIGIN?.trim().replace(/\/$/, '') || 'https://widget.assistrio.com';
@@ -200,7 +288,7 @@ export class CustomerBotsController extends WorkspaceBotsControllerBase {
     if (!Types.ObjectId.isValid(id)) {
       throw new HttpException({ error: 'Invalid id' }, HttpStatus.BAD_REQUEST);
     }
-    await this.assertCanAccessWorkspaceBot(req, id);
+    await this.assertCanManageWorkspaceBot(req, id);
     await this.botKbTotalLimit.assertStoredBytesBelowCapForNewContent(id);
     const r = req as FastifyRequest & {
       parts: () => AsyncIterableIterator<
@@ -318,7 +406,7 @@ export class CustomerBotsController extends WorkspaceBotsControllerBase {
     if (!Types.ObjectId.isValid(id)) {
       throw new HttpException({ error: 'Invalid id' }, HttpStatus.BAD_REQUEST);
     }
-    await this.assertCanAccessWorkspaceBot(req, id);
+    await this.assertCanManageWorkspaceBot(req, id);
     const parsed = parseDatasheetImportCancelBody(body);
     if (!parsed) {
       throw new HttpException({ error: 'importSessionId is required (valid ObjectId).' }, HttpStatus.BAD_REQUEST);
@@ -358,7 +446,7 @@ export class CustomerBotsController extends WorkspaceBotsControllerBase {
     if (!Types.ObjectId.isValid(id)) {
       throw new HttpException({ error: 'Invalid id' }, HttpStatus.BAD_REQUEST);
     }
-    await this.assertCanAccessWorkspaceBot(req, id);
+    await this.assertCanManageWorkspaceBot(req, id);
     await this.botKbTotalLimit.assertStoredBytesBelowCapForNewContent(id);
     const parsed = parseDatasheetImportConfirmBody(body);
     if (!parsed) {

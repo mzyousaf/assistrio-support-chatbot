@@ -19,6 +19,7 @@ import {
   useCaptureLeadsWorkspace,
   type LeadFieldDraft,
 } from './CaptureLeadsWorkspaceContext';
+import { useCanManageBot } from './BotWorkspaceContext';
 import { WorkspaceSectionHeader } from './WorkspaceSectionHeader';
 import { ws } from './workspace';
 import {
@@ -27,6 +28,7 @@ import {
   type LeadFieldFormValues,
 } from '@/components/lead-field';
 import { Button, Card, CardBody, Checkbox, FieldRow, Modal, Select, Switch, Tooltip } from '@/components/ui';
+import { BotSettingsFieldset } from '@/components/bot-workspace/BotSettingsFieldset';
 import { BOT_FIELD_MAX } from '@/lib/botFieldLimits';
 import { cn } from '@/lib/utils';
 
@@ -158,6 +160,7 @@ export function CaptureLeadsSection() {
     saveError,
     save,
   } = useCaptureLeadsWorkspace();
+  const canManageBot = useCanManageBot();
 
   const [fieldModal, setFieldModal] = useState<FieldModal>({ kind: 'idle' });
 
@@ -283,6 +286,7 @@ export function CaptureLeadsSection() {
               </div>
             </div>
             <div className="flex shrink-0 flex-col sm:pt-0">
+              {canManageBot ? (
               <Button
                 type="submit"
                 variant="primary"
@@ -309,6 +313,7 @@ export function CaptureLeadsSection() {
                   </>
                 )}
               </Button>
+              ) : null}
             </div>
           </header>
 
@@ -323,6 +328,7 @@ export function CaptureLeadsSection() {
             </div>
           ) : null}
 
+          <BotSettingsFieldset canManage={canManageBot}>
           <Card className="w-full min-w-0 overflow-hidden border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)] ring-1 ring-slate-900/[0.035]">
             <CardBody className="w-full min-w-0 px-5 py-5 sm:px-6 sm:py-6">
               <section className={ws.workspaceEditorCardSection} aria-labelledby="capture-lead-section-h">
@@ -616,6 +622,7 @@ export function CaptureLeadsSection() {
               </LeadCaptureLockedOverlay>
             ) : null}
           </div>
+          </BotSettingsFieldset>
         </div>
       </form>
 

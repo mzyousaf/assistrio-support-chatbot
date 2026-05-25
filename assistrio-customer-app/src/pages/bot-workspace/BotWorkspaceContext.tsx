@@ -1,18 +1,12 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getCustomerBot } from '../../api/customerApi';
 import type { CustomerBotDetail } from '../../api/types';
+import { useCustomerAuth } from '../../auth/CustomerAuthContext';
+import { canManageActiveWorkspace } from '../../lib/canManageActiveWorkspace';
 import { ASSISTRIO_WORKSPACE_BOT_REFRESH, requestNavbarBotRefresh } from '../../lib/botSyncEvents';
 import { isCustomerResourceUnavailable, MSG_DELETED_BOT } from '../../lib/customerResourceUnavailable';
+import { WORKSPACE_BOT_ACCESS_DENIED_MESSAGE, WORKSPACE_BOT_PREVIEW_ACCESS_DENIED_MESSAGE, isWorkspaceBotAccessDenied, isWorkspaceBotPreviewAccessDenied } from '../../lib/botsListMessages';
 import { appToast } from '@/lib/app-toast';
 
 export type BotWorkspaceLoadState = 'loading' | 'ok' | 'not_found' | 'forbidden' | 'error';
@@ -23,6 +17,7 @@ type BotWorkspaceValue = {
   health: Record<string, unknown> | null;
   loadState: BotWorkspaceLoadState;
   loadMessage: string;
+  canManageBot: boolean;
   reload: () => Promise<void>;
   /** Refetch bot + health without setting `loadState` to loading (use after PATCH saves). */
   softReload: () => Promise<void>;
@@ -33,6 +28,8 @@ const BotWorkspaceContext = createContext<BotWorkspaceValue | null>(null);
 export function BotWorkspaceProvider({ children }: { children: ReactNode }) {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { customer } = useCustomerAuth();
+  const canManageBot = canManageActiveWorkspace(customer);
   const [bot, setBot] = useState<CustomerBotDetail | null>(null);
   const [health, setHealth] = useState<Record<string, unknown> | null>(null);
   const [loadState, setLoadState] = useState<BotWorkspaceLoadState>('loading');
@@ -89,8 +86,17 @@ export function BotWorkspaceProvider({ children }: { children: ReactNode }) {
           return;
         }
         if (res.status === 403) {
+          const previewDenied = isWorkspaceBotPreviewAccessDenied(res);
+          const accessDenied = isWorkspaceBotAccessDenied(res);
+          const msg = previewDenied
+            ? WORKSPACE_BOT_PREVIEW_ACCESS_DENIED_MESSAGE
+            : accessDenied
+              ? WORKSPACE_BOT_ACCESS_DENIED_MESSAGE
+              : res.error || "You don't have access to this assistant.";
+          if (previewDenied) appToast.error(WORKSPACE_BOT_PREVIEW_ACCESS_DENIED_MESSAGE);
+          else if (accessDenied) appToast.error(WORKSPACE_BOT_ACCESS_DENIED_MESSAGE);
           setLoadState('forbidden');
-          setLoadMessage("You don't have access to this assistant.");
+          setLoadMessage(msg);
         } else {
           setLoadState('error');
           setLoadMessage(res.error);
@@ -167,10 +173,11 @@ export function BotWorkspaceProvider({ children }: { children: ReactNode }) {
       health,
       loadState,
       loadMessage,
+      canManageBot,
       reload,
       softReload,
     }),
-    [id, bot, health, loadState, loadMessage, reload, softReload],
+    [id, bot, health, loadState, loadMessage, canManageBot, reload, softReload],
   );
 
   return <BotWorkspaceContext.Provider value={value}>{children}</BotWorkspaceContext.Provider>;
@@ -182,4 +189,8 @@ export function useBotWorkspace() {
     throw new Error('useBotWorkspace must be used within BotWorkspaceProvider');
   }
   return ctx;
+}
+
+export function useCanManageBot(): boolean {
+  return useBotWorkspace().canManageBot;
 }

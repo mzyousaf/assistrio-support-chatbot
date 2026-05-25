@@ -1,5 +1,6 @@
 import {
   Body,
+  ForbiddenException,
   HttpException,
   HttpStatus,
   Param,
@@ -115,13 +116,18 @@ export abstract class WorkspaceUserChatControllerBase {
       throw new HttpException({ error: 'Bot not found' }, HttpStatus.NOT_FOUND);
     }
     const uid = adminUser?._id != null ? String(adminUser._id) : '';
-    const can = await this.workspacesService.canUserAccessWorkspaceBot(
-      uid,
-      adminUser?.role ?? 'customer',
-      bot as Record<string, unknown>,
-    );
-    if (!can) {
-      throw new HttpException({ error: 'Forbidden' }, HttpStatus.FORBIDDEN);
+    try {
+      await this.workspacesService.assertCanPreviewWorkspaceBot(
+        uid,
+        adminUser?.role ?? 'customer',
+        bot as Record<string, unknown>,
+      );
+    } catch (err) {
+      if (err instanceof ForbiddenException) {
+        const response = (err as ForbiddenException).getResponse() as Record<string, unknown>;
+        throw new HttpException(response, HttpStatus.FORBIDDEN);
+      }
+      throw err;
     }
 
     const b = bot as Record<string, unknown>;

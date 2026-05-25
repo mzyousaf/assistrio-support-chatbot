@@ -28,6 +28,7 @@ import {
 } from '@/lib/customerKnowledgeItemDelete';
 import { requestWorkspaceBotRefresh } from '@/lib/botSyncEvents';
 import { useBotWorkspace } from '../BotWorkspaceContext';
+import { ReadOnlyWorkspaceNotice } from '@/components/workspace/ReadOnlyWorkspaceNotice';
 import { useKnowledgeStorageUx, useDismissKnowledgeCompanionModalsOnStorageClose } from '@/context/KnowledgeStorageUxContext';
 import { Button, Checkbox, FieldRow, Input, Modal, Textarea } from '@/components/ui';
 import { KnowledgeUtf8Meter } from '@/components/knowledge/KnowledgeUtf8Meter';
@@ -105,7 +106,7 @@ export function QaListPage() {
   const pageSelectId = useId();
   const perPageSelectId = useId();
   const importFileRef = useRef<HTMLInputElement | null>(null);
-  const { bot, loadState, softReload } = useBotWorkspace();
+  const { bot, loadState, softReload, canManageBot } = useBotWorkspace();
   const { notifyPlanLimitFromApi, interceptKnowledgeStorageIncrease } = useKnowledgeStorageUx();
   const { knowledgeStatusItems, refreshKnowledgeStatus, refreshTrainingStatus } = useKbWorkspacePolling();
   const fromBot = useMemo(() => (bot ? faqsFromBot(bot) : []), [bot]);
@@ -530,6 +531,7 @@ export function QaListPage() {
   return (
     <div className={styles.knowledgeSourcesPageRoot} data-knowledge-qa-list>
       <div className={styles.knowledgeSourcesPageBody}>
+      {!canManageBot ? <ReadOnlyWorkspaceNotice variant="knowledge" className="shrink-0" /> : null}
       <header className={cn(styles.workspaceEditorPageHeader, 'shrink-0')}>
         <div className={styles.workspaceEditorTitleBlock}>
           <div className={styles.workspaceEditorHeadingStack}>
@@ -538,27 +540,32 @@ export function QaListPage() {
               Preset answers for important topics. Your Agent checks Q&amp;A before the rest of your knowledge.
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <Button type="button" variant="outlinePrimary" size="sm" onClick={() => setImportOpen(true)}>
-              <Upload size={14} aria-hidden />
-              Import CSV
-            </Button>
-          </div>
+          {canManageBot ? (
+            <div className="flex items-center gap-2">
+              <Button type="button" variant="outlinePrimary" size="sm" onClick={() => setImportOpen(true)}>
+                <Upload size={14} aria-hidden />
+                Import CSV
+              </Button>
+            </div>
+          ) : null}
         </div>
       </header>
-      <input
-        ref={importFileRef}
-        type="file"
-        accept=".csv,text/csv"
-        className="hidden"
-        tabIndex={-1}
-        onChange={(ev) => {
-          const f = ev.target.files?.[0];
-          ev.target.value = '';
-          void importFaqCsv(f);
-        }}
-      />
+      {canManageBot ? (
+        <input
+          ref={importFileRef}
+          type="file"
+          accept=".csv,text/csv"
+          className="hidden"
+          tabIndex={-1}
+          onChange={(ev) => {
+            const f = ev.target.files?.[0];
+            ev.target.value = '';
+            void importFaqCsv(f);
+          }}
+        />
+      ) : null}
 
+      {canManageBot ? (
       <div className={styles.knowledgeSourcesAddCard}>
         <p className={styles.knowledgeSourcesAddCardOverline}>Add Q&amp;A</p>
         <form
@@ -685,6 +692,7 @@ export function QaListPage() {
           </div>
         </form>
       </div>
+      ) : null}
 
       <div
         className={cn(
@@ -701,7 +709,9 @@ export function QaListPage() {
             </div>
             <p className="mt-3 text-sm font-semibold text-slate-900">No Q&amp;A yet</p>
             <p className="mx-auto mt-1.5 max-w-sm text-sm text-slate-500">
-              Use the form above to add common questions and answers the assistant can reuse.
+              {canManageBot
+                ? 'Use the form above to add common questions and answers the assistant can reuse.'
+                : 'No Q&A entries have been added yet.'}
             </p>
           </div>
         ) : (
@@ -713,7 +723,7 @@ export function QaListPage() {
               inputId={sourcesSearchId}
             />
             <div className={styles.knowledgeSourcesListControlsStack}>
-              {sortedFilteredIndices.length > 0 ? (
+              {canManageBot && sortedFilteredIndices.length > 0 ? (
                 <KnowledgeSourcesPageSelectAll
                   id={pageSelectId}
                   pageIndices={pagedIndices}
@@ -722,14 +732,20 @@ export function QaListPage() {
                   selectionBlocked={isIndexSelectionBlockedForBulk}
                   endSlot={<KnowledgeSortFilterCapsule value={listSort} onChange={setListSort} />}
                 />
+              ) : sortedFilteredIndices.length > 0 ? (
+                <div className="flex justify-end">
+                  <KnowledgeSortFilterCapsule value={listSort} onChange={setListSort} />
+                </div>
               ) : null}
-              <KnowledgeSourcesBulkBar
-                count={selected.size}
-                noun="Q and A"
-                busy={bulkDeleting}
-                onRequestDelete={openBulkDeleteModal}
-                onClear={clearSelection}
-              />
+              {canManageBot ? (
+                <KnowledgeSourcesBulkBar
+                  count={selected.size}
+                  noun="Q and A"
+                  busy={bulkDeleting}
+                  onRequestDelete={openBulkDeleteModal}
+                  onClear={clearSelection}
+                />
+              ) : null}
             </div>
             {sortedFilteredIndices.length === 0 ? (
               <div className="flex w-full min-w-0 flex-col items-center justify-center px-0 pb-2 pt-10 text-center">
@@ -759,7 +775,8 @@ export function QaListPage() {
                           onClick={(e) => e.stopPropagation()}
                           onKeyDown={(e) => e.stopPropagation()}
                         >
-                          {!deleting &&
+                          {canManageBot &&
+                          !deleting &&
                           !bulkDeleting &&
                           (!isKnowledgeRowDeleteBlocked(faqStatusSlice, faq.knowledgeItemId, faq) ||
                             selected.has(i)) ? (
@@ -812,57 +829,59 @@ export function QaListPage() {
                             </div>
                           </button>
                         </div>
-                        <div className="absolute right-1 top-1 z-10 sm:right-2 sm:top-2">
-                          <details className="relative isolate inline-block">
-                            <summary
-                              className="relative z-0 flex h-8 w-8 list-none cursor-pointer items-center justify-center rounded-md text-slate-500 hover:text-slate-700 [&::-webkit-details-marker]:hidden"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <MoreVertical size={16} />
-                            </summary>
-                            <div className="absolute right-0 top-[calc(100%+0.25rem)] z-10 min-w-[10.5rem] rounded-lg border border-slate-200 bg-white p-1 shadow-[var(--shadow-dropdown)]">
-                              {faq.knowledgeItemId?.trim() ? (
+                        {canManageBot ? (
+                          <div className="absolute right-1 top-1 z-10 sm:right-2 sm:top-2">
+                            <details className="relative isolate inline-block">
+                              <summary
+                                className="relative z-0 flex h-8 w-8 list-none cursor-pointer items-center justify-center rounded-md text-slate-500 hover:text-slate-700 [&::-webkit-details-marker]:hidden"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <MoreVertical size={16} />
+                              </summary>
+                              <div className="absolute right-0 top-[calc(100%+0.25rem)] z-10 min-w-[10.5rem] rounded-lg border border-slate-200 bg-white p-1 shadow-[var(--shadow-dropdown)]">
+                                {faq.knowledgeItemId?.trim() ? (
+                                  <button
+                                    type="button"
+                                    className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-xs font-medium text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                    disabled={
+                                      deleting || bulkDeleting || useInRepliesBusyId === faq.knowledgeItemId.trim()
+                                    }
+                                    title={
+                                      faq.active !== false
+                                        ? KNOWLEDGE_USE_IN_REPLIES_TAG_TOOLTIPS.active
+                                        : KNOWLEDGE_USE_IN_REPLIES_TAG_TOOLTIPS.excluded
+                                    }
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      (e.currentTarget.closest('details') as HTMLDetailsElement | null)?.removeAttribute(
+                                        'open',
+                                      );
+                                      void toggleFaqUseInReplies(faq.knowledgeItemId!, faq.active !== false);
+                                    }}
+                                  >
+                                    <MessageSquareReply className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
+                                    <span className="min-w-0">
+                                      {faq.active !== false ? 'Turn off in replies' : 'Turn on in replies'}
+                                    </span>
+                                  </button>
+                                ) : null}
                                 <button
                                   type="button"
-                                  className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-xs font-medium text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                                  disabled={
-                                    deleting || bulkDeleting || useInRepliesBusyId === faq.knowledgeItemId.trim()
-                                  }
-                                  title={
-                                    faq.active !== false
-                                      ? KNOWLEDGE_USE_IN_REPLIES_TAG_TOOLTIPS.active
-                                      : KNOWLEDGE_USE_IN_REPLIES_TAG_TOOLTIPS.excluded
-                                  }
+                                  className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-xs font-medium text-[var(--color-danger-text-emphasis)] hover:bg-slate-50"
+                                  title="Delete this Q&A"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    (e.currentTarget.closest('details') as HTMLDetailsElement | null)?.removeAttribute(
-                                      'open',
-                                    );
-                                    void toggleFaqUseInReplies(faq.knowledgeItemId!, faq.active !== false);
+                                    (e.currentTarget.closest('details') as HTMLDetailsElement | null)?.removeAttribute('open');
+                                    openRowDeleteModal(i);
                                   }}
                                 >
-                                  <MessageSquareReply className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
-                                  <span className="min-w-0">
-                                    {faq.active !== false ? 'Turn off in replies' : 'Turn on in replies'}
-                                  </span>
+                                  <Trash2 className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
+                                  <span className="min-w-0">Delete</span>
                                 </button>
-                              ) : null}
-                              <button
-                                type="button"
-                                className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-xs font-medium text-[var(--color-danger-text-emphasis)] hover:bg-slate-50"
-                                title="Delete this Q&A"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  (e.currentTarget.closest('details') as HTMLDetailsElement | null)?.removeAttribute('open');
-                                  openRowDeleteModal(i);
-                                }}
-                              >
-                                <Trash2 className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
-                                <span className="min-w-0">Delete</span>
-                              </button>
-                            </div>
-                          </details>
-                        </div>
+                              </div>
+                            </details>
+                          </div>
+                        ) : null}
                       </div>
                     </li>
                   );

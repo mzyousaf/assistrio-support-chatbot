@@ -45,6 +45,7 @@ describe('ResponseStyleSection', () => {
   it('refine calls API and onRefined', async () => {
     vi.mocked(refineCustomerBotResponseStyle).mockResolvedValue({
       ok: true,
+      status: 200,
       data: {
         mode: 'structured',
         description: 'Title and answer',

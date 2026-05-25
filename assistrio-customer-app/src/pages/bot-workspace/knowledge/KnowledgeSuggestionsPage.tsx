@@ -15,6 +15,7 @@ import {
   reportCustomerKnowledgeItemDeleteRejected,
 } from '@/lib/customerKnowledgeItemDelete';
 import { useBotWorkspace } from '../BotWorkspaceContext';
+import { ReadOnlyWorkspaceNotice } from '@/components/workspace/ReadOnlyWorkspaceNotice';
 import { useKnowledgeStorageUx, useDismissKnowledgeCompanionModalsOnStorageClose } from '@/context/KnowledgeStorageUxContext';
 import {
   EXAMPLE_QUESTIONS_BACKEND_MAX,
@@ -97,7 +98,7 @@ export function KnowledgeSuggestionsPage() {
   const sourcesSearchId = useId();
   const pageSelectId = useId();
   const perPageSelectId = useId();
-  const { bot, loadState, softReload } = useBotWorkspace();
+  const { bot, loadState, softReload, canManageBot } = useBotWorkspace();
   const { notifyPlanLimitFromApi, interceptKnowledgeStorageIncrease } = useKnowledgeStorageUx();
   const { knowledgeStatusItems, refreshKnowledgeStatus, refreshTrainingStatus } = useKbWorkspacePolling();
 
@@ -480,6 +481,7 @@ export function KnowledgeSuggestionsPage() {
   return (
     <div className={styles.knowledgeSourcesPageRoot} data-knowledge-suggestions-list>
       <div className={styles.knowledgeSourcesPageBody}>
+      {!canManageBot ? <ReadOnlyWorkspaceNotice variant="knowledge" className="shrink-0" /> : null}
       <header className={cn(styles.workspaceEditorPageHeader, 'shrink-0')}>
         <div className={styles.workspaceEditorTitleBlock}>
           <div className={styles.workspaceEditorHeadingStack}>
@@ -492,6 +494,7 @@ export function KnowledgeSuggestionsPage() {
         </div>
       </header>
 
+      {canManageBot ? (
       <div className={cn(styles.knowledgeSourcesAddCard, 'relative overflow-hidden')}>
         <div
           className={cn(atCapacity && 'pointer-events-none select-none')}
@@ -595,6 +598,7 @@ export function KnowledgeSuggestionsPage() {
           </div>
         ) : null}
       </div>
+      ) : null}
 
       <div
         className={cn(
@@ -618,13 +622,19 @@ export function KnowledgeSuggestionsPage() {
             </div>
             <p className="mt-3 text-sm font-semibold text-slate-900">No suggestions yet</p>
             <p className="mx-auto mt-1.5 max-w-sm text-sm text-slate-500">
-              Use <span className="font-medium text-slate-700">Add suggestion</span> above to create your first chip.
+              {canManageBot ? (
+                <>
+                  Use <span className="font-medium text-slate-700">Add suggestion</span> above to create your first chip.
+                </>
+              ) : (
+                'No suggestion chips have been added yet.'
+              )}
             </p>
           </div>
         ) : (
           <div className="flex w-full min-w-0 flex-col">
             <div className={styles.knowledgeSourcesListControlsStack}>
-              {sortedFilteredIndices.length > 0 ? (
+              {canManageBot && sortedFilteredIndices.length > 0 ? (
                 <KnowledgeSourcesPageSelectAll
                   id={pageSelectId}
                   pageIndices={pagedIndices}
@@ -633,14 +643,20 @@ export function KnowledgeSuggestionsPage() {
                   selectionBlocked={isIndexSelectionBlockedForBulk}
                   endSlot={<KnowledgeSortFilterCapsule value={listSort} onChange={setListSort} />}
                 />
+              ) : sortedFilteredIndices.length > 0 ? (
+                <div className="flex justify-end">
+                  <KnowledgeSortFilterCapsule value={listSort} onChange={setListSort} />
+                </div>
               ) : null}
-              <KnowledgeSourcesBulkBar
-                count={selected.size}
-                noun="suggestion"
-                busy={bulkDeleting}
-                onRequestDelete={openBulkDeleteModal}
-                onClear={clearSelection}
-              />
+              {canManageBot ? (
+                <KnowledgeSourcesBulkBar
+                  count={selected.size}
+                  noun="suggestion"
+                  busy={bulkDeleting}
+                  onRequestDelete={openBulkDeleteModal}
+                  onClear={clearSelection}
+                />
+              ) : null}
             </div>
             {sortedFilteredIndices.length === 0 ? (
               <div className="flex w-full min-w-0 flex-col items-center justify-center px-0 pb-2 pt-10 text-center">
@@ -673,7 +689,8 @@ export function KnowledgeSuggestionsPage() {
                           onClick={(e) => e.stopPropagation()}
                           onKeyDown={(e) => e.stopPropagation()}
                         >
-                          {!deleting &&
+                          {canManageBot &&
+                          !deleting &&
                           !bulkDeleting &&
                           (!isKnowledgeRowDeleteBlocked(suggestionStatusSlice, s.knowledgeItemId, s) ||
                             selected.has(i)) ? (
@@ -747,6 +764,7 @@ export function KnowledgeSuggestionsPage() {
                             ) : null}
                           </button>
                         </div>
+                        {canManageBot ? (
                         <div className="absolute right-1 top-1 z-10 sm:right-2 sm:top-2">
                           <details className="relative isolate inline-block">
                             <summary
@@ -824,6 +842,7 @@ export function KnowledgeSuggestionsPage() {
                             </div>
                           </details>
                         </div>
+                        ) : null}
                       </div>
                     </li>
                   );

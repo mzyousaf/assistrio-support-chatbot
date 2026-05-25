@@ -22,6 +22,7 @@ import { FeStackTags } from './FeStackTags';
 import { getInstallSetupGuide } from './installSetupGuide';
 import { MAX_ALLOWED_ORIGINS } from './publishConstants';
 import { usePublishWorkspace, type EmbedInstallMode, type EmbedVisibility } from './PublishWorkspaceContext';
+import { useBotWorkspace } from './BotWorkspaceContext';
 import { WorkspaceSectionHeader } from './WorkspaceSectionHeader';
 import { ws } from './workspace';
 
@@ -168,6 +169,7 @@ export function PublishSection() {
   const baseId = useId();
   const ctx = usePublishWorkspace();
   const lifecycle = useBotLifecycleControls();
+  const { canManageBot } = useBotWorkspace();
 
   const {
     copyText,
@@ -353,6 +355,7 @@ export function PublishSection() {
                       </>
                     )}
                   </Button>
+                  {canManageBot ? (
                   <Button
                     type="button"
                     variant="danger"
@@ -365,8 +368,9 @@ export function PublishSection() {
                     <PencilLine size={15} strokeWidth={2} aria-hidden />
                     Move to draft
                   </Button>
+                  ) : null}
                 </div>
-              ) : (
+              ) : canManageBot ? (
                 <Button
                   type="button"
                   variant="primary"
@@ -383,7 +387,7 @@ export function PublishSection() {
                   <Rocket size={15} strokeWidth={2} className="text-white" aria-hidden />
                   Go Live
                 </Button>
-              )}
+              ) : null}
             </div>
           </header>
 
@@ -414,7 +418,7 @@ export function PublishSection() {
                           </span>
                         }
                         inlineEnd={
-                          rows.length > 0 ? (
+                          canManageBot && rows.length > 0 ? (
                             <Button
                               type="button"
                               variant="outlinePrimary"
@@ -444,6 +448,7 @@ export function PublishSection() {
                           Add at least one production site where visitors will open the chat. Use the full address, e.g.{' '}
                           <span className="font-mono text-[0.6875rem] text-slate-700">https://www.example.com</span>
                         </p>
+                        {canManageBot ? (
                         <Button
                           type="button"
                           variant="primary"
@@ -454,6 +459,7 @@ export function PublishSection() {
                           <Plus size={16} strokeWidth={2} aria-hidden />
                           Add origin
                         </Button>
+                        ) : null}
                       </div>
                     ) : (
                       <ul className="m-0 list-none divide-y divide-slate-200/80 p-0" role="list" aria-label="Allowed origins">
@@ -485,6 +491,8 @@ export function PublishSection() {
                                 {row.isActive ? 'Active' : 'Inactive'}
                               </span>
                               <div className="flex shrink-0 items-center gap-0.5">
+                                {canManageBot ? (
+                                <>
                                 <Button
                                   type="button"
                                   variant="ghost"
@@ -505,6 +513,8 @@ export function PublishSection() {
                                 >
                                   <Trash2 size={16} strokeWidth={1.75} aria-hidden />
                                 </Button>
+                                </>
+                                ) : null}
                               </div>
                             </li>
                           );
@@ -661,6 +671,7 @@ export function PublishSection() {
                                     }
                                   />
                                 </div>
+                                {canManageBot ? (
                                 <Button
                                   type="button"
                                   variant="secondary"
@@ -678,6 +689,7 @@ export function PublishSection() {
                                   />
                                   <span className="text-xs font-medium">Rotate</span>
                                 </Button>
+                                ) : null}
                               </div>
                             </div>
 
@@ -699,6 +711,7 @@ export function PublishSection() {
                                       className={readOnlyMono}
                                       revealable={false}
                                       trailingIcon={
+                                        canManageBot ? (
                                         <span className="inline-flex items-center gap-0.5">
                                           <button
                                             type="button"
@@ -725,9 +738,11 @@ export function PublishSection() {
                                             )}
                                           </button>
                                         </span>
+                                        ) : undefined
                                       }
                                     />
                                   </div>
+                                  {canManageBot ? (
                                   <Button
                                     type="button"
                                     variant="secondary"
@@ -745,6 +760,7 @@ export function PublishSection() {
                                     />
                                     <span className="text-xs font-medium">Rotate</span>
                                   </Button>
+                                  ) : null}
                                 </div>
                               </div>
                             ) : null}

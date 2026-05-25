@@ -1,18 +1,5 @@
-export type EmbedInitFailureIconKind = "not_found" | "forbidden" | "network" | "generic";
-
-function isLikelyNetworkFailureMessage(message: string): boolean {
-  const m = (message || "").trim().toLowerCase();
-  return (
-    m.includes("failed to fetch") ||
-    m.includes("networkerror") ||
-    m.includes("network request failed") ||
-    m.includes("load failed") ||
-    m === "fetcherror"
-  );
-}
-
 /**
- * Mirrors `resolveIframeChatFailurePresentation` in the customer app so embed init errors
+ * Mirrors `resolveEmbedInitFailurePresentation` in the customer app so embed init errors
  * match the dashboard “couldn’t load this chat” card UX.
  */
 export function resolveEmbedInitFailurePresentation(errorText: string): {
@@ -21,7 +8,39 @@ export function resolveEmbedInitFailurePresentation(errorText: string): {
   icon: EmbedInitFailureIconKind;
 } {
   const m = (errorText || "").trim();
-  const isOriginBlocked = /not allowed|forbidden|origin|referer|invalid/i.test(m);
+
+  if (
+    m.includes("workspace_bot_preview_access_denied") ||
+    /don't have permission to preview this agent/i.test(m)
+  ) {
+    const description =
+      m.replace(/\s*\(workspace_bot_preview_access_denied\)\s*$/i, "").trim() ||
+      "You don't have permission to preview this agent. Ask a workspace owner or admin for access.";
+    return {
+      title: "Preview access denied",
+      description,
+      icon: "forbidden",
+    };
+  }
+
+  if (m.includes("PREVIEW_FORBIDDEN") || /only available to the bot owner/i.test(m)) {
+    const description =
+      m.replace(/\s*\(PREVIEW_FORBIDDEN\)\s*$/i, "").trim() ||
+      "Preview is only available to the bot owner. Sign in as the account that owns this agent.";
+    return {
+      title: "Preview not available",
+      description,
+      icon: "forbidden",
+    };
+  }
+
+  const isOriginBlocked =
+    m.includes("PREVIEW_ORIGIN_NOT_ALLOWED") ||
+    m.includes("EMBED_DOMAIN_NOT_ALLOWED") ||
+    m.includes("EMBED_ORIGIN_REQUIRED") ||
+    m.includes("EMBED_ORIGIN_INVALID") ||
+    m.includes("EMBED_NO_ALLOWLIST") ||
+    (/not allowed on this site/i.test(m) && !/preview/i.test(m));
 
   if (isOriginBlocked) {
     return {
@@ -46,4 +65,17 @@ export function resolveEmbedInitFailurePresentation(errorText: string): {
     description: m || "We could not load this chat. Please try again.",
     icon: "generic",
   };
+}
+
+export type EmbedInitFailureIconKind = "not_found" | "forbidden" | "network" | "generic";
+
+function isLikelyNetworkFailureMessage(message: string): boolean {
+  const lower = (message || "").trim().toLowerCase();
+  return (
+    lower.includes("failed to fetch") ||
+    lower.includes("networkerror") ||
+    lower.includes("network request failed") ||
+    lower.includes("load failed") ||
+    lower === "fetcherror"
+  );
 }

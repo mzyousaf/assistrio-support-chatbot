@@ -1,4 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
+import { Types } from 'mongoose';
 
 /**
  * Platform roles: `superadmin` (Assistrio staff), `customer` (tenant accounts).
@@ -54,6 +55,10 @@ export class User {
   /** Customer Google profile picture URL — updated on each successful Google sign-in. */
   @Prop({ required: false, trim: true })
   picture?: string;
+
+  /** Last selected workspace in the customer app; must match a workspace membership. */
+  @Prop({ type: Types.ObjectId, ref: 'Workspace', required: false })
+  activeWorkspaceId?: Types.ObjectId;
 
   @Prop({ default: Date.now })
   createdAt: Date;
