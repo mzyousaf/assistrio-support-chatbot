@@ -31,7 +31,7 @@ describe('CustomerWorkspaceActiveController', () => {
         botLimit: 1,
         memberLimit: 3,
         monthlyAiCredits: 50,
-        kbStorageMbPerBot: 10,
+        kbStorageMbPerBot: 5,
         analyticsHistoryDays: 7,
         canExportReports: false,
         showPoweredByAssistrio: true,

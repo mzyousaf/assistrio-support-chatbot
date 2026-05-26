@@ -39,6 +39,7 @@ describe('BotsService soft remove', () => {
       {} as never,
       {} as never,
       {} as never,
+      {} as never,
     );
 
     const r = await svc.remove(String(botId));
@@ -83,6 +84,7 @@ describe('BotsService soft remove', () => {
       {} as never,
       {} as never,
       { softDeleteKnowledgeItemsMatching: jest.fn() } as never,
+      {} as never,
       {} as never,
       {} as never,
       {} as never,

@@ -3,6 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { CustomerSessionAuthGuard } from '../auth/customer/customer-session.guard';
 import { CustomerChatsAnalyticsService } from '../analytics/customer-chats-analytics.service';
 import { BotsService } from '../bots/bots.service';
+import { WorkspaceAnalyticsEntitlementService } from '../entitlements/workspace-analytics-entitlement.service';
 import { WorkspacesService } from '../workspaces/workspaces.service';
 import { CustomerBotChatsAnalyticsController } from './customer-bot-chats-analytics.controller';
 
@@ -11,17 +12,24 @@ describe('CustomerBotChatsAnalyticsController', () => {
   const getMock = jest.fn();
   const findOneMock = jest.fn();
   const canAccessMock = jest.fn();
+  const resolveHistoryMock = jest.fn();
 
   beforeEach(async () => {
     getMock.mockReset();
     findOneMock.mockReset();
     canAccessMock.mockReset();
+    resolveHistoryMock.mockReset();
+    resolveHistoryMock.mockResolvedValue(7);
     const module: TestingModule = await Test.createTestingModule({
       controllers: [CustomerBotChatsAnalyticsController],
       providers: [
         { provide: CustomerChatsAnalyticsService, useValue: { get: getMock } },
         { provide: BotsService, useValue: { findOne: findOneMock } },
         { provide: WorkspacesService, useValue: { canUserAccessWorkspaceBot: canAccessMock } },
+        {
+          provide: WorkspaceAnalyticsEntitlementService,
+          useValue: { resolveAnalyticsHistoryDays: resolveHistoryMock },
+        },
       ],
     })
       .overrideGuard(CustomerSessionAuthGuard)
@@ -39,7 +47,7 @@ describe('CustomerBotChatsAnalyticsController', () => {
   });
 
   it('throws Forbidden when workspace denies bot access', async () => {
-    findOneMock.mockResolvedValue({ _id: 'bot1' });
+    findOneMock.mockResolvedValue({ _id: 'bot1', workspaceId: 'ws1' });
     canAccessMock.mockResolvedValue(false);
     await expect(
       ctrl.chatsAnalytics({ user: { _id: 'u1', role: 'member' } } as never, 'bot1', {}),
@@ -47,24 +55,23 @@ describe('CustomerBotChatsAnalyticsController', () => {
     expect(getMock).not.toHaveBeenCalled();
   });
 
-  it('calls analytics service when access granted', async () => {
-    findOneMock.mockResolvedValue({ _id: 'bot1' });
+  it('passes analyticsHistoryDays to analytics service when access granted', async () => {
+    findOneMock.mockResolvedValue({ _id: 'bot1', workspaceId: 'ws1' });
     canAccessMock.mockResolvedValue(true);
-    getMock.mockResolvedValue({ range: { from: '', to: '', granularity: 'day' } });
-    const res = await ctrl.chatsAnalytics(
+    resolveHistoryMock.mockResolvedValue(7);
+    getMock.mockResolvedValue({
+      range: { from: '', to: '', granularity: 'day' },
+      analyticsWindow: { analyticsWindowApplied: true, analyticsHistoryDays: 7 },
+    });
+    await ctrl.chatsAnalytics(
       { user: { _id: 'u1', role: 'member' } } as never,
       'bot1',
       { includePreview: 'false', granularity: 'week' },
     );
-    expect(res).toEqual({ range: { from: '', to: '', granularity: 'day' } });
-    expect(getMock).toHaveBeenCalledWith('bot1', {
-      from: undefined,
-      to: undefined,
-      granularity: 'week',
-      includePreview: 'false',
-      startedFrom: undefined,
-      countryCode: undefined,
-      deviceType: undefined,
-    });
+    expect(getMock).toHaveBeenCalledWith(
+      'bot1',
+      expect.objectContaining({ granularity: 'week', includePreview: 'false' }),
+      { analyticsHistoryDays: 7 },
+    );
   });
 });

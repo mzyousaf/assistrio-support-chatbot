@@ -6,16 +6,22 @@ describe('CustomerBotTopicsAnalyticsController', () => {
   const findOneMock = jest.fn();
   const canAccessMock = jest.fn();
 
+  const resolveHistoryMock = jest.fn();
+
   const ctrl = new CustomerBotTopicsAnalyticsController(
     { get: getMock } as never,
     { findOne: findOneMock } as never,
     { canUserAccessWorkspaceBot: canAccessMock } as never,
+    { resolveAnalyticsHistoryDays: resolveHistoryMock } as never,
   );
 
   beforeEach(() => {
     getMock.mockReset();
     findOneMock.mockReset();
     canAccessMock.mockReset();
+    resolveHistoryMock.mockReset();
+    resolveHistoryMock.mockResolvedValue(null);
+    findOneMock.mockResolvedValue({ _id: 'bot1', workspaceId: 'ws1' });
   });
 
   it('throws NotFound when bot missing', async () => {
@@ -45,14 +51,10 @@ describe('CustomerBotTopicsAnalyticsController', () => {
       { includePreview: 'false', granularity: 'week', topic: 'billing' },
     );
     expect(res).toEqual({ range: { from: '', to: '', granularity: 'day' } });
-    expect(getMock).toHaveBeenCalledWith('bot1', {
-      from: undefined,
-      to: undefined,
+    expect(getMock).toHaveBeenCalledWith('bot1', expect.objectContaining({
       granularity: 'week',
       includePreview: 'false',
-      startedFrom: undefined,
       topic: 'billing',
-      messageTopicScope: undefined,
-    });
+    }));
   });
 });

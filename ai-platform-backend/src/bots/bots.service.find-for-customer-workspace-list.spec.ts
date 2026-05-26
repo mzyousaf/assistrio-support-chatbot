@@ -27,8 +27,8 @@ describe('BotsService.findForCustomerWorkspaceList', () => {
       {} as never,
       {} as never,
       {} as never,
+      {} as never,
     );
-
     return { svc, find };
   }
 

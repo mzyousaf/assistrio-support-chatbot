@@ -16,6 +16,7 @@ import {
   KB_PLAN_FAQ_TITLE_MAX_UTF8_BYTES,
   faqQuestionsCombinedUtf8Bytes,
 } from '@/lib/knowledgeContentUtf8Limits';
+import { TRAINED_KNOWLEDGE_STORAGE_LIMIT_SHORT } from '@/lib/trainedKnowledgeStorageCopy';
 import { useBotWorkspace } from '../BotWorkspaceContext';
 import { useKnowledgeStorageUx } from '@/context/KnowledgeStorageUxContext';
 import { useKbKnowledgeStatusPollInterest, useKbWorkspacePolling } from '@/context/KbWorkspacePollingContext';
@@ -309,7 +310,7 @@ export function QaDetailPage() {
             lastTrainedAt={kbPollItem?.lastTrainedAt ?? row.lastTrainedAt}
             updatedAt={kbPollItem?.updatedAt ?? null}
             utf8SizeLabel={formatKnowledgeUtf8BytesDisplay(qaKnowledgeItemStoredUtf8Bytes(row))}
-            statusLabelOverride={planLimit ? 'Storage limit reached' : undefined}
+            statusLabelOverride={planLimit ? TRAINED_KNOWLEDGE_STORAGE_LIMIT_SHORT : undefined}
             forceFailedStatusDot={planLimit}
             kbLifecyclePresentation={planLimit ? null : kbLifecyclePresentation}
             trainingScheduleRunAfter={null}

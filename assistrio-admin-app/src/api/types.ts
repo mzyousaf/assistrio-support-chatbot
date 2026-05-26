@@ -411,6 +411,15 @@ export type AdminCustomerWorkspace = {
   botCount: number;
   createdAt?: string | null;
   updatedAt?: string | null;
+  planKey?: string;
+  planName?: string;
+  subscriptionStatus?: string;
+  monthlyAiCredits?: number;
+  aiCreditsUsedThisPeriod?: number;
+  botLimit?: number;
+  memberLimit?: number;
+  currentBots?: number;
+  currentMembers?: number;
 };
 
 export type AdminCustomerWorkspacesResponse = {
@@ -433,6 +442,80 @@ export type AdminCustomerBot = {
 export type AdminCustomerBotsResponse = {
   ok: true;
   bots: AdminCustomerBot[];
+};
+
+export type AdminWorkspaceBillingPlanSummary = {
+  key: string;
+  name: string;
+  priceMonthly: number;
+  status: string;
+  currentPeriodStart: string;
+  currentPeriodEnd: string;
+};
+
+export type AdminWorkspaceBillingEntitlementsSummary = {
+  botLimit: number;
+  memberLimit: number;
+  monthlyAiCredits: number;
+  kbStorageMbPerBot: number;
+  maxKbStorageMbPerBot: number;
+  analyticsHistoryDays: number | null;
+  canExportReports: boolean;
+  showPoweredByAssistrio: boolean;
+  canRemoveBranding: boolean;
+  activeAddons: string[];
+  topUpCreditsRemaining: number;
+};
+
+export type AdminWorkspaceBillingUsageSummary = {
+  bots: { current: number; limit: number };
+  members: { current: number; pendingInvites: number; used: number; limit: number };
+  aiCredits: {
+    periodStart: string;
+    periodEnd: string;
+    monthlyCredits: number;
+    monthlyCreditsUsed: number;
+    monthlyCreditsRemaining: number;
+    topUpCreditsRemaining: number;
+    totalCreditsAvailable: number;
+    totalCreditsRemaining: number;
+    isOverLimit: boolean;
+    byBot: Array<{ botId: string; creditsUsed: number }>;
+  };
+  trainedKnowledge: {
+    perBot: Array<{
+      botId: string;
+      botName: string;
+      usedBytes: number;
+      maxBytes: number;
+      usedMb: number;
+      maxMb: number;
+      percentUsed: number;
+    }>;
+    totalUsedBytes: number;
+    note: string;
+  };
+};
+
+export type AdminWorkspaceBillingMetadata = {
+  workspaceName: string;
+  workspaceOwnerEmail: string | null;
+  subscriptionId: string | null;
+  subscriptionCreatedAt: string | null;
+  subscriptionUpdatedAt: string | null;
+  activeAddons: string[];
+  topUpCreditsRemaining: number;
+  usageLedgerCount: number | null;
+};
+
+export type AdminWorkspaceBillingSummary = {
+  workspaceId: string;
+  plan: AdminWorkspaceBillingPlanSummary;
+  entitlements: AdminWorkspaceBillingEntitlementsSummary;
+  usage: AdminWorkspaceBillingUsageSummary;
+  planCatalog: Array<{ key: string; name: string }>;
+  addonCatalog: Array<{ key: string; name: string; checkoutAvailable: false }>;
+  admin: AdminWorkspaceBillingMetadata;
 };
 
 export type AdminCustomersListParams = {

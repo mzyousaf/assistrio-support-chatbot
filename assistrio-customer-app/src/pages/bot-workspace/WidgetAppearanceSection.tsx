@@ -1,6 +1,15 @@
 import { useCallback, useEffect, useId, useRef, useState, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { Loader2, Palette, Rocket, Save, SeparatorHorizontal, type LucideIcon } from 'lucide-react';
 import { patchCustomerBot } from '../../api/customerApi';
+import { useCustomerAuth } from '../../auth/CustomerAuthContext';
+import {
+  applyBrandingEntitlementToLocalChatUi,
+  BRANDING_REMOVAL_LOCKED_HELPER,
+  resolveBrandingSaveErrorMessage,
+} from '../../lib/brandingEntitlementCopy';
+import { resolveActiveCustomerWorkspace } from '../../lib/resolveActiveCustomerWorkspace';
+import { useWorkspaceBillingSummary } from '../../hooks/useWorkspaceBillingSummary';
 import { Button, Card, CardBody, FieldRow, Input, Range, Select, Switch, Textarea } from '@/components/ui';
 import { BotSettingsFieldset } from '@/components/bot-workspace/BotSettingsFieldset';
 import { cn } from '@/lib/utils';
@@ -99,9 +108,10 @@ type ToggleRowProps = {
   description?: string;
   checked: boolean;
   onChange: (next: boolean) => void;
+  disabled?: boolean;
 };
 
-function ToggleRow({ id, label, description, checked, onChange }: ToggleRowProps) {
+function ToggleRow({ id, label, description, checked, onChange, disabled = false }: ToggleRowProps) {
   return (
     <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 py-3.5 last:border-b-0">
       <div className="min-w-0 flex-1">
@@ -114,6 +124,7 @@ function ToggleRow({ id, label, description, checked, onChange }: ToggleRowProps
         id={id}
         checked={checked}
         onCheckedChange={onChange}
+        disabled={disabled}
         aria-labelledby={`${id}-label`}
         className="mt-0.5 shrink-0"
       />
@@ -127,6 +138,11 @@ export function WidgetAppearanceSection() {
   const subnavId = useId();
   const launcherFileRef = useRef<HTMLInputElement>(null);
   const { bot, botId, softReload, canManageBot } = useBotWorkspace();
+  const { customer } = useCustomerAuth();
+  const { activeWorkspaceId } = resolveActiveCustomerWorkspace(customer);
+  const { summary: billingSummary } = useWorkspaceBillingSummary(activeWorkspaceId);
+  const canRemoveBranding = billingSummary?.entitlements.canRemoveBranding === true;
+  const brandingLocked = !canRemoveBranding;
   const { setAppearanceChatUiDraft } = useCustomerWidgetPreview();
   const [chatUi, setChatUi] = useState<Record<string, unknown>>({});
   const [activeTab, setActiveTab] = useState<WidgetAppearanceTabId>('branding-theme');
@@ -136,10 +152,11 @@ export function WidgetAppearanceSection() {
 
   const hydrateFromBot = useCallback(() => {
     if (!bot) return;
-    setChatUi(mergeChatUiFromBot(bot.chatUI));
+    const merged = mergeChatUiFromBot(bot.chatUI);
+    setChatUi(brandingLocked ? applyBrandingEntitlementToLocalChatUi(merged, false) : merged);
     setDirty(false);
     setSaveError(null);
-  }, [bot]);
+  }, [bot, brandingLocked]);
 
   useEffect(() => {
     hydrateFromBot();
@@ -151,10 +168,11 @@ export function WidgetAppearanceSection() {
 
   useEffect(() => {
     const id = window.setTimeout(() => {
-      setAppearanceChatUiDraft({ ...chatUi });
+      const draft = brandingLocked ? applyBrandingEntitlementToLocalChatUi({ ...chatUi }, false) : { ...chatUi };
+      setAppearanceChatUiDraft(draft);
     }, APPEARANCE_PREVIEW_DEBOUNCE_MS);
     return () => window.clearTimeout(id);
-  }, [chatUi, setAppearanceChatUiDraft]);
+  }, [chatUi, setAppearanceChatUiDraft, brandingLocked]);
 
   useEffect(() => {
     return () => setAppearanceChatUiDraft(null);
@@ -167,10 +185,11 @@ export function WidgetAppearanceSection() {
 
   const patch = useCallback(
     (key: string, value: unknown) => {
+      if (brandingLocked && key === 'showBranding' && value === false) return;
       setChatUi((prev) => ({ ...prev, [key]: value }));
       markDirty();
     },
-    [markDirty],
+    [markDirty, brandingLocked],
   );
 
   const onSubmit = useCallback(
@@ -180,20 +199,29 @@ export function WidgetAppearanceSection() {
       setSaving(true);
       setSaveError(null);
       const res = await patchCustomerBot(botId, {
-        chatUI: buildWidgetAppearanceChatUiSavePayload(bot.chatUI, chatUi),
+        chatUI: buildWidgetAppearanceChatUiSavePayload(bot.chatUI, chatUi, {
+          canRemoveBranding,
+        }),
       });
       setSaving(false);
       if (!res.ok) {
-        setSaveError(res.error);
-        toastPlaygroundSectionSaveFailed('widgetAppearance', res.error);
+        const message = resolveBrandingSaveErrorMessage(res);
+        setSaveError(message);
+        toastPlaygroundSectionSaveFailed('widgetAppearance', message);
         return;
       }
       toastPlaygroundSectionSaved('widgetAppearance');
       setDirty(false);
       await softReload();
     },
-    [bot, botId, chatUi, dirty, softReload, saving],
+    [bot, botId, chatUi, dirty, softReload, saving, canRemoveBranding],
   );
+
+  const showBrandingEnabled = brandingLocked ? true : getBool(chatUi, 'showBranding', true);
+  const storedBrandingHidden =
+    brandingLocked && bot?.chatUI && typeof bot.chatUI === 'object'
+      ? (bot.chatUI as { showBranding?: boolean }).showBranding === false
+      : false;
 
   const primaryColor = getStr(chatUi, 'primaryColor') || DEFAULT_PRIMARY_HEX;
   const colorPickerValue = normalizePrimaryColor(primaryColor);
@@ -535,10 +563,26 @@ export function WidgetAppearanceSection() {
                           id="appearance-show-branding"
                           label="Show branding line"
                           description="Attribution or product line at the bottom of the widget."
-                          checked={getBool(chatUi, 'showBranding', true)}
+                          checked={showBrandingEnabled}
+                          disabled={brandingLocked}
                           onChange={(v) => patch('showBranding', v)}
                         />
-                        {getBool(chatUi, 'showBranding', true) ? (
+                        {brandingLocked ? (
+                          <div className="border-b border-slate-100 py-3.5">
+                            <p className={cn(ws.workspaceEditorControlHint, 'm-0')}>
+                              {BRANDING_REMOVAL_LOCKED_HELPER}{' '}
+                              <Link to="/settings/plans" className="font-medium text-teal-700 underline">
+                                View add-ons
+                              </Link>
+                            </p>
+                            {storedBrandingHidden ? (
+                              <p className="mt-2 text-sm text-amber-800">
+                                Branding is required on your current plan and will stay visible in the live widget.
+                              </p>
+                            ) : null}
+                          </div>
+                        ) : null}
+                        {showBrandingEnabled ? (
                           <div className="border-b border-slate-100 py-3.5">
                             <FieldRow
                               label="Branding text"

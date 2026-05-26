@@ -219,7 +219,7 @@ export function AgentWorkspaceSidebar({ bot, health }: Props) {
         'min-h-0 overflow-y-auto overflow-x-hidden',
         'p-3 max-[900px]:max-h-[min(42vh,22rem)] max-[900px]:w-full max-[900px]:self-start max-[900px]:border-b max-[900px]:border-r-0 max-[900px]:p-2',
       )}
-      style={{ background: 'var(--bg-sidebar-secondary)', borderRight: '1px solid var(--border-soft)' }}
+      style={{ background: 'var(--bg-sidebar-secondary)' }}
       aria-label="Agent workspace"
     >
       <nav

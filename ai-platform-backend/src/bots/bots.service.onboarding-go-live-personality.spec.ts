@@ -38,6 +38,7 @@ describe('BotsService.createPublishedBotFromWorkspaceOnboarding personality mapp
       {} as never,
       workspaceBotLimitService,
       workspaceEntitlementsService,
+      {} as never,
     );
 
     let capturedCreatePayload: Record<string, unknown> | null = null;

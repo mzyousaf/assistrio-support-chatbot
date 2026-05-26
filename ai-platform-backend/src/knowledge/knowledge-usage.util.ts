@@ -1,5 +1,6 @@
 import { buildFaqEmbeddingText, buildNoteEmbeddingText, buildQaEmbeddingText } from './faq-note-embedding.helper';
 import { getUtf8ByteCount } from './knowledge-byte-size.util';
+import { Types } from 'mongoose';
 import {
   knowledgeBaseItemIsEffectivelyDeleted,
   knowledgeItemNotDeletedClause,
@@ -309,14 +310,16 @@ export function calculateKnowledgeUsageFromItems(items: KnowledgeBaseItemUsageLe
 }
 
 export type BotForKnowledgeUsageLimit = {
+  workspaceId?: Types.ObjectId | string | null;
   botConfig?: { knowledgeSize?: Partial<BotKnowledgeSizeStored> | null } | null;
 } | null;
 
 export function buildKnowledgeUsageWithLimit(
   usage: KnowledgeUsageBreakdown,
   bot?: BotForKnowledgeUsageLimit,
+  resolvedOverride?: ResolvedBotKnowledgeSize,
 ): KnowledgeUsageBreakdown {
-  if (bot == null) {
+  if (bot == null && resolvedOverride == null) {
     return {
       ...usage,
       maxBytes: undefined,
@@ -324,7 +327,8 @@ export function buildKnowledgeUsageWithLimit(
       percentUsed: undefined,
     };
   }
-  const resolved: ResolvedBotKnowledgeSize = resolveBotKnowledgeSizeConfig(bot);
+  const resolved: ResolvedBotKnowledgeSize =
+    resolvedOverride ?? resolveBotKnowledgeSizeConfig(bot);
   const maxBytes = resolved.maxBytes;
   if (typeof maxBytes !== 'number' || !Number.isFinite(maxBytes) || maxBytes <= 0) {
     return {

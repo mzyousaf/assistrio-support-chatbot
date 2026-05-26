@@ -19,7 +19,7 @@ import {
   type KnowledgeBaseItemUsageLean,
 } from './knowledge-usage.util';
 import { mergeTrainingScopes } from './merge-training-scopes.util';
-import { resolveBotKnowledgeSizeConfig } from './resolve-bot-knowledge-size.util';
+import { BotKnowledgeSizeResolverService } from '../entitlements/bot-knowledge-size-resolver.service';
 
 function trainingScopeForKbSourceType(st: string): KnowledgeTrainingScope | null {
   if (st === 'faq' || st === 'note' || st === 'table' || st === 'suggestion') return st;
@@ -55,6 +55,7 @@ export class KnowledgeOosReconcileService {
     private readonly knowledgeStatsService: KnowledgeStatsService,
     @Inject(forwardRef(() => KnowledgeBaseItemService))
     private readonly knowledgeBaseItemService: KnowledgeBaseItemService,
+    private readonly knowledgeSizeResolver: BotKnowledgeSizeResolverService,
   ) {}
 
   /**
@@ -63,8 +64,13 @@ export class KnowledgeOosReconcileService {
    */
   async reconcileOutOfStorageItemsForBot(botId: string, reason: string): Promise<{ releasedCount: number }> {
     if (!Types.ObjectId.isValid(botId)) return { releasedCount: 0 };
-    const botLean = await this.botModel.findById(new Types.ObjectId(botId)).select('botConfig knowledgeTraining').lean();
-    const { maxBytes } = resolveBotKnowledgeSizeConfig(botLean as Parameters<typeof resolveBotKnowledgeSizeConfig>[0]);
+    const botLean = await this.botModel
+      .findById(new Types.ObjectId(botId))
+      .select('workspaceId botConfig knowledgeTraining')
+      .lean();
+    const { maxBytes } = await this.knowledgeSizeResolver.resolveForBotLean(
+      botLean as Parameters<BotKnowledgeSizeResolverService['resolveForBotLean']>[0],
+    );
     if (!Number.isFinite(maxBytes) || maxBytes <= 0) return { releasedCount: 0 };
 
     const settings = getKnowledgeTrainingSettings(botLean as Parameters<typeof getKnowledgeTrainingSettings>[0]);

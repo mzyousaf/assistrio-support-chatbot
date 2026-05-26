@@ -3,6 +3,7 @@ import {
   Database,
   CheckCircle2,
   ChevronDown,
+  Building2,
   Copy,
   CreditCard,
   Gem,
@@ -16,11 +17,10 @@ import {
   PencilLine,
   Rocket,
   Settings,
-  Sliders,
   Sparkles,
+  User,
   UserCog,
   Users,
-  Zap,
   type LucideIcon,
 } from 'lucide-react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
@@ -47,11 +47,16 @@ import { Modal } from '../components/ui/Modal';
 import { ASSISTRIO_NAVBAR_BOT_REFRESH, requestWorkspaceBotRefresh } from '../lib/botSyncEvents';
 import { WorkspaceSwitcher } from '@/components/workspace/WorkspaceSwitcher';
 import { canManageActiveWorkspace } from '@/lib/canManageActiveWorkspace';
+import { resolveActiveCustomerWorkspace } from '@/lib/resolveActiveCustomerWorkspace';
+import {
+  buildWorkspaceBillingSessionKey,
+  useWorkspaceBillingSummary,
+} from '@/hooks/useWorkspaceBillingSummary';
+import { AppShellCreditsWidget } from '@/layout/AppShellCreditsWidget';
+
+import { resolveSettingsNavActiveIndex } from '@/lib/settingsNavigation';
 
 import { cn } from '@/lib/utils';
-
-const CREDITS_USED = 10;
-const CREDITS_TOTAL = 50;
 
 // TODO(epic-4): Filter bot list by active workspace when backend supports workspace-scoped bot listing.
 
@@ -351,6 +356,21 @@ export function AppShell() {
   const sidebarPeeking = sidebarCollapsed && sidebarHovered;
 
   const { customer, needsOnboarding, activateWorkspace } = useCustomerAuth();
+  const { activeWorkspaceId } = resolveActiveCustomerWorkspace(customer);
+  const billingSessionKey = useMemo(
+    () =>
+      buildWorkspaceBillingSessionKey({
+        customerId: customer?.id,
+        activeWorkspaceId,
+        workspaceIds: customer?.workspaceIds,
+      }),
+    [customer?.id, customer?.workspaceIds, activeWorkspaceId],
+  );
+  const { summary: billingSummary, loadState: billingLoadState } = useWorkspaceBillingSummary(
+    activeWorkspaceId,
+    billingSessionKey,
+  );
+  const sidebarAiCredits = billingSummary?.usage?.aiCredits;
   const { signOut, logoutInFlight, logoutError, clearLogoutError } = useCustomerLogout();
 
   const initials = customer ? customerInitials(customer) : '?';
@@ -481,7 +501,8 @@ export function AppShell() {
   );
 
   const settingsSubNav: [string, string, LucideIcon][] = [
-    ['/settings/general', 'General', Sliders],
+    ['/settings/account', 'User Account', User],
+    ['/settings/workspace', 'Workspace', Building2],
     ['/settings/members', 'Members', Users],
     ['/settings/plans', 'Plans', Gem],
     ['/settings/billing', 'Billing', CreditCard],
@@ -495,7 +516,7 @@ export function AppShell() {
   const [peekIndicator, setPeekIndicator] = useState<{ top: number; height: number } | null>(null);
 
   useEffect(() => {
-    const activeIdx = settingsSubNav.findIndex(([to]) => location.pathname.startsWith(to));
+    const activeIdx = resolveSettingsNavActiveIndex(location.pathname);
 
     const el = settingsSubNavRefs.current[activeIdx];
     const track = settingsTrackRef.current;
@@ -578,7 +599,6 @@ export function AppShell() {
     setAgentInfoExpanded(false);
   }
 
-  const creditsPct = Math.min(100, Math.round((CREDITS_USED / CREDITS_TOTAL) * 100));
 
   useEffect(() => {
     return () => {
@@ -1034,7 +1054,7 @@ export function AppShell() {
                   {(
                     [
                       ['/bots', LayoutDashboard, 'Dashboard'],
-                      ['/settings/general', UserCog, 'Account settings'],
+                      ['/settings/account', UserCog, 'Account settings'],
                       ['/settings/billing', CreditCard, 'Billing & plans'],
                     ] as const
                   ).map(([to, Icon, label]) => (
@@ -1157,7 +1177,7 @@ export function AppShell() {
                       onClick={() => {
                         const opening = !settingsOpen;
                         setSettingsOpen(opening);
-                        if (opening && !isSettingsActive) navigate('/settings/general');
+                        if (opening && !isSettingsActive) navigate('/settings/account');
                       }}
                     >
                       <Settings size={18} strokeWidth={1.75} className={cn('shrink-0 transition-colors duration-150', isSettingsActive ? 'text-teal-600' : 'text-slate-400 group-hover:text-teal-600')} aria-hidden />
@@ -1202,24 +1222,13 @@ export function AppShell() {
                   </div>
                 </div>
 
-                {/* Credits in peek */}
-                <div className="shrink-0 p-3" style={{ borderTop: '1px solid var(--border-soft)' }}>
-                  <div className="mb-1.5 flex items-center justify-between">
-                    <span className="text-xs font-semibold text-slate-600">Credits</span>
-                    <span className="text-xs font-semibold tabular-nums text-slate-400">{CREDITS_USED}/{CREDITS_TOTAL}</span>
-                  </div>
-                  <div className="h-1.5 overflow-hidden rounded-full bg-slate-100" aria-hidden>
-                    <div className="h-full rounded-full bg-gradient-to-r from-teal-400 to-teal-500 transition-all" style={{ width: `${creditsPct}%` }} />
-                  </div>
-                  <NavLink
-                    to="/settings/plans"
-                    onClick={(e) => workspaceLeaveGuard(e, '/settings/plans')}
-                    className="mt-2.5 flex w-full items-center justify-center gap-2 rounded-md bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white no-underline shadow-sm transition-all duration-150 hover:bg-teal-700 active:scale-[0.98]"
-                  >
-                    <Zap size={12} className="shrink-0 fill-white" aria-hidden />
-                    Upgrade
-                  </NavLink>
-                </div>
+                <AppShellCreditsWidget
+                  variant="peek"
+                  activeWorkspaceId={activeWorkspaceId}
+                  loadState={billingLoadState}
+                  aiCredits={sidebarAiCredits}
+                  onNavigatePlans={(e) => workspaceLeaveGuard(e, '/settings/plans')}
+                />
               </nav>
             </>
           )}
@@ -1298,10 +1307,10 @@ export function AppShell() {
               <div className="flex w-full flex-col items-center gap-1">
                 {/* Settings icon only — no sub-nav when collapsed */}
                 <NavLink
-                  to="/settings/general"
+                  to="/settings/account"
                   className={sideNavLink}
                   title="Settings"
-                  onClick={(e) => workspaceLeaveGuard(e, '/settings/general')}
+                  onClick={(e) => workspaceLeaveGuard(e, '/settings/account')}
                 >
                   {({ isActive }) => (
                     <Settings
@@ -1327,7 +1336,7 @@ export function AppShell() {
                   onClick={() => {
                     const opening = !settingsOpen;
                     setSettingsOpen(opening);
-                    if (opening && !isSettingsActive) navigate('/settings/general');
+                    if (opening && !isSettingsActive) navigate('/settings/account');
                   }}
                 >
                   <Settings
@@ -1405,49 +1414,13 @@ export function AppShell() {
           <div className="shrink-0 max-[900px]:hidden">
             {!sidebarCollapsed && (
               <div className="px-3 pb-2">
-                {/* Credits + Upgrade */}
-                <div className="mb-3 overflow-hidden rounded-xl shadow-[var(--shadow-card)]" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-soft)' }}>
-                  {/* Usage bar */}
-                  <div className="p-3">
-                    <div className="mb-1.5 flex items-center justify-between">
-                      <span className="text-xs font-semibold text-slate-600">Credits</span>
-                      <span className="text-xs font-semibold tabular-nums text-slate-400">
-                        {CREDITS_USED}/{CREDITS_TOTAL}
-                      </span>
-                    </div>
-                    <div className="h-1.5 overflow-hidden rounded-full bg-slate-100" aria-hidden>
-                      <div
-                        className="h-full rounded-full bg-gradient-to-r from-teal-400 to-teal-500 transition-all"
-                        style={{ width: `${creditsPct}%` }}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Upgrade CTA */}
-                  <div className="p-3" style={{ borderTop: '1px solid var(--border-soft)', background: 'var(--bg-sidebar-secondary)' }}>
-                    <div className="mb-1.5 flex items-center gap-2">
-                      <Zap
-                        size={13}
-                        className="shrink-0 fill-amber-400 text-amber-400"
-                        aria-hidden
-                      />
-                      <span className="text-xs font-semibold text-slate-700">
-                        Upgrade to Pro
-                      </span>
-                    </div>
-                    <p className="mb-3 text-xs leading-relaxed text-slate-400">
-                      Get 5k messages, remove branding &amp; priority support.
-                    </p>
-                    <NavLink
-                      to="/settings/plans"
-                      onClick={(e) => workspaceLeaveGuard(e, '/settings/plans')}
-                      className="flex w-full items-center justify-center gap-2 rounded-md bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white no-underline shadow-sm transition-all duration-150 hover:bg-teal-700 active:scale-[0.98]"
-                    >
-                      <Zap size={12} className="shrink-0 fill-white" aria-hidden />
-                      Upgrade
-                    </NavLink>
-                  </div>
-                </div>
+                <AppShellCreditsWidget
+                  variant="card"
+                  activeWorkspaceId={activeWorkspaceId}
+                  loadState={billingLoadState}
+                  aiCredits={sidebarAiCredits}
+                  onNavigatePlans={(e) => workspaceLeaveGuard(e, '/settings/plans')}
+                />
               </div>
             )}
 

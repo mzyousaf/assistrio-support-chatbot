@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Plus, Users } from 'lucide-react';
+import { AlertTriangle, UserPlus } from 'lucide-react';
 import {
   deleteWorkspaceMember,
   getWorkspaceInvites,
@@ -12,10 +12,16 @@ import {
 import type { WorkspaceInviteRole, WorkspaceInviteSummary, WorkspaceMemberSummary } from '@/api/types';
 import { useCustomerAuth } from '@/auth/CustomerAuthContext';
 import { InviteMemberModal } from '@/components/settings/InviteMemberModal';
+import { MembersSeatUsageCard } from '@/components/settings/MembersSeatUsageCard';
 import { SettingsMembersConfirmModal } from '@/components/settings/SettingsMembersConfirmModal';
-import { buildWorkspacePersonRows, WorkspacePeopleTable, type WorkspacePersonRow } from '@/components/settings/WorkspacePeopleTable';
-import { Button } from '@/components/ui';
-import { DataPageLayout } from '@/layout/workspace-layout';
+import { SettingsPageHeader } from '@/components/settings/SettingsPageHeader';
+import {
+  buildWorkspacePersonRows,
+  WorkspacePeopleTable,
+  type WorkspacePersonRow,
+} from '@/components/settings/WorkspacePeopleTable';
+import { Button, Card, CardBody } from '@/components/ui';
+import { WorkspaceContentContainer } from '@/layout/workspace-layout/WorkspaceContentContainer';
 import { appToast } from '@/lib/app-toast';
 import { resolveActiveCustomerWorkspace } from '@/lib/resolveActiveCustomerWorkspace';
 import {
@@ -35,11 +41,31 @@ type LoadState = 'idle' | 'loading' | 'ready' | 'error';
 
 function MembersPageSkeleton() {
   return (
-    <div className="space-y-5" aria-busy="true" aria-label="Loading members">
-      <div className="h-24 animate-pulse rounded-xl border border-slate-200/90 bg-white" />
-      <div className="h-48 animate-pulse rounded-xl border border-slate-200/90 bg-white" />
-      <div className="h-36 animate-pulse rounded-xl border border-slate-200/90 bg-white" />
+    <div className="space-y-4" aria-busy="true" aria-label="Loading members">
+      <div className="h-52 animate-pulse rounded-2xl border border-slate-200/90 bg-slate-50" />
+      <div className="h-80 animate-pulse rounded-2xl border border-slate-200/90 bg-slate-50" />
     </div>
+  );
+}
+
+function MembersErrorCard(props: { onRetry: () => void }) {
+  return (
+    <Card className="border-amber-200/90 bg-amber-50/70 shadow-[var(--shadow-card)]">
+      <CardBody className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-start gap-3">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-800" aria-hidden />
+          <div className="min-w-0">
+            <p className="m-0 font-semibold text-amber-950">Could not load members</p>
+            <p className="m-0 mt-1 text-sm leading-relaxed text-amber-900/90">
+              We couldn&apos;t load workspace people right now.
+            </p>
+          </div>
+        </div>
+        <Button type="button" variant="secondary" size="sm" onClick={props.onRetry}>
+          Retry
+        </Button>
+      </CardBody>
+    </Card>
   );
 }
 
@@ -69,6 +95,16 @@ export function SettingsMembersPage() {
   );
   const seatsUsed = useMemo(() => countWorkspaceSeatsUsed(members.length, invites), [members.length, invites]);
   const memberLimit = workspace?.memberLimit ?? null;
+  const planName = workspace?.planName ?? 'current';
+
+  const showCollaborationCallout = useMemo(() => {
+    const activeCount = members.length;
+    const pendingCount = pendingInvites.length;
+    if (activeCount >= 6) return false;
+    return activeCount < 2 || pendingCount > 0;
+  }, [members.length, pendingInvites.length]);
+
+  const openInviteModal = useCallback(() => setInviteOpen(true), []);
 
   const refreshData = useCallback(async () => {
     if (!activeWorkspaceId || !canManageMembers) return;
@@ -177,25 +213,29 @@ export function SettingsMembersPage() {
 
   const inviteButton =
     canManageMembers && activeWorkspaceId && !accessDenied ? (
-      <Button type="button" variant="primary" size="sm" onClick={() => setInviteOpen(true)}>
-        <Plus className="h-4 w-4" aria-hidden />
+      <Button type="button" variant="primary" size="sm" onClick={openInviteModal}>
+        <UserPlus className="h-4 w-4" aria-hidden />
         Invite member
       </Button>
     ) : null;
 
   if (!activeWorkspaceId || !workspace) {
     return (
-      <DataPageLayout
-        title="Members"
-        description="Manage who can access this workspace."
-        containerSize="standard"
-      >
-        <div className="rounded-xl border border-slate-200/90 bg-white p-5 shadow-[var(--shadow-card)]">
-          <p className="m-0 text-[0.9375rem] leading-[1.5] text-slate-600">
-            No active workspace is selected. Choose a workspace to manage members.
-          </p>
-        </div>
-      </DataPageLayout>
+      <>
+        <SettingsPageHeader
+          title="Members"
+          description="Manage who can access this workspace."
+        />
+        <WorkspaceContentContainer size="standard" className="pt-6">
+          <Card className="border-slate-200/90 shadow-[var(--shadow-card)]">
+            <CardBody>
+              <p className="m-0 text-sm leading-relaxed text-slate-600">
+                No active workspace is selected. Choose a workspace to manage members.
+              </p>
+            </CardBody>
+          </Card>
+        </WorkspaceContentContainer>
+      </>
     );
   }
 
@@ -203,98 +243,58 @@ export function SettingsMembersPage() {
 
   return (
     <>
-      <DataPageLayout
+      <SettingsPageHeader
         title="Members"
         description="Manage who can access this workspace."
         actions={inviteButton}
-        containerSize="standard"
-      >
+      />
+
+      <WorkspaceContentContainer size="standard" className="pt-6">
         {showReadOnly ? (
-          <div
-            className="mb-5 rounded-lg border border-slate-200/90 bg-slate-50/80 px-4 py-3 text-[0.9375rem] text-slate-600"
-            role="status"
-          >
-            Only workspace owners and admins can manage members.
-          </div>
+          <Card className="mb-4 border-slate-200/90 bg-slate-50/80 shadow-[var(--shadow-xs)]">
+            <CardBody>
+              <p className="m-0 text-sm text-slate-600" role="status">
+                Only workspace owners and admins can manage members.
+              </p>
+            </CardBody>
+          </Card>
         ) : null}
 
         {canManageMembers && !accessDenied ? (
           loadState === 'loading' ? (
             <MembersPageSkeleton />
           ) : loadState === 'error' ? (
-            <div className="rounded-xl border border-slate-200/90 bg-white p-5 shadow-[var(--shadow-card)]">
-              <p className="m-0 text-[0.9375rem] text-slate-600">
-                Could not load members.{' '}
-                <button
-                  type="button"
-                  className="cursor-pointer border-none bg-transparent p-0 font-semibold text-teal-700 underline"
-                  onClick={() => {
-                    setLoadState('loading');
-                    void refreshData();
-                  }}
-                >
-                  Retry
-                </button>
-              </p>
-            </div>
+            <MembersErrorCard
+              onRetry={() => {
+                setLoadState('loading');
+                void refreshData();
+              }}
+            />
           ) : (
-            <div className="flex flex-col gap-5">
-              <section
-                className="rounded-[0.625rem] border border-slate-100 bg-white p-[1.25rem_1.35rem]"
-                aria-labelledby="members-usage-heading"
-              >
-                <div className="flex items-start gap-3">
-                  <span
-                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-slate-200/90 bg-slate-50 text-slate-600"
-                    aria-hidden
-                  >
-                    <Users className="h-5 w-5" strokeWidth={1.75} />
-                  </span>
-                  <div className="min-w-0">
-                    <h2
-                      id="members-usage-heading"
-                      className="mb-1 mt-0 text-base font-semibold tracking-tight text-slate-900"
-                    >
-                      Seat usage
-                    </h2>
-                    <p className="m-0 text-[0.9375rem] leading-[1.5] text-slate-600">
-                      {memberLimit != null && memberLimit > 0
-                        ? `${seatsUsed} of ${memberLimit} seats used`
-                        : `${seatsUsed} seats used`}
-                      {pendingInvites.length > 0
-                        ? ` (${pendingInvites.length} pending invite${pendingInvites.length === 1 ? '' : 's'})`
-                        : null}
-                    </p>
-                  </div>
-                </div>
-              </section>
+            <div className="flex flex-col gap-4">
+              <MembersSeatUsageCard
+                planName={planName}
+                seatsUsed={seatsUsed}
+                memberLimit={memberLimit}
+                activeMembers={members.length}
+                pendingInvites={pendingInvites.length}
+              />
 
-              <section
-                className="rounded-[0.625rem] border border-slate-100 bg-white p-[1.25rem_1.35rem]"
-                aria-labelledby="workspace-people-heading"
-              >
-                <div className="mb-4">
-                  <h2
-                    id="workspace-people-heading"
-                    className="m-0 text-base font-semibold tracking-tight text-slate-900"
-                  >
-                    Workspace people
-                  </h2>
-                </div>
-                <WorkspacePeopleTable
-                  rows={directoryRows}
-                  canManageRoles={canManageRoles}
-                  resendBusyId={resendBusyId}
-                  onRemoveMember={setRemoveTarget}
-                  onCancelInvite={setCancelTarget}
-                  onResendInvite={(invite) => void handleResendInvite(invite)}
-                  onRoleChange={(row, nextRole) => void handleRoleChange(row, nextRole)}
-                />
-              </section>
+              <WorkspacePeopleTable
+                rows={directoryRows}
+                canManageRoles={canManageRoles}
+                resendBusyId={resendBusyId}
+                showCollaborationCallout={showCollaborationCallout}
+                onInviteClick={openInviteModal}
+                onRemoveMember={setRemoveTarget}
+                onCancelInvite={setCancelTarget}
+                onResendInvite={(invite) => void handleResendInvite(invite)}
+                onRoleChange={(row, nextRole) => void handleRoleChange(row, nextRole)}
+              />
             </div>
           )
         ) : null}
-      </DataPageLayout>
+      </WorkspaceContentContainer>
 
       {activeWorkspaceId ? (
         <InviteMemberModal

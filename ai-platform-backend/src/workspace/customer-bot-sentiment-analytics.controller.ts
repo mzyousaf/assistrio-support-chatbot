@@ -1,19 +1,16 @@
-import {
-  Controller,
-  ForbiddenException,
-  Get,
-  NotFoundException,
-  Param,
-  Query,
-  Req,
-  UseGuards,
-} from '@nestjs/common';
+import { Controller, Get, Param, Query, Req, UseGuards } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { CustomerSentimentAnalyticsService } from '../analytics/customer-sentiment-analytics.service';
 import type { RequestUser } from '../auth/shared/request-user.types';
 import { CustomerSessionAuthGuard } from '../auth/customer/customer-session.guard';
 import { BotsService } from '../bots/bots.service';
+import { WorkspaceAnalyticsEntitlementService } from '../entitlements/workspace-analytics-entitlement.service';
 import { WorkspacesService } from '../workspaces/workspaces.service';
+import {
+  clampAnalyticsFromToQuery,
+  requireCustomerBotAnalyticsAccess,
+} from './shared/customer-bot-analytics-access.util';
+import { withAnalyticsWindowMetadata } from './shared/customer-bot-analytics-request.util';
 
 type RequestWithUser = FastifyRequest & { user?: RequestUser };
 
@@ -27,9 +24,6 @@ function pickQueryParam(
   return undefined;
 }
 
-/**
- * Message sentiment analytics (`GET /api/customer/bots/:id/analytics/sentiment`).
- */
 @Controller('api/customer/bots')
 @UseGuards(CustomerSessionAuthGuard)
 export class CustomerBotSentimentAnalyticsController {
@@ -37,6 +31,7 @@ export class CustomerBotSentimentAnalyticsController {
     private readonly customerSentimentAnalyticsService: CustomerSentimentAnalyticsService,
     private readonly botsService: BotsService,
     private readonly workspacesService: WorkspacesService,
+    private readonly analyticsEntitlementService: WorkspaceAnalyticsEntitlementService,
   ) {}
 
   @Get(':id/analytics/sentiment')
@@ -45,29 +40,27 @@ export class CustomerBotSentimentAnalyticsController {
     @Param('id') id: string,
     @Query() query: Record<string, string | string[] | undefined>,
   ) {
-    const bot = await this.botsService.findOne(id);
-    if (!bot) {
-      throw new NotFoundException('Bot not found');
-    }
-    const uid = req.user?._id != null ? String(req.user._id) : '';
-    const ok = await this.workspacesService.canUserAccessWorkspaceBot(
-      uid,
-      req.user?.role ?? '',
-      bot as Record<string, unknown>,
+    const { analyticsHistoryDays } = await requireCustomerBotAnalyticsAccess({
+      req,
+      botId: id,
+      botsService: this.botsService,
+      workspacesService: this.workspacesService,
+      analyticsEntitlementService: this.analyticsEntitlementService,
+      forbiddenCode: 'BOT_SENTIMENT_ANALYTICS_FORBIDDEN',
+    });
+    const clamped = clampAnalyticsFromToQuery(
+      pickQueryParam(query, 'from'),
+      pickQueryParam(query, 'to'),
+      analyticsHistoryDays,
     );
-    if (!ok) {
-      throw new ForbiddenException({
-        error: 'Forbidden',
-        errorCode: 'BOT_SENTIMENT_ANALYTICS_FORBIDDEN',
-      });
-    }
-    return this.customerSentimentAnalyticsService.get(id, {
-      from: pickQueryParam(query, 'from'),
-      to: pickQueryParam(query, 'to'),
+    const result = await this.customerSentimentAnalyticsService.get(id, {
+      from: clamped.from,
+      to: clamped.to,
       granularity: pickQueryParam(query, 'granularity'),
       includePreview: pickQueryParam(query, 'includePreview'),
       startedFrom: pickQueryParam(query, 'startedFrom'),
       sentiment: pickQueryParam(query, 'sentiment'),
     });
+    return withAnalyticsWindowMetadata(result as Record<string, unknown>, clamped.window);
   }
 }

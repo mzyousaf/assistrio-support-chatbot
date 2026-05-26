@@ -38,9 +38,11 @@ import { KnowledgeUsageService } from './knowledge-usage.service';
 import { BotKnowledgeTotalLimitService } from './bot-knowledge-total-limit.service';
 import { KnowledgeOosReconcileService } from './knowledge-oos-reconcile.service';
 import { KnowledgeTrainKbDriftReconcileService } from './knowledge-train-kb-drift-reconcile.service';
+import { EntitlementsModule } from '../entitlements/entitlements.module';
 
 @Module({
   imports: [
+    EntitlementsModule,
     MongooseModule.forFeature([
       { name: KnowledgeBaseItem.name, schema: KnowledgeBaseItemSchema },
       { name: KnowledgeBaseChunk.name, schema: KnowledgeBaseChunkSchema },

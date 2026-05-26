@@ -24,6 +24,12 @@ import {
   type CustomerChatsGranularity,
   type ParsedCustomerChatsAnalyticsQuery,
 } from './customer-chats-analytics.util';
+import {
+  applyAnalyticsHistoryToParsedQuery,
+  attachAnalyticsWindowMetadata,
+  type CustomerAnalyticsGetOptions,
+} from './customer-analytics-entitlement.util';
+import type { AnalyticsHistoryWindowMetadata } from '../entitlements/analytics-entitlement-window.util';
 
 export type CustomerChatsAnalyticsResponse = {
   range: {
@@ -84,6 +90,7 @@ export type CustomerChatsAnalyticsResponse = {
     conversations: number;
     messages: number;
   }>;
+  analyticsWindow?: AnalyticsHistoryWindowMetadata;
 };
 
 
@@ -113,8 +120,13 @@ export class CustomerChatsAnalyticsService {
   /**
    * Tenant-scoped chats analytics (caller must verify bot workspace access).
    */
-  async get(botId: string, queryIn: CustomerChatsAnalyticsQueryInput): Promise<CustomerChatsAnalyticsResponse> {
-    const q = parseCustomerChatsAnalyticsQuery(queryIn);
+  async get(
+    botId: string,
+    queryIn: CustomerChatsAnalyticsQueryInput,
+    options?: CustomerAnalyticsGetOptions,
+  ): Promise<CustomerChatsAnalyticsResponse> {
+    const parsed = parseCustomerChatsAnalyticsQuery(queryIn);
+    const { parsed: q, window } = applyAnalyticsHistoryToParsedQuery(parsed, options);
 
     const oid = new Types.ObjectId(botId);
 
@@ -178,7 +190,8 @@ export class CustomerChatsAnalyticsService {
     const totalMessages = msgTotals.total;
     const avgMsgPerConv =
       totalConversations > 0 ? totalMessages / totalConversations : 0;
-    return {
+    return attachAnalyticsWindowMetadata(
+      {
       range: {
         from: q.from.toISOString(),
         to: q.to.toISOString(),
@@ -201,7 +214,9 @@ export class CustomerChatsAnalyticsService {
       },
       topPagesBreakdown: mergeTopPagesBreakdown(topPagesConv, topPagesMsg),
       startedFromBreakdown: buildStartedFromBreakdown(sfConv, sfMsg),
-    };
+      },
+      window,
+    );
   }
 
   private async aggregateAssistantFeedbackCounts(

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
-import { Bot, BotSchema, Conversation, ConversationSchema, Message, MessageSchema } from '../models';
+import { Bot, BotSchema, Conversation, ConversationSchema, Message, MessageSchema, UsageLedger, UsageLedgerSchema } from '../models';
+import { EntitlementsModule } from '../entitlements/entitlements.module';
 import { RagModule } from '../rag/rag.module';
 import { SummaryJobModule } from '../chat/summary-job.module';
 import { WorkspacesModule } from '../workspaces/workspaces.module';
@@ -31,10 +32,12 @@ import { WidgetIframeController } from '../bots/widget-iframe.controller';
     TranscriptionModule,
     VisitorsRuntimeModule,
     KnowledgeModule,
+    EntitlementsModule,
     MongooseModule.forFeature([
       { name: Conversation.name, schema: ConversationSchema },
       { name: Message.name, schema: MessageSchema },
       { name: Bot.name, schema: BotSchema },
+      { name: UsageLedger.name, schema: UsageLedgerSchema },
     ]),
   ],
   controllers: [ChatController, WidgetPreviewController, SharedChatController, WidgetIframeController],

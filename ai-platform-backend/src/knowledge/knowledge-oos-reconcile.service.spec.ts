@@ -46,6 +46,12 @@ describe('KnowledgeOosReconcileService', () => {
     };
   }
 
+  function mockKnowledgeSizeResolver(maxBytes: number) {
+    return {
+      resolveForBotLean: jest.fn().mockResolvedValue({ maxBytes }),
+    };
+  }
+
   const baseBotLean = {
     botConfig: {
       knowledgeSize: { type: 'custom' as const, maxBytes: 50, baseMaxBytes: 50, extraMaxBytes: 0 },
@@ -124,6 +130,7 @@ describe('KnowledgeOosReconcileService', () => {
       trainingJob as never,
       stats as never,
       mockKbItemServiceForOos() as never,
+      mockKnowledgeSizeResolver(50) as never,
     );
 
     const out = await svc.reconcileOutOfStorageItemsForBot(botId, 'test');
@@ -175,6 +182,7 @@ describe('KnowledgeOosReconcileService', () => {
       { scheduleTrainingForScopes: jest.fn() } as never,
       { recalculateKnowledgeStatsForBot: jest.fn() } as never,
       mockKbItemServiceForOos() as never,
+      mockKnowledgeSizeResolver(50) as never,
     );
 
     await svc.reconcileOutOfStorageItemsForBot(botId, 'test');
@@ -217,6 +225,7 @@ describe('KnowledgeOosReconcileService', () => {
       { scheduleTrainingForScopes: scheduleScopes } as never,
       { recalculateKnowledgeStatsForBot: jest.fn() } as never,
       mockKbItemServiceForOos() as never,
+      mockKnowledgeSizeResolver(50) as never,
     );
 
     await svc.reconcileOutOfStorageItemsForBot(botId, 'test');
@@ -264,6 +273,7 @@ describe('KnowledgeOosReconcileService', () => {
       { scheduleTrainingForScopes: jest.fn() } as never,
       { recalculateKnowledgeStatsForBot: jest.fn() } as never,
       mockKbItemServiceForOos() as never,
+      mockKnowledgeSizeResolver(50) as never,
     );
 
     const out = await svc.reconcileOutOfStorageItemsForBot(botId, 'test');
@@ -279,8 +289,8 @@ describe('KnowledgeOosReconcileService', () => {
         sourceType: 'document',
         active: false,
         deletedAt: null,
-        content: 'x',
-        isContentExtracted: true,
+        content: '',
+        isContentExtracted: false,
         extractionStatus: 'done',
         trainingError: PLAN,
         createdAt: new Date('2021-01-01'),
@@ -302,10 +312,15 @@ describe('KnowledgeOosReconcileService', () => {
     const svc = new KnowledgeOosReconcileService(
       itemModel as never,
       botModel as never,
-      { get: jest.fn() } as unknown as ModuleRef,
+      {
+        get: jest.fn().mockReturnValue({
+          ensureQueuedIngestJobForDocument: jest.fn().mockResolvedValue(undefined),
+        }),
+      } as unknown as ModuleRef,
       { scheduleTrainingForScopes: jest.fn() } as never,
       { recalculateKnowledgeStatsForBot: jest.fn() } as never,
       mockKbItemServiceForOos() as never,
+      mockKnowledgeSizeResolver(50) as never,
     );
 
     await svc.reconcileOutOfStorageItemsForBot(botId, 'test');
@@ -369,6 +384,7 @@ describe('KnowledgeOosReconcileService', () => {
       { scheduleTrainingForScopes: scheduleScopes } as never,
       { recalculateKnowledgeStatsForBot: jest.fn() } as never,
       mockKbItemServiceForOos() as never,
+      mockKnowledgeSizeResolver(500) as never,
     );
 
     await svc.reconcileOutOfStorageItemsForBot(botId, 'test');

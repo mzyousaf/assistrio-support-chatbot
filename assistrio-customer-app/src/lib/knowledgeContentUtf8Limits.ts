@@ -4,6 +4,7 @@
  * and `ai-platform-backend/src/knowledge/knowledge-plan-limits.ts` → `DEFAULT_KB_FIELD_LIMITS`.
  */
 import { KNOWLEDGE_DOCUMENT_UPLOAD_BATCH_MAX, KNOWLEDGE_DOCUMENTS_MAX } from '@/lib/botFieldLimits';
+import { TRAINED_KNOWLEDGE_STORAGE_LABEL } from '@/lib/trainedKnowledgeStorageCopy';
 
 export const KNOWLEDGE_ITEM_TITLE_MAX_UTF8_BYTES = 200;
 /** Workspace document titles (PATCH title). Matches backend `workspace-bot-documents.controller.base`. */
@@ -36,7 +37,7 @@ const KB_PLAN_LIMIT_HINTS: Record<string, string> = {
   plan_limit_suggestion_description_size: 'Shorten the optional scoped text and try again.',
   plan_limit_suggestion_total_size: 'This bot’s suggestions use too much space in total. Remove or shorten entries.',
   plan_limit_bot_kb_total:
-    'This agent has reached its knowledge limit. Delete some knowledge or buy more storage.',
+    `This agent has reached its ${TRAINED_KNOWLEDGE_STORAGE_LABEL.toLowerCase()} limit. Delete some knowledge or upgrade your plan.`,
   plan_limit_document_batch_count: `You can upload up to ${KNOWLEDGE_DOCUMENT_UPLOAD_BATCH_MAX} files at a time.`,
   plan_limit_knowledge_documents_count: `Each agent can have at most ${KNOWLEDGE_DOCUMENTS_MAX} documents. Remove one to add another.`,
 };
@@ -52,7 +53,7 @@ function formatPlanLimitKbUsageLine(errorBody: unknown): string | null {
   }
   const curMb = (cur / (1024 * 1024)).toFixed(2);
   const maxMb = (max / (1024 * 1024)).toFixed(2);
-  return `Usage: ${curMb} MB / ${maxMb} MB`;
+  return `${TRAINED_KNOWLEDGE_STORAGE_LABEL}: ${curMb} MB / ${maxMb} MB`;
 }
 
 /**

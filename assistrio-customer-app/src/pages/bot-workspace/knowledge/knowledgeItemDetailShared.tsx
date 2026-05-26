@@ -17,6 +17,7 @@ import { formatKbItemLastTrainedDateTime, kbItemTrainingStatusLabel } from './kn
 import type { KbItemTrainingStatus } from './knowledgeViewTypes';
 import { normalizeKnowledgeTrainingStatus } from '@/lib/knowledgeTrainingStatus';
 import type { KnowledgeItemDisplayDotCanon } from '@/lib/knowledgeItemDisplayStatus';
+import { TRAINED_KNOWLEDGE_STORAGE_LIMIT_SHORT } from '@/lib/trainedKnowledgeStorageCopy';
 
 export type KnowledgeDetailTabId = 'details' | 'analytics';
 
@@ -326,7 +327,13 @@ export function KnowledgeDetailKbLifecycleTrainingPill({
   runAfter?: string | null;
 }) {
   if (planLimit) {
-    return <KbTrainingStatusTag className="font-normal" label="Storage limit reached" statusForBadge="failed" />;
+    return (
+      <KbTrainingStatusTag
+        className="font-normal"
+        label={TRAINED_KNOWLEDGE_STORAGE_LIMIT_SHORT}
+        statusForBadge="failed"
+      />
+    );
   }
   if (!kbLifecyclePresentation) return null;
   return (

@@ -232,7 +232,7 @@ export function TrainingStatusSidebarCard({
             {overviewLoading && !overview && !usageResolved ? (
               <div className="flex items-center gap-1.5">
                 <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-teal-600" aria-hidden />
-                <span className="text-[10px] text-slate-500">Loading storage…</span>
+                <span className="text-[10px] text-slate-500">Loading trained knowledge storage…</span>
               </div>
             ) : usageResolved ? (
               <KnowledgeStorageUsagePanel

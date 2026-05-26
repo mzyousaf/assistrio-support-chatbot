@@ -14,7 +14,9 @@ import type { RequestUser } from '../auth/shared/request-user.types';
 import { BotsService } from '../bots/bots.service';
 import { ChatEngineService } from '../chat/chat-engine.service';
 import { parseWorkspaceConversationListFilters } from '../chat/workspace-conversation-serialize.util';
+import { WorkspaceAnalyticsEntitlementService } from '../entitlements/workspace-analytics-entitlement.service';
 import { WorkspacesService } from '../workspaces/workspaces.service';
+import { workspaceIdFromBotRecord } from './shared/customer-analytics-entitlement.types';
 
 type RequestWithUser = FastifyRequest & { user?: RequestUser };
 
@@ -28,6 +30,7 @@ export class CustomerBotConversationsController {
     private readonly botsService: BotsService,
     private readonly chatEngineService: ChatEngineService,
     private readonly workspacesService: WorkspacesService,
+    private readonly analyticsEntitlementService: WorkspaceAnalyticsEntitlementService,
   ) {}
 
   private async requireWorkspaceBot(req: RequestWithUser, botId: string) {
@@ -55,13 +58,27 @@ export class CustomerBotConversationsController {
     const beforeRaw = Array.isArray(q.before) ? q.before[0] : q.before;
     const limit = Math.min(50, Math.max(1, parseInt(String(limitRaw ?? '30'), 10) || 30));
     const beforeIso = typeof beforeRaw === 'string' && beforeRaw.trim() ? beforeRaw.trim() : null;
-    const filters = parseWorkspaceConversationListFilters(q);
-    return this.chatEngineService.listBotConversationsForWorkspace({
+    const filtersRaw = parseWorkspaceConversationListFilters(q);
+    const workspaceId = workspaceIdFromBotRecord(bot as Record<string, unknown>);
+    let filters = filtersRaw;
+    let analyticsWindow: Awaited<
+      ReturnType<WorkspaceAnalyticsEntitlementService['clampListDateFrom']>
+    >['window'] = null;
+    if (workspaceId) {
+      const clamped = await this.analyticsEntitlementService.clampListDateFrom(
+        workspaceId,
+        filtersRaw.dateFrom,
+      );
+      filters = { ...filtersRaw, dateFrom: clamped.dateFrom };
+      analyticsWindow = clamped.window;
+    }
+    const result = await this.chatEngineService.listBotConversationsForWorkspace({
       botOid: new Types.ObjectId(String((bot as { _id: unknown })._id)),
       limit,
       beforeIso,
       filters,
     });
+    return analyticsWindow ? { ...result, analyticsWindow } : result;
   }
 
   @Get(':id/conversations/:conversationId')

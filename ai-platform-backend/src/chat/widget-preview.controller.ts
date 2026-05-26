@@ -470,6 +470,13 @@ export class WidgetPreviewController {
     const privacyText =
       toNonEmptyString(previewOverrides?.privacyText) ?? toNonEmptyString(mergedChatUI.privacyText);
 
+    const sanitizedChatUI = await this.botsService.sanitizeRuntimeChatUiForBot({
+      workspaceId: (bot as { workspaceId?: unknown }).workspaceId,
+      chatUI: mergedChatUI,
+    });
+    const sanitizedBrandingMessage =
+      toNonEmptyString(sanitizedChatUI.brandingMessage) ?? brandingMessage;
+
     const visitorMultiChatEnabled = (bot as { visitorMultiChatEnabled?: unknown }).visitorMultiChatEnabled === true;
     const visitorMultiChatMax = normalizeVisitorMultiChatMax(
       (bot as { visitorMultiChatMax?: unknown }).visitorMultiChatMax,
@@ -522,8 +529,8 @@ export class WidgetPreviewController {
         suggestedQuestionChips,
       },
       settings: {
-        chatUI: mergedChatUI,
-        ...(brandingMessage ? { brandingMessage } : {}),
+        chatUI: sanitizedChatUI,
+        ...(sanitizedBrandingMessage ? { brandingMessage: sanitizedBrandingMessage } : {}),
         ...(privacyText ? { privacyText } : {}),
         visitorMultiChatEnabled,
         visitorMultiChatMax,

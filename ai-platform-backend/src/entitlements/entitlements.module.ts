@@ -10,8 +10,13 @@ import {
   WorkspaceSubscription,
   WorkspaceSubscriptionSchema,
 } from '../models';
+import { WorkspaceAiCreditGateService } from './workspace-ai-credit-gate.service';
 import { WorkspaceAiCreditsUsageService } from './workspace-ai-credits-usage.service';
+import { WorkspaceAnalyticsEntitlementService } from './workspace-analytics-entitlement.service';
+import { WorkspaceBrandingEntitlementService } from './workspace-branding-entitlement.service';
+import { WorkspaceExportReportEntitlementService } from './workspace-export-report-entitlement.service';
 import { WorkspaceBotLimitService } from './workspace-bot-limit.service';
+import { BotKnowledgeSizeResolverService } from './bot-knowledge-size-resolver.service';
 import { WorkspaceEntitlementsService } from './workspace-entitlements.service';
 import { WorkspaceMemberLimitService } from './workspace-member-limit.service';
 import { WorkspaceSubscriptionsService } from './workspace-subscriptions.service';
@@ -32,6 +37,11 @@ import { WorkspaceSubscriptionsService } from './workspace-subscriptions.service
     WorkspaceBotLimitService,
     WorkspaceMemberLimitService,
     WorkspaceAiCreditsUsageService,
+    WorkspaceAiCreditGateService,
+    WorkspaceBrandingEntitlementService,
+    WorkspaceAnalyticsEntitlementService,
+    WorkspaceExportReportEntitlementService,
+    BotKnowledgeSizeResolverService,
   ],
   exports: [
     WorkspaceSubscriptionsService,
@@ -39,6 +49,11 @@ import { WorkspaceSubscriptionsService } from './workspace-subscriptions.service
     WorkspaceBotLimitService,
     WorkspaceMemberLimitService,
     WorkspaceAiCreditsUsageService,
+    WorkspaceAiCreditGateService,
+    WorkspaceBrandingEntitlementService,
+    WorkspaceAnalyticsEntitlementService,
+    WorkspaceExportReportEntitlementService,
+    BotKnowledgeSizeResolverService,
   ],
 })
 export class EntitlementsModule {}

@@ -45,6 +45,7 @@ describe('BotsService.createDraft workspace bot limit', () => {
       workspacesService,
       workspaceBotLimitService,
       {} as never,
+      {} as never,
     );
 
     jest.spyOn(svc, 'create').mockResolvedValue({ _id: new Types.ObjectId(), slug: 'new-bot' } as never);

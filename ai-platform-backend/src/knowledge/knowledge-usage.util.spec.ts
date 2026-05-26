@@ -268,7 +268,7 @@ describe('KnowledgeUsageService', () => {
     const select = jest.fn().mockReturnValue({ lean });
     const find = jest.fn().mockReturnValue({ select });
     const model = { find } as unknown as import('mongoose').Model<unknown>;
-    const svc = new KnowledgeUsageService(model as never);
+    const svc = new KnowledgeUsageService(model as never, { resolveForBotLean: jest.fn() } as never);
     const out = await svc.getActiveBotKnowledgeUsage(oid, undefined);
     expect(find).toHaveBeenCalledWith(
       expect.objectContaining({

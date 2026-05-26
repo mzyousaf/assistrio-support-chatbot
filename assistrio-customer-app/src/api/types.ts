@@ -171,6 +171,108 @@ export type CustomerWorkspaceAiCreditsUsage = {
   byBot: Array<{ botId: string; creditsUsed: number }>;
 };
 
+/** GET /api/customer/workspaces/:workspaceId/billing/summary */
+export type WorkspaceBillingPlanSummary = {
+  key: string;
+  name: string;
+  priceMonthly: number;
+  status: string;
+  currentPeriodStart: string;
+  currentPeriodEnd: string;
+};
+
+export type WorkspaceBillingEntitlementsSummary = {
+  botLimit: number;
+  memberLimit: number;
+  monthlyAiCredits: number;
+  kbStorageMbPerBot: number;
+  maxKbStorageMbPerBot: number;
+  analyticsHistoryDays: number | null;
+  canExportReports: boolean;
+  showPoweredByAssistrio: boolean;
+  canRemoveBranding: boolean;
+  activeAddons: string[];
+  topUpCreditsRemaining: number;
+};
+
+export type WorkspaceBillingBotUsageSummary = {
+  current: number;
+  limit: number;
+};
+
+export type WorkspaceBillingMemberUsageSummary = {
+  current: number;
+  pendingInvites: number;
+  used: number;
+  limit: number;
+};
+
+export type WorkspaceBillingAiCreditsUsageSummary = {
+  periodStart: string;
+  periodEnd: string;
+  monthlyCredits: number;
+  monthlyCreditsUsed: number;
+  monthlyCreditsRemaining: number;
+  topUpCreditsRemaining: number;
+  totalCreditsAvailable: number;
+  totalCreditsRemaining: number;
+  isOverLimit: boolean;
+  byBot: Array<{ botId: string; creditsUsed: number }>;
+};
+
+export type WorkspaceBillingTrainedKnowledgeBotUsage = {
+  botId: string;
+  botName: string;
+  usedBytes: number;
+  maxBytes: number;
+  usedMb: number;
+  maxMb: number;
+  percentUsed: number;
+};
+
+export type WorkspaceBillingTrainedKnowledgeUsageSummary = {
+  perBot: WorkspaceBillingTrainedKnowledgeBotUsage[];
+  totalUsedBytes: number;
+  note: string;
+};
+
+export type WorkspaceBillingUsageSummary = {
+  bots: WorkspaceBillingBotUsageSummary;
+  members: WorkspaceBillingMemberUsageSummary;
+  aiCredits: WorkspaceBillingAiCreditsUsageSummary;
+  trainedKnowledge: WorkspaceBillingTrainedKnowledgeUsageSummary;
+};
+
+export type WorkspaceBillingPlanCatalogCard = {
+  key: string;
+  name: string;
+  priceMonthly: number;
+  botLimit: number;
+  memberLimit: number;
+  monthlyAiCredits: number;
+  kbStorageMbPerBot: number;
+  analyticsHistoryDays: number | null;
+  canExportReports: boolean;
+};
+
+export type WorkspaceBillingAddonCatalogCard = {
+  key: string;
+  name: string;
+  billingInterval: 'one_time' | 'monthly';
+  priceUsd: number;
+  scope: 'workspace' | 'bot';
+  checkoutAvailable: false;
+};
+
+export type WorkspaceBillingSummary = {
+  workspaceId: string;
+  plan: WorkspaceBillingPlanSummary;
+  entitlements: WorkspaceBillingEntitlementsSummary;
+  usage: WorkspaceBillingUsageSummary;
+  planCatalog: WorkspaceBillingPlanCatalogCard[];
+  addonCatalog: WorkspaceBillingAddonCatalogCard[];
+};
+
 export type CustomerMe = {
   id: string;
   email: string;
@@ -1468,6 +1570,13 @@ export type CustomerChatsAnalyticsStartedFromBreakdownItem = {
   messages: number;
 };
 
+export type AnalyticsHistoryWindowMetadata = {
+  analyticsWindowApplied: boolean;
+  analyticsHistoryDays: number;
+  effectiveFrom: string;
+  requestedFrom?: string;
+};
+
 /** GET /api/customer/bots/:id/analytics/chats */
 export type CustomerChatsAnalyticsResponse = {
   range: CustomerChatsAnalyticsRange;
@@ -1479,6 +1588,7 @@ export type CustomerChatsAnalyticsResponse = {
   };
   topPagesBreakdown: CustomerChatsAnalyticsTopPageRow[];
   startedFromBreakdown: CustomerChatsAnalyticsStartedFromBreakdownItem[];
+  analyticsWindow?: AnalyticsHistoryWindowMetadata;
 };
 
 export type CustomerBotChatsAnalyticsParams = {

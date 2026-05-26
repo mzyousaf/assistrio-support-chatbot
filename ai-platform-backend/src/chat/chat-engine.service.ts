@@ -115,6 +115,7 @@ import {
 import { getServerLocalMonthlyBillingPeriod } from './chat-billing-period.util';
 import { calculateMessageCreditUsage } from './message-credit.util';
 import type { MessageCreditCalculation } from './message-credit.util';
+import { WorkspaceAiCreditGateService } from '../entitlements/workspace-ai-credit-gate.service';
 import { WorkspaceEntitlementsService } from '../entitlements/workspace-entitlements.service';
 import { resolveUsageLedgerPlanAtTime } from '../entitlements/usage-ledger-plan-at-time.util';
 import { normalizeAssistantMessageSourcesForPersistence } from './assistant-message-sources.normalize';
@@ -373,6 +374,7 @@ export class ChatEngineService {
     private readonly summaryJobService: SummaryJobService,
     private readonly topicSentimentClassificationService: TopicSentimentClassificationService,
     private readonly workspaceEntitlementsService: WorkspaceEntitlementsService,
+    private readonly workspaceAiCreditGateService: WorkspaceAiCreditGateService,
   ) { }
 
   private parseOptionalObjectId(s?: string): Types.ObjectId | null {
@@ -972,6 +974,15 @@ export class ChatEngineService {
       hasAttachments: Boolean(inputAttachments?.length),
       hasTextContent,
     });
+
+    const workspaceIdForCredits = String(bot.workspaceId ?? '').trim();
+    if (creditCalc.billable && creditCalc.creditsUsed > 0 && workspaceIdForCredits) {
+      await this.workspaceAiCreditGateService.assertCanUseAiCredits(
+        workspaceIdForCredits,
+        creditCalc.creditsUsed,
+        now,
+      );
+    }
 
     const saveUserMessageStart = Date.now();
     const userMessageDoc = await this.messageModel.create({

@@ -4,6 +4,14 @@ import type { CustomerKnowledgeUsage } from '@/api/types';
 import { Button, Modal } from '@/components/ui';
 import { formatKnowledgeBytes } from '@/lib/formatKnowledgeBytes';
 import { clampKnowledgeUsagePercent, KnowledgeUsageMeterBar } from '@/components/knowledge/KnowledgeUsageMeterBar';
+import {
+  TRAINED_KNOWLEDGE_STORAGE_HELPER,
+  TRAINED_KNOWLEDGE_STORAGE_LABEL,
+  TRAINED_KNOWLEDGE_STORAGE_LIMIT_TITLE,
+  TRAINED_KNOWLEDGE_STORAGE_LOW_TITLE,
+  TRAINED_KNOWLEDGE_STORAGE_UPGRADE_ACTION,
+  TRAINED_KNOWLEDGE_STORAGE_VIEW_ACTION,
+} from '@/lib/trainedKnowledgeStorageCopy';
 
 const PLANS_PATH = '/settings/plans';
 
@@ -45,10 +53,10 @@ export function StorageLimitModal(props: {
           >
             <HardDrive className="h-[1.125rem] w-[1.125rem] text-red-900" strokeWidth={2} />
           </span>
-          <span className="leading-snug">Storage limit reached</span>
+          <span className="leading-snug">{TRAINED_KNOWLEDGE_STORAGE_LIMIT_TITLE}</span>
         </span>
       }
-      description="This assistant can't accept more knowledge until you remove content or increase your storage allowance."
+      description="This assistant can't accept more trained knowledge until you remove content or increase your allowance."
       className="max-w-[26rem]"
       footer={
         <>
@@ -56,7 +64,7 @@ export function StorageLimitModal(props: {
             Close
           </Button>
           <Button type="button" variant="secondary" size="sm" onClick={goPlans}>
-            Upgrade storage
+            {TRAINED_KNOWLEDGE_STORAGE_UPGRADE_ACTION}
           </Button>
           <Button type="button" variant="primary" size="sm" onClick={goOverview} className="bg-teal-600 hover:bg-teal-700">
             Manage knowledge
@@ -80,7 +88,7 @@ export function StorageLimitModal(props: {
         {usage ? (
           <div className="rounded-xl border border-slate-200/90 bg-slate-50/80 px-3.5 py-3">
             <div className="flex flex-wrap items-baseline justify-between gap-2 text-xs font-medium text-slate-600">
-              <span>Storage usage</span>
+              <span>{TRAINED_KNOWLEDGE_STORAGE_LABEL} usage</span>
               <span className="tabular-nums text-slate-900">
                 {formatKnowledgeBytes(usage.totalBytes)}
                 <span className="font-normal text-slate-400"> / </span>
@@ -92,8 +100,9 @@ export function StorageLimitModal(props: {
               percent={pctRaw}
               heightClass="h-2"
               aria-valuenow={barPctRounded}
-              aria-label="Knowledge storage usage"
+              aria-label={`${TRAINED_KNOWLEDGE_STORAGE_LABEL} usage`}
             />
+            <p className="m-0 mt-2.5 text-[11px] leading-relaxed text-slate-500">{TRAINED_KNOWLEDGE_STORAGE_HELPER}</p>
           </div>
         ) : (
           <p className="m-0 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-relaxed text-slate-600">
@@ -129,10 +138,10 @@ export function StorageLowWarningModal(props: {
           >
             <AlertTriangle className="h-[1.125rem] w-[1.125rem] text-amber-900" strokeWidth={2} />
           </span>
-          <span className="leading-snug">Low storage</span>
+          <span className="leading-snug">{TRAINED_KNOWLEDGE_STORAGE_LOW_TITLE}</span>
         </span>
       }
-      description="You're close to your limit — continuing may fail if the content doesn't fit in what's left."
+      description="You're close to your trained knowledge storage limit — continuing may fail if the content doesn't fit in what's left."
       className="max-w-[26rem]"
       footer={
         <>
@@ -167,7 +176,7 @@ export function StorageLowWarningModal(props: {
               void navigate(overviewPath);
             }}
           >
-            Open storage overview
+            Open trained knowledge overview
           </Button>
         ) : null}
       </div>
@@ -194,10 +203,10 @@ export function KnowledgePlanLimitDetailActions({
         className="bg-teal-600 hover:bg-teal-700"
         onClick={() => void navigate(overviewPath)}
       >
-        View storage
+        {TRAINED_KNOWLEDGE_STORAGE_VIEW_ACTION}
       </Button>
       <Button type="button" variant="secondary" size="sm" onClick={() => void navigate(PLANS_PATH)}>
-        Upgrade storage
+        {TRAINED_KNOWLEDGE_STORAGE_UPGRADE_ACTION}
       </Button>
     </div>
   );

@@ -16,8 +16,8 @@ function freeEntitlements() {
     botLimit: 1,
     memberLimit: 3,
     monthlyAiCredits: 50,
-    kbStorageMbPerBot: 10,
-    kbStorageBytesPerBot: megabytesToBytes(10),
+    kbStorageMbPerBot: 5,
+    kbStorageBytesPerBot: megabytesToBytes(5),
     maxKbStorageMbPerBot: 40,
     maxKbStorageBytesPerBot: megabytesToBytes(40),
     analyticsHistoryDays: 7,
@@ -44,8 +44,8 @@ function proEntitlements() {
     ...freeEntitlements(),
     planKey: 'pro' as const,
     planName: 'Pro',
-    kbStorageMbPerBot: 25,
-    kbStorageBytesPerBot: megabytesToBytes(25),
+    kbStorageMbPerBot: 30,
+    kbStorageBytesPerBot: megabytesToBytes(30),
   };
 }
 
@@ -67,6 +67,7 @@ describe('BotsService.createDraft workspace KB entitlements', () => {
 
     const workspacesService = {
       ensurePersonalWorkspaceForUser: jest.fn().mockResolvedValue(workspaceId),
+      applyDefaultBotAccessGrantsOnBotCreate: jest.fn().mockResolvedValue(undefined),
     } as never;
 
     const workspaceBotLimitService = {
@@ -95,6 +96,7 @@ describe('BotsService.createDraft workspace KB entitlements', () => {
       workspacesService,
       workspaceBotLimitService,
       workspaceEntitlementsService,
+      {} as never,
     );
 
     const createSpy = jest
@@ -105,7 +107,7 @@ describe('BotsService.createDraft workspace KB entitlements', () => {
     return { svc, createSpy, workspaceEntitlementsService };
   }
 
-  it('Free workspace new customer draft gets 10 MB KB limit', async () => {
+  it('Free workspace new customer draft gets 5 MB KB limit', async () => {
     const { svc, createSpy } = buildService({ entitlements: freeEntitlements() });
 
     await svc.createDraft(clientDraftId, userId, { applyWorkspaceEntitlements: true });
@@ -115,8 +117,8 @@ describe('BotsService.createDraft workspace KB entitlements', () => {
         botConfig: expect.objectContaining({
           knowledgeSize: expect.objectContaining({
             type: 'default',
-            maxBytes: 10 * MB,
-            baseMaxBytes: 10 * MB,
+            maxBytes: 5 * MB,
+            baseMaxBytes: 5 * MB,
             note: 'Free plan',
           }),
         }),
@@ -138,7 +140,7 @@ describe('BotsService.createDraft workspace KB entitlements', () => {
     );
   });
 
-  it('Pro workspace new customer draft gets 25 MB KB limit', async () => {
+  it('Pro workspace new customer draft gets 30 MB KB limit', async () => {
     const { svc, createSpy } = buildService({ entitlements: proEntitlements() });
 
     await svc.createDraft(clientDraftId, userId, { applyWorkspaceEntitlements: true });
@@ -146,7 +148,7 @@ describe('BotsService.createDraft workspace KB entitlements', () => {
     expect(createSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         botConfig: expect.objectContaining({
-          knowledgeSize: expect.objectContaining({ maxBytes: 25 * MB }),
+          knowledgeSize: expect.objectContaining({ maxBytes: 30 * MB }),
         }),
       }),
     );
@@ -205,7 +207,7 @@ describe('BotsService.createDraft workspace KB entitlements', () => {
     expect(createSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         botConfig: expect.objectContaining({
-          knowledgeSize: expect.objectContaining({ maxBytes: 10 * MB }),
+          knowledgeSize: expect.objectContaining({ maxBytes: 5 * MB }),
         }),
       }),
     );

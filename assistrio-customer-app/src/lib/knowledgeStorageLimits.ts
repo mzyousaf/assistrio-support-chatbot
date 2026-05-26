@@ -22,7 +22,7 @@ export const KB_STORAGE_DATASHEET_VIEW_ONLY_REMAINING_PERCENT = 5;
 
 /** Shown on datasheet detail / editor when {@link isKnowledgeStorageDatasheetViewOnly} is true. */
 export const KB_STORAGE_DATASHEET_VIEW_ONLY_MESSAGE =
-  'Less than 5% of your knowledge storage is left. This datasheet is view-only until you free space or upgrade your plan.';
+  'Less than 5% of your trained knowledge storage is left. This datasheet is view-only until you free space or upgrade your plan.';
 
 export function isKnowledgeStorageDatasheetViewOnly(usage: CustomerKnowledgeUsage | null | undefined): boolean {
   if (!usage) return false;
@@ -121,14 +121,20 @@ export function documentManualUtf8Estimate(title: string, body: string): number 
 }
 
 export const KNOWLEDGE_STORAGE_LOW_CONTINUE_DEFAULT_MESSAGE =
-  'You are close to your knowledge storage limit. Changes that add more content may fail. Continue anyway?';
+  'You are close to your trained knowledge storage limit. Changes that add more content may fail. Continue anyway?';
 
 /**
- * Documents upload only: raw file size is an imperfect proxy for indexed knowledge bytes, so we warn here instead
- * of the “storage full” modal when the sum of file sizes would exceed remaining quota.
+ * Documents upload only: raw file size is separate from trained knowledge quota.
+ * Maximum upload size is 20 MB per file — see upload UI copy.
  */
 export const KNOWLEDGE_DOC_UPLOAD_FILESIZE_VS_QUOTA_MESSAGE =
-  'File size in bytes is only an estimate of knowledge storage. This upload may exceed your remaining allowance. Continue anyway?';
+  'File upload size is separate from trained knowledge storage. A large file may use much less space after text extraction. This upload may exceed your remaining trained knowledge allowance. Continue anyway?';
+
+/** Re-export for upload field helpers. */
+export {
+  MAX_KB_UPLOAD_FILE_SIZE_LABEL,
+  TRAINED_KNOWLEDGE_STORAGE_LIMIT_SHORT,
+} from '@/lib/trainedKnowledgeStorageCopy';
 
 export type StorageLimitApiErrorInput = {
   ok?: boolean;

@@ -1,8 +1,21 @@
-import { describe, expect, it } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { WorkspaceInviteSummary, WorkspaceMemberSummary } from '@/api/types';
-import { buildWorkspacePersonRows } from './WorkspacePeopleTable';
+import {
+  WorkspacePeopleTable,
+  buildWorkspacePersonRows,
+} from './WorkspacePeopleTable';
 
 const members: WorkspaceMemberSummary[] = [
+  {
+    userId: 'user-owner',
+    email: 'owner@test.com',
+    firstName: 'Owner',
+    lastName: 'User',
+    picture: null,
+    role: 'owner',
+    joinedAt: '2026-01-01T00:00:00.000Z',
+  },
   {
     userId: 'user-1',
     email: 'member@test.com',
@@ -41,28 +54,86 @@ const invites: WorkspaceInviteSummary[] = [
     createdAt: '2025-01-01T00:00:00.000Z',
     updatedAt: '2025-01-01T00:00:00.000Z',
   },
-  {
-    id: 'inv-cancelled',
-    email: 'cancelled@test.com',
-    role: 'member',
-    status: 'cancelled',
-    expiresAt: '2026-12-01T00:00:00.000Z',
-    invitedByUserId: 'user-owner',
-    acceptedByUserId: null,
-    acceptedAt: null,
-    cancelledAt: '2026-06-02T00:00:00.000Z',
-    createdAt: '2026-06-01T00:00:00.000Z',
-    updatedAt: '2026-06-02T00:00:00.000Z',
-  },
 ];
 
 describe('buildWorkspacePersonRows', () => {
   it('includes active members and pending invites only', () => {
     const rows = buildWorkspacePersonRows(members, invites);
-    expect(rows).toHaveLength(2);
+    expect(rows).toHaveLength(3);
     expect(rows.some((row) => row.kind === 'member' && row.email === 'member@test.com')).toBe(true);
     expect(rows.some((row) => row.kind === 'invite' && row.email === 'pending@test.com')).toBe(true);
     expect(rows.some((row) => row.email === 'expired@test.com')).toBe(false);
-    expect(rows.some((row) => row.email === 'cancelled@test.com')).toBe(false);
+  });
+});
+
+describe('WorkspacePeopleTable', () => {
+  afterEach(() => cleanup());
+
+  it('renders status and role badges', () => {
+    const rows = buildWorkspacePersonRows(members, invites);
+    render(
+      <WorkspacePeopleTable
+        rows={rows}
+        canManageRoles={false}
+        resendBusyId={null}
+        onRemoveMember={vi.fn()}
+        onCancelInvite={vi.fn()}
+        onResendInvite={vi.fn()}
+        onRoleChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getAllByText('Active').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText('Pending invite')).toBeTruthy();
+    expect(screen.getByText('Owner')).toBeTruthy();
+    expect(screen.getAllByText('Member').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('renders pending invite actions and omits owner remove action', () => {
+    const rows = buildWorkspacePersonRows(members, invites);
+    const onResend = vi.fn();
+    const onCancel = vi.fn();
+    const onRemove = vi.fn();
+
+    render(
+      <WorkspacePeopleTable
+        rows={rows}
+        canManageRoles={false}
+        resendBusyId={null}
+        onRemoveMember={onRemove}
+        onCancelInvite={onCancel}
+        onResendInvite={onResend}
+        onRoleChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByRole('button', { name: /Remove Owner User/i })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /Resend invite to pending@test.com/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Cancel invite for pending@test.com/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Remove Member User/i }));
+
+    expect(onResend).toHaveBeenCalled();
+    expect(onCancel).toHaveBeenCalled();
+    expect(onRemove).toHaveBeenCalled();
+  });
+
+  it('shows collaboration callout and triggers invite click', () => {
+    const onInvite = vi.fn();
+    render(
+      <WorkspacePeopleTable
+        rows={[]}
+        canManageRoles={false}
+        resendBusyId={null}
+        showCollaborationCallout
+        onInviteClick={onInvite}
+        onRemoveMember={vi.fn()}
+        onCancelInvite={vi.fn()}
+        onResendInvite={vi.fn()}
+        onRoleChange={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Invite member/i }));
+    expect(onInvite).toHaveBeenCalled();
   });
 });

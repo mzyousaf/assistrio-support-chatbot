@@ -3,6 +3,10 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Bot, Conversation, User, Workspace, WorkspaceMembership } from '../models';
 import { botNotDeletedClause } from '../bots/bot-not-deleted.util';
+import { WorkspaceAiCreditsUsageService } from '../entitlements/workspace-ai-credits-usage.service';
+import { WorkspaceBotLimitService } from '../entitlements/workspace-bot-limit.service';
+import { WorkspaceEntitlementsService } from '../entitlements/workspace-entitlements.service';
+import { WorkspaceMemberLimitService } from '../entitlements/workspace-member-limit.service';
 import {
   accessibleBotsMatchForCustomer,
   customerDisplayName,
@@ -10,6 +14,25 @@ import {
   isoOrNull,
   parsePaginationQuery,
 } from './admin-customers.util';
+
+export type AdminCustomerWorkspace = {
+  id: string;
+  name: string;
+  role?: string;
+  memberCount?: number;
+  botCount: number;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  planKey?: string;
+  planName?: string;
+  subscriptionStatus?: string;
+  monthlyAiCredits?: number;
+  aiCreditsUsedThisPeriod?: number;
+  botLimit?: number;
+  memberLimit?: number;
+  currentBots?: number;
+  currentMembers?: number;
+};
 
 export type AdminCustomerRow = {
   id: string;
@@ -35,6 +58,10 @@ export class AdminCustomersService {
     @InjectModel(WorkspaceMembership.name) private readonly membershipModel: Model<WorkspaceMembership>,
     @InjectModel(Bot.name) private readonly botModel: Model<Bot>,
     @InjectModel(Conversation.name) private readonly conversationModel: Model<Conversation>,
+    private readonly entitlementsService: WorkspaceEntitlementsService,
+    private readonly botLimitService: WorkspaceBotLimitService,
+    private readonly memberLimitService: WorkspaceMemberLimitService,
+    private readonly aiCreditsUsageService: WorkspaceAiCreditsUsageService,
   ) {}
 
   private assertCustomerObjectId(id: string): Types.ObjectId {
@@ -292,9 +319,15 @@ export class AdminCustomersService {
       .exec();
     const botCountByWs = new Map(botCountsByWs.map((r) => [String(r._id), r.count]));
 
-    const workspaces = (memberships as { workspaceId: Types.ObjectId; role?: string }[]).map((m) => {
+    const billingByWs = await this.loadWorkspaceBillingSnapshots(
+      (memberships as { workspaceId: Types.ObjectId }[]).map((m) => String(m.workspaceId)),
+    );
+
+    const workspaces: AdminCustomerWorkspace[] = (memberships as { workspaceId: Types.ObjectId; role?: string }[]).map(
+      (m) => {
       const id = String(m.workspaceId);
       const ws = wsById.get(id);
+      const billing = billingByWs.get(id);
       return {
         id,
         name: String(ws?.name ?? '').trim() || 'Workspace',
@@ -303,8 +336,18 @@ export class AdminCustomersService {
         botCount: botCountByWs.get(id) ?? 0,
         createdAt: isoOrNull(ws?.createdAt),
         updatedAt: null,
+        planKey: billing?.planKey,
+        planName: billing?.planName,
+        subscriptionStatus: billing?.subscriptionStatus,
+        monthlyAiCredits: billing?.monthlyAiCredits,
+        aiCreditsUsedThisPeriod: billing?.aiCreditsUsedThisPeriod,
+        botLimit: billing?.botLimit,
+        memberLimit: billing?.memberLimit,
+        currentBots: billing?.currentBots,
+        currentMembers: billing?.currentMembers,
       };
-    });
+    },
+    );
 
     workspaces.sort((a, b) => a.name.localeCompare(b.name));
 
@@ -367,5 +410,47 @@ export class AdminCustomersService {
     });
 
     return { ok: true as const, bots };
+  }
+
+  private async loadWorkspaceBillingSnapshots(workspaceIds: string[]) {
+    const out = new Map<
+      string,
+      {
+        planKey: string;
+        planName: string;
+        subscriptionStatus: string;
+        monthlyAiCredits: number;
+        aiCreditsUsedThisPeriod: number;
+        botLimit: number;
+        memberLimit: number;
+        currentBots: number;
+        currentMembers: number;
+      }
+    >();
+
+    await Promise.all(
+      workspaceIds.map(async (workspaceId) => {
+        const [entitlements, botUsage, memberUsage, aiCreditsUsage] = await Promise.all([
+          this.entitlementsService.resolveForWorkspace(workspaceId),
+          this.botLimitService.getWorkspaceBotUsage(workspaceId),
+          this.memberLimitService.getWorkspaceMemberUsage(workspaceId),
+          this.aiCreditsUsageService.getWorkspaceAiCreditsUsage(workspaceId),
+        ]);
+
+        out.set(workspaceId, {
+          planKey: entitlements.planKey,
+          planName: entitlements.planName,
+          subscriptionStatus: entitlements.subscriptionStatus,
+          monthlyAiCredits: entitlements.monthlyAiCredits,
+          aiCreditsUsedThisPeriod: aiCreditsUsage.monthlyCreditsUsed,
+          botLimit: entitlements.botLimit,
+          memberLimit: entitlements.memberLimit,
+          currentBots: botUsage.current,
+          currentMembers: memberUsage.current,
+        });
+      }),
+    );
+
+    return out;
   }
 }

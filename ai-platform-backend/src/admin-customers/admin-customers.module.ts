@@ -14,6 +14,7 @@ import {
 } from '../models';
 import { AuthModule } from '../auth/auth.module';
 import { AnalyticsModule } from '../analytics/analytics.module';
+import { EntitlementsModule } from '../entitlements/entitlements.module';
 import { AdminCustomersController } from './admin-customers.controller';
 import { AdminCustomersService } from './admin-customers.service';
 
@@ -21,6 +22,7 @@ import { AdminCustomersService } from './admin-customers.service';
   imports: [
     AuthModule,
     AnalyticsModule,
+    EntitlementsModule,
     MongooseModule.forFeature([
       { name: User.name, schema: UserSchema },
       { name: Workspace.name, schema: WorkspaceSchema },

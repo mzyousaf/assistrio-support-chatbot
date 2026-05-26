@@ -2,6 +2,10 @@ import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useSta
 import { useNavigate } from 'react-router-dom';
 import type { CustomerBotLeadsListParams, CustomerLeadFieldDefinition, CustomerLeadListItem } from '@/api/types';
 import { getCustomerBotLeads } from '@/api/customerApi';
+import { useCustomerAuth } from '@/auth/CustomerAuthContext';
+import { useWorkspaceBillingSummary } from '@/hooks/useWorkspaceBillingSummary';
+import { canExportReportsEntitlement, resolveExportReportsSaveErrorMessage } from '@/lib/analyticsEntitlementCopy';
+import { resolveActiveCustomerWorkspace } from '@/lib/resolveActiveCustomerWorkspace';
 import { useBotWorkspace } from './BotWorkspaceContext';
 import { WorkspaceContentContainer } from '@/layout/workspace-layout';
 import { Button } from '@/components/ui';
@@ -37,6 +41,10 @@ const LEADS_SEARCH_DEBOUNCE_MS = 350;
 
 export function CustomerLeadsPage() {
   const { botId } = useBotWorkspace();
+  const { customer } = useCustomerAuth();
+  const { activeWorkspaceId } = resolveActiveCustomerWorkspace(customer);
+  const { summary: billingSummary } = useWorkspaceBillingSummary(activeWorkspaceId);
+  const canExportReports = canExportReportsEntitlement(billingSummary?.entitlements.canExportReports);
   const navigate = useNavigate();
   const leadsSearchInputId = useId();
   const leadsPerPageSelectId = useId();
@@ -236,6 +244,10 @@ export function CustomerLeadsPage() {
   };
 
   const handleExportCsv = useCallback(() => {
+    if (!canExportReports) {
+      appToast.error(resolveExportReportsSaveErrorMessage({ errorCode: 'plan_limit_export_reports' }));
+      return;
+    }
     if (leads.length === 0) {
       appToast.info('No loaded leads to export');
       return;
@@ -249,7 +261,7 @@ export function CustomerLeadsPage() {
     } catch {
       appToast.error('Could not export CSV');
     }
-  }, [leads, leadFieldDefinitions]);
+  }, [canExportReports, leads, leadFieldDefinitions]);
 
   const clearAllFilters = useCallback(() => {
     cancelSearchDebounce();
@@ -274,6 +286,7 @@ export function CustomerLeadsPage() {
       />
       <div className="flex min-h-[calc(100dvh-var(--nav-height))] max-h-[calc(100dvh-var(--nav-height))] min-h-0 w-full flex-col overflow-hidden bg-gradient-to-b from-slate-50/80 to-white">
         <LeadsHeader
+          exportLocked={!canExportReports}
           exportDisabled={leads.length === 0}
           onExport={handleExportCsv}
           refreshDisabled={disableRefresh}

@@ -15,8 +15,8 @@ describe('workspace onboarding knowledge limit', () => {
     botLimit: 1,
     memberLimit: 1,
     monthlyAiCredits: 100,
-    kbStorageMbPerBot: 10,
-    kbStorageBytesPerBot: 10 * 1024 * 1024,
+    kbStorageMbPerBot: 5,
+    kbStorageBytesPerBot: 5 * 1024 * 1024,
     maxKbStorageMbPerBot: 40,
     maxKbStorageBytesPerBot: 40 * 1024 * 1024,
     analyticsHistoryDays: 7,
@@ -55,7 +55,7 @@ describe('workspace onboarding knowledge limit', () => {
   };
 
   it('caps limit at 40 MB', () => {
-    expect(resolveOnboardingKbLimitBytes(entitlements)).toBe(10 * 1024 * 1024);
+    expect(resolveOnboardingKbLimitBytes(entitlements)).toBe(5 * 1024 * 1024);
   });
 
   it('throws plan_limit_bot_kb_total when upload exceeds cap', () => {

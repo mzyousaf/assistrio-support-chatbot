@@ -3,6 +3,7 @@
  * Shared by Documents ingest view, FAQs, snippets, datasheets, suggestions, overview, polling.
  */
 import { isKbPlanLimitTrainingError } from './knowledgeStorageLimits';
+import { TRAINED_KNOWLEDGE_STORAGE_LIMIT_SHORT } from '@/lib/trainedKnowledgeStorageCopy';
 
 export const KNOWLEDGE_TRAINING_STATUSES = [
   'pending',
@@ -536,7 +537,7 @@ export function knowledgeTrainingStatusLabel(status: KnowledgeTrainingStatus | s
   if (n === 'processing') return 'Training';
   if (n === 'ready') return 'Trained';
   if (n === 'failed') return 'Training Failed';
-  if (n === 'out_of_storage') return 'Out of storage';
+  if (n === 'out_of_storage') return TRAINED_KNOWLEDGE_STORAGE_LIMIT_SHORT;
   return '—';
 }
 
@@ -639,7 +640,7 @@ export function knowledgeTrainingStatusPillHoverDescription(
     case 'failed':
       return 'Training failed. Review the error on this item or retry from Knowledge overview.';
     case 'out_of_storage':
-      return 'Training is blocked by your workspace storage limit. Free space or upgrade to continue.';
+      return 'Training is blocked by your trained knowledge storage limit. Free space or upgrade to continue.';
     default:
       return 'Training status for this knowledge item.';
   }

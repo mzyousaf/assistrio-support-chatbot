@@ -24,6 +24,7 @@ import {
   KNOWLEDGE_DOCUMENT_UPLOAD_BATCH_MAX,
   KNOWLEDGE_DOCUMENTS_MAX,
 } from '@/lib/botFieldLimits';
+import { MAX_KB_UPLOAD_FILE_SIZE_LABEL } from '@/lib/trainedKnowledgeStorageCopy';
 import {
   ASSISTRIO_WORKSPACE_BOT_REFRESH,
   requestWorkspaceBotRefresh,
@@ -1298,7 +1299,7 @@ export function KnowledgeBaseSection() {
                       </div>
                       <p className="mt-3 text-sm font-semibold text-slate-900">Upload documents</p>
                       <p className="mt-1 w-full max-w-none px-1 text-xs leading-relaxed text-slate-600 sm:text-[0.8125rem]">
-                        .md · .txt · .pdf · .docx · .doc — Max 20 MB per file
+                        .md · .txt · .pdf · .docx · .doc — {MAX_KB_UPLOAD_FILE_SIZE_LABEL}
                       </p>
                       <p className="mt-2 w-full max-w-none px-1 text-xs leading-relaxed text-slate-500 sm:text-[0.8125rem]">
                         Up to {KNOWLEDGE_DOCUMENTS_MAX} documents per agent. Drag here, click to browse, or multi-select—up

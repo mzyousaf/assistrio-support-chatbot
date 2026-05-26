@@ -20,6 +20,7 @@ import {
   kbPlanLimitClientDescription,
   KNOWLEDGE_ITEM_TITLE_MAX_UTF8_BYTES,
 } from '@/lib/knowledgeContentUtf8Limits';
+import { TRAINED_KNOWLEDGE_STORAGE_LIMIT_SHORT } from '@/lib/trainedKnowledgeStorageCopy';
 import { tryHandleCustomerResourceGone } from '@/lib/customerResourceUnavailable';
 import { useBotWorkspace } from '../BotWorkspaceContext';
 import { useKnowledgeStorageUx } from '@/context/KnowledgeStorageUxContext';
@@ -346,7 +347,7 @@ export function KnowledgeSuggestionDetailPage() {
             lastTrainedAt={kbPollItem?.lastTrainedAt ?? row.lastTrainedAt}
             updatedAt={kbPollItem?.updatedAt ?? null}
             utf8SizeLabel={formatKnowledgeUtf8BytesDisplay(suggestionKnowledgeItemStoredUtf8Bytes(row))}
-            statusLabelOverride={planLimit ? 'Storage limit reached' : undefined}
+            statusLabelOverride={planLimit ? TRAINED_KNOWLEDGE_STORAGE_LIMIT_SHORT : undefined}
             forceFailedStatusDot={planLimit}
             kbLifecyclePresentation={planLimit || !hasScope ? null : kbLifecyclePresentation}
             trainingScheduleRunAfter={null}

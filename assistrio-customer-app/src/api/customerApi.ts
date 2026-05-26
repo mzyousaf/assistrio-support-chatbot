@@ -49,6 +49,7 @@ import type {
   CustomerShareLinkStatus,
   WorkspaceOnboardingGoLiveResponse,
   WorkspaceOnboardingResponse,
+  WorkspaceBillingSummary,
   SharedBotInitPayload,
   WidgetIframeInitPayload,
   ApiResult,
@@ -76,6 +77,11 @@ export function postCustomerInviteAccept(token: string) {
 
 function workspacePath(workspaceId: string): string {
   return `${P}/workspaces/${encodeURIComponent(workspaceId)}`;
+}
+
+/** GET /api/customer/workspaces/:workspaceId/billing/summary */
+export function getWorkspaceBillingSummary(workspaceId: string) {
+  return customerFetch<WorkspaceBillingSummary>(`${workspacePath(workspaceId)}/billing/summary`);
 }
 
 /** GET /api/customer/workspaces/:workspaceId/members */

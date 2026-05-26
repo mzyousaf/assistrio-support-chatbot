@@ -33,6 +33,7 @@ import { normalizeVisitorMultiChatMax } from './visitor-multi-chat.util';
 import { KNOWLEDGE_QA_MAX, KNOWLEDGE_SNIPPETS_MAX, KNOWLEDGE_TABLES_MAX } from '../workspace/shared/bot-field-limits';
 import { incomingTableSectionUtf8Bytes } from '../knowledge/bot-knowledge-total-incoming.util';
 import { WorkspacesService } from '../workspaces/workspaces.service';
+import { WorkspaceBrandingEntitlementService } from '../entitlements/workspace-branding-entitlement.service';
 import { WorkspaceBotLimitService } from '../entitlements/workspace-bot-limit.service';
 import { WorkspaceEntitlementsService } from '../entitlements/workspace-entitlements.service';
 import {
@@ -226,6 +227,7 @@ export class BotsService {
     private readonly workspacesService: WorkspacesService,
     private readonly workspaceBotLimitService: WorkspaceBotLimitService,
     private readonly workspaceEntitlementsService: WorkspaceEntitlementsService,
+    private readonly workspaceBrandingEntitlementService: WorkspaceBrandingEntitlementService,
   ) { }
 
   private async buildCustomerBotConfigFromWorkspace(workspaceId: string) {
@@ -973,6 +975,22 @@ export class BotsService {
     return { ...bot, faqs, knowledgeDescription } as Record<string, unknown>;
   }
 
+  /** Runtime/public widget surfaces: enforce branding visibility from workspace entitlements. */
+  async sanitizeRuntimeChatUiForBot(bot: {
+    workspaceId?: unknown;
+    chatUI?: unknown;
+  }): Promise<Record<string, unknown>> {
+    const chatUI =
+      bot.chatUI && typeof bot.chatUI === 'object' && !Array.isArray(bot.chatUI)
+        ? ({ ...(bot.chatUI as Record<string, unknown>) } as Record<string, unknown>)
+        : {};
+    const workspaceId = bot.workspaceId != null ? String(bot.workspaceId).trim() : '';
+    return this.workspaceBrandingEntitlementService.applyBrandingEntitlementToChatUi(
+      workspaceId || undefined,
+      chatUI,
+    );
+  }
+
   /** Find one bot by slug for marketing page (public shape; faqs from KB). Superadmin-owned gallery bots only. */
   async findOneBySlugForPage(slug: string): Promise<{
     id: string;
@@ -1610,7 +1628,22 @@ export class BotsService {
       updateDoc.leadCapture = patch.leadCapture;
     }
     if (patch.touched.has('chatUI')) {
-      updateDoc.chatUI = patch.chatUI;
+      const workspaceIdRaw = (ex.workspaceId as Types.ObjectId | string | undefined);
+      const workspaceId =
+        workspaceIdRaw != null && String(workspaceIdRaw).trim() ? String(workspaceIdRaw).trim() : '';
+      if (workspaceId) {
+        await this.workspaceBrandingEntitlementService.assertCanHideBranding(workspaceId, patch.chatUI);
+      }
+      let chatUiPatch: Record<string, unknown> = {};
+      if (patch.chatUI && typeof patch.chatUI === 'object' && !Array.isArray(patch.chatUI)) {
+        chatUiPatch = { ...(patch.chatUI as Record<string, unknown>) };
+      }
+      updateDoc.chatUI = workspaceId
+        ? await this.workspaceBrandingEntitlementService.applyBrandingEntitlementToChatUi(
+            workspaceId,
+            chatUiPatch,
+          )
+        : chatUiPatch;
     }
     if (patch.touched.has('personality')) {
       const existingPersonality =

@@ -1,4 +1,5 @@
 import { BOT_FIELD_MAX, clampStr } from '@/lib/botFieldLimits';
+import { applyBrandingEntitlementToLocalChatUi } from '@/lib/brandingEntitlementCopy';
 import { normalizePrimaryColor } from '@/lib/primaryColorNormalize';
 import { normalizeQuickLinkIcon } from '@/lib/quickLinkIconNormalize';
 
@@ -336,6 +337,7 @@ export function buildAiAdvancedChatUiSavePayload(
 export function buildWidgetAppearanceChatUiSavePayload(
   botChatUi: unknown,
   localChatUi: Record<string, unknown>,
+  options?: { canRemoveBranding?: boolean },
 ): Record<string, unknown> {
   const base = mergeChatUiFromBot(botChatUi);
   const merged: Record<string, unknown> = { ...base };
@@ -344,5 +346,9 @@ export function buildWidgetAppearanceChatUiSavePayload(
       merged[key] = localChatUi[key];
     }
   }
-  return buildCustomerChatUiPayload(merged);
+  const payload = buildCustomerChatUiPayload(merged);
+  if (options?.canRemoveBranding === false) {
+    return applyBrandingEntitlementToLocalChatUi(payload, false);
+  }
+  return payload;
 }

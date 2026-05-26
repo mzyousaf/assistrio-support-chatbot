@@ -18,6 +18,7 @@ describe('BotsService KB edit patch preserves inactive active=false', () => {
       {} as never,
       {} as never,
       {} as never,
+      {} as never,
     );
   }
 

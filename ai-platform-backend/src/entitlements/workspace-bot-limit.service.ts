@@ -68,6 +68,18 @@ export class WorkspaceBotLimitService {
     return this.botModel.countDocuments(filter).exec();
   }
 
+  async getWorkspaceBotUsage(workspaceId: string): Promise<PlanLimitWorkspaceBotsUsage> {
+    const entitlements = await this.entitlementsService.resolveForWorkspace(workspaceId);
+    const current = await this.countWorkspaceCustomerBots(workspaceId);
+
+    return {
+      current,
+      limit: entitlements.botLimit,
+      planKey: entitlements.planKey,
+      planName: entitlements.planName,
+    };
+  }
+
   async assertCanAddBotToWorkspace(
     workspaceId: string,
     options?: { excludeBotId?: string },

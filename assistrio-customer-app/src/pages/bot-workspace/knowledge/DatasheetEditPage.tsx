@@ -9,6 +9,7 @@ import {
 import { useNotifyKbItemDeletedOnce, tryHandleCustomerResourceGone } from '@/lib/customerResourceUnavailable';
 import { patchCustomerKnowledgeDatasheet, patchCustomerKnowledgeItemUseInReplies } from '../../../api/customerApi';
 import { requestWorkspaceBotRefresh } from '@/lib/botSyncEvents';
+import { TRAINED_KNOWLEDGE_STORAGE_LIMIT_SHORT } from '@/lib/trainedKnowledgeStorageCopy';
 import { useBotWorkspace } from '../BotWorkspaceContext';
 import { useKnowledgeStorageUx } from '@/context/KnowledgeStorageUxContext';
 import { useKbKnowledgeStatusPollInterest, useKbWorkspacePolling } from '@/context/KbWorkspacePollingContext';
@@ -555,7 +556,7 @@ export function DatasheetEditPage() {
     >
       <span className="inline-flex min-w-0 items-center gap-1.5">
         {datasheetPlanLimit ? (
-          <KbTrainingStatusTag className="font-normal" label="Storage limit reached" statusForBadge="failed" />
+          <KbTrainingStatusTag className="font-normal" label={TRAINED_KNOWLEDGE_STORAGE_LIMIT_SHORT} statusForBadge="failed" />
         ) : (
           <KbTrainingStatusTagWithSchedule
             label={kbMergedTableTrainingChip(tTrain)}

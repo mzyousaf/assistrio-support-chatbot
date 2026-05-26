@@ -12,7 +12,7 @@ describe('plan-catalog', () => {
     expect(PLAN_CATALOG.map((p) => p.key)).toEqual(['free', 'starter', 'pro']);
   });
 
-  it('Free plan matches Epic 2 spec', () => {
+  it('Free plan matches Epic 6 product spec', () => {
     expect(FREE_PLAN).toMatchObject({
       key: 'free',
       name: 'Free',
@@ -20,7 +20,7 @@ describe('plan-catalog', () => {
       botLimit: 1,
       memberLimit: 3,
       monthlyAiCredits: 50,
-      kbStorageMbPerBot: 10,
+      kbStorageMbPerBot: 5,
       maxKbStorageMbPerBot: 40,
       analyticsHistoryDays: 7,
       canExportReports: false,
@@ -48,16 +48,29 @@ describe('plan-catalog', () => {
       priceMonthlyUsd: 99,
       memberLimit: 5,
       monthlyAiCredits: 3000,
-      kbStorageMbPerBot: 25,
+      kbStorageMbPerBot: 30,
       canExportReports: true,
     });
     expect(PRO_PLAN.analyticsHistoryDays).toBeNull();
   });
 
-  it('max KB storage is 40 MB for all plans', () => {
+  it('trained KB storage limits per plan (Epic 6)', () => {
+    expect(FREE_PLAN.kbStorageMbPerBot).toBe(5);
+    expect(STARTER_PLAN.kbStorageMbPerBot).toBe(15);
+    expect(PRO_PLAN.kbStorageMbPerBot).toBe(30);
+  });
+
+  it('max trained KB storage is 40 MB for all plans', () => {
     for (const plan of PLAN_CATALOG) {
       expect(plan.maxKbStorageMbPerBot).toBe(40);
     }
+  });
+
+  it('megabytesToBytes maps plan KB limits to binary bytes', () => {
+    expect(megabytesToBytes(FREE_PLAN.kbStorageMbPerBot)).toBe(5 * 1024 * 1024);
+    expect(megabytesToBytes(STARTER_PLAN.kbStorageMbPerBot)).toBe(15 * 1024 * 1024);
+    expect(megabytesToBytes(PRO_PLAN.kbStorageMbPerBot)).toBe(30 * 1024 * 1024);
+    expect(megabytesToBytes(FREE_PLAN.maxKbStorageMbPerBot)).toBe(40 * 1024 * 1024);
   });
 
   it('getPlanByKey falls back to Free for unknown keys', () => {
@@ -66,7 +79,7 @@ describe('plan-catalog', () => {
   });
 
   it('megabytesToBytes converts using binary megabytes', () => {
-    expect(megabytesToBytes(10)).toBe(10 * 1024 * 1024);
+    expect(megabytesToBytes(5)).toBe(5 * 1024 * 1024);
     expect(megabytesToBytes(40)).toBe(40 * 1024 * 1024);
   });
 });

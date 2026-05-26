@@ -13,6 +13,11 @@ export type BotKnowledgeSizeStored = {
   note?: string | null;
 };
 
+/**
+ * Legacy fallback for bots without a workspace or without a persisted quota.
+ * Workspace customer bots should use plan entitlements instead (see `BotKnowledgeSizeResolverService`).
+ * TODO(epic-6): Revisit lowering this to Free-tier 5 MB for non-workspace bots when migration is safe.
+ */
 export const DEFAULT_BOT_KNOWLEDGE_SIZE: BotKnowledgeSizeStored = {
   type: 'default',
   baseMaxBytes: 50 * 1024 * 1024,

@@ -28,6 +28,8 @@ import { runtimeEmbedSpeechPost } from "../lib/runtimeEmbedSpeechPost";
 import { speechEndpointFromChatUrl } from "../lib/speechEndpoint";
 import { createTranscriptionUploadFile } from "../lib/transcriptionUploadFile";
 import { sanitizeChatMessageContent } from "../lib/chatMessageDisplay.util";
+import { resolveBrandingFooterDisplay } from "../lib/resolveBrandingFooterDisplay";
+import { resolveChatRuntimeErrorMessage } from "../lib/resolveChatRuntimeErrorMessage";
 import { streamAssistantReply } from "../lib/streamAssistantReply";
 import { mergeWidgetStrings, type WidgetStrings } from "../lib/widgetStrings";
 import { resolveWelcomeMessage } from "../lib/welcomeMessage";
@@ -124,44 +126,9 @@ interface SuperAdminChatResponse {
   conversationId?: string;
   error?: string;
   errorCode?: string;
+  message?: string;
   debug?: SuperAdminChatDebug;
   userAttachments?: Array<{ name: string; mimeType: string; url: string; size?: number }>;
-}
-
-function getRuntimeErrorMessage(
-  response: Pick<SuperAdminChatResponse, "error" | "errorCode">,
-  visitorMultiChatMax?: number | null,
-): string {
-  if (typeof response.error === "string" && response.error.trim()) {
-    return response.error;
-  }
-  switch (response.errorCode) {
-    case "BOT_NOT_PUBLISHED":
-      return "This bot is not available for embedding right now.";
-    case "INVALID_ACCESS_KEY":
-      return "Chat access is invalid. Please verify your access key.";
-    case "INVALID_SECRET_KEY":
-      return "Chat access is invalid. Please verify your secret key.";
-    case "VISITOR_ID_REQUIRED":
-      return "A visitor session is required for this bot.";
-    case "MESSAGE_LIMIT_REACHED":
-      return "This bot has reached its message limit.";
-    case "VISITOR_MULTI_CHAT_LIMIT_REACHED":
-      if (visitorMultiChatMax != null && Number.isFinite(visitorMultiChatMax) && visitorMultiChatMax > 0) {
-        return `You've reached the limit of ${visitorMultiChatMax} saved conversation${visitorMultiChatMax === 1 ? "" : "s"}. Open an existing thread from Recent chats or end one before starting new.`;
-      }
-      return "You've reached the maximum number of saved conversations.";
-    case "CONVERSATION_NOT_FOUND":
-      return "That conversation could not be loaded.";
-    case "EMBED_DOMAIN_NOT_ALLOWED":
-    case "EMBED_ORIGIN_REQUIRED":
-    case "EMBED_ORIGIN_INVALID":
-    case "EMBED_NO_ALLOWLIST":
-    case "PREVIEW_ORIGIN_NOT_ALLOWED":
-      return "This chat widget is not allowed on this site.";
-    default:
-      return "No response.";
-  }
 }
 
 function truncateSubtitle(text: string, maxLen: number): string {
@@ -1117,7 +1084,7 @@ export function AdminLiveChatAdapter({
           data.assistantMessage ??
           data.reply ??
           data.content ??
-          getRuntimeErrorMessage(data, visitorMultiChatMax);
+          resolveChatRuntimeErrorMessage(data, { visitorMultiChatMax });
         pendingStartNewRef.current = false;
         if (data.conversationId) {
           conversationIdRef.current = data.conversationId;
@@ -1474,12 +1441,10 @@ export function AdminLiveChatAdapter({
     [executeSend, messages],
   );
 
-  const brandingLine = (chatUI?.brandingMessage ?? "").trim();
   const privacyLineRaw =
     (chatUI?.privacyText ?? "").trim() || (footerPrivacyText ?? "").trim();
-  const showBrandingLine = chatUI?.showBranding !== false && Boolean(brandingLine);
+  const { showBrandingLine, brandingMessage: brandingMessageResolved } = resolveBrandingFooterDisplay(chatUI);
   const showPrivacyLine = chatUI?.showPrivacyText !== false && Boolean(privacyLineRaw);
-  const brandingMessageResolved = showBrandingLine ? brandingLine : undefined;
   const privacyTextResolved = showPrivacyLine ? privacyLineRaw : undefined;
   const showFooterResolved = showBrandingLine || showPrivacyLine;
 

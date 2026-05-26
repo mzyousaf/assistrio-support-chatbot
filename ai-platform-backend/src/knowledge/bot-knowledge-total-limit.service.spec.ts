@@ -24,18 +24,32 @@ function mockItemFindLean(rows: unknown[]) {
 
 describe('BotKnowledgeTotalLimitService', () => {
   const botId = new Types.ObjectId().toString();
+  const workspaceId = new Types.ObjectId();
 
-  it('throws HttpException with plan_limit_bot_kb_total payload when over default maxBytes', async () => {
-    const knowledgeUsageService = {
+  function buildSvc(input: {
+    botLean: unknown;
+    knowledgeSizeResolver?: { resolveForBotLean: jest.Mock };
+    knowledgeUsageService?: { getActiveBotKnowledgeUsage: jest.Mock };
+    itemModel?: ReturnType<typeof mockItemFindLean>;
+  }) {
+    const knowledgeSizeResolver = input.knowledgeSizeResolver ?? {
+      resolveForBotLean: jest.fn().mockResolvedValue({ maxBytes: 50 * 1024 * 1024 }),
+    };
+    const knowledgeUsageService = input.knowledgeUsageService ?? {
       getActiveBotKnowledgeUsage: jest.fn().mockResolvedValue({ totalBytes: 50 * 1024 * 1024 }),
     };
-    const itemModel = mockItemFindLean([]);
-    const botModel = mockBotModelLean(null);
-    const svc = new BotKnowledgeTotalLimitService(
+    const itemModel = input.itemModel ?? mockItemFindLean([]);
+    const botModel = mockBotModelLean(input.botLean);
+    return new BotKnowledgeTotalLimitService(
       knowledgeUsageService as never,
+      knowledgeSizeResolver as never,
       itemModel as never,
       botModel as never,
     );
+  }
+
+  it('throws HttpException with plan_limit_bot_kb_total payload when over default maxBytes', async () => {
+    const svc = buildSvc({ botLean: null });
     try {
       await svc.assertWithinLimit(botId, { incomingBytes: 1 });
       expect(true).toBe(false);
@@ -54,28 +68,24 @@ describe('BotKnowledgeTotalLimitService', () => {
   });
 
   it('uses custom botConfig.knowledgeSize.maxBytes', async () => {
-    const knowledgeUsageService = {
-      getActiveBotKnowledgeUsage: jest.fn().mockResolvedValue({ totalBytes: 900 }),
-    };
-    const itemModel = mockItemFindLean([]);
-    const botModel = mockBotModelLean({
-      botConfig: {
-        knowledgeSize: { type: 'custom', maxBytes: 1000, baseMaxBytes: 1000, extraMaxBytes: 0 },
+    const svc = buildSvc({
+      botLean: {
+        botConfig: {
+          knowledgeSize: { type: 'custom', maxBytes: 1000, baseMaxBytes: 1000, extraMaxBytes: 0 },
+        },
+      },
+      knowledgeSizeResolver: {
+        resolveForBotLean: jest.fn().mockResolvedValue({ maxBytes: 1000 }),
+      },
+      knowledgeUsageService: {
+        getActiveBotKnowledgeUsage: jest.fn().mockResolvedValue({ totalBytes: 900 }),
       },
     });
-    const svc = new BotKnowledgeTotalLimitService(
-      knowledgeUsageService as never,
-      itemModel as never,
-      botModel as never,
-    );
     await expect(svc.assertWithinLimit(botId, { incomingBytes: 101 })).rejects.toBeInstanceOf(HttpException);
     await expect(svc.assertWithinLimit(botId, { incomingBytes: 100 })).resolves.toBeUndefined();
   });
 
   it('subtracts replacing document bytes before comparing', async () => {
-    const knowledgeUsageService = {
-      getActiveBotKnowledgeUsage: jest.fn().mockResolvedValue({ totalBytes: 1000 }),
-    };
     const replacingId = new Types.ObjectId();
     const itemModel = {
       find: jest.fn().mockReturnValue({
@@ -92,16 +102,20 @@ describe('BotKnowledgeTotalLimitService', () => {
         }),
       }),
     };
-    const botModel = mockBotModelLean({
-      botConfig: {
-        knowledgeSize: { type: 'custom', maxBytes: 1000, baseMaxBytes: 1000, extraMaxBytes: 0 },
+    const svc = buildSvc({
+      botLean: {
+        botConfig: {
+          knowledgeSize: { type: 'custom', maxBytes: 1000, baseMaxBytes: 1000, extraMaxBytes: 0 },
+        },
       },
+      knowledgeSizeResolver: {
+        resolveForBotLean: jest.fn().mockResolvedValue({ maxBytes: 1000 }),
+      },
+      knowledgeUsageService: {
+        getActiveBotKnowledgeUsage: jest.fn().mockResolvedValue({ totalBytes: 1000 }),
+      },
+      itemModel,
     });
-    const svc = new BotKnowledgeTotalLimitService(
-      knowledgeUsageService as never,
-      itemModel as never,
-      botModel as never,
-    );
     await expect(
       svc.assertWithinLimit(botId, { replacingItemIds: [replacingId], incomingBytes: 500 }),
     ).rejects.toBeInstanceOf(HttpException);
@@ -111,23 +125,11 @@ describe('BotKnowledgeTotalLimitService', () => {
   });
 
   it('assertStoredBytesBelowCapForNewContent throws when stored usage is at cap', async () => {
-    const knowledgeUsageService = {
-      getActiveBotKnowledgeUsage: jest.fn().mockResolvedValue({ totalBytes: 50 * 1024 * 1024 }),
-    };
-    const itemModel = mockItemFindLean([]);
-    const botModel = mockBotModelLean(null);
-    const svc = new BotKnowledgeTotalLimitService(
-      knowledgeUsageService as never,
-      itemModel as never,
-      botModel as never,
-    );
+    const svc = buildSvc({ botLean: null });
     await expect(svc.assertStoredBytesBelowCapForNewContent(botId)).rejects.toBeInstanceOf(HttpException);
   });
 
   it('allows replace shrink while over max when new bytes are <= replaced bytes', async () => {
-    const knowledgeUsageService = {
-      getActiveBotKnowledgeUsage: jest.fn().mockResolvedValue({ totalBytes: 1200 }),
-    };
     const replacingId = new Types.ObjectId();
     const itemModel = {
       find: jest.fn().mockReturnValue({
@@ -144,25 +146,26 @@ describe('BotKnowledgeTotalLimitService', () => {
         }),
       }),
     };
-    const botModel = mockBotModelLean({
-      botConfig: {
-        knowledgeSize: { type: 'custom', maxBytes: 1000, baseMaxBytes: 1000, extraMaxBytes: 0 },
+    const svc = buildSvc({
+      botLean: {
+        botConfig: {
+          knowledgeSize: { type: 'custom', maxBytes: 1000, baseMaxBytes: 1000, extraMaxBytes: 0 },
+        },
       },
+      knowledgeSizeResolver: {
+        resolveForBotLean: jest.fn().mockResolvedValue({ maxBytes: 1000 }),
+      },
+      knowledgeUsageService: {
+        getActiveBotKnowledgeUsage: jest.fn().mockResolvedValue({ totalBytes: 1200 }),
+      },
+      itemModel,
     });
-    const svc = new BotKnowledgeTotalLimitService(
-      knowledgeUsageService as never,
-      itemModel as never,
-      botModel as never,
-    );
     await expect(
       svc.assertWithinLimit(botId, { replacingItemIds: [replacingId], incomingBytes: 400 }),
     ).resolves.toBeUndefined();
   });
 
   it('blocks replacement growth when already over max and new bytes exceed old item bytes', async () => {
-    const knowledgeUsageService = {
-      getActiveBotKnowledgeUsage: jest.fn().mockResolvedValue({ totalBytes: 1200 }),
-    };
     const replacingId = new Types.ObjectId();
     const itemModel = {
       find: jest.fn().mockReturnValue({
@@ -179,18 +182,46 @@ describe('BotKnowledgeTotalLimitService', () => {
         }),
       }),
     };
-    const botModel = mockBotModelLean({
-      botConfig: {
-        knowledgeSize: { type: 'custom', maxBytes: 1000, baseMaxBytes: 1000, extraMaxBytes: 0 },
+    const svc = buildSvc({
+      botLean: {
+        botConfig: {
+          knowledgeSize: { type: 'custom', maxBytes: 1000, baseMaxBytes: 1000, extraMaxBytes: 0 },
+        },
       },
+      knowledgeSizeResolver: {
+        resolveForBotLean: jest.fn().mockResolvedValue({ maxBytes: 1000 }),
+      },
+      knowledgeUsageService: {
+        getActiveBotKnowledgeUsage: jest.fn().mockResolvedValue({ totalBytes: 1200 }),
+      },
+      itemModel,
     });
-    const svc = new BotKnowledgeTotalLimitService(
-      knowledgeUsageService as never,
-      itemModel as never,
-      botModel as never,
-    );
     await expect(
       svc.assertWithinLimit(botId, { replacingItemIds: [replacingId], incomingBytes: 600 }),
     ).rejects.toBeInstanceOf(HttpException);
+  });
+
+  it('workspace bot missing knowledgeSize uses resolver plan quota in limit payload', async () => {
+    const planBytes = 10 * 1024 * 1024;
+    const svc = buildSvc({
+      botLean: { workspaceId, botConfig: {} },
+      knowledgeSizeResolver: {
+        resolveForBotLean: jest.fn().mockResolvedValue({ maxBytes: planBytes }),
+      },
+      knowledgeUsageService: {
+        getActiveBotKnowledgeUsage: jest.fn().mockResolvedValue({ totalBytes: planBytes }),
+      },
+    });
+    try {
+      await svc.assertWithinLimit(botId, { incomingBytes: 1 });
+      expect(true).toBe(false);
+    } catch (e: unknown) {
+      expect(isPlanLimitBotKbTotalHttpException(e)).toBe(true);
+      const res = (e as HttpException).getResponse() as Record<string, unknown>;
+      expect(res.maxBytes).toBe(planBytes);
+      expect(res.currentBytes).toBe(planBytes);
+      expect(res.errorCode).toBe(PLAN_LIMIT_BOT_KB_TOTAL_CODE);
+    }
+    await expect(svc.assertStoredBytesBelowCapForNewContent(botId)).rejects.toBeInstanceOf(HttpException);
   });
 });

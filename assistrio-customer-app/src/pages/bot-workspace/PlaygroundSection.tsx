@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { postCustomerBotChat } from '../../api/customerApi';
-import { resolveChatRuntimeErrorMessage } from '../../lib/resolveChatRuntimeErrorMessage';
+import { useCustomerAuth } from '../../auth/CustomerAuthContext';
+import { resolveActiveCustomerWorkspace } from '../../lib/resolveActiveCustomerWorkspace';
+import {
+  PLAN_LIMIT_AI_CREDITS_CODE,
+  resolveChatRuntimeErrorMessage,
+} from '../../lib/resolveChatRuntimeErrorMessage';
+import { isWorkspaceManagerRole } from '../../lib/workspaceRoles';
 import { useBotWorkspace } from './BotWorkspaceContext';
 import { ws } from './workspace';
 import { PageIntroStrip, SplitPanelLayout, SupportPanel, WorkspaceContentContainer } from '@/layout/workspace-layout';
@@ -12,10 +19,14 @@ const storageKey = (botId: string) => `assistrio_customer_playground_${botId}`;
 
 export function PlaygroundSection() {
   const { bot, botId } = useBotWorkspace();
+  const { customer } = useCustomerAuth();
+  const { role } = resolveActiveCustomerWorkspace(customer);
+  const canViewPlans = isWorkspaceManagerRole(role);
   const [messages, setMessages] = useState<Turn[]>([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [errCode, setErrCode] = useState<string | null>(null);
 
   useEffect(() => {
     if (!botId) return;
@@ -44,6 +55,7 @@ export function PlaygroundSection() {
     const text = input.trim();
     if (!text || sending) return;
     setErr(null);
+    setErrCode(null);
     const userTurn: Turn = { id: crypto.randomUUID(), role: 'user', text };
     const next = [...messages, userTurn];
     setMessages(next);
@@ -54,6 +66,7 @@ export function PlaygroundSection() {
     setSending(false);
     if (!res.ok) {
       setErr(resolveChatRuntimeErrorMessage(res));
+      setErrCode(res.errorCode ?? null);
       return;
     }
     const asst: Turn = { id: crypto.randomUUID(), role: 'assistant', text: res.data.assistantMessage ?? '' };
@@ -80,7 +93,16 @@ export function PlaygroundSection() {
             className="rounded-xl border bg-white p-4 shadow-[var(--shadow-card)] md:p-5"
             style={{ borderColor: 'color-mix(in srgb, var(--border-soft) 92%, #0f766e 8%)' }}
           >
-            {err ? <p className={ws.err}>{err}</p> : null}
+            {err ? (
+              <div className={ws.err}>
+                <p className="m-0">{err}</p>
+                {errCode === PLAN_LIMIT_AI_CREDITS_CODE && canViewPlans ? (
+                  <Link to="/settings/plans" className="mt-2 inline-block text-sm font-medium text-teal-700 underline">
+                    View plans
+                  </Link>
+                ) : null}
+              </div>
+            ) : null}
 
             <div className="mb-3 flex max-h-[420px] flex-col gap-3 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50/80 p-3">
               {messages.length === 0 ? (

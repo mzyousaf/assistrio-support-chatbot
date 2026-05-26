@@ -5,6 +5,7 @@
  */
 import type { CustomerWorkspaceDocument } from '@/api/types';
 import { isKbPlanLimitTrainingError } from '@/lib/knowledgeStorageLimits';
+import { TRAINED_KNOWLEDGE_STORAGE_LIMIT_SHORT } from '@/lib/trainedKnowledgeStorageCopy';
 import {
   baselineDocumentRowTrainingStatus,
   normalizeKnowledgeTrainingStatus,
@@ -226,7 +227,7 @@ export function getKnowledgeItemDisplayStatus(input: KnowledgeItemDisplayInput):
   if (isKbPlanLimitTrainingError(input.trainingError) || ds === 'out_of_storage' || tsApi === 'out_of_storage') {
     return {
       key: 'out_of_storage',
-      label: 'Out of storage',
+      label: TRAINED_KNOWLEDGE_STORAGE_LIMIT_SHORT,
       tone: 'danger',
       isBusy: false,
       dotCanon: 'out_of_storage',

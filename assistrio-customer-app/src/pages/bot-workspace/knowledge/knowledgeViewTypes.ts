@@ -320,7 +320,7 @@ export function formatDocumentTrainingStatusDisplayLabel(
   opts?: WorkspaceDocumentDisplayOptions,
 ): string {
   const ext = doc as DocumentRowWithKbMeta;
-  if (knowledgeRowIndicatesPlanLimitTotal(ext)) return 'Out of storage';
+  if (knowledgeRowIndicatesPlanLimitTotal(ext)) return knowledgeTrainingStatusLabel('out_of_storage');
   return getKnowledgeItemDisplayStatus(workspaceDocumentToDisplayInput(doc, opts)).label;
 }
 

@@ -11,7 +11,7 @@ import {
   type KnowledgeBaseItemUsageLean,
 } from './knowledge-usage.util';
 import { KnowledgeUsageService } from './knowledge-usage.service';
-import { resolveBotKnowledgeSizeConfig } from './resolve-bot-knowledge-size.util';
+import { BotKnowledgeSizeResolverService } from '../entitlements/bot-knowledge-size-resolver.service';
 import type { BotForKnowledgeUsageLimit } from './knowledge-usage.util';
 
 export const PLAN_LIMIT_BOT_KB_TOTAL_CODE = 'plan_limit_bot_kb_total' as const;
@@ -89,14 +89,20 @@ export function planLimitPayloadFromHttpException(err: HttpException): PlanLimit
 export class BotKnowledgeTotalLimitService {
   constructor(
     private readonly knowledgeUsageService: KnowledgeUsageService,
+    private readonly knowledgeSizeResolver: BotKnowledgeSizeResolverService,
     @InjectModel(KnowledgeBaseItem.name) private readonly itemModel: Model<KnowledgeBaseItem>,
     @InjectModel(Bot.name) private readonly botModel: Model<Bot>,
   ) {}
 
   private async loadBotForLimit(botId: string): Promise<BotForKnowledgeUsageLimit> {
     if (!Types.ObjectId.isValid(botId)) return null;
-    const b = await this.botModel.findById(new Types.ObjectId(botId)).select('botConfig').lean();
+    const b = await this.botModel.findById(new Types.ObjectId(botId)).select('workspaceId botConfig').lean();
     return b as BotForKnowledgeUsageLimit;
+  }
+
+  private async resolveMaxBytes(bot: BotForKnowledgeUsageLimit): Promise<number> {
+    const resolved = await this.knowledgeSizeResolver.resolveForBotLean(bot);
+    return resolved.maxBytes;
   }
 
   private async sumEligibleBytesForFilter(botId: string, filter: Record<string, unknown>): Promise<number> {
@@ -165,7 +171,7 @@ export class BotKnowledgeTotalLimitService {
     isReplaceOperation: boolean;
   }> {
     const bot = await this.loadBotForLimit(botId);
-    const { maxBytes } = resolveBotKnowledgeSizeConfig(bot);
+    const maxBytes = await this.resolveMaxBytes(bot);
     const usage = await this.knowledgeUsageService.getActiveBotKnowledgeUsage(botId, bot);
     const currentBytes = usage.totalBytes;
     let replacingBytes = 0;
@@ -235,7 +241,7 @@ export class BotKnowledgeTotalLimitService {
    */
   async assertStoredBytesBelowCapForNewContent(botId: string): Promise<void> {
     const bot = await this.loadBotForLimit(botId);
-    const { maxBytes } = resolveBotKnowledgeSizeConfig(bot);
+    const maxBytes = await this.resolveMaxBytes(bot);
     if (!Number.isFinite(maxBytes) || maxBytes <= 0) return;
     const usage = await this.knowledgeUsageService.getActiveBotKnowledgeUsage(botId, bot);
     const currentBytes = usage.totalBytes;

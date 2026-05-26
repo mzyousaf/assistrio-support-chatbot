@@ -7,6 +7,7 @@ import type {
   AdminCustomerWorkspacesResponse,
   AdminCustomersListParams,
   AdminCustomersListResponse,
+  AdminWorkspaceBillingSummary,
   AdminLoginResponse,
   AdminLogoutResponse,
   AdminMe,
@@ -103,6 +104,12 @@ export function getAdminCustomer(customerId: string) {
 export function getAdminCustomerWorkspaces(customerId: string) {
   return adminFetch<AdminCustomerWorkspacesResponse>(
     `${P}/customers/${encodeURIComponent(customerId)}/workspaces`,
+  );
+}
+
+export function getAdminWorkspaceBillingSummary(workspaceId: string) {
+  return adminFetch<AdminWorkspaceBillingSummary>(
+    `${P}/workspaces/${encodeURIComponent(workspaceId)}/billing/summary`,
   );
 }
 

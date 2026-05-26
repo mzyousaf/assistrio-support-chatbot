@@ -50,9 +50,10 @@ import { CustomerLeadsPage } from './pages/bot-workspace/CustomerLeadsPage';
 import { BotsListPage } from './pages/BotsListPage';
 import { LoginPage } from './pages/LoginPage';
 import { InviteAcceptPage } from './pages/InviteAcceptPage';
-import { PlansPage } from './pages/PlansPage';
+import { PlansPage, SettingsBillingPage } from './pages/PlansPage';
 import { NotFoundPage } from './pages/NotFoundPage';
-import { SettingsPage } from './pages/SettingsPage';
+import { UserAccountSettingsPage } from './pages/settings/UserAccountSettingsPage';
+import { WorkspaceSettingsPage } from './pages/settings/WorkspaceSettingsPage';
 import { SettingsMembersPage } from './pages/settings/SettingsMembersPage';
 import { SettingsPlaceholderPage } from './pages/settings/SettingsPlaceholderPage';
 import { UsagePage } from './pages/UsagePage';
@@ -124,18 +125,12 @@ export function App() {
             <Route element={<AppShell />}>
             <Route path="/usage" element={<UsagePage />} />
             <Route path="/plans" element={<Navigate to="/settings/plans" replace />} />
-            <Route path="/settings" element={<Navigate to="/settings/general" replace />} />
-            <Route path="/settings/general" element={<SettingsPage />} />
+            <Route path="/settings" element={<Navigate to="/settings/account" replace />} />
+            <Route path="/settings/general" element={<Navigate to="/settings/account" replace />} />
+            <Route path="/settings/account" element={<UserAccountSettingsPage />} />
+            <Route path="/settings/workspace" element={<WorkspaceSettingsPage />} />
             <Route path="/settings/members" element={<SettingsMembersPage />} />
-            <Route
-              path="/settings/billing"
-              element={
-                <SettingsPlaceholderPage
-                  title="Billing"
-                  description="Plans, invoices, and payment methods will appear here."
-                />
-              }
-            />
+            <Route path="/settings/billing" element={<SettingsBillingPage />} />
             <Route path="/settings/plans" element={<PlansPage />} />
             <Route
               path="/settings/api-keys"

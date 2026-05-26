@@ -93,7 +93,7 @@
   /* Main workspace canvas — same family as app for a flat, consistent field */
   --bg-workspace-canvas: #f8fafc;
   --bg-navbar: #ffffff;
-  --bg-sidebar-primary: #ffffff;
+  --bg-sidebar-primary: #f8fafc;
   --bg-sidebar-secondary: #ffffff;
   --bg-card: #ffffff;
   --border-soft: #e2e8f0;

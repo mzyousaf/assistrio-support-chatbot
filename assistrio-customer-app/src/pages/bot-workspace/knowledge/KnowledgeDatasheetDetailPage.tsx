@@ -11,6 +11,7 @@ import {
 } from '@/lib/knowledgeItemActionToasts';
 import { Button } from '@/components/ui';
 import { useNotifyKbItemDeletedOnce } from '@/lib/customerResourceUnavailable';
+import { TRAINED_KNOWLEDGE_STORAGE_LIMIT_SHORT } from '@/lib/trainedKnowledgeStorageCopy';
 import { useBotWorkspace } from '../BotWorkspaceContext';
 import { useKnowledgeStorageUx } from '@/context/KnowledgeStorageUxContext';
 import { useKbKnowledgeStatusPollInterest, useKbWorkspacePolling } from '@/context/KbWorkspacePollingContext';
@@ -395,7 +396,7 @@ export function KnowledgeDatasheetDetailPage() {
             lastTrainedAt={kbPollItem?.lastTrainedAt ?? table.lastTrainedAt}
             updatedAt={kbPollItem?.updatedAt ?? null}
             utf8SizeLabel={formatKnowledgeUtf8BytesDisplay(datasheetGridUtf8Bytes(table))}
-            statusLabelOverride={planLimit ? 'Storage limit reached' : undefined}
+            statusLabelOverride={planLimit ? TRAINED_KNOWLEDGE_STORAGE_LIMIT_SHORT : undefined}
             forceFailedStatusDot={planLimit}
             kbLifecyclePresentation={planLimit ? null : kbLifecyclePresentation}
             trainingScheduleRunAfter={null}

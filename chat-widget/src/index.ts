@@ -44,3 +44,11 @@ export {
 export type { QuickLinkIconId } from "./lib/quickLinkIcons";
 
 export { createStablePreviewOverridesKey } from "./lib/stablePreviewOverridesKey";
+export {
+  PLAN_LIMIT_AI_CREDITS_CODE,
+  PLAN_LIMIT_AI_CREDITS_MESSAGE,
+  AI_CREDITS_USAGE_UNAVAILABLE_CODE,
+  AI_CREDITS_USAGE_UNAVAILABLE_MESSAGE,
+  resolveChatRuntimeErrorMessage,
+} from "./lib/resolveChatRuntimeErrorMessage";
+export type { ChatRuntimeErrorInput, ResolveChatRuntimeErrorOptions } from "./lib/resolveChatRuntimeErrorMessage";

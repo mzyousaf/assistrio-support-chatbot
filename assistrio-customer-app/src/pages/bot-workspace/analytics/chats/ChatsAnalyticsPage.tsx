@@ -1,7 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Download, MessagesSquare } from 'lucide-react';
 import { getCustomerBotChatsAnalytics } from '@/api/customerApi';
 import type { CustomerChatsAnalyticsResponse } from '@/api/types';
+import { useCustomerAuth } from '@/auth/CustomerAuthContext';
+import { useWorkspaceBillingSummary } from '@/hooks/useWorkspaceBillingSummary';
+import {
+  ANALYTICS_WINDOW_CLAMPED_NOTE,
+  EXPORT_REPORTS_LOCKED_HELPER,
+  canExportReportsEntitlement,
+} from '@/lib/analyticsEntitlementCopy';
+import { shouldShowAnalyticsWindowClampedNote } from '@/lib/analyticsEntitlementWindow';
+import { resolveActiveCustomerWorkspace } from '@/lib/resolveActiveCustomerWorkspace';
 import { CHATS_ANALYTICS_DEFAULTS, buildChatsAnalyticsApiParams, type ChatsAnalyticsUiState } from '@/lib/chatsAnalyticsQuery';
 import { safeClientString } from '@/lib/safeClientString';
 import { useBotWorkspace } from '../../BotWorkspaceContext';
@@ -22,6 +32,11 @@ import { hasTopPagesSignal } from './chatsTopPages.util';
 
 export function ChatsAnalyticsPage() {
   const { botId } = useBotWorkspace();
+  const { customer } = useCustomerAuth();
+  const { activeWorkspaceId } = resolveActiveCustomerWorkspace(customer);
+  const { summary: billingSummary } = useWorkspaceBillingSummary(activeWorkspaceId);
+  const maxHistoryDays = billingSummary?.entitlements.analyticsHistoryDays ?? null;
+  const canExportReports = canExportReportsEntitlement(billingSummary?.entitlements.canExportReports);
   const [ui, setUi] = useState<ChatsAnalyticsUiState>(() => ({ ...CHATS_ANALYTICS_DEFAULTS }));
   const [data, setData] = useState<CustomerChatsAnalyticsResponse | null>(null);
   const [loadState, setLoadState] = useState<'loading' | 'ok' | 'error'>('loading');
@@ -56,8 +71,10 @@ export function ChatsAnalyticsPage() {
   const topPagesRows = useMemo(() => data?.topPagesBreakdown ?? [], [data]);
   const topPagesExportable = useMemo(() => hasTopPagesSignal(topPagesRows), [topPagesRows]);
   const exportTopPagesCsv = useCallback(() => {
+    if (!canExportReports) return;
     downloadChatsTopPagesCsv(topPagesRows);
-  }, [topPagesRows]);
+  }, [canExportReports, topPagesRows]);
+  const showWindowClampedNote = shouldShowAnalyticsWindowClampedNote(data?.analyticsWindow);
 
   return (
     <WorkspaceContentContainer size="full">
@@ -66,7 +83,19 @@ export function ChatsAnalyticsPage() {
           title="Chats"
           titleIcon={MessagesSquare}
           subtitle="Conversation volume, visitor feedback, and activity over time."
-          filters={<ChatsAnalyticsFilterBar state={ui} onChange={setUi} disabled={loadState === 'loading'} />}
+          detail={
+            showWindowClampedNote ? (
+              <p className="m-0 text-xs leading-relaxed text-slate-500">{ANALYTICS_WINDOW_CLAMPED_NOTE}</p>
+            ) : null
+          }
+          filters={
+            <ChatsAnalyticsFilterBar
+              state={ui}
+              onChange={setUi}
+              disabled={loadState === 'loading'}
+              maxHistoryDays={maxHistoryDays}
+            />
+          }
         />
 
         <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-gradient-to-b from-slate-50/90 to-slate-100/50 p-4 sm:p-6 md:p-8">
@@ -101,7 +130,7 @@ export function ChatsAnalyticsPage() {
                     title="Top pages"
                     description="Pages where visitors started or continued chats."
                     titleAside={
-                      topPagesExportable ? (
+                      topPagesExportable && canExportReports ? (
                         <button
                           type="button"
                           className="inline-flex cursor-pointer select-none items-center gap-1.5 rounded-lg border border-slate-200/80 bg-white px-2.5 py-1.5 text-left text-[11px] font-semibold text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/25 sm:text-xs"
@@ -115,6 +144,13 @@ export function ChatsAnalyticsPage() {
                           />
                           <span>Export</span>
                         </button>
+                      ) : topPagesExportable && !canExportReports ? (
+                        <span className="max-w-[12rem] text-right text-[10px] leading-snug text-slate-500 sm:text-[11px]">
+                          {EXPORT_REPORTS_LOCKED_HELPER}{' '}
+                          <Link to="/settings/plans" className="font-medium text-teal-700 underline">
+                            View plans
+                          </Link>
+                        </span>
                       ) : null
                     }
                   >

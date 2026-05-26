@@ -14,7 +14,9 @@ import type { RequestUser } from '../auth/shared/request-user.types';
 import { BotsService } from '../bots/bots.service';
 import { ChatEngineService } from '../chat/chat-engine.service';
 import { parseWorkspaceLeadsListFilters } from '../chat/workspace-conversation-serialize.util';
+import { WorkspaceAnalyticsEntitlementService } from '../entitlements/workspace-analytics-entitlement.service';
 import { WorkspacesService } from '../workspaces/workspaces.service';
+import { workspaceIdFromBotRecord } from './shared/customer-analytics-entitlement.types';
 
 type RequestWithUser = FastifyRequest & { user?: RequestUser };
 
@@ -28,6 +30,7 @@ export class CustomerBotLeadsController {
     private readonly botsService: BotsService,
     private readonly chatEngineService: ChatEngineService,
     private readonly workspacesService: WorkspacesService,
+    private readonly analyticsEntitlementService: WorkspaceAnalyticsEntitlementService,
   ) {}
 
   private async requireWorkspaceBot(req: RequestWithUser, botId: string) {
@@ -62,8 +65,18 @@ export class CustomerBotLeadsController {
     const page = Math.max(1, parseInt(String(pageRaw ?? '1'), 10) || 1);
     const skip = useBeforeCursor ? 0 : (page - 1) * limit;
     const pageReply = useBeforeCursor ? 1 : page;
-    const filters = parseWorkspaceLeadsListFilters(q);
-    return this.chatEngineService.listBotLeadsForWorkspace({
+    const filtersRaw = parseWorkspaceLeadsListFilters(q);
+    const workspaceId = workspaceIdFromBotRecord(bot as Record<string, unknown>);
+    let filters = filtersRaw;
+    let analyticsWindow: Awaited<
+      ReturnType<WorkspaceAnalyticsEntitlementService['clampListDateFrom']>
+    >['window'] = null;
+    if (workspaceId) {
+      const clamped = await this.analyticsEntitlementService.clampListDateFrom(workspaceId, filtersRaw.dateFrom);
+      filters = { ...filtersRaw, dateFrom: clamped.dateFrom };
+      analyticsWindow = clamped.window;
+    }
+    const result = await this.chatEngineService.listBotLeadsForWorkspace({
       botOid: new Types.ObjectId(String((bot as { _id: unknown })._id)),
       limit,
       skip,
@@ -72,6 +85,7 @@ export class CustomerBotLeadsController {
       filters,
       leadCapture: (bot as { leadCapture?: unknown }).leadCapture,
     });
+    return analyticsWindow ? { ...result, analyticsWindow } : result;
   }
 
   @Get(':id/leads/:conversationId')

@@ -13,7 +13,11 @@ import { CustomerChatsAnalyticsService } from '../analytics/customer-chats-analy
 import type { RequestUser } from '../auth/shared/request-user.types';
 import { CustomerSessionAuthGuard } from '../auth/customer/customer-session.guard';
 import { BotsService } from '../bots/bots.service';
+import { WorkspaceAnalyticsEntitlementService } from '../entitlements/workspace-analytics-entitlement.service';
 import { WorkspacesService } from '../workspaces/workspaces.service';
+import {
+  requireCustomerBotAnalyticsAccess,
+} from './shared/customer-bot-analytics-access.util';
 
 type RequestWithUser = FastifyRequest & { user?: RequestUser };
 
@@ -37,6 +41,7 @@ export class CustomerBotChatsAnalyticsController {
     private readonly customerChatsAnalyticsService: CustomerChatsAnalyticsService,
     private readonly botsService: BotsService,
     private readonly workspacesService: WorkspacesService,
+    private readonly analyticsEntitlementService: WorkspaceAnalyticsEntitlementService,
   ) {}
 
   @Get(':id/analytics/chats')
@@ -45,27 +50,27 @@ export class CustomerBotChatsAnalyticsController {
     @Param('id') id: string,
     @Query() query: Record<string, string | string[] | undefined>,
   ) {
-    const bot = await this.botsService.findOne(id);
-    if (!bot) {
-      throw new NotFoundException('Bot not found');
-    }
-    const uid = req.user?._id != null ? String(req.user._id) : '';
-    const ok = await this.workspacesService.canUserAccessWorkspaceBot(
-      uid,
-      req.user?.role ?? '',
-      bot as Record<string, unknown>,
-    );
-    if (!ok) {
-      throw new ForbiddenException({ error: 'Forbidden', errorCode: 'BOT_ANALYTICS_FORBIDDEN' });
-    }
-    return this.customerChatsAnalyticsService.get(id, {
-      from: pickQueryParam(query, 'from'),
-      to: pickQueryParam(query, 'to'),
-      granularity: pickQueryParam(query, 'granularity'),
-      includePreview: pickQueryParam(query, 'includePreview'),
-      startedFrom: pickQueryParam(query, 'startedFrom'),
-      countryCode: pickQueryParam(query, 'countryCode'),
-      deviceType: pickQueryParam(query, 'deviceType'),
+    const { analyticsHistoryDays } = await requireCustomerBotAnalyticsAccess({
+      req,
+      botId: id,
+      botsService: this.botsService,
+      workspacesService: this.workspacesService,
+      analyticsEntitlementService: this.analyticsEntitlementService,
+      forbiddenCode: 'BOT_ANALYTICS_FORBIDDEN',
     });
+
+    return this.customerChatsAnalyticsService.get(
+      id,
+      {
+        from: pickQueryParam(query, 'from'),
+        to: pickQueryParam(query, 'to'),
+        granularity: pickQueryParam(query, 'granularity'),
+        includePreview: pickQueryParam(query, 'includePreview'),
+        startedFrom: pickQueryParam(query, 'startedFrom'),
+        countryCode: pickQueryParam(query, 'countryCode'),
+        deviceType: pickQueryParam(query, 'deviceType'),
+      },
+      { analyticsHistoryDays },
+    );
   }
 }

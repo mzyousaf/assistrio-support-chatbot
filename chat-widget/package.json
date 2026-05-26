@@ -39,6 +39,7 @@
     "build:css": "npx @tailwindcss/cli -i ./src/styles/embed.css -o ./dist/assistrio-chat.css --minify",
     "copy:public": "node -e \"const fs=require('fs'); fs.mkdirSync('public',{recursive:true}); fs.copyFileSync('dist/assistrio-chat.js','public/assistrio-chat.js'); fs.copyFileSync('dist/assistrio-chat.css','public/assistrio-chat.css'); console.log('Copied dist files to public/');\"",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
     "prepublishOnly": "npm run build",
     "test:local": "npx --yes serve . -l 3456"
   },
@@ -63,6 +64,7 @@
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^3.2.4"
   }
 }

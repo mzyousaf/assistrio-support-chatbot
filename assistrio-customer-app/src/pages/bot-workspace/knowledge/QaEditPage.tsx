@@ -5,6 +5,7 @@ import { tryHandleCustomerResourceGone } from '@/lib/customerResourceUnavailable
 import { patchCustomerKnowledgeFaq } from '../../../api/customerApi';
 import { requestWorkspaceBotRefresh } from '@/lib/botSyncEvents';
 import { appToast } from '@/lib/app-toast';
+import { TRAINED_KNOWLEDGE_STORAGE_LIMIT_SHORT } from '@/lib/trainedKnowledgeStorageCopy';
 import { useBotWorkspace } from '../BotWorkspaceContext';
 import { useKnowledgeStorageUx, useDismissKnowledgeCompanionModalsOnStorageClose } from '@/context/KnowledgeStorageUxContext';
 import { useKbKnowledgeStatusPollInterest, useKbWorkspacePolling } from '@/context/KbWorkspacePollingContext';
@@ -289,7 +290,7 @@ export function QaEditPage() {
                 {planLimitTraining ? (
                   <KbTrainingStatusTag
                     className="font-normal"
-                    label="Storage limit reached"
+                    label={TRAINED_KNOWLEDGE_STORAGE_LIMIT_SHORT}
                     statusForBadge="failed"
                   />
                 ) : (

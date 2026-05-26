@@ -29,8 +29,8 @@ describe('WorkspaceEntitlementsService', () => {
       botLimit: 1,
       memberLimit: 3,
       monthlyAiCredits: 50,
-      kbStorageMbPerBot: 10,
-      kbStorageBytesPerBot: megabytesToBytes(10),
+      kbStorageMbPerBot: 5,
+      kbStorageBytesPerBot: megabytesToBytes(5),
       maxKbStorageMbPerBot: 40,
       maxKbStorageBytesPerBot: megabytesToBytes(40),
       analyticsHistoryDays: 7,
@@ -57,8 +57,31 @@ describe('WorkspaceEntitlementsService', () => {
     expect(entitlements.planName).toBe('Starter');
     expect(entitlements.subscriptionStatus).toBe('active');
     expect(entitlements.monthlyAiCredits).toBe(500);
+    expect(entitlements.kbStorageMbPerBot).toBe(15);
+    expect(entitlements.kbStorageBytesPerBot).toBe(megabytesToBytes(15));
+    expect(entitlements.maxKbStorageMbPerBot).toBe(40);
+    expect(entitlements.maxKbStorageBytesPerBot).toBe(megabytesToBytes(40));
     expect(entitlements.canExportReports).toBe(true);
     expect(entitlements.analyticsHistoryDays).toBeNull();
+  });
+
+  it('resolves Pro entitlements including 30 MB trained KB storage', async () => {
+    const { service } = createService({
+      workspaceId: new Types.ObjectId(workspaceId),
+      planKey: 'pro',
+      status: 'active',
+      currentPeriodStart: new Date('2026-05-01'),
+      currentPeriodEnd: new Date('2026-06-01'),
+    });
+
+    const entitlements = await service.resolveForWorkspace(workspaceId);
+
+    expect(entitlements.planKey).toBe('pro');
+    expect(entitlements.memberLimit).toBe(5);
+    expect(entitlements.monthlyAiCredits).toBe(3000);
+    expect(entitlements.kbStorageMbPerBot).toBe(30);
+    expect(entitlements.kbStorageBytesPerBot).toBe(megabytesToBytes(30));
+    expect(entitlements.maxKbStorageBytesPerBot).toBe(megabytesToBytes(40));
   });
 
   it('falls back to Free for invalid workspace id without throwing', async () => {

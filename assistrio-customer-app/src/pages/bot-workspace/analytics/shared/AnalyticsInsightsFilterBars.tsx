@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Check, Search } from 'lucide-react';
 import type { CustomerChatsAnalyticsStartedFromKey, CustomerSentimentLabelId } from '@/api/types';
 import { FieldRow, FilterCapsule, Input } from '@/components/ui';
@@ -27,6 +28,11 @@ import {
   WIDGET_CHANNEL_SECTIONS,
   widgetStartedFromUiLabel,
 } from './widgetChannelLabels';
+import { ANALYTICS_HISTORY_LOCKED_HELPER } from '@/lib/analyticsEntitlementCopy';
+import {
+  filterAnalyticsDatePresetsForHistoryLimit,
+  minAnalyticsCustomFromYmd,
+} from '@/lib/analyticsEntitlementWindow';
 
 export { WIDGET_CHANNEL_FIELD_LABEL, WIDGET_CHANNEL_SECTIONS, widgetStartedFromUiLabel };
 
@@ -99,6 +105,7 @@ export function CoreDateGranularityPreviewCapsules({
   widgetTopicsEngagement,
   topicsDateEngagement,
   autoGranularityRangeFallbackDays = 30,
+  maxHistoryDays = null,
 }: {
   values: StandardDateControlValues;
   onValuesChange: (next: StandardDateControlValues) => void;
@@ -130,7 +137,14 @@ export function CoreDateGranularityPreviewCapsules({
   };
   /** Fallback window (days) when custom range inputs are invalid — must match the page’s API builder. */
   autoGranularityRangeFallbackDays?: number;
+  /** When set (Free plan), presets beyond this window are disabled. */
+  maxHistoryDays?: number | null;
 }) {
+  const datePresetOptions = useMemo(
+    () => filterAnalyticsDatePresetsForHistoryLimit(ANALYTICS_DATE_PRESET_OPTIONS, maxHistoryDays),
+    [maxHistoryDays],
+  );
+  const customFromMin = minAnalyticsCustomFromYmd(maxHistoryDays);
   const customInvalid =
     values.preset === 'custom' &&
     values.customFrom.trim() &&
@@ -194,7 +208,7 @@ export function CoreDateGranularityPreviewCapsules({
       >
         <div className="flex max-h-[min(24rem,70vh)] min-w-[15rem] flex-col gap-2 overflow-y-auto p-0.5">
           <ul className="m-0 list-none space-y-0.5 p-0 py-0.5">
-            {ANALYTICS_DATE_PRESET_OPTIONS.map((opt) => {
+            {datePresetOptions.map((opt) => {
               const selected = values.preset === opt.id;
               return (
                 <li key={opt.id}>
@@ -202,9 +216,10 @@ export function CoreDateGranularityPreviewCapsules({
                     type="button"
                     role="option"
                     aria-selected={selected}
-                    disabled={disabled}
-                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-slate-800 hover:bg-slate-50 disabled:opacity-50"
+                    disabled={disabled || opt.disabled}
+                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                     onClick={() => {
+                      if (opt.disabled) return;
                       if (opt.id === 'custom' && !values.customFrom.trim() && !values.customTo.trim()) {
                         onValuesChange({ ...values, preset: 'custom', ...seedCustomRangeIfEmpty() });
                       } else {
@@ -230,6 +245,7 @@ export function CoreDateGranularityPreviewCapsules({
                   id="analytics-cap-from"
                   type="date"
                   disabled={disabled}
+                  min={customFromMin}
                   value={values.customFrom}
                   onChange={(e) => {
                     onValuesChange({ ...values, customFrom: e.target.value });
@@ -253,6 +269,14 @@ export function CoreDateGranularityPreviewCapsules({
               </FieldRow>
               {customInvalid ? (
                 <p className="m-0 text-[0.7rem] leading-snug text-amber-700">End date must be on or after start date.</p>
+              ) : null}
+              {maxHistoryDays != null ? (
+                <p className="m-0 mt-2 text-[0.7rem] leading-snug text-slate-600">
+                  {ANALYTICS_HISTORY_LOCKED_HELPER}{' '}
+                  <Link to="/settings/plans" className="font-medium text-teal-700 underline">
+                    View plans
+                  </Link>
+                </p>
               ) : null}
               <p className="m-0 text-[0.7rem] leading-snug text-slate-500">Uses your local timezone.</p>
             </div>
@@ -725,10 +749,12 @@ export function ChatsAnalyticsFilterBar({
   state,
   onChange,
   disabled,
+  maxHistoryDays = null,
 }: {
   state: ChatsAnalyticsUiState;
   onChange: (next: ChatsAnalyticsUiState) => void;
   disabled?: boolean;
+  maxHistoryDays?: number | null;
 }) {
   const [open, setOpen] = useState<CapsuleKey>(null);
   const closeAll = useCallback(() => setOpen(null), []);
@@ -765,6 +791,7 @@ export function ChatsAnalyticsFilterBar({
         setOpen={setOpen}
         closeAll={closeAll}
         defaults={coreDef}
+        maxHistoryDays={maxHistoryDays}
         topicsDateEngagement={{
           quietValueRow: dateQuietValueRow,
           onEngagement: setDateEngaged,
@@ -800,10 +827,12 @@ export function TopicsAnalyticsFilterBar({
   state,
   onChange,
   disabled,
+  maxHistoryDays = null,
 }: {
   state: TopicsAnalyticsUiState;
   onChange: (next: TopicsAnalyticsUiState) => void;
   disabled?: boolean;
+  maxHistoryDays?: number | null;
 }) {
   const [open, setOpen] = useState<CapsuleKey>(null);
   const closeAll = useCallback(() => setOpen(null), []);
@@ -838,6 +867,7 @@ export function TopicsAnalyticsFilterBar({
         setOpen={setOpen}
         closeAll={closeAll}
         defaults={coreDef}
+        maxHistoryDays={maxHistoryDays}
         topicsDateEngagement={{
           quietValueRow: dateQuietValueRow,
           onEngagement: setDateEngaged,
@@ -868,11 +898,13 @@ export function SentimentAnalyticsFilterBar({
   onChange,
   disabled,
   sentimentLabels,
+  maxHistoryDays = null,
 }: {
   state: SentimentAnalyticsUiState;
   onChange: (next: SentimentAnalyticsUiState) => void;
   disabled?: boolean;
   sentimentLabels: Partial<Record<CustomerSentimentLabelId, string>>;
+  maxHistoryDays?: number | null;
 }) {
   const [open, setOpen] = useState<CapsuleKey>(null);
   const closeAll = useCallback(() => setOpen(null), []);
@@ -906,6 +938,7 @@ export function SentimentAnalyticsFilterBar({
         setOpen={setOpen}
         closeAll={closeAll}
         defaults={coreDef}
+        maxHistoryDays={maxHistoryDays}
         topicsDateEngagement={{
           quietValueRow: dateQuietValueRow,
           onEngagement: setDateEngaged,
@@ -933,10 +966,12 @@ export function AgentResourcesAnalyticsFilterBar({
   state,
   onChange,
   disabled,
+  maxHistoryDays = null,
 }: {
   state: AgentResourcesAnalyticsUiState;
   onChange: (next: AgentResourcesAnalyticsUiState) => void;
   disabled?: boolean;
+  maxHistoryDays?: number | null;
 }) {
   const [open, setOpen] = useState<CapsuleKey>(null);
   const closeAll = useCallback(() => setOpen(null), []);
@@ -972,6 +1007,7 @@ export function AgentResourcesAnalyticsFilterBar({
         setOpen={setOpen}
         closeAll={closeAll}
         defaults={coreDef}
+        maxHistoryDays={maxHistoryDays}
         topicsDateEngagement={{
           quietValueRow: dateQuietValueRow,
           onEngagement: setDateEngaged,
@@ -990,10 +1026,12 @@ export function LeadsAnalyticsFilterBar({
   state,
   onChange,
   disabled,
+  maxHistoryDays = null,
 }: {
   state: LeadsAnalyticsUiState;
   onChange: (next: LeadsAnalyticsUiState) => void;
   disabled?: boolean;
+  maxHistoryDays?: number | null;
 }) {
   const [open, setOpen] = useState<CapsuleKey>(null);
   const closeAll = useCallback(() => setOpen(null), []);
@@ -1028,6 +1066,7 @@ export function LeadsAnalyticsFilterBar({
         setOpen={setOpen}
         closeAll={closeAll}
         defaults={coreDef}
+        maxHistoryDays={maxHistoryDays}
         topicsDateEngagement={{
           quietValueRow: dateQuietValueRow,
           onEngagement: setDateEngaged,

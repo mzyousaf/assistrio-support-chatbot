@@ -28,6 +28,7 @@ import { useKbPollRegistration, useKbWorkspacePolling } from '@/context/KbWorksp
 import { NeedsTrainingModal } from '../components/NeedsTrainingModal';
 import { ws as styles } from '../workspace';
 import { formatKnowledgeBytes } from '@/lib/formatKnowledgeBytes';
+import { TRAINED_KNOWLEDGE_STORAGE_HELPER, TRAINED_KNOWLEDGE_STORAGE_LABEL } from '@/lib/trainedKnowledgeStorageCopy';
 import {
   hasKnowledgePendingOrQueuedForTrainAction,
   knowledgeSourceRowsFromOverview,
@@ -469,7 +470,7 @@ export function KnowledgeOverviewPage() {
               </button>
             </div>
             <p className={styles.workspaceEditorLead}>
-              Approximate knowledge size by source and Auto Train defaults.
+              Approximate trained knowledge storage by source and Auto Train defaults.
             </p>
           </div>
         </div>
@@ -699,8 +700,8 @@ export function KnowledgeOverviewPage() {
                 headingId="overview-agent-size-heading"
                 icon={Gauge}
                 accent="slate"
-                title="Knowledge storage"
-                description="Trainable knowledge versus your quota (UTF-8 bytes)."
+                title={TRAINED_KNOWLEDGE_STORAGE_LABEL}
+                description={TRAINED_KNOWLEDGE_STORAGE_HELPER}
               />
               <div className="mt-7 flex min-h-0 flex-1 flex-col sm:mt-8">
                 <KnowledgeStorageUsagePanel usage={data?.knowledgeUsage} variant="full" />

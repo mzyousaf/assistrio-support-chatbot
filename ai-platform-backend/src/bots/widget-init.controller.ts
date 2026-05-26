@@ -168,8 +168,7 @@ export class WidgetInitController {
       );
     }
 
-    const chatUI = (row.chatUI ?? {}) as Record<string, unknown>;
-
+    const chatUI = await this.botsService.sanitizeRuntimeChatUiForBot(row as { workspaceId?: unknown; chatUI?: unknown });
     const brandingMessage =
       typeof chatUI.brandingMessage === 'string' ? chatUI.brandingMessage.trim() : undefined;
     const privacyText =

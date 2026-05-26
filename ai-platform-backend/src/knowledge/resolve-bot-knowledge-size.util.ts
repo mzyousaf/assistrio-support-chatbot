@@ -3,6 +3,10 @@ import {
   type BotKnowledgeSizeStored,
   type BotKnowledgeSizeType,
 } from './knowledge-plan-limits';
+import {
+  buildBotKnowledgeSizeFromEntitlements,
+  type EntitlementsKbSizeInput,
+} from '../entitlements/bot-knowledge-size-from-entitlements.util';
 
 /** Effective quota used by services (audit fields omitted). */
 export type ResolvedBotKnowledgeSize = {
@@ -39,19 +43,41 @@ function normalizeKnowledgeSizeType(raw: unknown): BotKnowledgeSizeType {
 
 /**
  * Returns effective KB storage quota for a bot.
- * Legacy documents without `botConfig` resolve to {@link DEFAULT_BOT_KNOWLEDGE_SIZE}.
+ * Legacy documents without `botConfig` resolve to {@link DEFAULT_BOT_KNOWLEDGE_SIZE} (50 MiB).
+ * Pass `entitlementFallback` for workspace bots missing persisted quota (sync path only).
  * Invalid or non-positive `maxBytes` falls back to defaults for the whole resolved view.
  */
+export function resolvedBotKnowledgeSizeFromEntitlements(
+  entitlements: EntitlementsKbSizeInput,
+): ResolvedBotKnowledgeSize {
+  const stored = buildBotKnowledgeSizeFromEntitlements(entitlements);
+  return {
+    type: stored.type,
+    baseMaxBytes: stored.baseMaxBytes,
+    extraMaxBytes: stored.extraMaxBytes,
+    maxBytes: stored.maxBytes,
+    lastPaidAt: stored.lastPaidAt ?? null,
+    expiresAt: stored.expiresAt ?? null,
+  };
+}
+
 export function resolveBotKnowledgeSizeConfig(
   bot: { botConfig?: { knowledgeSize?: Partial<BotKnowledgeSizeStored> | null } | null } | null | undefined,
+  options?: { entitlementFallback?: EntitlementsKbSizeInput },
 ): ResolvedBotKnowledgeSize {
   const ks = bot?.botConfig?.knowledgeSize;
   if (!ks || typeof ks !== 'object') {
+    if (options?.entitlementFallback) {
+      return resolvedBotKnowledgeSizeFromEntitlements(options.entitlementFallback);
+    }
     return toResolvedDefault();
   }
 
   const maxBytes = ks.maxBytes;
   if (typeof maxBytes !== 'number' || !Number.isFinite(maxBytes) || maxBytes <= 0) {
+    if (options?.entitlementFallback) {
+      return resolvedBotKnowledgeSizeFromEntitlements(options.entitlementFallback);
+    }
     return toResolvedDefault();
   }
 

@@ -15,6 +15,10 @@ describe('resolveBotKnowledgeSizeConfig', () => {
     expect(resolveBotKnowledgeSizeConfig({ botConfig: {} })).toEqual(resolveBotKnowledgeSizeConfig(null));
   });
 
+  it('legacy default remains 50 MiB for bots without workspace entitlement fallback', () => {
+    expect(resolveBotKnowledgeSizeConfig(null).maxBytes).toBe(50 * 1024 * 1024);
+  });
+
   it('returns configured limits for valid paid_addon', () => {
     const lastPaid = new Date('2024-06-01T00:00:00.000Z');
     const expires = new Date('2025-06-01T00:00:00.000Z');

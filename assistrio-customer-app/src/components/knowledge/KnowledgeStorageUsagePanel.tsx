@@ -1,6 +1,10 @@
 import type { CustomerKnowledgeUsage } from '@/api/types';
 import type { ReactNode } from 'react';
 import { formatKnowledgeBytes } from '@/lib/formatKnowledgeBytes';
+import {
+  TRAINED_KNOWLEDGE_STORAGE_HELPER,
+  TRAINED_KNOWLEDGE_STORAGE_LABEL,
+} from '@/lib/trainedKnowledgeStorageCopy';
 import { cn } from '@/lib/utils';
 import {
   clampKnowledgeUsagePercent,
@@ -41,7 +45,7 @@ export function KnowledgeStorageUsagePanel({
 }) {
   if (!usage) {
     return variant === 'compact' ? null : (
-      <p className={cn('m-0 text-xs text-slate-500', className)}>Storage usage is loading…</p>
+      <p className={cn('m-0 text-xs text-slate-500', className)}>Trained knowledge storage is loading…</p>
     );
   }
 
@@ -52,7 +56,9 @@ export function KnowledgeStorageUsagePanel({
   if (variant === 'compact') {
     return (
       <div className={cn('flex min-w-0 flex-col gap-2.5', className)}>
-        <p className="m-0 text-[9px] font-semibold uppercase tracking-wide text-slate-500">Usage</p>
+        <p className="m-0 text-[9px] font-semibold uppercase tracking-wide text-slate-500">
+          {TRAINED_KNOWLEDGE_STORAGE_LABEL}
+        </p>
         <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
           <p className="m-0 min-w-0 flex-1 text-[9px] font-semibold tabular-nums leading-tight text-slate-800">
             <span className="tabular-nums">{formatKnowledgeBytes(usage.totalBytes)}</span>
@@ -67,7 +73,7 @@ export function KnowledgeStorageUsagePanel({
           percent={pctRaw}
           heightClass="h-1.5"
           aria-valuenow={barPctRounded}
-          aria-label="Knowledge storage used versus limit"
+          aria-label="Trained knowledge storage used versus limit"
         />
       </div>
     );
@@ -80,7 +86,7 @@ export function KnowledgeStorageUsagePanel({
       <div className="min-w-0 shrink-0 space-y-4 sm:space-y-5">
         <div className="flex items-center justify-between gap-x-3 gap-y-2 sm:gap-x-4">
           <p className="m-0 min-w-0 pr-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Trainable knowledge
+            {TRAINED_KNOWLEDGE_STORAGE_LABEL}
           </p>
           <span
             className={cn(
@@ -109,10 +115,10 @@ export function KnowledgeStorageUsagePanel({
           percent={pctRaw}
           heightClass="h-2.5"
           aria-valuenow={barPctRounded}
-          aria-label={`Knowledge storage ${pctTag}% used of limit`}
+          aria-label={`Trained knowledge storage ${pctTag}% used of limit`}
         />
         <p className="m-0 max-w-prose text-[11px] leading-relaxed text-slate-500">
-          UTF-8 bytes of trainable knowledge; widget and chat are not counted.
+          {TRAINED_KNOWLEDGE_STORAGE_HELPER} Widget and chat content are not counted.
         </p>
       </div>
     </div>

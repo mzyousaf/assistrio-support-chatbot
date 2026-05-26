@@ -5,6 +5,8 @@
  * - `ai-platform-backend/src/knowledge/knowledge-plan-limits.ts` (raw upload caps)
  * - `ai-platform-app-admin/src/lib/botFieldLimits.ts`
  */
+import { MAX_KB_UPLOAD_FILE_SIZE_LABEL } from '@/lib/trainedKnowledgeStorageCopy';
+
 export const BOT_FIELD_MAX = {
   name: 120,
   shortDescription: 120,
@@ -71,8 +73,8 @@ export const KNOWLEDGE_QA_QUESTIONS_MAX = 24;
 export const KB_PLAN_DOCUMENT_UPLOAD_MAX_BYTES = 20 * 1024 * 1024;
 export const KB_PLAN_DATASHEET_UPLOAD_MAX_BYTES = 20 * 1024 * 1024;
 
-export const CUSTOMER_DOCUMENT_UPLOAD_SIZE_MESSAGE = 'Document files can be up to 20 MB.';
-export const CUSTOMER_DATASHEET_UPLOAD_SIZE_MESSAGE = 'Datasheet files can be up to 20 MB.';
+export const CUSTOMER_DOCUMENT_UPLOAD_SIZE_MESSAGE = MAX_KB_UPLOAD_FILE_SIZE_LABEL;
+export const CUSTOMER_DATASHEET_UPLOAD_SIZE_MESSAGE = MAX_KB_UPLOAD_FILE_SIZE_LABEL;
 
 /** Datasheet CSV/Excel import file size (upload), not grid UTF-8 limits. */
 export const MAX_DATASHEET_IMPORT_FILE_BYTES = KB_PLAN_DATASHEET_UPLOAD_MAX_BYTES;
