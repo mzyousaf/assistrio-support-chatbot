@@ -6,10 +6,14 @@ import { SettingsMembersPage } from './SettingsMembersPage';
 
 const mockGetMembers = vi.fn();
 const mockGetInvites = vi.fn();
+const mockPatchMemberRole = vi.fn();
+const mockPatchInviteRole = vi.fn();
 
 vi.mock('../../api/customerApi', () => ({
   getWorkspaceMembers: (...args: unknown[]) => mockGetMembers(...args),
   getWorkspaceInvites: (...args: unknown[]) => mockGetInvites(...args),
+  patchWorkspaceMemberRole: (...args: unknown[]) => mockPatchMemberRole(...args),
+  patchWorkspaceInviteRole: (...args: unknown[]) => mockPatchInviteRole(...args),
   postWorkspaceInvite: vi.fn(),
   postWorkspaceInviteCancel: vi.fn(),
   postWorkspaceInviteResend: vi.fn(),
@@ -79,6 +83,8 @@ function renderPage() {
 describe('SettingsMembersPage', () => {
   beforeEach(() => {
     mockCustomer = adminCustomer;
+    mockPatchMemberRole.mockResolvedValue({ ok: true, data: {} });
+    mockPatchInviteRole.mockResolvedValue({ ok: true, data: {} });
     mockGetMembers.mockResolvedValue({
       ok: true,
       data: [
@@ -110,16 +116,48 @@ describe('SettingsMembersPage', () => {
     vi.clearAllMocks();
   });
 
-  it('renders seat usage summary with plan note and stats', async () => {
+  it('shows loading skeleton while fetching members', async () => {
+    let resolveMembers: (value: unknown) => void = () => undefined;
+    let resolveInvites: (value: unknown) => void = () => undefined;
+    mockGetMembers.mockReturnValue(
+      new Promise((resolve) => {
+        resolveMembers = resolve;
+      }),
+    );
+    mockGetInvites.mockReturnValue(
+      new Promise((resolve) => {
+        resolveInvites = resolve;
+      }),
+    );
+
     renderPage();
-    expect(await screen.findByText('Seat usage')).toBeTruthy();
-    expect(screen.getByText(/You're on the Free plan/i)).toBeTruthy();
-    expect(screen.getByText(/2 of 3 seats used/i)).toBeTruthy();
-    await waitFor(() => {
-      expect(document.getElementById('members-seat-usage')?.textContent).toContain('1 seat remaining');
-    });
+
+    expect(await screen.findByLabelText('Loading members')).toBeTruthy();
+    expect(screen.queryByRole('heading', { level: 3, name: 'Members' })).toBeNull();
+
+    resolveMembers({ ok: true, data: [] });
+    resolveInvites({ ok: true, data: [] });
+
+    expect(await screen.findByRole('heading', { level: 3, name: 'Members' })).toBeTruthy();
+  });
+
+  it('renders seat usage cards outside workspace people card', async () => {
+    renderPage();
+    expect(await screen.findByRole('heading', { level: 3, name: 'Members' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Members Management' })).toBeTruthy();
+    expect(screen.queryByText('Seat usage')).toBeNull();
+    expect(screen.queryByText('Free plan')).toBeNull();
+    expect(screen.getByText('2/3')).toBeTruthy();
     expect(screen.getByText('Active members')).toBeTruthy();
     expect(screen.getByText('Pending invites')).toBeTruthy();
+    expect(screen.queryByText('Seats remaining')).toBeNull();
+    expect(screen.queryByText('Total seats')).toBeNull();
+
+    const peopleCard = document.getElementById('workspace-people');
+    const seatUsage = document.getElementById('members-seat-usage');
+    expect(peopleCard).toBeTruthy();
+    expect(seatUsage).toBeTruthy();
+    expect(peopleCard?.contains(seatUsage ?? null)).toBe(false);
   });
 
   it('shows invite button and opens invite modal from header', async () => {
@@ -128,7 +166,7 @@ describe('SettingsMembersPage', () => {
     expect(await screen.findByRole('dialog')).toBeTruthy();
   });
 
-  it('shows collaboration callout and opens invite modal from callout', async () => {
+  it('shows subtle invite hint when only the owner is present', async () => {
     mockGetMembers.mockResolvedValue({
       ok: true,
       data: [
@@ -144,15 +182,15 @@ describe('SettingsMembersPage', () => {
       ],
     });
     renderPage();
-    expect(await screen.findByText('Add teammates to collaborate with AI')).toBeTruthy();
-    const inviteButtons = screen.getAllByRole('button', { name: /Invite member/i });
-    fireEvent.click(inviteButtons[inviteButtons.length - 1]!);
-    expect(await screen.findByRole('dialog')).toBeTruthy();
+    expect(await screen.findByText('Invite teammates to collaborate on this workspace.')).toBeTruthy();
+    expect(screen.queryByText('Add teammates to collaborate with AI')).toBeNull();
+    expect(screen.getAllByRole('button', { name: /Invite member/i })).toHaveLength(1);
   });
 
   it('renders role and status badges in people table', async () => {
     renderPage();
     await screen.findByText(/Owner User/i);
+    expect(screen.getByRole('heading', { level: 3, name: 'Members' })).toBeTruthy();
     expect(screen.getAllByText('Active').length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText('Owner')).toBeTruthy();
     expect(screen.getByText('Admin')).toBeTruthy();
@@ -256,5 +294,25 @@ describe('SettingsMembersPage', () => {
     renderPage();
     expect(await screen.findByText('Could not load members')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
+  });
+
+  it('reverts role selection when member role update fails', async () => {
+    mockCustomer = ownerCustomer;
+    mockPatchMemberRole.mockResolvedValueOnce({ ok: false, error: 'Role update failed' });
+    renderPage();
+    await screen.findByText(/Admin User/i);
+
+    const roleTrigger = screen.getByRole('button', { name: /Role for admin@example.com/i });
+    expect(roleTrigger.textContent).toContain('Admin');
+
+    fireEvent.click(roleTrigger);
+    fireEvent.click(await screen.findByRole('option', { name: 'Member' }));
+
+    await waitFor(() => {
+      expect(mockPatchMemberRole).toHaveBeenCalledWith('ws-1', 'user-1', 'member');
+    });
+    await waitFor(() => {
+      expect(roleTrigger.textContent).toContain('Admin');
+    });
   });
 });

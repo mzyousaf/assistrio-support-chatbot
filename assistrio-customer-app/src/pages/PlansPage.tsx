@@ -23,12 +23,13 @@ export function PlansPage() {
   return (
     <>
       <SettingsPageHeader
+        settingsRoute="/settings/plans"
         title="Plans"
         description="Compare workspace plans, limits, and add-ons."
         actions={<BillingUnavailableNotice role={role} variant="chip" />}
       />
 
-      <WorkspaceContentContainer size="standard" className="pt-6">
+      <WorkspaceContentContainer size="editor" className="pt-0">
         {!activeWorkspaceId ? (
           <BillingEmptyWorkspaceCard />
         ) : loadState === 'loading' && !summary ? (
@@ -58,11 +59,12 @@ export function SettingsBillingPage() {
   return (
     <>
       <SettingsPageHeader
+        settingsRoute="/settings/billing"
         title="Billing"
         description="Review your workspace subscription, usage, and upcoming billing features."
       />
 
-      <WorkspaceContentContainer size="standard" className="pt-6">
+      <WorkspaceContentContainer size="editor" className="pt-0">
         {!activeWorkspaceId ? (
           <BillingEmptyWorkspaceCard />
         ) : loadState === 'loading' && !summary ? (

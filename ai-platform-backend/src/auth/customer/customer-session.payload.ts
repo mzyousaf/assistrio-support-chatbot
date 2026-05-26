@@ -7,7 +7,8 @@ import type {
 import type { WorkspaceMemberRole } from '../../models/workspace-membership.schema';
 import type { WorkspaceEntitlementsService } from '../../entitlements/workspace-entitlements.service';
 import type { WorkspacesService } from '../../workspaces/workspaces.service';
-import type { RequestUser } from '../shared/request-user.types';
+import type { RequestUser, CustomerProfileLinks } from '../shared/request-user.types';
+import { resolveCustomerSessionProfile } from './customer-profile.resolve.util';
 
 /** Plan/entitlement summary embedded in customer session workspace entries. */
 export type CustomerSessionWorkspaceSummary = {
@@ -30,6 +31,12 @@ export type CustomerSessionWorkspaceSummary = {
 };
 
 /** Safe customer session body returned by `GET /api/customer/me` and `GET /api/customer/auth/session`. */
+export type CustomerSessionProfileLinks = {
+  linkedinUrl: string | null;
+  calendlyUrl: string | null;
+  websiteUrl: string | null;
+  otherUrl: string | null;
+};
 export type CustomerSessionPayload = {
   id: string;
   email: string;
@@ -40,6 +47,7 @@ export type CustomerSessionPayload = {
   firstName?: string;
   lastName?: string;
   picture?: string;
+  profileLinks?: CustomerSessionProfileLinks;
 };
 
 async function buildWorkspaceSummaries(
@@ -95,6 +103,8 @@ export async function buildCustomerSessionPayload(
   const activeWorkspaceId = await workspacesService.resolveActiveWorkspaceForUser(userId);
   const workspaceSummaries = await workspacesService.getWorkspacesSummaryForUser(userId, activeWorkspaceId);
   const workspaces = await buildWorkspaceSummaries(workspaceSummaries, entitlementsService);
+  const profile = resolveCustomerSessionProfile(user);
+  const profileLinks = normalizeCustomerSessionProfileLinks(user.profileLinks);
 
   return {
     id: userId,
@@ -103,8 +113,21 @@ export async function buildCustomerSessionPayload(
     activeWorkspaceId,
     workspaceIds: workspaceSummaries.map((workspace) => workspace.id),
     workspaces,
-    firstName: user.firstName ?? undefined,
-    lastName: user.lastName ?? undefined,
-    picture: user.picture ?? undefined,
+    firstName: profile.firstName,
+    lastName: profile.lastName,
+    picture: profile.picture,
+    ...(profileLinks ? { profileLinks } : {}),
   };
+}
+
+function normalizeCustomerSessionProfileLinks(
+  links: CustomerProfileLinks | undefined,
+): CustomerSessionProfileLinks | undefined {
+  if (!links) return undefined;
+  const linkedinUrl = links.linkedinUrl?.trim() || null;
+  const calendlyUrl = links.calendlyUrl?.trim() || null;
+  const websiteUrl = links.websiteUrl?.trim() || null;
+  const otherUrl = links.otherUrl?.trim() || null;
+  if (!linkedinUrl && !calendlyUrl && !websiteUrl && !otherUrl) return undefined;
+  return { linkedinUrl, calendlyUrl, websiteUrl, otherUrl };
 }

@@ -1,89 +1,91 @@
-import { HardDrive } from 'lucide-react';
-import type { WorkspaceBillingTrainedKnowledgeUsageSummary } from '@/api/types';
-import { SettingsInfoCard } from '@/components/settings/SettingsInfoCard';
+import { useMemo } from 'react';
+import type { CustomerBotListItem, WorkspaceBillingTrainedKnowledgeUsageSummary } from '@/api/types';
 import { TRAINED_KNOWLEDGE_STORAGE_HELPER, TRAINED_KNOWLEDGE_STORAGE_LABEL } from '@/lib/trainedKnowledgeStorageCopy';
+import { UsageAgentAvatar } from '@/pages/usage/UsageAgentAvatar';
+import { matchesUsageAgentFilter } from '@/pages/usage/UsageFilterBar';
 import { UsageProgressBar } from '@/pages/usage/UsageProgressBar';
-import { botAgentInitials, formatMbLabel } from '@/pages/usage/usagePageFormat';
+import { UsageSectionCard } from '@/pages/usage/UsageSectionCard';
+import { formatMbLabel } from '@/pages/usage/usagePageFormat';
 
 type Props = {
   trainedKnowledge: WorkspaceBillingTrainedKnowledgeUsageSummary | undefined;
+  bots?: CustomerBotListItem[];
+  agentIds?: string[];
+  className?: string;
 };
 
-function AgentAvatar({ name }: { name: string }) {
-  return (
-    <span
-      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-teal-50 text-xs font-semibold text-teal-800 ring-1 ring-teal-100"
-      aria-hidden
-    >
-      {botAgentInitials(name)}
-    </span>
-  );
-}
-
-export function UsageKnowledgeStorageTable({ trainedKnowledge }: Props) {
-  const rows = trainedKnowledge?.perBot ?? [];
+export function UsageKnowledgeStorageTable({
+  trainedKnowledge,
+  bots = [],
+  agentIds = [],
+  className,
+}: Props) {
   const helper = trainedKnowledge?.note ?? TRAINED_KNOWLEDGE_STORAGE_HELPER;
+  const botsById = useMemo(() => new Map(bots.map((bot) => [bot._id, bot])), [bots]);
+  const rows = useMemo(
+    () =>
+      [...(trainedKnowledge?.perBot ?? [])]
+        .filter((row) => matchesUsageAgentFilter(row.botId, agentIds))
+        .sort((a, b) => (b.percentUsed ?? 0) - (a.percentUsed ?? 0)),
+    [trainedKnowledge?.perBot, agentIds],
+  );
   const isEmpty = rows.length === 0;
 
   return (
-    <SettingsInfoCard
+    <UsageSectionCard
       id="usage-knowledge-storage"
-      icon={HardDrive}
+      className={className}
       title={`${TRAINED_KNOWLEDGE_STORAGE_LABEL} by agent`}
       description={helper}
+      bodyClassName="flex flex-1 flex-col"
     >
       {isEmpty ? (
-        <p className="m-0 rounded-xl border border-dashed border-slate-200 bg-slate-50/80 px-4 py-8 text-center text-sm text-slate-500">
-          No trained knowledge usage yet.
+        <p className="m-0 flex flex-1 items-center justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50/60 px-4 py-8 text-center text-sm text-slate-500">
+          {agentIds.length > 0
+            ? 'No trained knowledge usage for the selected agents.'
+            : 'No trained knowledge usage yet.'}
         </p>
       ) : (
-        <div className="overflow-x-auto -mx-1 px-1">
-          <table className="w-full min-w-[720px] border-collapse text-left text-sm">
-            <thead>
-              <tr className="border-b border-slate-200 text-[0.6875rem] font-semibold uppercase tracking-wide text-slate-500">
-                <th className="pb-3 pr-4 font-semibold">Agent</th>
-                <th className="pb-3 pr-4 font-semibold">Used</th>
-                <th className="pb-3 pr-4 font-semibold">Limit</th>
-                <th className="pb-3 pr-4 font-semibold">Used %</th>
-                <th className="min-w-[8rem] pb-3 font-semibold">Progress</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <tr
-                  key={row.botId}
-                  className="border-b border-slate-100 last:border-b-0 hover:bg-slate-50/60"
-                >
-                  <td className="py-3.5 pr-4">
-                    <div className="flex min-w-0 items-center gap-3">
-                      <AgentAvatar name={row.botName} />
-                      <span className="truncate font-medium text-slate-900">{row.botName}</span>
+        <ul className="m-0 flex min-h-0 flex-1 flex-col divide-y divide-slate-100 p-0 lg:max-h-[220px] lg:overflow-y-auto">
+          {rows.map((row) => {
+            const bot = botsById.get(row.botId);
+            return (
+              <li key={row.botId} className="list-none py-2.5 first:pt-0 last:pb-0">
+                <div className="flex items-start gap-3">
+                  <UsageAgentAvatar
+                    name={row.botName}
+                    size="sm"
+                    imageUrl={bot?.imageUrl}
+                    avatarEmoji={bot?.avatarEmoji}
+                    primaryColor={bot?.primaryColor}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="m-0 min-w-0 truncate text-sm font-medium text-slate-900">
+                        {row.botName}
+                      </p>
+                      <p className="m-0 shrink-0 text-xs font-medium tabular-nums text-slate-700">
+                        {row.percentUsed.toLocaleString()}%
+                      </p>
                     </div>
-                  </td>
-                  <td className="py-3.5 pr-4 tabular-nums text-slate-700">{formatMbLabel(row.usedMb)}</td>
-                  <td className="py-3.5 pr-4 tabular-nums text-slate-700">{formatMbLabel(row.maxMb)}</td>
-                  <td className="py-3.5 pr-4 tabular-nums text-slate-700">
-                    {row.percentUsed.toLocaleString()}%
-                  </td>
-                  <td className="py-3.5">
-                    <UsageProgressBar
-                      percent={row.percentUsed}
-                      ariaLabel={`${row.botName} trained knowledge storage ${row.percentUsed}% used`}
-                      tone={
-                        row.percentUsed >= 95
-                          ? 'danger'
-                          : row.percentUsed >= 85
-                            ? 'warning'
-                            : 'default'
-                      }
-                    />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                    <p className="m-0 mt-0.5 text-xs text-slate-500">
+                      {formatMbLabel(row.usedMb)} used · {formatMbLabel(row.maxMb)} limit
+                    </p>
+                    <div className="mt-2">
+                      <UsageProgressBar
+                        percent={row.percentUsed}
+                        ariaLabel={`${row.botName} trained knowledge storage ${row.percentUsed}% used`}
+                        tone={row.percentUsed >= 95 ? 'danger' : 'default'}
+                        heightClass="h-1.5"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
       )}
-    </SettingsInfoCard>
+    </UsageSectionCard>
   );
 }

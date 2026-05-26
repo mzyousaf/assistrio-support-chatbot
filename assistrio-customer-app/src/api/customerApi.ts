@@ -40,6 +40,9 @@ import type {
   CustomerKnowledgeCsvSampleResponse,
   CustomerKnowledgeItemManualRetryResponse,
   CustomerMe,
+  PatchCustomerMeProfileRequest,
+  PatchCustomerMeProfileResponse,
+  UploadCustomerMeAvatarResponse,
   CustomerInvitePreview,
   CreateWorkspaceInviteRequest,
   WorkspaceInviteSummary,
@@ -59,6 +62,27 @@ const P = '/api/customer';
 
 export function getCustomerMe() {
   return customerFetch<CustomerMe>(`${P}/me`);
+}
+
+export function patchCustomerMeProfile(body: PatchCustomerMeProfileRequest) {
+  return customerFetch<PatchCustomerMeProfileResponse>(`${P}/me/profile`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+/** Multipart: field `file` (PNG/JPEG/WebP, max 5MB). Sets customer profile photo override. */
+export function postCustomerMeAvatar(formData: FormData) {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), 120_000);
+  return customerFetch<UploadCustomerMeAvatarResponse>(`${P}/me/avatar`, {
+    method: 'POST',
+    body: formData,
+    signal: controller.signal,
+  }).finally(() => {
+    window.clearTimeout(timer);
+  });
 }
 
 export function getCustomerInvitePreview(token: string) {

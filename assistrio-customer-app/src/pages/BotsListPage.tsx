@@ -6,6 +6,7 @@ import type { CustomerBotListItem } from '../api/types';
 import { useCustomerAuth } from '../auth/CustomerAuthContext';
 import { DataPageLayout } from '../layout/workspace-layout';
 import { AgentCard, DeleteAgentDialog } from '../components/AgentCard';
+import { AgentsPageSkeleton } from '../components/AgentsPageSkeleton';
 import { AgentShareAccessModal } from '../components/AgentShareAccessModal';
 import { resolveActiveCustomerWorkspace } from '../lib/resolveActiveCustomerWorkspace';
 import { canManageActiveWorkspace } from '../lib/canManageActiveWorkspace';
@@ -24,6 +25,8 @@ import {
 import { toastIfWorkspaceAdminRequired } from '../lib/toastIfWorkspaceAdminRequired';
 import { appToast } from '../lib/app-toast';
 
+type LoadState = 'idle' | 'loading' | 'ready' | 'error';
+
 export function BotsListPage() {
   const navigate = useNavigate();
   const { customer, refreshOnboardingHeuristic, needsOnboarding } = useCustomerAuth();
@@ -32,7 +35,7 @@ export function BotsListPage() {
   const isOwner = isWorkspaceOwnerRole(role);
 
   const [bots, setBots] = useState<CustomerBotListItem[] | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loadState, setLoadState] = useState<LoadState>(() => (activeWorkspaceId ? 'loading' : 'idle'));
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -40,20 +43,24 @@ export function BotsListPage() {
   const [shareBot, setShareBot] = useState<CustomerBotListItem | null>(null);
 
   const load = useCallback(async (workspaceId: string) => {
+    setLoadState('loading');
     setError(null);
-    setLoading(true);
     setBots(null);
     const query = buildCustomerBotsListQuery({ activeWorkspaceId: workspaceId });
     const res = await getCustomerBots(query ?? undefined);
-    setLoading(false);
-    if (res.ok) setBots(res.data);
-    else setError(res.error);
+    if (res.ok) {
+      setBots(res.data);
+      setLoadState('ready');
+      return;
+    }
+    setError(res.error);
+    setLoadState('error');
   }, []);
 
   useEffect(() => {
     if (!activeWorkspaceId) {
       setBots(null);
-      setLoading(false);
+      setLoadState('idle');
       setError(null);
       return;
     }
@@ -98,7 +105,7 @@ export function BotsListPage() {
       <DataPageLayout
         title="AI Agents"
         description="Build, train, and deploy intelligent AI agents for your workspace."
-        containerSize="wide"
+        containerSize="editor"
       >
         <div className="rounded-2xl bg-white px-6 py-10 text-center text-[0.9375rem] text-slate-500 shadow-[var(--shadow-card)]">
           {BOTS_LIST_NO_ACTIVE_WORKSPACE}
@@ -108,7 +115,8 @@ export function BotsListPage() {
   }
 
   const count = bots?.length ?? 0;
-  const showEmpty = !loading && !error && bots && count === 0;
+  const showSkeleton = loadState === 'loading';
+  const showEmpty = loadState === 'ready' && !error && bots && count === 0;
 
   return (
     <DataPageLayout
@@ -148,7 +156,7 @@ export function BotsListPage() {
           </button>
         ) : undefined
       }
-      containerSize="wide"
+      containerSize="editor"
     >
 
       {error && (
@@ -182,7 +190,9 @@ export function BotsListPage() {
         </div>
       )}
 
-      {!loading && bots && count > 0 && (
+      {showSkeleton ? <AgentsPageSkeleton /> : null}
+
+      {loadState === 'ready' && bots && count > 0 && (
         <section className="mt-1" aria-label="Your agents">
           <div className="mb-5 flex justify-end">
             <span className="text-[0.8125rem] font-semibold tabular-nums text-slate-500">

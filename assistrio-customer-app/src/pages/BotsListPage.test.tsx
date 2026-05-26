@@ -247,6 +247,16 @@ describe('BotsListPage', () => {
     expect(mockGetBots).not.toHaveBeenCalled();
   });
 
+  it('shows loading skeleton while fetching agents', async () => {
+    mockGetBots.mockImplementation(
+      () => new Promise(() => {
+        /* never resolves */
+      }),
+    );
+    renderPage();
+    expect(await screen.findByLabelText('Loading agents')).toBeTruthy();
+  });
+
   it('does not show previous workspace bots while loading after switch', async () => {
     mockGetBots.mockImplementation(async (params?: { workspaceId?: string }) => {
       if (params?.workspaceId === 'ws-1') {

@@ -32,6 +32,12 @@ export function configFactory() {
     emailFrom: process.env.EMAIL_FROM?.trim() ?? '',
     /** Optional reply-to for transactional email. */
     emailReplyTo: process.env.EMAIL_REPLY_TO?.trim() ?? '',
+    /** Email logo mark URL (e.g. Google Drive direct image link). */
+    emailLogoPath1: process.env.EMAIL_LOGO_PATH_1?.trim() ?? '',
+    /** Email logo text/word URL (e.g. Google Drive direct image link). */
+    emailLogoPath2: process.env.EMAIL_LOGO_PATH_2?.trim() ?? '',
+    /** Optional support/contact page URL for transactional emails. */
+    supportUrl: process.env.SUPPORT_URL?.trim() ?? '',
     /**
      * Optional `Domain` attribute for `ar_customer_session` only (e.g. `.assistrio.com`).
      * Unset → host-only cookie on the API host. Admin session cookies are unaffected.

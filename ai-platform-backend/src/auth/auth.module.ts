@@ -9,6 +9,7 @@ import { AdminSessionAuthGuard } from './admin/admin-session.guard';
 import { SuperAdminGuard } from './admin/super-admin.guard';
 import { CustomerGoogleOAuthController } from './customer/customer-google-oauth.controller';
 import { CustomerGoogleOAuthService } from './customer/customer-google-oauth.service';
+import { CustomerProfileService } from './customer/customer-profile.service';
 import { CustomerPortalController } from './customer/customer-portal.controller';
 import { CustomerSessionAuthGuard } from './customer/customer-session.guard';
 import { AuthService } from './shared/auth.service';
@@ -40,6 +41,7 @@ import { EntitlementsModule } from '../entitlements/entitlements.module';
   providers: [
     AuthService,
     CustomerGoogleOAuthService,
+    CustomerProfileService,
     AdminSessionAuthGuard,
     CustomerSessionAuthGuard,
     SuperAdminGuard,

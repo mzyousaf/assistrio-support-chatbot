@@ -3,10 +3,8 @@ import {
   Database,
   CheckCircle2,
   ChevronDown,
-  Building2,
   Copy,
   CreditCard,
-  Gem,
   Gauge,
   Globe2,
   HelpCircle,
@@ -18,10 +16,7 @@ import {
   Rocket,
   Settings,
   Sparkles,
-  User,
   UserCog,
-  Users,
-  type LucideIcon,
 } from 'lucide-react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { PostGoLiveInstallModalHost } from '@/components/onboarding/PostGoLiveInstallModalHost';
@@ -53,6 +48,7 @@ import {
   useWorkspaceBillingSummary,
 } from '@/hooks/useWorkspaceBillingSummary';
 import { AppShellCreditsWidget } from '@/layout/AppShellCreditsWidget';
+import { AccountSettingsModal } from '@/components/account/AccountSettingsModal';
 
 import { resolveSettingsNavActiveIndex } from '@/lib/settingsNavigation';
 
@@ -352,6 +348,7 @@ export function AppShell() {
     location.pathname.startsWith('/settings'),
   );
   const [sharePreviewOpen, setSharePreviewOpen] = useState(false);
+  const [accountSettingsOpen, setAccountSettingsOpen] = useState(false);
 
   const sidebarPeeking = sidebarCollapsed && sidebarHovered;
 
@@ -500,12 +497,11 @@ export function AppShell() {
     location.pathname,
   );
 
-  const settingsSubNav: [string, string, LucideIcon][] = [
-    ['/settings/account', 'User Account', User],
-    ['/settings/workspace', 'Workspace', Building2],
-    ['/settings/members', 'Members', Users],
-    ['/settings/plans', 'Plans', Gem],
-    ['/settings/billing', 'Billing', CreditCard],
+  const settingsSubNav: [string, string][] = [
+    ['/settings/workspace', 'General'],
+    ['/settings/members', 'Members'],
+    ['/settings/plans', 'Plans'],
+    ['/settings/billing', 'Billing'],
   ];
   const settingsSubNavRefs = useRef<(HTMLAnchorElement | null)[]>([]);
   const settingsTrackRef = useRef<HTMLDivElement>(null);
@@ -1051,24 +1047,36 @@ export function AppShell() {
                 <div className="h-px bg-slate-200" role="separator" />
 
                 <div className="flex flex-col gap-0.5 p-1.5">
-                  {(
-                    [
-                      ['/bots', LayoutDashboard, 'Dashboard'],
-                      ['/settings/account', UserCog, 'Account settings'],
-                      ['/settings/billing', CreditCard, 'Billing & plans'],
-                    ] as const
-                  ).map(([to, Icon, label]) => (
-                    <NavLink
-                      key={to}
-                      to={to}
-                      className="flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-slate-500 no-underline transition-colors duration-150 nav-hover"
-                      role="menuitem"
-                      onClick={closeAllMenus}
-                    >
-                      <Icon size={15} strokeWidth={1.75} className="shrink-0 text-slate-400" aria-hidden />
-                      {label}
-                    </NavLink>
-                  ))}
+                  <NavLink
+                    to="/bots"
+                    className="flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-slate-500 no-underline transition-colors duration-150 nav-hover"
+                    role="menuitem"
+                    onClick={closeAllMenus}
+                  >
+                    <LayoutDashboard size={15} strokeWidth={1.75} className="shrink-0 text-slate-400" aria-hidden />
+                    Dashboard
+                  </NavLink>
+                  <button
+                    type="button"
+                    className="flex w-full cursor-pointer items-center gap-2.5 rounded-lg border-none bg-transparent px-2.5 py-1.5 text-left font-[inherit] text-sm font-medium text-slate-500 transition-colors duration-150 nav-hover"
+                    role="menuitem"
+                    onClick={() => {
+                      closeAllMenus();
+                      setAccountSettingsOpen(true);
+                    }}
+                  >
+                    <UserCog size={15} strokeWidth={1.75} className="shrink-0 text-slate-400" aria-hidden />
+                    Account settings
+                  </button>
+                  <NavLink
+                    to="/settings/billing"
+                    className="flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-slate-500 no-underline transition-colors duration-150 nav-hover"
+                    role="menuitem"
+                    onClick={closeAllMenus}
+                  >
+                    <CreditCard size={15} strokeWidth={1.75} className="shrink-0 text-slate-400" aria-hidden />
+                    Billing & plans
+                  </NavLink>
                 </div>
 
                 <div className="h-px bg-slate-200" role="separator" />
@@ -1094,15 +1102,18 @@ export function AppShell() {
       {/* ── Body ──────────────────────────────────────────────────── */}
       <div
         className="flex min-h-0 flex-1 max-[900px]:flex-col"
-        style={{ minHeight: 'calc(100vh - var(--nav-height))' }}
+        style={{
+          minHeight: 'calc(100vh - var(--nav-height))',
+          background: 'var(--bg-workspace-canvas)',
+        }}
       >
         {/* Sidebar */}
         <aside
           className={cn(
-            'relative flex shrink-0 flex-col transition-[width] duration-200 ease-out max-[900px]:w-full max-[900px]:border-b',
+            'relative flex shrink-0 flex-col bg-white transition-[width] duration-200 ease-out max-[900px]:w-full max-[900px]:border-b',
             hideAgentWorkspaceChrome && 'hidden',
           )}
-          style={{ background: 'var(--bg-sidebar-primary)', borderRight: '1px solid var(--border-sidebar)', width: sidebarCollapsed ? 'var(--sidebar-width-collapsed)' : 'var(--sidebar-width)' }}
+          style={{ borderRight: '1px solid var(--border-sidebar)', width: sidebarCollapsed ? 'var(--sidebar-width-collapsed)' : 'var(--sidebar-width)' }}
           aria-label="Application"
           onMouseEnter={() => {
             if (!sidebarCollapsed) return;
@@ -1119,13 +1130,13 @@ export function AppShell() {
             <>
               <nav
                 className={cn(
-                  'absolute inset-y-0 left-0 z-30 flex flex-col overflow-hidden',
+                  'absolute inset-y-0 left-0 z-30 flex flex-col overflow-hidden bg-white',
                   'transition-[width,box-shadow] duration-250 ease-[cubic-bezier(0.25,0.1,0.25,1)]',
                   sidebarPeeking
                     ? 'w-[var(--sidebar-width)] shadow-[4px_0_24px_-4px_rgba(0,0,0,0.08)]'
                     : 'pointer-events-none w-0',
                 )}
-                style={{ background: 'var(--bg-sidebar-primary)', borderRight: '1px solid var(--border-sidebar)' }}
+                style={{ borderRight: '1px solid var(--border-sidebar)' }}
                 aria-label="Main"
               >
                 <div className="flex min-w-[var(--sidebar-width)] flex-1 flex-col overflow-y-auto overflow-x-hidden p-3">
@@ -1177,7 +1188,7 @@ export function AppShell() {
                       onClick={() => {
                         const opening = !settingsOpen;
                         setSettingsOpen(opening);
-                        if (opening && !isSettingsActive) navigate('/settings/account');
+                        if (opening && !isSettingsActive) navigate('/settings/workspace');
                       }}
                     >
                       <Settings size={18} strokeWidth={1.75} className={cn('shrink-0 transition-colors duration-150', isSettingsActive ? 'text-teal-600' : 'text-slate-400 group-hover:text-teal-600')} aria-hidden />
@@ -1201,7 +1212,7 @@ export function AppShell() {
                             aria-hidden
                           />
                         )}
-                        {settingsSubNav.map(([to, label, Icon], i) => (
+                        {settingsSubNav.map(([to, label], i) => (
                           <NavLink
                             key={to}
                             to={to}
@@ -1209,12 +1220,7 @@ export function AppShell() {
                             onClick={(e) => workspaceLeaveGuard(e, to)}
                             ref={(el) => { peekSubNavRefs.current[i] = el; }}
                           >
-                            {({ isActive }) => (
-                              <>
-                                <Icon size={15} strokeWidth={1.75} className={cn('shrink-0 transition-colors duration-150', isActive ? 'text-teal-600' : 'text-slate-400 group-hover:text-teal-600')} aria-hidden />
-                                {label}
-                              </>
-                            )}
+                            {label}
                           </NavLink>
                         ))}
                       </div>
@@ -1307,10 +1313,10 @@ export function AppShell() {
               <div className="flex w-full flex-col items-center gap-1">
                 {/* Settings icon only — no sub-nav when collapsed */}
                 <NavLink
-                  to="/settings/account"
+                  to="/settings/workspace"
                   className={sideNavLink}
                   title="Settings"
-                  onClick={(e) => workspaceLeaveGuard(e, '/settings/account')}
+                  onClick={(e) => workspaceLeaveGuard(e, '/settings/workspace')}
                 >
                   {({ isActive }) => (
                     <Settings
@@ -1336,7 +1342,7 @@ export function AppShell() {
                   onClick={() => {
                     const opening = !settingsOpen;
                     setSettingsOpen(opening);
-                    if (opening && !isSettingsActive) navigate('/settings/account');
+                    if (opening && !isSettingsActive) navigate('/settings/workspace');
                   }}
                 >
                   <Settings
@@ -1380,7 +1386,7 @@ export function AppShell() {
                         aria-hidden
                       />
                     )}
-                    {settingsSubNav.map(([to, label, Icon], i) => (
+                    {settingsSubNav.map(([to, label], i) => (
                       <NavLink
                         key={to}
                         to={to}
@@ -1388,20 +1394,7 @@ export function AppShell() {
                         onClick={(e) => workspaceLeaveGuard(e, to)}
                         ref={(el) => { settingsSubNavRefs.current[i] = el; }}
                       >
-                        {({ isActive }) => (
-                          <>
-                            <Icon
-                              size={15}
-                              strokeWidth={1.75}
-                              className={cn(
-                                'shrink-0 transition-colors duration-150',
-                                isActive ? 'text-teal-600' : 'text-slate-400 group-hover:text-teal-600',
-                              )}
-                              aria-hidden
-                            />
-                            {label}
-                          </>
-                        )}
+                        {label}
                       </NavLink>
                     ))}
                   </div>
@@ -1431,7 +1424,8 @@ export function AppShell() {
         {!agentId && !hideAgentWorkspaceChrome && (
           <button
             type="button"
-            className="group relative z-10 flex w-3 shrink-0 cursor-pointer items-center justify-center border-none bg-transparent p-0 max-[900px]:hidden"
+            className="group relative z-10 flex w-3 shrink-0 cursor-pointer items-center justify-center border-none p-0 max-[900px]:hidden"
+            style={{ background: 'var(--bg-workspace-canvas)' }}
             onClick={() => {
               const next = !sidebarCollapsed;
               setSidebarCollapsed(next);
@@ -1533,6 +1527,8 @@ export function AppShell() {
       ) : null}
 
       <PostGoLiveInstallModalHost />
+
+      <AccountSettingsModal open={accountSettingsOpen} onClose={() => setAccountSettingsOpen(false)} />
     </div>
   );
 }

@@ -193,4 +193,56 @@ describe('buildCustomerSessionPayload', () => {
     expect(payload.lastName).toBeUndefined();
     expect(payload.picture).toBeUndefined();
   });
+
+  it('prefers displayNameOverride over Google profile names in session payload', async () => {
+    const payload = await buildCustomerSessionPayload(
+      {
+        ...user,
+        firstName: 'Google',
+        lastName: 'User',
+        displayNameOverride: 'Custom Name',
+      },
+      mockWorkspacesService(),
+      mockEntitlementsService(),
+    );
+
+    expect(payload.firstName).toBe('Custom');
+    expect(payload.lastName).toBe('Name');
+  });
+
+  it('includes profileLinks when only otherUrl is set', async () => {
+    const payload = await buildCustomerSessionPayload(
+      {
+        ...user,
+        profileLinks: { otherUrl: 'https://other.example.com' },
+      },
+      mockWorkspacesService(),
+      mockEntitlementsService(),
+    );
+
+    expect(payload.profileLinks).toEqual({
+      linkedinUrl: null,
+      calendlyUrl: null,
+      websiteUrl: null,
+      otherUrl: 'https://other.example.com',
+    });
+  });
+
+  it('omits profileLinks when all link fields are empty', async () => {
+    const payload = await buildCustomerSessionPayload(
+      {
+        ...user,
+        profileLinks: {
+          linkedinUrl: '',
+          calendlyUrl: '  ',
+          websiteUrl: undefined,
+          otherUrl: null,
+        },
+      },
+      mockWorkspacesService(),
+      mockEntitlementsService(),
+    );
+
+    expect(payload).not.toHaveProperty('profileLinks');
+  });
 });

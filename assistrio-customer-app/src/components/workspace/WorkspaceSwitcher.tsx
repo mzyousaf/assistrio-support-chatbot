@@ -89,7 +89,6 @@ export const WorkspaceSwitcher = forwardRef<HTMLDetailsElement, Props>(function 
       >
         {displayName}
       </span>
-      <WorkspaceRoleBadge role={activeWorkspace?.role} />
       <WorkspacePlanBadge planName={activeWorkspace?.planName} />
       <details ref={ref} className="relative min-w-0">
         <summary

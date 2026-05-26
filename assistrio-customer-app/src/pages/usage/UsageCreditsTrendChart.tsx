@@ -1,24 +1,28 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Area,
   AreaChart,
+  Bar,
+  BarChart,
   CartesianGrid,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from 'recharts';
-import { TrendingUp } from 'lucide-react';
-import { SettingsInfoCard } from '@/components/settings/SettingsInfoCard';
 import {
   buildAiCreditsTrendPoints,
   type AiCreditsTrendPoint,
 } from '@/pages/usage/usagePageFormat';
+import { UsageChartViewToggle, type UsageChartViewMode } from '@/pages/usage/UsageChartViewToggle';
+import { UsageSectionCard } from '@/pages/usage/UsageSectionCard';
+import { USAGE_CHART, USAGE_CHART_TOOLTIP_CLASS } from '@/pages/usage/usageChartTheme';
 
 type Props = {
   periodStart: string | null | undefined;
   periodEnd: string | null | undefined;
   monthlyCreditsUsed: number;
+  className?: string;
 };
 
 function CreditsTooltip({
@@ -33,14 +37,21 @@ function CreditsTooltip({
   if (!active || !payload?.length) return null;
   const credits = Number(payload[0]?.value ?? 0);
   return (
-    <div className="rounded-lg border border-slate-200/90 bg-white/95 px-3 py-2 text-xs shadow-lg">
-      <p className="m-0 font-semibold text-slate-700">{label}</p>
-      <p className="m-0 mt-1 tabular-nums text-slate-600">{credits.toLocaleString()} credits</p>
+    <div className={USAGE_CHART_TOOLTIP_CLASS}>
+      <p className="m-0 font-medium text-slate-800">{label}</p>
+      <p className="m-0 mt-0.5 tabular-nums text-slate-600">{credits.toLocaleString()} credits</p>
     </div>
   );
 }
 
-export function UsageCreditsTrendChart({ periodStart, periodEnd, monthlyCreditsUsed }: Props) {
+export function UsageCreditsTrendChart({
+  periodStart,
+  periodEnd,
+  monthlyCreditsUsed,
+  className,
+}: Props) {
+  const [viewMode, setViewMode] = useState<UsageChartViewMode>('trend');
+
   const trendPoints = useMemo(
     () => buildAiCreditsTrendPoints(periodStart, periodEnd, monthlyCreditsUsed),
     [periodStart, periodEnd, monthlyCreditsUsed],
@@ -55,50 +66,94 @@ export function UsageCreditsTrendChart({ periodStart, periodEnd, monthlyCreditsU
         ].slice(0, Math.max(2, trendPoints.length));
 
   return (
-    <SettingsInfoCard
+    <UsageSectionCard
       id="usage-credits-trend"
-      icon={TrendingUp}
+      className={className}
       title="Usage trend"
       description="Estimated from current billing-period usage."
+      headerAction={<UsageChartViewToggle value={viewMode} onChange={setViewMode} />}
+      bodyClassName="flex flex-col"
+      testId="usage-trend-full-width"
     >
-      <div className="h-52 w-full min-w-0" aria-label="AI credits usage trend chart">
+      <div
+        className="h-[280px] w-full min-w-0 sm:h-[300px]"
+        aria-label={
+          viewMode === 'trend' ? 'AI credits usage trend chart' : 'AI credits usage highlights chart'
+        }
+        data-testid={viewMode === 'trend' ? 'usage-credits-trend-chart' : 'usage-credits-highlights-chart'}
+      >
         <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-            <defs>
-              <linearGradient id="usageCreditsTrendFill" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#0d9488" stopOpacity={0.35} />
-                <stop offset="100%" stopColor="#0d9488" stopOpacity={0.02} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-            <XAxis
-              dataKey="label"
-              tick={{ fill: '#64748b', fontSize: 11 }}
-              axisLine={{ stroke: '#e2e8f0' }}
-              tickLine={false}
-            />
-            <YAxis
-              tick={{ fill: '#64748b', fontSize: 11 }}
-              axisLine={false}
-              tickLine={false}
-              width={40}
-              allowDecimals={false}
-            />
-            <Tooltip content={<CreditsTooltip />} />
-            <Area
-              type="monotone"
-              dataKey="credits"
-              name="Credits used"
-              stroke="#0d9488"
-              strokeWidth={2}
-              fill="url(#usageCreditsTrendFill)"
-              dot={{ r: 4, fill: '#ffffff', stroke: '#0d9488', strokeWidth: 2 }}
-              activeDot={{ r: 5, fill: '#ffffff', stroke: '#0d9488', strokeWidth: 2.5 }}
-            />
-          </AreaChart>
+          {viewMode === 'trend' ? (
+            <AreaChart data={chartData} margin={{ top: 12, right: 20, left: 4, bottom: 8 }}>
+              <defs>
+                <linearGradient id="usageCreditsTrendFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={USAGE_CHART.teal600} stopOpacity={0.24} />
+                  <stop offset="100%" stopColor={USAGE_CHART.teal600} stopOpacity={0.02} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke={USAGE_CHART.grid} vertical={false} />
+              <XAxis
+                dataKey="label"
+                tick={{ fill: USAGE_CHART.axis, fontSize: 11 }}
+                axisLine={{ stroke: USAGE_CHART.grid }}
+                tickLine={false}
+                interval="preserveStartEnd"
+                minTickGap={32}
+                dy={4}
+              />
+              <YAxis
+                tick={{ fill: USAGE_CHART.axis, fontSize: 11 }}
+                axisLine={false}
+                tickLine={false}
+                width={44}
+                allowDecimals={false}
+                dx={-2}
+              />
+              <Tooltip content={<CreditsTooltip />} />
+              <Area
+                type="monotone"
+                dataKey="credits"
+                name="Credits used"
+                stroke={USAGE_CHART.teal600}
+                strokeWidth={2}
+                fill="url(#usageCreditsTrendFill)"
+                dot={{ r: 3, fill: '#ffffff', stroke: USAGE_CHART.teal600, strokeWidth: 2 }}
+                activeDot={{ r: 4, fill: '#ffffff', stroke: USAGE_CHART.teal600, strokeWidth: 2.5 }}
+              />
+            </AreaChart>
+          ) : (
+            <BarChart data={chartData} margin={{ top: 12, right: 20, left: 4, bottom: 8 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke={USAGE_CHART.grid} vertical={false} />
+              <XAxis
+                dataKey="label"
+                tick={{ fill: USAGE_CHART.axis, fontSize: 11 }}
+                axisLine={{ stroke: USAGE_CHART.grid }}
+                tickLine={false}
+                interval="preserveStartEnd"
+                minTickGap={32}
+                dy={4}
+              />
+              <YAxis
+                tick={{ fill: USAGE_CHART.axis, fontSize: 11 }}
+                axisLine={false}
+                tickLine={false}
+                width={44}
+                allowDecimals={false}
+                dx={-2}
+              />
+              <Tooltip content={<CreditsTooltip />} cursor={{ fill: 'rgba(13, 148, 136, 0.06)' }} />
+              <Bar
+                dataKey="credits"
+                name="Credits used"
+                fill={USAGE_CHART.teal600}
+                radius={[4, 4, 0, 0]}
+                maxBarSize={48}
+              />
+            </BarChart>
+          )}
         </ResponsiveContainer>
       </div>
       {/* TODO: Replace estimated trend with daily ledger endpoint when available. */}
-    </SettingsInfoCard>
+    </UsageSectionCard>
   );
 }

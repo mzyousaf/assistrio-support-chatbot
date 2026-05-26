@@ -11,5 +11,8 @@ export function attachRequestUser(request: FastifyRequest, user: User): void {
     firstName: user.firstName,
     lastName: user.lastName,
     picture: user.picture,
+    displayNameOverride: user.displayNameOverride,
+    pictureOverride: user.pictureOverride,
+    profileLinks: user.profileLinks,
   };
 }

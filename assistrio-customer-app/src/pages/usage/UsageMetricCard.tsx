@@ -1,17 +1,17 @@
 import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { UsageProgressBar } from '@/pages/usage/UsageProgressBar';
+import { UsageCircularProgress } from '@/pages/usage/UsageCircularProgress';
 import { cn } from '@/lib/utils';
 
 type Props = {
   title: string;
   icon: LucideIcon;
-  headline: string;
-  subtext?: string;
+  valueLabel: string;
+  ringPercent: number;
+  ringAriaLabel: string;
+  ringTone?: 'default' | 'warning' | 'danger';
+  supportText?: string;
   helper?: string;
-  progressPercent?: number;
-  progressAriaLabel?: string;
-  progressTone?: 'default' | 'warning' | 'danger';
   footer?: ReactNode;
   tone?: 'default' | 'warning' | 'danger';
 };
@@ -19,21 +19,21 @@ type Props = {
 export function UsageMetricCard({
   title,
   icon: Icon,
-  headline,
-  subtext,
+  valueLabel,
+  ringPercent,
+  ringAriaLabel,
+  ringTone = 'default',
+  supportText,
   helper,
-  progressPercent,
-  progressAriaLabel,
-  progressTone = 'default',
   footer,
   tone = 'default',
 }: Props) {
-  const showProgress = progressPercent != null && progressAriaLabel;
+  const resolvedRingTone = tone === 'danger' ? 'danger' : tone === 'warning' ? 'warning' : ringTone;
 
   return (
     <article
       className={cn(
-        'flex h-full flex-col rounded-2xl border shadow-[var(--shadow-card)]',
+        'flex h-full flex-col rounded-xl border shadow-[var(--shadow-card)]',
         tone === 'danger'
           ? 'border-red-200/80 bg-red-50/20'
           : tone === 'warning'
@@ -41,17 +41,11 @@ export function UsageMetricCard({
             : 'border-slate-200/90 bg-white',
       )}
     >
-      <div className="flex flex-1 flex-col gap-4 p-5">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <h2 className="m-0 text-sm font-semibold text-slate-900">{title}</h2>
-            {helper ? (
-              <p className="m-0 mt-1 text-xs leading-relaxed text-slate-500">{helper}</p>
-            ) : null}
-          </div>
+      <div className="flex flex-1 flex-col gap-3 p-4 sm:p-5">
+        <div className="flex items-start gap-3">
           <div
             className={cn(
-              'flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ring-1',
+              'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ring-1',
               tone === 'danger'
                 ? 'bg-red-50 text-red-700 ring-red-100'
                 : tone === 'warning'
@@ -60,31 +54,40 @@ export function UsageMetricCard({
             )}
             aria-hidden
           >
-            <Icon size={20} strokeWidth={1.75} />
+            <Icon size={16} strokeWidth={1.75} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <h2 className="m-0 text-sm font-semibold text-slate-900">{title}</h2>
+            {helper ? (
+              <p className="m-0 mt-0.5 text-xs leading-relaxed text-slate-500">{helper}</p>
+            ) : null}
           </div>
         </div>
 
-        <div className="space-y-2">
-          <p
-            className={cn(
-              'm-0 text-2xl font-semibold tracking-tight tabular-nums',
-              tone === 'danger' ? 'text-red-900' : 'text-slate-900',
-            )}
-          >
-            {headline}
-          </p>
-          {subtext ? <p className="m-0 text-sm leading-relaxed text-slate-600">{subtext}</p> : null}
+        <div className="flex items-center justify-between gap-4">
+          <div className="min-w-0 flex-1">
+            <p
+              className={cn(
+                'm-0 text-xl font-semibold tracking-tight tabular-nums',
+                tone === 'danger' ? 'text-red-900' : 'text-slate-900',
+              )}
+            >
+              {valueLabel}
+            </p>
+            {supportText ? (
+              <p className="m-0 mt-1 text-sm leading-relaxed text-slate-600">{supportText}</p>
+            ) : null}
+          </div>
+          <UsageCircularProgress
+            percent={ringPercent}
+            ariaLabel={ringAriaLabel}
+            tone={resolvedRingTone}
+            size={48}
+            strokeWidth={4}
+          />
         </div>
 
-        {showProgress ? (
-          <UsageProgressBar
-            percent={progressPercent}
-            ariaLabel={progressAriaLabel}
-            tone={progressTone}
-          />
-        ) : null}
-
-        {footer ? <div className="mt-auto space-y-2">{footer}</div> : null}
+        {footer ? <div className="mt-auto space-y-2 border-t border-slate-100 pt-3">{footer}</div> : null}
       </div>
     </article>
   );

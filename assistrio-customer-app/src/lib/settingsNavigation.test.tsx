@@ -10,40 +10,40 @@ import {
 describe('settingsNavigation', () => {
   afterEach(() => cleanup());
 
-  it('lists User Account and Workspace in sidebar order', () => {
+  it('lists General settings pages in sidebar order', () => {
     expect(SETTINGS_NAV_ITEMS.map((item) => item.label)).toEqual([
-      'User Account',
-      'Workspace',
+      'General',
       'Members',
       'Plans',
       'Billing',
     ]);
   });
 
-  it('maps legacy /settings/general to User Account active index', () => {
-    expect(normalizeSettingsPathname('/settings/general')).toBe('/settings/account');
-    expect(resolveSettingsNavActiveIndex('/settings/general')).toBe(0);
+  it('maps legacy account routes to Workspace active index', () => {
+    expect(normalizeSettingsPathname('/settings/general')).toBe('/settings/workspace');
+    expect(normalizeSettingsPathname('/settings/account')).toBe('/settings/workspace');
+    expect(resolveSettingsNavActiveIndex('/settings/account')).toBe(0);
   });
 
   it('resolves active nav index for workspace route', () => {
-    expect(resolveSettingsNavActiveIndex('/settings/workspace')).toBe(1);
-    expect(resolveSettingsNavActiveIndex('/settings/members')).toBe(2);
+    expect(resolveSettingsNavActiveIndex('/settings/workspace')).toBe(0);
+    expect(resolveSettingsNavActiveIndex('/settings/members')).toBe(1);
   });
 });
 
 describe('settings routes', () => {
   afterEach(() => cleanup());
 
-  it('redirects /settings/general to /settings/account', () => {
+  it('redirects /settings/account to /settings/workspace', () => {
     render(
-      <MemoryRouter initialEntries={['/settings/general']}>
+      <MemoryRouter initialEntries={['/settings/account']}>
         <Routes>
-          <Route path="/settings/general" element={<Navigate to="/settings/account" replace />} />
-          <Route path="/settings/account" element={<div>User Account page</div>} />
+          <Route path="/settings/account" element={<Navigate to="/settings/workspace" replace />} />
+          <Route path="/settings/workspace" element={<div>Workspace settings page</div>} />
         </Routes>
       </MemoryRouter>,
     );
 
-    expect(screen.getByText('User Account page')).toBeTruthy();
+    expect(screen.getByText('Workspace settings page')).toBeTruthy();
   });
 });

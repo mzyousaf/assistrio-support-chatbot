@@ -106,13 +106,13 @@ describe('InviteMemberModal agent access', () => {
 
     await waitFor(() => expect(screen.getByText('Support Bot')).toBeTruthy());
 
-    const viewSwitch = screen.getByRole('switch', { name: 'View access for Support Bot' });
-    const previewSwitch = screen.getByRole('switch', { name: 'Preview access for Support Bot' });
+    const viewCheckbox = screen.getByRole('checkbox', { name: 'View access for Support Bot' }) as HTMLInputElement;
+    const previewCheckbox = screen.getByRole('checkbox', { name: 'Preview access for Support Bot' }) as HTMLInputElement;
 
-    expect(viewSwitch.getAttribute('aria-checked')).toBe('false');
-    fireEvent.click(previewSwitch);
-    expect(viewSwitch.getAttribute('aria-checked')).toBe('true');
-    expect(previewSwitch.getAttribute('aria-checked')).toBe('true');
+    expect(viewCheckbox.checked).toBe(false);
+    fireEvent.click(previewCheckbox);
+    expect(viewCheckbox.checked).toBe(true);
+    expect(previewCheckbox.checked).toBe(true);
   });
 
   it('view off disables preview', async () => {
@@ -121,14 +121,14 @@ describe('InviteMemberModal agent access', () => {
 
     await waitFor(() => expect(screen.getByText('Support Bot')).toBeTruthy());
 
-    fireEvent.click(screen.getByRole('switch', { name: 'Preview access for Support Bot' }));
-    const viewSwitch = screen.getByRole('switch', { name: 'View access for Support Bot' });
-    const previewSwitch = screen.getByRole('switch', { name: 'Preview access for Support Bot' });
-    expect(previewSwitch.getAttribute('aria-checked')).toBe('true');
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Preview access for Support Bot' }));
+    const viewCheckbox = screen.getByRole('checkbox', { name: 'View access for Support Bot' }) as HTMLInputElement;
+    const previewCheckbox = screen.getByRole('checkbox', { name: 'Preview access for Support Bot' }) as HTMLInputElement;
+    expect(previewCheckbox.checked).toBe(true);
 
-    fireEvent.click(viewSwitch);
-    expect(viewSwitch.getAttribute('aria-checked')).toBe('false');
-    expect(previewSwitch.getAttribute('aria-checked')).toBe('false');
+    fireEvent.click(viewCheckbox);
+    expect(viewCheckbox.checked).toBe(false);
+    expect(previewCheckbox.checked).toBe(false);
   });
 
   it('submit includes selected botGrants', async () => {
@@ -140,8 +140,8 @@ describe('InviteMemberModal agent access', () => {
     await waitFor(() => expect(screen.getByText('Support Bot')).toBeTruthy());
 
     fireEvent.change(screen.getByLabelText(/^email$/i), { target: { value: 'new@test.com' } });
-    fireEvent.click(screen.getByRole('switch', { name: 'View access for Support Bot' }));
-    fireEvent.click(screen.getByRole('switch', { name: 'Preview access for Sales Bot' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'View access for Support Bot' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Preview access for Sales Bot' }));
     fireEvent.click(screen.getByRole('button', { name: /^send invite$/i }));
 
     await waitFor(() => {

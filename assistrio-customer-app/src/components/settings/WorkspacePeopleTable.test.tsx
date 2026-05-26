@@ -66,6 +66,13 @@ describe('buildWorkspacePersonRows', () => {
   });
 });
 
+const defaultTableProps = {
+  onRemoveMember: vi.fn(),
+  onCancelInvite: vi.fn(),
+  onResendInvite: vi.fn(),
+  onRoleChange: vi.fn(),
+};
+
 describe('WorkspacePeopleTable', () => {
   afterEach(() => cleanup());
 
@@ -76,6 +83,7 @@ describe('WorkspacePeopleTable', () => {
         rows={rows}
         canManageRoles={false}
         resendBusyId={null}
+        {...defaultTableProps}
         onRemoveMember={vi.fn()}
         onCancelInvite={vi.fn()}
         onResendInvite={vi.fn()}
@@ -100,6 +108,7 @@ describe('WorkspacePeopleTable', () => {
         rows={rows}
         canManageRoles={false}
         resendBusyId={null}
+        {...defaultTableProps}
         onRemoveMember={onRemove}
         onCancelInvite={onCancel}
         onResendInvite={onResend}
@@ -117,23 +126,17 @@ describe('WorkspacePeopleTable', () => {
     expect(onRemove).toHaveBeenCalled();
   });
 
-  it('shows collaboration callout and triggers invite click', () => {
-    const onInvite = vi.fn();
+  it('shows invite hint when only the owner would be listed', () => {
     render(
       <WorkspacePeopleTable
         rows={[]}
         canManageRoles={false}
         resendBusyId={null}
-        showCollaborationCallout
-        onInviteClick={onInvite}
-        onRemoveMember={vi.fn()}
-        onCancelInvite={vi.fn()}
-        onResendInvite={vi.fn()}
-        onRoleChange={vi.fn()}
+        showInviteHint
+        {...defaultTableProps}
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /Invite member/i }));
-    expect(onInvite).toHaveBeenCalled();
+    expect(screen.getByText('Invite teammates to collaborate on this workspace.')).toBeTruthy();
   });
 });

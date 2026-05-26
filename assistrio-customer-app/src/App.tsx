@@ -52,7 +52,6 @@ import { LoginPage } from './pages/LoginPage';
 import { InviteAcceptPage } from './pages/InviteAcceptPage';
 import { PlansPage, SettingsBillingPage } from './pages/PlansPage';
 import { NotFoundPage } from './pages/NotFoundPage';
-import { UserAccountSettingsPage } from './pages/settings/UserAccountSettingsPage';
 import { WorkspaceSettingsPage } from './pages/settings/WorkspaceSettingsPage';
 import { SettingsMembersPage } from './pages/settings/SettingsMembersPage';
 import { SettingsPlaceholderPage } from './pages/settings/SettingsPlaceholderPage';
@@ -125,9 +124,9 @@ export function App() {
             <Route element={<AppShell />}>
             <Route path="/usage" element={<UsagePage />} />
             <Route path="/plans" element={<Navigate to="/settings/plans" replace />} />
-            <Route path="/settings" element={<Navigate to="/settings/account" replace />} />
-            <Route path="/settings/general" element={<Navigate to="/settings/account" replace />} />
-            <Route path="/settings/account" element={<UserAccountSettingsPage />} />
+            <Route path="/settings" element={<Navigate to="/settings/workspace" replace />} />
+            <Route path="/settings/general" element={<Navigate to="/settings/workspace" replace />} />
+            <Route path="/settings/account" element={<Navigate to="/settings/workspace" replace />} />
             <Route path="/settings/workspace" element={<WorkspaceSettingsPage />} />
             <Route path="/settings/members" element={<SettingsMembersPage />} />
             <Route path="/settings/billing" element={<SettingsBillingPage />} />

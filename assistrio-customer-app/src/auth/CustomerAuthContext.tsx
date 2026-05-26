@@ -50,6 +50,8 @@ export type CustomerAuthValue = {
   patchPrimaryWorkspaceOnboardingStatus: (status: WorkspaceOnboardingStatus) => void;
   /** Switch active workspace via POST /activate and refresh session + onboarding flags. */
   activateWorkspace: (workspaceId: string) => Promise<CustomerMe | null>;
+  /** Replace session customer after profile save without full bootstrap reload. */
+  applyCustomerSession: (next: CustomerMe) => void;
   /** Clears the API-invalidation marker (e.g. after login screen has shown the message). */
   clearSessionInvalidatedByApi: () => void;
 };
@@ -219,6 +221,10 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
     return result.data;
   }, []);
 
+  const applyCustomerSession = useCallback((next: CustomerMe) => {
+    setCustomer(next);
+  }, []);
+
   useEffect(() => {
     void refresh();
   }, [refresh]);
@@ -260,6 +266,7 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
       refreshOnboardingHeuristic,
       patchPrimaryWorkspaceOnboardingStatus,
       activateWorkspace,
+      applyCustomerSession,
       clearSessionInvalidatedByApi,
     }),
     [
@@ -276,6 +283,7 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
       refreshOnboardingHeuristic,
       patchPrimaryWorkspaceOnboardingStatus,
       activateWorkspace,
+      applyCustomerSession,
       clearSessionInvalidatedByApi,
     ],
   );

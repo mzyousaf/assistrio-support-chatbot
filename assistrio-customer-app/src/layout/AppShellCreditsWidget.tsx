@@ -133,7 +133,7 @@ export function AppShellCreditsWidget(props: AppShellCreditsWidgetProps) {
       <div className="p-3">
         <CreditsBody activeWorkspaceId={props.activeWorkspaceId} loadState={props.loadState} aiCredits={props.aiCredits} />
       </div>
-      <div className="p-3" style={{ borderTop: '1px solid var(--border-soft)', background: 'var(--bg-sidebar-secondary)' }}>
+      <div className="p-3 bg-white" style={{ borderTop: '1px solid var(--border-soft)' }}>
         <div className="mb-1.5 flex items-center gap-2">
           <Zap size={13} className="shrink-0 fill-amber-400 text-amber-400" aria-hidden />
           <span className="text-xs font-semibold text-slate-700">Upgrade to Pro</span>

@@ -1,9 +1,11 @@
 import {
+  Body,
   Controller,
   ForbiddenException,
   Get,
   HttpException,
   HttpStatus,
+  Patch,
   Post,
   Req,
   Res,
@@ -21,6 +23,9 @@ import {
 import type { RequestUser } from '../shared/request-user.types';
 import { CustomerSessionAuthGuard } from './customer-session.guard';
 import { buildCustomerSessionPayload } from './customer-session.payload';
+import { CustomerProfileService } from './customer-profile.service';
+import { parseCustomerAvatarMultipartUpload } from './customer-profile-avatar.util';
+import { parsePatchCustomerProfileBody } from './customer-profile.validation';
 import { AR_CUSTOMER_SESSION_COOKIE_NAME } from '../shared/session-cookie.constants';
 
 type RequestWithUser = FastifyRequest & { user?: RequestUser };
@@ -35,6 +40,7 @@ export class CustomerPortalController {
     private readonly workspacesService: WorkspacesService,
     private readonly entitlementsService: WorkspaceEntitlementsService,
     private readonly configService: ConfigService,
+    private readonly customerProfileService: CustomerProfileService,
   ) {}
 
   /**
@@ -67,6 +73,38 @@ export class CustomerPortalController {
   @UseGuards(CustomerSessionAuthGuard)
   async session(@Req() req: RequestWithUser) {
     return this.resolveCustomerSession(req);
+  }
+
+  @Patch('me/profile')
+  @UseGuards(CustomerSessionAuthGuard)
+  async patchProfile(@Req() req: RequestWithUser, @Body() body: unknown) {
+    const user = req.user;
+    if (!user) throw new HttpException({ error: 'Unauthorized' }, HttpStatus.UNAUTHORIZED);
+    if (user.role !== 'customer') {
+      throw new ForbiddenException({
+        error: 'Customer session required.',
+        errorCode: 'CUSTOMER_SESSION_REQUIRED',
+      });
+    }
+    const patch = parsePatchCustomerProfileBody(body);
+    const customer = await this.customerProfileService.patchProfile(String(user._id), patch);
+    return { customer };
+  }
+
+  @Post('me/avatar')
+  @UseGuards(CustomerSessionAuthGuard)
+  async uploadAvatar(@Req() req: RequestWithUser) {
+    const user = req.user;
+    if (!user) throw new HttpException({ error: 'Unauthorized' }, HttpStatus.UNAUTHORIZED);
+    if (user.role !== 'customer') {
+      throw new ForbiddenException({
+        error: 'Customer session required.',
+        errorCode: 'CUSTOMER_SESSION_REQUIRED',
+      });
+    }
+    const file = await parseCustomerAvatarMultipartUpload(req);
+    const customer = await this.customerProfileService.uploadAvatar(String(user._id), file);
+    return { customer };
   }
 
   private async resolveCustomerSession(req: RequestWithUser) {

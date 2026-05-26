@@ -83,11 +83,12 @@ describe('WorkspaceSwitcher', () => {
     cleanup();
   });
 
-  it('shows active workspace label with role and plan badges', () => {
+  it('shows active workspace label with plan badge', () => {
     renderSwitcher();
     expect(screen.getByTitle('Personal')).toBeTruthy();
-    expect(screen.getAllByText('Admin').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Free').length).toBeGreaterThan(0);
+    openMenu();
+    expect(screen.getAllByText('Admin').length).toBeGreaterThan(0);
   });
 
   it('lists all workspaces in the dropdown', () => {
@@ -169,6 +170,7 @@ describe('WorkspaceSwitcher', () => {
       activeWorkspaceId: 'ws-owned',
       workspaces: [ownerWorkspace, teamWorkspace],
     });
+    openMenu();
     expect(screen.getAllByText('Owner').length).toBeGreaterThan(0);
   });
 

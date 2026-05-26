@@ -23,6 +23,8 @@ export type ModalProps = {
   titleClassName?: string;
   /** Merged into the footer strip (e.g. override default footer button text size). */
   footerClassName?: string;
+  /** Merged into the header strip (e.g. white background for settings modals). */
+  headerClassName?: string;
   /** Extra classes on the scrollable body region (default `px-4 py-4 sm:px-5`). */
   bodyClassName?: string;
   /** When true, does not set `document.body.style.overflow` (use for nested modals). */
@@ -66,6 +68,7 @@ export function Modal({
   overlayClassName,
   titleClassName,
   footerClassName,
+  headerClassName,
   bodyClassName,
   skipBodyScrollLock = false,
   allowDismiss = true,
@@ -247,6 +250,7 @@ export function Modal({
               tone === 'danger' ? 'border-[var(--color-danger-border)] bg-[var(--color-danger-bg)]' : null,
               tone === 'warning' ? 'border-amber-200/75 bg-amber-50/90' : null,
               tone === 'default' ? 'border-slate-100 bg-slate-50/80' : null,
+              headerClassName,
             )}
           >
             <div className="min-w-0 flex-1">

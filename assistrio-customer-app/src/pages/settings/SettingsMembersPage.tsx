@@ -12,7 +12,7 @@ import {
 import type { WorkspaceInviteRole, WorkspaceInviteSummary, WorkspaceMemberSummary } from '@/api/types';
 import { useCustomerAuth } from '@/auth/CustomerAuthContext';
 import { InviteMemberModal } from '@/components/settings/InviteMemberModal';
-import { MembersSeatUsageCard } from '@/components/settings/MembersSeatUsageCard';
+import { MembersPageSkeleton } from '@/components/settings/MembersPageSkeleton';
 import { SettingsMembersConfirmModal } from '@/components/settings/SettingsMembersConfirmModal';
 import { SettingsPageHeader } from '@/components/settings/SettingsPageHeader';
 import {
@@ -20,7 +20,8 @@ import {
   WorkspacePeopleTable,
   type WorkspacePersonRow,
 } from '@/components/settings/WorkspacePeopleTable';
-import { Button, Card, CardBody } from '@/components/ui';
+import { WorkspaceSeatUsageCards } from '@/components/settings/WorkspaceSeatUsageCards';
+import { Button, Card, CardBody, Tooltip } from '@/components/ui';
 import { WorkspaceContentContainer } from '@/layout/workspace-layout/WorkspaceContentContainer';
 import { appToast } from '@/lib/app-toast';
 import { resolveActiveCustomerWorkspace } from '@/lib/resolveActiveCustomerWorkspace';
@@ -38,15 +39,6 @@ import {
 } from '@/lib/workspaceRoles';
 
 type LoadState = 'idle' | 'loading' | 'ready' | 'error';
-
-function MembersPageSkeleton() {
-  return (
-    <div className="space-y-4" aria-busy="true" aria-label="Loading members">
-      <div className="h-52 animate-pulse rounded-2xl border border-slate-200/90 bg-slate-50" />
-      <div className="h-80 animate-pulse rounded-2xl border border-slate-200/90 bg-slate-50" />
-    </div>
-  );
-}
 
 function MembersErrorCard(props: { onRetry: () => void }) {
   return (
@@ -95,14 +87,11 @@ export function SettingsMembersPage() {
   );
   const seatsUsed = useMemo(() => countWorkspaceSeatsUsed(members.length, invites), [members.length, invites]);
   const memberLimit = workspace?.memberLimit ?? null;
-  const planName = workspace?.planName ?? 'current';
 
-  const showCollaborationCallout = useMemo(() => {
-    const activeCount = members.length;
-    const pendingCount = pendingInvites.length;
-    if (activeCount >= 6) return false;
-    return activeCount < 2 || pendingCount > 0;
-  }, [members.length, pendingInvites.length]);
+  const showInviteHint = useMemo(
+    () => members.length <= 1 && pendingInvites.length === 0,
+    [members.length, pendingInvites.length],
+  );
 
   const openInviteModal = useCallback(() => setInviteOpen(true), []);
 
@@ -194,39 +183,64 @@ export function SettingsMembersPage() {
 
   const handleRoleChange = async (row: WorkspacePersonRow, nextRole: WorkspaceInviteRole) => {
     if (!activeWorkspaceId || !canManageRoles) return;
+    const previousRole = row.role;
+    if (previousRole === nextRole) return;
+
     if (row.kind === 'member') {
+      setMembers((prev) =>
+        prev.map((member) =>
+          member.userId === row.member.userId ? { ...member, role: nextRole } : member,
+        ),
+      );
       const result = await patchWorkspaceMemberRole(activeWorkspaceId, row.member.userId, nextRole);
       if (!result.ok) {
+        setMembers((prev) =>
+          prev.map((member) =>
+            member.userId === row.member.userId ? { ...member, role: previousRole } : member,
+          ),
+        );
         appToast.error(workspaceMembersErrorMessage(result, 'Could not update member role.'));
         return;
       }
     } else {
+      setInvites((prev) =>
+        prev.map((invite) => (invite.id === row.invite.id ? { ...invite, role: nextRole } : invite)),
+      );
       const result = await patchWorkspaceInviteRole(activeWorkspaceId, row.invite.id, nextRole);
       if (!result.ok) {
+        setInvites((prev) =>
+          prev.map((invite) =>
+            invite.id === row.invite.id
+              ? { ...invite, role: previousRole as WorkspaceInviteRole }
+              : invite,
+          ),
+        );
         appToast.error(workspaceMembersErrorMessage(result, 'Could not update invite role.'));
         return;
       }
     }
     appToast.success('Role updated.');
-    await refreshData();
   };
 
   const inviteButton =
     canManageMembers && activeWorkspaceId && !accessDenied ? (
-      <Button type="button" variant="primary" size="sm" onClick={openInviteModal}>
-        <UserPlus className="h-4 w-4" aria-hidden />
-        Invite member
-      </Button>
+      <Tooltip content="Invite a teammate to this workspace" side="top">
+        <Button type="button" variant="primary" size="sm" onClick={openInviteModal}>
+          <UserPlus className="h-4 w-4" aria-hidden />
+          Invite member
+        </Button>
+      </Tooltip>
     ) : null;
 
   if (!activeWorkspaceId || !workspace) {
     return (
       <>
         <SettingsPageHeader
-          title="Members"
-          description="Manage who can access this workspace."
+          settingsRoute="/settings/members"
+          title="Members Management"
+          description="Manage workspace access, roles, and pending invitations."
         />
-        <WorkspaceContentContainer size="standard" className="pt-6">
+        <WorkspaceContentContainer size="editor" className="pt-0">
           <Card className="border-slate-200/90 shadow-[var(--shadow-card)]">
             <CardBody>
               <p className="m-0 text-sm leading-relaxed text-slate-600">
@@ -244,12 +258,13 @@ export function SettingsMembersPage() {
   return (
     <>
       <SettingsPageHeader
-        title="Members"
-        description="Manage who can access this workspace."
+        settingsRoute="/settings/members"
+        title="Members Management"
+        description="Manage workspace access, roles, and pending invitations."
         actions={inviteButton}
       />
 
-      <WorkspaceContentContainer size="standard" className="pt-6">
+      <WorkspaceContentContainer size="editor" className="pt-0">
         {showReadOnly ? (
           <Card className="mb-4 border-slate-200/90 bg-slate-50/80 shadow-[var(--shadow-xs)]">
             <CardBody>
@@ -271,21 +286,18 @@ export function SettingsMembersPage() {
               }}
             />
           ) : (
-            <div className="flex flex-col gap-4">
-              <MembersSeatUsageCard
-                planName={planName}
+            <div className="space-y-4">
+              <WorkspaceSeatUsageCards
                 seatsUsed={seatsUsed}
                 memberLimit={memberLimit}
                 activeMembers={members.length}
                 pendingInvites={pendingInvites.length}
               />
-
               <WorkspacePeopleTable
                 rows={directoryRows}
                 canManageRoles={canManageRoles}
                 resendBusyId={resendBusyId}
-                showCollaborationCallout={showCollaborationCallout}
-                onInviteClick={openInviteModal}
+                showInviteHint={showInviteHint}
                 onRemoveMember={setRemoveTarget}
                 onCancelInvite={setCancelTarget}
                 onResendInvite={(invite) => void handleResendInvite(invite)}

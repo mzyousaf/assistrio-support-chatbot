@@ -89,11 +89,11 @@
   --color-info-accent-text: #0369a1;
 
   /* ── Shell surface hierarchy (neutral slate — cards stay white; no teal wash) */
-  --bg-app: #f8fafc;
-  /* Main workspace canvas — same family as app for a flat, consistent field */
+  --bg-app: #ffffff;
+  /* Main workspace canvas — soft off-white so white sidebar/cards read clearly */
   --bg-workspace-canvas: #f8fafc;
   --bg-navbar: #ffffff;
-  --bg-sidebar-primary: #f8fafc;
+  --bg-sidebar-primary: #ffffff;
   --bg-sidebar-secondary: #ffffff;
   --bg-card: #ffffff;
   --border-soft: #e2e8f0;
@@ -129,6 +129,8 @@
   --layout-main-pad-x: clamp(1rem, 2.5vw, 1.5rem);
   --layout-main-pad-y: 1.25rem;
   --layout-main-pad-bottom: 2.75rem;
+  /* Dashboard, usage, and workspace settings content column */
+  --editor-max: 1200px;
 
   /* Neutral preview column (aligned with workspace neutrals) */
   --preview-stage-bg: #f1f5f9;

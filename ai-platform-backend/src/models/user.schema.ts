@@ -56,6 +56,35 @@ export class User {
   @Prop({ required: false, trim: true })
   picture?: string;
 
+  /** Customer-edited display name; takes precedence over Google first/last name in session payloads. */
+  @Prop({ type: String, default: undefined, trim: true })
+  displayNameOverride?: string | null;
+
+  /**
+   * Customer-edited profile photo URL. When set (non-empty), overrides Google `picture` in session payloads.
+   * Explicit `null` clears a previous override and restores the Google photo.
+   */
+  @Prop({ type: String, default: undefined, trim: true })
+  pictureOverride?: string | null;
+
+  /** Optional public contact links shown on the customer profile (editable in account settings). */
+  @Prop({
+    type: {
+      linkedinUrl: { type: String, default: undefined, trim: true },
+      calendlyUrl: { type: String, default: undefined, trim: true },
+      websiteUrl: { type: String, default: undefined, trim: true },
+      otherUrl: { type: String, default: undefined, trim: true },
+    },
+    default: undefined,
+    _id: false,
+  })
+  profileLinks?: {
+    linkedinUrl?: string | null;
+    calendlyUrl?: string | null;
+    websiteUrl?: string | null;
+    otherUrl?: string | null;
+  };
+
   /** Last selected workspace in the customer app; must match a workspace membership. */
   @Prop({ type: Types.ObjectId, ref: 'Workspace', required: false })
   activeWorkspaceId?: Types.ObjectId;

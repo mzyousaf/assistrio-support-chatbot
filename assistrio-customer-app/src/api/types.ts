@@ -273,6 +273,13 @@ export type WorkspaceBillingSummary = {
   addonCatalog: WorkspaceBillingAddonCatalogCard[];
 };
 
+export type CustomerProfileLinks = {
+  linkedinUrl: string | null;
+  calendlyUrl: string | null;
+  websiteUrl: string | null;
+  otherUrl: string | null;
+};
+
 export type CustomerMe = {
   id: string;
   email: string;
@@ -285,6 +292,26 @@ export type CustomerMe = {
   lastName?: string;
   /** Profile image URL (e.g. Google picture). */
   picture?: string;
+  profileLinks?: CustomerProfileLinks;
+};
+
+export type PatchCustomerMeProfileRequest = {
+  name?: string;
+  avatarUrl?: string | null;
+  profileLinks?: {
+    linkedinUrl?: string | null;
+    calendlyUrl?: string | null;
+    websiteUrl?: string | null;
+    otherUrl?: string | null;
+  };
+};
+
+export type UploadCustomerMeAvatarResponse = {
+  customer: CustomerMe;
+};
+
+export type PatchCustomerMeProfileResponse = {
+  customer: CustomerMe;
 };
 
 export type WorkspaceMemberRole = 'owner' | 'admin' | 'member';

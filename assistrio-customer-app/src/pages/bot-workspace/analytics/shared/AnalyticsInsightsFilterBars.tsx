@@ -16,6 +16,7 @@ import { customYmdRangeIsValid } from '@/lib/analyticsQueryDates';
 import { formatAnalyticsGranularityViewCaption, resolveAnalyticsGranularity } from '@/lib/analyticsGranularity';
 import { computeDateRangeFromAnalyticsPreset } from '@/lib/chatsAnalyticsQuery';
 import { getLeadsFilterCountryOptions } from '@/pages/bot-workspace/leads/leadsFilterCountryOptions';
+import { cn } from '@/lib/utils';
 import { SENTIMENT_DISPLAY_FALLBACK, SENTIMENT_STACK_ORDER } from '@/pages/bot-workspace/analytics/sentiment/sentimentChartTheme';
 import {
   ANALYTICS_DATE_PRESET_OPTIONS,
@@ -106,6 +107,7 @@ export function CoreDateGranularityPreviewCapsules({
   topicsDateEngagement,
   autoGranularityRangeFallbackDays = 30,
   maxHistoryDays = null,
+  compactPanel = false,
 }: {
   values: StandardDateControlValues;
   onValuesChange: (next: StandardDateControlValues) => void;
@@ -139,6 +141,8 @@ export function CoreDateGranularityPreviewCapsules({
   autoGranularityRangeFallbackDays?: number;
   /** When set (Free plan), presets beyond this window are disabled. */
   maxHistoryDays?: number | null;
+  /** Smaller preset list panel without analytics granularity footer (e.g. Usage page). */
+  compactPanel?: boolean;
 }) {
   const datePresetOptions = useMemo(
     () => filterAnalyticsDatePresetsForHistoryLimit(ANALYTICS_DATE_PRESET_OPTIONS, maxHistoryDays),
@@ -206,7 +210,14 @@ export function CoreDateGranularityPreviewCapsules({
           closeAll();
         }}
       >
-        <div className="flex max-h-[min(24rem,70vh)] min-w-[15rem] flex-col gap-2 overflow-y-auto p-0.5">
+        <div
+          className={cn(
+            'flex flex-col gap-2 overflow-y-auto p-0.5',
+            compactPanel
+              ? 'max-h-[min(13rem,45vh)] min-w-[11rem]'
+              : 'max-h-[min(24rem,70vh)] min-w-[15rem]',
+          )}
+        >
           <ul className="m-0 list-none space-y-0.5 p-0 py-0.5">
             {datePresetOptions.map((opt) => {
               const selected = values.preset === opt.id;
@@ -217,7 +228,10 @@ export function CoreDateGranularityPreviewCapsules({
                     role="option"
                     aria-selected={selected}
                     disabled={disabled || opt.disabled}
-                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    className={cn(
+                      'flex w-full items-center gap-2 rounded-md px-2 text-left text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50',
+                      compactPanel ? 'py-1 text-xs' : 'py-1.5 text-sm',
+                    )}
                     onClick={() => {
                       if (opt.disabled) return;
                       if (opt.id === 'custom' && !values.customFrom.trim() && !values.customTo.trim()) {
@@ -278,13 +292,17 @@ export function CoreDateGranularityPreviewCapsules({
                   </Link>
                 </p>
               ) : null}
-              <p className="m-0 text-[0.7rem] leading-snug text-slate-500">Uses your local timezone.</p>
+              {!compactPanel ? (
+                <p className="m-0 text-[0.7rem] leading-snug text-slate-500">Uses your local timezone.</p>
+              ) : null}
             </div>
           ) : null}
-          <div className="border-t border-slate-100 pt-2">
-            <p className="m-0 text-[0.7rem] leading-snug text-slate-600">{viewCaption}</p>
-            <p className="m-0 mt-0.5 text-[0.65rem] leading-snug text-slate-500">Based on the selected date range.</p>
-          </div>
+          {!compactPanel ? (
+            <div className="border-t border-slate-100 pt-2">
+              <p className="m-0 text-[0.7rem] leading-snug text-slate-600">{viewCaption}</p>
+              <p className="m-0 mt-0.5 text-[0.65rem] leading-snug text-slate-500">Based on the selected date range.</p>
+            </div>
+          ) : null}
         </div>
       </FilterCapsule>
 

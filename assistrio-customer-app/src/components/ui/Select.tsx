@@ -22,8 +22,12 @@ export type SelectProps = Omit<SelectHTMLAttributes<HTMLSelectElement>, 'size'> 
   invalid?: boolean;
   /** Extra-neutral focus (reserved for parity with Input). */
   quiet?: boolean;
+  /** Compact (28px), default modal (32px), or comfortable (36px). Default `lg` preserves legacy 36px triggers. */
+  selectSize?: 'sm' | 'md' | 'lg';
   /** Applied to the trigger button (after base styles) e.g. compact `h-8`. */
   triggerClassName?: string;
+  /** Applied to the portaled listbox menu. */
+  menuClassName?: string;
 };
 
 type OptionRow = { value: string; label: string; disabled?: boolean; sectionLabel?: string };
@@ -76,13 +80,45 @@ function parseOptions(children: ReactNode): OptionRow[] {
 }
 
 const triggerBase = cn(
-  'inline-flex w-full max-w-full min-h-9 h-9 items-center justify-between gap-2 rounded-[var(--ui-radius)] border bg-[var(--ui-surface)]',
-  'px-3 text-left text-sm font-normal leading-tight text-slate-900 antialiased',
+  'inline-flex w-full max-w-full items-center justify-between gap-2 rounded-[var(--ui-radius)] border bg-[var(--ui-surface)]',
+  'text-left font-normal leading-tight text-slate-900 antialiased',
   'shadow-none transition-[border-color,box-shadow,background-color] duration-150 ease-out',
   'cursor-pointer',
   'focus:outline-none focus-visible:border-[var(--ui-border-focus)] focus-visible:ring-1 focus-visible:ring-slate-900/[0.06]',
   'disabled:cursor-not-allowed disabled:bg-[var(--ui-surface-muted)] disabled:text-slate-400',
 );
+
+type SelectSize = NonNullable<SelectProps['selectSize']>;
+
+const triggerSizeClass: Record<SelectSize, string> = {
+  sm: 'min-h-7 h-7 px-2.5 text-xs',
+  md: 'min-h-8 h-8 px-3 text-[0.8125rem]',
+  lg: 'min-h-9 h-9 px-3 text-sm',
+};
+
+const chevronSizeClass: Record<SelectSize, string> = {
+  sm: 'h-3.5 w-3.5',
+  md: 'h-3.5 w-3.5',
+  lg: 'h-4 w-4',
+};
+
+const optionButtonClass: Record<SelectSize, string> = {
+  sm: 'flex h-7 min-h-7 w-full cursor-pointer items-center gap-1.5 rounded-md px-2 text-left text-xs leading-none text-slate-800',
+  md: 'flex h-8 min-h-8 w-full cursor-pointer items-center gap-2 rounded-md px-2.5 text-left text-[0.8125rem] leading-none text-slate-800',
+  lg: 'flex w-full cursor-pointer items-start gap-2 rounded-md px-2.5 py-2 text-left text-sm leading-snug text-slate-800',
+};
+
+const optionCheckWrapClass: Record<SelectSize, string> = {
+  sm: 'flex h-3.5 w-3.5 shrink-0 items-center justify-center',
+  md: 'flex h-3.5 w-3.5 shrink-0 items-center justify-center',
+  lg: 'mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center',
+};
+
+const optionCheckIconClass: Record<SelectSize, string> = {
+  sm: 'h-3 w-3 text-[var(--color-teal-700)]',
+  md: 'h-3 w-3 text-[var(--color-teal-700)]',
+  lg: 'h-3.5 w-3.5 text-[var(--color-teal-700)]',
+};
 
 const listboxVisual = cn(
   'overflow-y-auto overflow-x-hidden',
@@ -133,7 +169,9 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(function Select
     className,
     invalid,
     quiet: _quiet = false,
+    selectSize = 'lg',
     triggerClassName,
+    menuClassName,
     disabled,
     children,
     value,
@@ -142,6 +180,7 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(function Select
     id,
     name,
     required,
+    'aria-label': ariaLabel,
   },
   ref,
 ) {
@@ -219,7 +258,7 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(function Select
         id={listId}
         role="listbox"
         data-ui-select-menu
-        className={listboxVisual}
+        className={cn(listboxVisual, menuClassName)}
         tabIndex={-1}
         style={{
           position: 'fixed',
@@ -252,7 +291,7 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(function Select
                 aria-selected={isSelected}
                 disabled={o.disabled}
                 className={cn(
-                  'flex w-full cursor-pointer items-start gap-2 rounded-md px-2.5 py-2 text-left text-sm leading-snug text-slate-800',
+                  optionButtonClass[selectSize],
                   'transition-colors duration-100',
                   'hover:bg-slate-50 focus:bg-slate-50 focus:outline-none',
                   isSelected &&
@@ -266,13 +305,12 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(function Select
                 }}
               >
                 <span
-                  className={cn(
-                    'mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center',
-                    !isSelected && 'opacity-0',
-                  )}
+                  className={cn(optionCheckWrapClass[selectSize], !isSelected && 'opacity-0')}
                   aria-hidden
                 >
-                  {isSelected ? <Check className="h-3.5 w-3.5 text-[var(--color-teal-700)]" strokeWidth={2.5} /> : null}
+                  {isSelected ? (
+                    <Check className={optionCheckIconClass[selectSize]} strokeWidth={2.5} />
+                  ) : null}
                 </span>
                 <span className="min-w-0 flex-1">{o.label}</span>
               </button>
@@ -296,8 +334,10 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(function Select
         aria-controls={open ? listId : undefined}
         aria-invalid={invalid || undefined}
         aria-required={required || undefined}
+        aria-label={ariaLabel}
         className={cn(
           triggerBase,
+          triggerSizeClass[selectSize],
           invalid
             ? 'border-[var(--color-danger-border)] focus-visible:border-[var(--color-danger-text-emphasis)] focus-visible:ring-red-900/10'
             : 'border-[var(--ui-border)] hover:enabled:border-[var(--ui-border-hover)] hover:enabled:bg-white',
@@ -309,7 +349,11 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(function Select
         <span className="min-w-0 flex-1 truncate text-left">{displayLabel}</span>
         <ChevronDown
           strokeWidth={2}
-          className={cn('h-4 w-4 shrink-0 text-slate-400 transition-transform duration-200', open && 'rotate-180')}
+          className={cn(
+            chevronSizeClass[selectSize],
+            'shrink-0 text-slate-400 transition-transform duration-200',
+            open && 'rotate-180',
+          )}
           aria-hidden
         />
       </button>

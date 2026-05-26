@@ -4,8 +4,8 @@ export function customerShellSectionTitle(pathname: string): string | null {
   if (path === '/') return null;
   if (path === '/usage') return 'Usage';
   if (path.startsWith('/settings/plans') || path === '/plans') return 'Plans';
-  if (path.startsWith('/settings/account') || path.startsWith('/settings/general')) return 'User Account';
-  if (path.startsWith('/settings/workspace')) return 'Workspace';
+  if (path.startsWith('/settings/account') || path.startsWith('/settings/general')) return 'General';
+  if (path.startsWith('/settings/workspace')) return 'General';
   if (path.startsWith('/settings/members')) return 'Members';
   if (path.startsWith('/settings/billing')) return 'Billing';
   if (path.startsWith('/settings/api-keys')) return 'API keys';
