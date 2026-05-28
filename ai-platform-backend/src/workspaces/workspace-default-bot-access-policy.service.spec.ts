@@ -27,6 +27,7 @@ describe('WorkspaceBotAccessGrantService applyDefaultAccessGrantsForNewBot', () 
 
     const service = new WorkspaceBotAccessGrantService(
       {} as never,
+      {} as never,
       membershipModel as never,
       {} as never,
       {} as never,

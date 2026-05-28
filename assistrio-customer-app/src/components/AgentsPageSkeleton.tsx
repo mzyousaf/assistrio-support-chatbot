@@ -32,9 +32,18 @@ function AgentCardSkeleton() {
           <SkeletonBone className="h-3 w-10" />
           <SkeletonBone className="h-3 w-16" />
         </div>
-        <div className="mt-2 flex flex-wrap gap-3">
-          <SkeletonBone className="h-3 w-20" />
-          <SkeletonBone className="h-3 w-24" />
+        <div className="mt-2 flex items-center justify-between gap-3">
+          <div className="flex flex-wrap gap-3">
+            <SkeletonBone className="h-3 w-20" />
+            <SkeletonBone className="h-3 w-24" />
+          </div>
+          <div className="flex items-center" aria-hidden>
+            <SkeletonBone className="h-6 w-6 rounded-full border border-[var(--color-teal-600)] bg-white ring-2 ring-white" />
+            <SkeletonBone className="-ml-1.5 h-6 w-6 rounded-full ring-2 ring-white" />
+            <SkeletonBone className="-ml-1.5 h-6 w-6 rounded-full ring-2 ring-white" />
+            <SkeletonBone className="-ml-1.5 h-6 w-6 rounded-full ring-2 ring-white" />
+            <SkeletonBone className="-ml-1 h-6 w-6 rounded-full bg-primary/20 ring-2 ring-white" />
+          </div>
         </div>
       </div>
 
@@ -54,10 +63,6 @@ type Props = {
 export function AgentsPageSkeleton({ cards = 6 }: Props) {
   return (
     <section className="mt-1" aria-busy="true" aria-label="Loading agents">
-      <div className="mb-5 flex justify-end" aria-hidden>
-        <SkeletonBone className="h-4 w-16" />
-      </div>
-
       <ul className="m-0 grid list-none grid-cols-1 gap-5 p-0 md:grid-cols-2 2xl:grid-cols-3">
         {Array.from({ length: cards }).map((_, index) => (
           <li key={index}>

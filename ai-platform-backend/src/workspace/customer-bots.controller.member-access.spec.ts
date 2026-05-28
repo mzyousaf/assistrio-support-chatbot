@@ -57,7 +57,7 @@ describe('CustomerBotsController member access', () => {
       filterWorkspaceBotsForUser: jest.fn(async (_uid, _ws, bots) => {
         if (options?.memberRole === 'member') {
           return (bots as Record<string, unknown>[]).filter(
-            (b) => (b as { workspaceMemberVisibility?: { visibleToMembers?: boolean } }).workspaceMemberVisibility?.visibleToMembers !== false,
+            (b) => String((b as { _id?: Types.ObjectId })._id) === botVisibleId,
           );
         }
         return bots;
@@ -148,7 +148,7 @@ describe('CustomerBotsController member access', () => {
       expect(result).toHaveLength(2);
     });
 
-    it('filters hidden bots for workspace members', async () => {
+    it('filters bots without canView grant for workspace members', async () => {
       const { controller, reqFor } = buildListController({ memberRole: 'member' });
       const result = await controller.listBots(reqFor(memberUserId));
       expect(result).toHaveLength(1);

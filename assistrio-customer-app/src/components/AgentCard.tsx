@@ -1,13 +1,15 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Check, Code2, ExternalLink, FileText, Globe, GraduationCap, HelpCircle, Link2,
-  Lock, MessagesSquare, MessageSquare, MoreHorizontal, Share2,
+  Code2, ExternalLink, FileText, Globe, GraduationCap, HelpCircle, Link2,
+  Lock, MessagesSquare, MessageSquare, MoreHorizontal,
   StickyNote, Table2, Trash2, UserCheck,
 } from 'lucide-react';
-import { getCustomerApiOrigin } from '../api/client';
-import { widgetSnippet } from '../lib/embedOrigin';
 import type { CustomerBotListItem } from '../api/types';
+import { AgentEmbedModal } from '@/components/AgentEmbedModal';
+import { AgentViewAccessAvatarGroup } from '@/components/AgentViewAccessAvatarGroup';
+import { Tooltip } from '@/components/ui';
+import { CATEGORY_OPTIONS } from '@/pages/bot-workspace/behaviorConstants';
 import { cn } from '@/lib/utils';
 
 /* ── helpers ─────────────────────────────────────────────────────── */
@@ -37,8 +39,64 @@ function stInfo(s: string) {
 }
 
 function catTags(c: string | undefined): string[] {
-  if (!c || c === 'general' || c === 'other') return [];
-  return c.split(/[,/]+/).map((t) => t.trim().replace(/[-_]/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase())).filter(Boolean);
+  if (!c?.trim()) return [];
+  return c.split(/[,/]+/).map((t) => t.trim()).filter(Boolean);
+}
+
+const CATEGORY_TAG_MAX_LEN = 18;
+
+function formatCategoryLabel(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  const preset = CATEGORY_OPTIONS.find((c) => c.value === trimmed.toLowerCase());
+  if (preset) return preset.label;
+  return trimmed.replace(/[-_]/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
+}
+
+function botCategoryLabels(bot: CustomerBotListItem): string[] {
+  const raw =
+    bot.categories?.length
+      ? bot.categories
+      : catTags(bot.category).length
+        ? catTags(bot.category)
+        : bot.category?.trim()
+          ? [bot.category.trim()]
+          : [];
+  const labels = raw.map(formatCategoryLabel).filter(Boolean);
+  return [...new Set(labels)];
+}
+
+function StatusTag({ status }: { status: string }) {
+  const st = stInfo(status);
+  return (
+    <span
+      className={cn(
+        'inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-[0.6875rem] font-semibold leading-none',
+        st.bg,
+        st.text,
+      )}
+    >
+      <span className={cn('h-1.5 w-1.5 rounded-full', st.dot)} />
+      {st.label}
+    </span>
+  );
+}
+
+function CategoryTag({ label, accent }: { label: string; accent: string }) {
+  const needsTooltip = label.length > CATEGORY_TAG_MAX_LEN;
+  const tag = (
+    <span
+      className={cn(
+        'inline-block max-w-[8.5rem] truncate rounded-md px-2 py-0.5 text-[0.6875rem] font-medium',
+        needsTooltip && 'cursor-default',
+      )}
+      style={{ backgroundColor: accent + '14', color: accent }}
+    >
+      {label}
+    </span>
+  );
+  if (!needsTooltip) return tag;
+  return <Tooltip content={label}>{tag}</Tooltip>;
 }
 
 function domain(o: string[] | undefined) {
@@ -57,15 +115,26 @@ function compactNum(n: number): string {
   return Math.floor(n / 1000) + 'k';
 }
 
-function embedSnippet(b: CustomerBotListItem) {
-  return widgetSnippet({
-    botId: b._id, apiBaseUrl: getCustomerApiOrigin(), accessKey: '',
-    visibility: isPriv(b) ? 'private' : 'public',
-    widgetAssetOrigin: (import.meta.env.VITE_WIDGET_ASSET_ORIGIN ?? '').replace(/\/$/, '') || 'https://widget.assistrio.com',
-  });
-}
+/* ── embed button ────────────────────────────────────────────────── */
 
-/* ── avatar ──────────────────────────────────────────────────────── */
+function EmbedButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      title="Embed agent"
+      aria-label="Embed agent"
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onClick();
+      }}
+      className="inline-flex cursor-pointer items-center gap-1 rounded-md px-2 py-1 text-[0.6875rem] font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700"
+    >
+      <Code2 size={12} strokeWidth={2} />
+      Embed
+    </button>
+  );
+}
 
 function Avatar({ bot, accent }: { bot: CustomerBotListItem; accent: string }) {
   const cls = 'h-10 w-10 rounded-xl';
@@ -93,37 +162,7 @@ function Stat({ icon, value, label }: { icon: React.ReactNode; value: string; la
   );
 }
 
-/* ── embed copy ──────────────────────────────────────────────────── */
-
-function CopyEmbed({ bot }: { bot: CustomerBotListItem }) {
-  const [ok, setOk] = useState(false);
-  const t = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const live = bot.status?.toLowerCase() === 'published';
-
-  return (
-    <button
-      type="button"
-      title={!live ? 'Publish first' : ok ? 'Copied!' : 'Copy embed code'}
-      disabled={!live}
-      onClick={(e) => {
-        e.preventDefault(); e.stopPropagation();
-        if (!live) return;
-        void navigator.clipboard.writeText(embedSnippet(bot)).then(() => {
-          setOk(true); clearTimeout(t.current); t.current = setTimeout(() => setOk(false), 1800);
-        });
-      }}
-      className={cn(
-        'inline-flex items-center gap-1 rounded-md px-2 py-1 text-[0.6875rem] font-medium transition-colors',
-        live ? 'cursor-pointer text-gray-500 hover:bg-gray-100 hover:text-gray-700' : 'cursor-not-allowed text-gray-300',
-      )}
-    >
-      {ok ? <Check size={12} strokeWidth={2.5} className="text-emerald-500" /> : <Code2 size={12} strokeWidth={2} />}
-      {ok ? 'Copied' : 'Embed'}
-    </button>
-  );
-}
-
-/* ── dropdown menu ───────────────────────────────────────────────── */
+/* ── avatar ──────────────────────────────────────────────────────── */
 
 function CardMenu({ href, onDelete, canDelete = true }: { href: string; onDelete: () => void; canDelete?: boolean }) {
   const [open, setOpen] = useState(false);
@@ -195,17 +234,27 @@ export type AgentCardProps = {
   onDelete: (b: CustomerBotListItem) => void;
   canDelete?: boolean;
   onShare?: (b: CustomerBotListItem) => void;
+  /** When true, renders the view-access avatar stack (owners/admins, or dev preview). */
+  showViewAccessPreview?: boolean;
 };
 
-export function AgentCard({ bot, deleting, onDelete, canDelete = true, onShare }: AgentCardProps) {
-  const st = stInfo(bot.status);
+export function AgentCard({
+  bot,
+  deleting,
+  onDelete,
+  canDelete = true,
+  onShare,
+  showViewAccessPreview,
+}: AgentCardProps) {
+  const [embedOpen, setEmbedOpen] = useState(false);
   const p = isPriv(bot);
-  const tags = catTags(bot.category);
+  const categoryLabels = botCategoryLabels(bot);
   const dom = domain(bot.activeOrigins);
   const accent = accentHex(bot.primaryColor);
   const activity = relDate(bot.lastActivityAt);
   const trained = relDate(bot.lastTrainedAt);
   const href = `/bots/${bot._id}`;
+  const showViewAccessStack = showViewAccessPreview ?? Boolean(onShare);
 
   const conversations = bot.totalConversations ?? 0;
   const messages = bot.totalMessages ?? 0;
@@ -216,6 +265,7 @@ export function AgentCard({ bot, deleting, onDelete, canDelete = true, onShare }
   const knowledgeTotal = docs + faqs + snippets + datasheets;
 
   return (
+    <>
     <article
       className={cn('group/card relative flex h-full flex-col rounded-2xl bg-white shadow-[var(--shadow-card)] transition-all duration-150 hover:shadow-[var(--shadow-card-hover)]', deleting && 'pointer-events-none opacity-40')}
       style={{ border: '1px solid var(--border-soft)' }}
@@ -246,47 +296,20 @@ export function AgentCard({ bot, deleting, onDelete, canDelete = true, onShare }
           </div>
         </div>
 
-        <span className={cn('mt-0.5 inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-[0.6875rem] font-semibold leading-none', st.bg, st.text)}>
-          <span className={cn('h-1.5 w-1.5 rounded-full', st.dot)} />
-          {st.label}
-        </span>
-
-        {onShare ? (
-          <button
-            type="button"
-            title="Share agent access"
-            aria-label="Share agent access"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              onShare(bot);
-            }}
-            className="flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md border-none bg-transparent text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
-          >
-            <Share2 size={15} strokeWidth={2} />
-          </button>
-        ) : null}
-
         <CardMenu href={href} onDelete={() => onDelete(bot)} canDelete={canDelete} />
       </div>
 
-      {/* ─── Category tags ─── */}
-      {tags.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 px-4 pt-2.5">
-          {tags.map((tag) => (
-            <span
-              key={tag}
-              className="rounded-md px-2 py-0.5 text-[0.6875rem] font-medium"
-              style={{ backgroundColor: accent + '14', color: accent }}
-            >
-              {tag}
-            </span>
-          ))}
-        </div>
-      )}
+      {/* ─── Status + category tags ─── */}
+      <div className="flex flex-wrap items-center gap-1.5 px-4 pt-2.5">
+        <StatusTag status={bot.status} />
+        {categoryLabels.map((label) => (
+          <CategoryTag key={label} label={label} accent={accent} />
+        ))}
+      </div>
 
-      {/* ─── Stats ─── */}
-      <Link to={href} className="block flex-1 px-4 pt-3 pb-3 no-underline text-inherit">
+      {/* ─── Stats + activity ─── */}
+      <div className="flex flex-1 flex-col px-4 pt-3 pb-3">
+      <Link to={href} className="block no-underline text-inherit">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
           <Stat
             icon={<MessagesSquare size={12} strokeWidth={2} />}
@@ -332,26 +355,36 @@ export function AgentCard({ bot, deleting, onDelete, canDelete = true, onShare }
             </span>
           )}
         </div>
+      </Link>
 
-        {/* activity + lead capture */}
-        {(activity || bot.leadCaptureEnabled) && (
-          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[0.6875rem] text-gray-400">
-            {activity && (
-              <span className="inline-flex items-center gap-1">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                Active {activity}
-              </span>
-            )}
+        {/* activity + lead capture + view access */}
+        {(activity || bot.leadCaptureEnabled || showViewAccessStack) && (
+          <div className="mt-2 flex items-center justify-between gap-3">
+            <Link to={href} className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1 text-[0.6875rem] text-gray-400 no-underline">
+              {activity && (
+                <span className="inline-flex items-center gap-1 text-inherit">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                  Active {activity}
+                </span>
+              )}
 
-            {bot.leadCaptureEnabled && (
-              <span className="inline-flex items-center gap-1 text-emerald-600">
-                <UserCheck size={11} strokeWidth={2} />
-                Lead capture
-              </span>
-            )}
+              {bot.leadCaptureEnabled && (
+                <span className="inline-flex items-center gap-1 text-emerald-600">
+                  <UserCheck size={11} strokeWidth={2} />
+                  Lead capture
+                </span>
+              )}
+            </Link>
+
+            {showViewAccessStack ? (
+              <AgentViewAccessAvatarGroup
+                members={bot.viewAccessPreview ?? []}
+                onAdd={() => onShare?.(bot)}
+              />
+            ) : null}
           </div>
         )}
-      </Link>
+      </div>
 
       {/* ─── Footer ─── */}
       <div className="flex items-center px-4 py-2" style={{ borderTop: '1px solid var(--border-soft)' }}>
@@ -363,8 +396,10 @@ export function AgentCard({ bot, deleting, onDelete, canDelete = true, onShare }
             </span>
           )}
         </div>
-        <CopyEmbed bot={bot} />
+        <EmbedButton onClick={() => setEmbedOpen(true)} />
       </div>
     </article>
+    <AgentEmbedModal open={embedOpen} bot={bot} onClose={() => setEmbedOpen(false)} />
+    </>
   );
 }

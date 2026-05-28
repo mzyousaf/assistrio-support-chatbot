@@ -47,6 +47,9 @@ import type {
   CreateWorkspaceInviteRequest,
   WorkspaceInviteSummary,
   WorkspaceMemberSummary,
+  SubjectBotGrantsResponse,
+  PatchWorkspaceResponse,
+  DeleteWorkspaceResponse,
   CustomerWorkspaceDocument,
   CustomerShareLinkResponse,
   CustomerShareLinkStatus,
@@ -106,6 +109,22 @@ function workspacePath(workspaceId: string): string {
 /** GET /api/customer/workspaces/:workspaceId/billing/summary */
 export function getWorkspaceBillingSummary(workspaceId: string) {
   return customerFetch<WorkspaceBillingSummary>(`${workspacePath(workspaceId)}/billing/summary`);
+}
+
+/** PATCH /api/customer/workspaces/:workspaceId */
+export function patchWorkspace(workspaceId: string, body: { name: string }) {
+  return customerFetch<PatchWorkspaceResponse>(`${workspacePath(workspaceId)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+/** DELETE /api/customer/workspaces/:workspaceId */
+export function deleteWorkspace(workspaceId: string) {
+  return customerFetch<DeleteWorkspaceResponse>(`${workspacePath(workspaceId)}`, {
+    method: 'DELETE',
+  });
 }
 
 /** GET /api/customer/workspaces/:workspaceId/members */
@@ -179,6 +198,52 @@ export function patchWorkspaceInviteRole(
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ role }),
+    },
+  );
+}
+
+/** GET /api/customer/workspaces/:workspaceId/members/:userId/bot-grants */
+export function getWorkspaceMemberBotGrants(workspaceId: string, userId: string) {
+  return customerFetch<SubjectBotGrantsResponse>(
+    `${workspacePath(workspaceId)}/members/${encodeURIComponent(userId)}/bot-grants`,
+  );
+}
+
+/** PATCH /api/customer/workspaces/:workspaceId/members/:userId/bot-grants */
+export function patchWorkspaceMemberBotGrants(
+  workspaceId: string,
+  userId: string,
+  grants: SubjectBotGrantsResponse['grants'],
+) {
+  return customerFetch<SubjectBotGrantsResponse>(
+    `${workspacePath(workspaceId)}/members/${encodeURIComponent(userId)}/bot-grants`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ grants }),
+    },
+  );
+}
+
+/** GET /api/customer/workspaces/:workspaceId/invites/:inviteId/bot-grants */
+export function getWorkspaceInviteBotGrants(workspaceId: string, inviteId: string) {
+  return customerFetch<SubjectBotGrantsResponse>(
+    `${workspacePath(workspaceId)}/invites/${encodeURIComponent(inviteId)}/bot-grants`,
+  );
+}
+
+/** PATCH /api/customer/workspaces/:workspaceId/invites/:inviteId/bot-grants */
+export function patchWorkspaceInviteBotGrants(
+  workspaceId: string,
+  inviteId: string,
+  grants: SubjectBotGrantsResponse['grants'],
+) {
+  return customerFetch<SubjectBotGrantsResponse>(
+    `${workspacePath(workspaceId)}/invites/${encodeURIComponent(inviteId)}/bot-grants`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ grants }),
     },
   );
 }

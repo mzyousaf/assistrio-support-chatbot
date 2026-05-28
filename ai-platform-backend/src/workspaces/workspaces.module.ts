@@ -18,6 +18,8 @@ import {
   WorkspaceOnboardingKnowledgeStagingSchema,
   WorkspaceBotAccessGrant,
   WorkspaceBotAccessGrantSchema,
+  Bot,
+  BotSchema,
 } from '../models';
 import { WorkspaceInviteService } from './workspace-invite.service';
 import { WorkspaceBotAccessGrantService } from './workspace-bot-access-grant.service';
@@ -40,6 +42,7 @@ import { WorkspaceOnboardingDictationService } from './workspace-onboarding-dict
       { name: WorkspaceMembership.name, schema: WorkspaceMembershipSchema },
       { name: WorkspaceInvite.name, schema: WorkspaceInviteSchema },
       { name: WorkspaceBotAccessGrant.name, schema: WorkspaceBotAccessGrantSchema },
+      { name: Bot.name, schema: BotSchema },
       { name: WorkspaceOnboardingDraft.name, schema: WorkspaceOnboardingDraftSchema },
       { name: WorkspaceOnboardingKnowledgeStaging.name, schema: WorkspaceOnboardingKnowledgeStagingSchema },
     ]),

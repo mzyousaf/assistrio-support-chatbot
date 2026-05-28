@@ -296,4 +296,68 @@ export class CustomerWorkspaceMembersController {
     await this.workspacesService.removeWorkspaceMember(workspaceId, userId, String(user._id));
     return { success: true };
   }
+
+  @Get(':workspaceId/members/:userId/bot-grants')
+  async getMemberBotGrants(
+    @Req() req: RequestWithUser,
+    @Param('workspaceId') workspaceId: string,
+    @Param('userId') userId: string,
+  ) {
+    const user = this.assertCustomer(req.user);
+    await this.workspacesService.assertWorkspaceOwner(String(user._id), workspaceId);
+    return this.workspacesService.getMemberBotGrants(workspaceId, userId);
+  }
+
+  @Patch(':workspaceId/members/:userId/bot-grants')
+  async patchMemberBotGrants(
+    @Req() req: RequestWithUser,
+    @Param('workspaceId') workspaceId: string,
+    @Param('userId') userId: string,
+    @Body() body: { grants?: Array<{ botId?: string; canView?: boolean; canPreview?: boolean }> },
+  ) {
+    const user = this.assertCustomer(req.user);
+    const grants = Array.isArray(body?.grants) ? body.grants : [];
+    return this.workspacesService.updateMemberBotGrants({
+      workspaceId,
+      userId,
+      actingUserId: String(user._id),
+      grants: grants.map((g) => ({
+        botId: String(g?.botId ?? '').trim(),
+        canView: g?.canView === true,
+        canPreview: g?.canPreview === true,
+      })),
+    });
+  }
+
+  @Get(':workspaceId/invites/:inviteId/bot-grants')
+  async getInviteBotGrants(
+    @Req() req: RequestWithUser,
+    @Param('workspaceId') workspaceId: string,
+    @Param('inviteId') inviteId: string,
+  ) {
+    const user = this.assertCustomer(req.user);
+    await this.workspacesService.assertWorkspaceOwner(String(user._id), workspaceId);
+    return this.workspacesService.getInviteBotGrants(workspaceId, inviteId);
+  }
+
+  @Patch(':workspaceId/invites/:inviteId/bot-grants')
+  async patchInviteBotGrants(
+    @Req() req: RequestWithUser,
+    @Param('workspaceId') workspaceId: string,
+    @Param('inviteId') inviteId: string,
+    @Body() body: { grants?: Array<{ botId?: string; canView?: boolean; canPreview?: boolean }> },
+  ) {
+    const user = this.assertCustomer(req.user);
+    const grants = Array.isArray(body?.grants) ? body.grants : [];
+    return this.workspacesService.updateInviteBotGrants({
+      workspaceId,
+      inviteId,
+      actingUserId: String(user._id),
+      grants: grants.map((g) => ({
+        botId: String(g?.botId ?? '').trim(),
+        canView: g?.canView === true,
+        canPreview: g?.canPreview === true,
+      })),
+    });
+  }
 }

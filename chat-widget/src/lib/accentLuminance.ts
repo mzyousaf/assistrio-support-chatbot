@@ -34,23 +34,13 @@ export function isLightAccentColor(css: string, threshold = 0.55): boolean {
   return relativeLuminance255(rgb[0], rgb[1], rgb[2]) > threshold;
 }
 
-function wcagContrastRatio(lumA: number, lumB: number): number {
-  const lighter = Math.max(lumA, lumB);
-  const darker = Math.min(lumA, lumB);
-  return (lighter + 0.05) / (darker + 0.05);
-}
-
 /**
- * Icon/text color on a solid brand-colored composer chip (send / voice).
- * Picks white vs near-black by whichever yields higher WCAG contrast vs the accent fill.
+ * Icon/text color on a solid brand-colored surface (user bubble, send/voice chip, launcher).
+ * Dark text only on genuinely light fills; saturated mid-tones (e.g. teal) keep white for consistency.
  */
-export function pickBrandChipForeground(css: string): "#ffffff" | "#111827" {
-  const rgb = parseCssRgbTriplet(css);
-  if (!rgb) return "#ffffff";
-  const Lbg = relativeLuminance255(rgb[0], rgb[1], rgb[2]);
-  const Lwhite = 1;
-  const LiconDark = relativeLuminance255(17, 24, 39);
-  const cWhite = wcagContrastRatio(Lwhite, Lbg);
-  const cDark = wcagContrastRatio(LiconDark, Lbg);
-  return cDark > cWhite ? "#111827" : "#ffffff";
+export function pickBrandChipForeground(
+  css: string,
+  lightThreshold = 0.55,
+): "#ffffff" | "#111827" {
+  return isLightAccentColor(css, lightThreshold) ? "#111827" : "#ffffff";
 }

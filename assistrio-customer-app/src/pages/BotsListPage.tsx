@@ -10,7 +10,7 @@ import { AgentsPageSkeleton } from '../components/AgentsPageSkeleton';
 import { AgentShareAccessModal } from '../components/AgentShareAccessModal';
 import { resolveActiveCustomerWorkspace } from '../lib/resolveActiveCustomerWorkspace';
 import { canManageActiveWorkspace } from '../lib/canManageActiveWorkspace';
-import { isWorkspaceOwnerRole } from '../lib/workspaceRoles';
+import { isWorkspaceManagerRole, isWorkspaceOwnerRole } from '../lib/workspaceRoles';
 import { buildCustomerBotsListQuery } from '../lib/customerBotsQuery';
 import {
   BOTS_LIST_ADMIN_ONLY_CREATE_NOTE,
@@ -27,12 +27,39 @@ import { appToast } from '../lib/app-toast';
 
 type LoadState = 'idle' | 'loading' | 'ready' | 'error';
 
+function WorkspaceAgentCountTag(props: { current: number | null; limit: number; loading?: boolean }) {
+  const { current, limit, loading = false } = props;
+
+  if (loading) {
+    return (
+      <span
+        className="inline-flex h-[22px] w-11 animate-pulse rounded-full bg-slate-200/80"
+        aria-busy="true"
+        aria-label="Loading agent count"
+      />
+    );
+  }
+
+  const label = `${current ?? 0}/${limit}`;
+
+  return (
+    <span
+      className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2.5 py-0.5 text-xs font-semibold tabular-nums text-slate-700 shadow-[var(--shadow-xs)]"
+      aria-label={`${current ?? 0} of ${limit} agents used`}
+    >
+      {label}
+    </span>
+  );
+}
+
 export function BotsListPage() {
   const navigate = useNavigate();
   const { customer, refreshOnboardingHeuristic, needsOnboarding } = useCustomerAuth();
   const { activeWorkspaceId, role, workspace } = resolveActiveCustomerWorkspace(customer);
   const isAdmin = canManageActiveWorkspace(customer);
   const isOwner = isWorkspaceOwnerRole(role);
+  const canShareAgentAccess = isOwner;
+  const showViewAccessPreview = isWorkspaceManagerRole(role);
 
   const [bots, setBots] = useState<CustomerBotListItem[] | null>(null);
   const [loadState, setLoadState] = useState<LoadState>(() => (activeWorkspaceId ? 'loading' : 'idle'));
@@ -117,10 +144,19 @@ export function BotsListPage() {
   const count = bots?.length ?? 0;
   const showSkeleton = loadState === 'loading';
   const showEmpty = loadState === 'ready' && !error && bots && count === 0;
+  const agentCount = loadState === 'ready' ? count : null;
+  const agentCountTag = (
+    <WorkspaceAgentCountTag
+      current={agentCount}
+      limit={workspace.botLimit}
+      loading={loadState === 'loading'}
+    />
+  );
 
   return (
     <DataPageLayout
       title="AI Agents"
+      titleAddon={agentCountTag}
       description={
         <>
           <p>
@@ -194,12 +230,6 @@ export function BotsListPage() {
 
       {loadState === 'ready' && bots && count > 0 && (
         <section className="mt-1" aria-label="Your agents">
-          <div className="mb-5 flex justify-end">
-            <span className="text-[0.8125rem] font-semibold tabular-nums text-slate-500">
-              {count} {count === 1 ? 'agent' : 'agents'}
-            </span>
-          </div>
-
           <ul className="m-0 grid grid-cols-1 gap-5 p-0 list-none md:grid-cols-2 2xl:grid-cols-3">
             {bots.map((bot) => (
               <li key={bot._id}>
@@ -208,7 +238,8 @@ export function BotsListPage() {
                   deleting={deletingId === bot._id}
                   onDelete={setConfirmDelete}
                   canDelete={isAdmin}
-                  onShare={isOwner ? setShareBot : undefined}
+                  onShare={canShareAgentAccess ? setShareBot : undefined}
+                  showViewAccessPreview={showViewAccessPreview}
                 />
               </li>
             ))}
@@ -224,7 +255,16 @@ export function BotsListPage() {
         />
       )}
 
-      <AgentShareAccessModal open={Boolean(shareBot)} bot={shareBot} onClose={() => setShareBot(null)} />
+      <AgentShareAccessModal
+        open={Boolean(shareBot)}
+        bot={shareBot}
+        onClose={() => setShareBot(null)}
+        onAccessUpdated={(botId, preview) => {
+          setBots((prev) =>
+            prev?.map((bot) => (bot._id === botId ? { ...bot, viewAccessPreview: preview } : bot)) ?? null,
+          );
+        }}
+      />
 
     </DataPageLayout>
   );

@@ -2149,6 +2149,35 @@ body {
   background: transparent !important;
 }
 
+/* Message list scrollbars — mirrors chat-widget/src/styles/embed.css (in-app preview). */
+.chat-ui-messages-scroll,
+[data-assistrio-msg-scroll="visible"] {
+  scrollbar-width: thin;
+  scrollbar-color: var(--chat-accent, #6366f1) transparent;
+  scrollbar-gutter: auto;
+}
+
+.chat-ui-messages-scroll::-webkit-scrollbar,
+[data-assistrio-msg-scroll="visible"]::-webkit-scrollbar {
+  width: 4px;
+}
+
+.chat-ui-messages-scroll-hidden,
+[data-assistrio-msg-scroll="hidden"] {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+  scrollbar-color: transparent transparent !important;
+  scrollbar-gutter: auto !important;
+}
+
+.chat-ui-messages-scroll-hidden::-webkit-scrollbar,
+[data-assistrio-msg-scroll="hidden"]::-webkit-scrollbar {
+  width: 0 !important;
+  height: 0 !important;
+  display: none !important;
+  background: transparent !important;
+}
+
 /* Panel + launcher shadow (chat-widget embed.css parity; preview hosts do not load assistrio-chat.css). */
 .assistrio-chat-shadow-none {
   box-shadow: none;
@@ -2447,5 +2476,36 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .chats-country-bar-fill {
     animation: none;
+  }
+}
+
+@keyframes planPriceTagIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.96);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes planPriceNoteIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .plan-price-tag-in,
+  .plan-price-note-in {
+    animation: none !important;
   }
 }

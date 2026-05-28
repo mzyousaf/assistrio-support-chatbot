@@ -10,24 +10,23 @@ export type PlanLimitRemoveBrandingPayload = {
   errorCode: typeof PLAN_LIMIT_REMOVE_BRANDING_CODE;
 };
 
-export function isBrandingHiddenInChatUi(chatUI: unknown): boolean {
+export function isAssistrioBrandingHiddenInChatUi(chatUI: unknown): boolean {
   if (!chatUI || typeof chatUI !== 'object' || Array.isArray(chatUI)) return false;
-  return (chatUI as { showBranding?: boolean }).showBranding === false;
+  const ui = chatUI as { showAssistrioBrandingPaid?: boolean };
+  return ui.showAssistrioBrandingPaid === false;
 }
 
-/** Force Assistrio branding visible when the workspace cannot remove it. */
+/** @deprecated Use {@link isAssistrioBrandingHiddenInChatUi}. Kept for tests referencing old name. */
+export const isBrandingHiddenInChatUi = isAssistrioBrandingHiddenInChatUi;
+
+/** Force "Show Assistrio branding" visible when the workspace cannot remove it. */
 export function applyBrandingEntitlementToChatUi<T extends Record<string, unknown>>(
   chatUI: T,
   canRemoveBranding: boolean,
 ): T {
   if (canRemoveBranding) return chatUI;
-  const brandingMessage =
-    typeof chatUI.brandingMessage === 'string' && chatUI.brandingMessage.trim()
-      ? chatUI.brandingMessage.trim()
-      : DEFAULT_POWERED_BY_BRANDING_MESSAGE;
   return {
     ...chatUI,
-    showBranding: true,
-    brandingMessage,
+    showAssistrioBrandingPaid: true,
   };
 }

@@ -16,7 +16,7 @@ export type ModalProps = {
   footer?: ReactNode;
   className?: string;
   /** Wider panel for forms */
-  size?: 'md' | 'lg';
+  size?: 'md' | 'lg' | 'xl';
   /** Extra classes on the fixed overlay wrapper (e.g. z-index when stacking modals). */
   overlayClassName?: string;
   /** Merged into the `<h2>` title (e.g. `text-sm` for a denser header). */
@@ -240,6 +240,7 @@ export function Modal({
           tone === 'default' && 'border-slate-200/90',
           size === 'md' && 'max-w-md',
           size === 'lg' && 'max-w-lg',
+          size === 'xl' && 'max-w-xl',
           className,
         )}
       >

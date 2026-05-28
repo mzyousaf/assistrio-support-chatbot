@@ -27,7 +27,7 @@ import { parseBotLifecycleActionBody } from './shared/bot-lifecycle-action.dto';
 import { publicApiBaseUrlFromRequest } from './shared/public-api-url.util';
 import { WorkspaceBotsControllerBase } from './shared/workspace-bots.controller.base';
 
-import { isWorkspaceOwnerRole } from '../models/workspace-membership-role.util';
+import { isWorkspaceManagerRole, isWorkspaceOwnerRole } from '../models/workspace-membership-role.util';
 import { BotKnowledgeTotalLimitService } from '../knowledge/bot-knowledge-total-limit.service';
 import { TableImportService } from '../ingestion/table-import.service';
 
@@ -137,8 +137,17 @@ export class CustomerBotsController extends WorkspaceBotsControllerBase {
     const statsMap = await this.botsService.getListStatsForBots(botIds);
     const workspaceName = await this.workspacesService.getWorkspaceDisplayName(workspaceId);
 
+    let viewAccessPreviewByBotId: Record<string, import('../workspaces/workspace-bot-access-grant.util').BotViewAccessPreviewMember[]> | undefined;
+    if (memberRole != null && isWorkspaceManagerRole(memberRole) && botIds.length > 0) {
+      viewAccessPreviewByBotId = await this.workspacesService.buildBotViewAccessPreviewByBotIds(
+        workspaceId,
+        botIds,
+      );
+    }
+
     return this.mapBotRecordsToListResponse(bots as Record<string, unknown>[], statsMap, {
       workspaceName: workspaceName ?? undefined,
+      viewAccessPreviewByBotId,
     });
   }
 

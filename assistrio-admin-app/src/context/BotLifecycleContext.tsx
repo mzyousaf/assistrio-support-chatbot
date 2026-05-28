@@ -1,8 +1,13 @@
 import { createContext, useContext, type ReactNode } from 'react';
 
+export type BotLifecycleAction = 'publish' | 'draft';
+
 export type BotLifecycleControls = {
   openPublish: () => void;
   openDraft: () => void;
+  busy: boolean;
+  action: BotLifecycleAction | null;
+  optimisticStatus: 'draft' | 'published' | null;
 };
 
 const BotLifecycleContext = createContext<BotLifecycleControls | null>(null);

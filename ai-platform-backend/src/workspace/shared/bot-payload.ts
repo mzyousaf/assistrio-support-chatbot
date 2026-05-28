@@ -472,6 +472,12 @@ function normalizeScrollToBottomChromeStyleInput(input: Record<string, unknown>)
   return normalizeScrollChromeStyleInput(input);
 }
 
+function normalizeScrollToBottomAlignInput(input: Record<string, unknown>): 'left' | 'center' | 'right' {
+  const s = input.scrollToBottomAlign;
+  if (s === 'left' || s === 'right') return s;
+  return 'center';
+}
+
 /** Shared chatUI normalizer (full object) for finalize-draft and PATCH when `chatUI` is present. */
 export function buildNormalizedChatUI(chatUIInput: Record<string, unknown>): BotChatUI {
   const bubbleRadius =
@@ -530,6 +536,7 @@ export function buildNormalizedChatUI(chatUIInput: Record<string, unknown>): Bot
           : 'slide-up-fade',
     openChatOnLoad: chatUIInput.openChatOnLoad !== false,
     showBranding: chatUIInput.showBranding !== false,
+    showAssistrioBrandingPaid: chatUIInput.showAssistrioBrandingPaid !== false,
     brandingMessage: clampStr(
       typeof chatUIInput.brandingMessage === 'string' ? chatUIInput.brandingMessage.trim() : '',
       BOT_FIELD_MAX.brandingMessage,
@@ -551,6 +558,7 @@ export function buildNormalizedChatUI(chatUIInput: Record<string, unknown>): Bot
     showScrollbar: chatUIInput.showScrollbar !== false,
     scrollChromeStyle: normalizeScrollChromeStyleInput(chatUIInput),
     scrollToBottomChromeStyle: normalizeScrollToBottomChromeStyleInput(chatUIInput),
+    scrollToBottomAlign: normalizeScrollToBottomAlignInput(chatUIInput),
     composerAsSeparateBox: chatUIInput.composerAsSeparateBox !== false,
     composerBorderWidth:
       typeof chatUIInput.composerBorderWidth === 'number' &&

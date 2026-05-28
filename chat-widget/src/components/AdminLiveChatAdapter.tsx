@@ -104,6 +104,12 @@ function resolveScrollToBottomChromeStyle(chatUI: BotChatUI | undefined | null):
   return resolveScrollChromeStyle(chatUI);
 }
 
+function resolveScrollToBottomAlign(chatUI: BotChatUI | undefined | null): "left" | "center" | "right" {
+  const s = chatUI?.scrollToBottomAlign;
+  if (s === "left" || s === "right") return s;
+  return "center";
+}
+
 const SUBTITLE_MAX_LENGTH = 80;
 
 interface SuperAdminChatDebug {
@@ -1561,6 +1567,7 @@ export function AdminLiveChatAdapter({
     showHeader: true,
     showAvatarInHeader: chatUI?.showAvatarInHeader !== false,
     showFooter: showFooterResolved,
+    showAssistrioBrandingPaid: chatUI?.showAssistrioBrandingPaid !== false,
     brandingMessage: brandingMessageResolved,
     privacyText: privacyTextResolved,
     statusIndicator: chatUI?.statusIndicator ?? "none",
@@ -1572,6 +1579,7 @@ export function AdminLiveChatAdapter({
     showScrollbar: chatUI?.showScrollbar !== false,
     scrollChromeStyle: resolveScrollChromeStyle(chatUI),
     scrollToBottomChromeStyle: resolveScrollToBottomChromeStyle(chatUI),
+    scrollToBottomAlign: resolveScrollToBottomAlign(chatUI),
     userTextBubbleStyle: mapUserBubbleStyle(chatUI?.userTextBubbleStyle),
     userVoiceBubbleStyle: mapUserBubbleStyle(chatUI?.userVoiceBubbleStyle),
     messageListOverflow: "auto" as const,

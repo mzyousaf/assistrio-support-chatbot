@@ -72,12 +72,43 @@ export function toastPlaygroundValidationWarning(title: string, description: str
   appToast.warning(title, { description });
 }
 
+export function toastPlaygroundDeployOriginsSaved(): void {
+  appToast.success('Allowed websites updated', {
+    description: 'Your allowed website list is saved.',
+  });
+}
+
 export function toastPlaygroundDeployOriginsSaveFailed(apiDetail?: string): void {
   const detail = apiDetail?.trim();
   appToast.error('Allowed websites could not be updated', {
     description:
       detail ||
       'Check your connection and try again. If the problem continues, contact support.',
+  });
+}
+
+export function toastPlaygroundAgentWentLive(): void {
+  appToast.success('Agent is live', {
+    description: 'Your agent is published on your allowed websites.',
+  });
+}
+
+export function toastPlaygroundAgentMovedToDraft(): void {
+  appToast.info('Agent moved to draft', {
+    description: 'The embed is no longer live on your allowed websites until you publish again.',
+  });
+}
+
+export function toastPlaygroundAgentAutoDraftedNoOrigins(): void {
+  appToast.info('Agent moved to draft', {
+    description: 'No allowed websites remain. Add a website and go live again when you are ready.',
+  });
+}
+
+export function toastPlaygroundAgentLifecycleFailed(action: 'publish' | 'draft', apiDetail?: string): void {
+  const detail = apiDetail?.trim();
+  appToast.error(action === 'publish' ? 'Could not go live' : 'Could not move to draft', {
+    description: detail || 'Please try again in a moment.',
   });
 }
 

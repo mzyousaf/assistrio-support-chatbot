@@ -9,6 +9,9 @@ function DeployLifecycleBridge({ children }: { children: ReactNode }) {
     () => ({
       openPublish: () => publish.setStatus('published'),
       openDraft: () => publish.setStatus('draft'),
+      busy: false,
+      action: null,
+      optimisticStatus: null,
     }),
     [publish],
   );

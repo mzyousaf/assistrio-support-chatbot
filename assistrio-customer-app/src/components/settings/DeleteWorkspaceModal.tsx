@@ -1,33 +1,42 @@
 import { useEffect, useId, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { Button, Input, Label, Modal } from '@/components/ui';
-import { appToast } from '@/lib/app-toast';
 
 type Props = {
   open: boolean;
   onClose: () => void;
   workspaceName: string;
+  onDelete: () => void | Promise<void>;
 };
 
-export function DeleteWorkspaceModal({ open, onClose, workspaceName }: Props) {
+export function DeleteWorkspaceModal({ open, onClose, workspaceName, onDelete }: Props) {
   const inputId = useId();
   const [confirmText, setConfirmText] = useState('');
+  const [busy, setBusy] = useState(false);
   const trimmedName = workspaceName.trim();
   const canDelete = confirmText.trim() === trimmedName && trimmedName.length > 0;
 
   useEffect(() => {
-    if (!open) setConfirmText('');
+    if (!open) {
+      setConfirmText('');
+      setBusy(false);
+    }
   }, [open]);
 
   function handleClose() {
+    if (busy) return;
     setConfirmText('');
     onClose();
   }
 
-  function handleDelete() {
-    if (!canDelete) return;
-    appToast.info('Workspace deletion is not available yet.');
-    handleClose();
+  async function handleDelete() {
+    if (!canDelete || busy) return;
+    setBusy(true);
+    try {
+      await onDelete();
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -38,11 +47,17 @@ export function DeleteWorkspaceModal({ open, onClose, workspaceName }: Props) {
       tone="danger"
       footer={
         <>
-          <Button type="button" variant="secondary" size="sm" onClick={handleClose}>
+          <Button type="button" variant="secondary" size="sm" onClick={handleClose} disabled={busy}>
             Cancel
           </Button>
-          <Button type="button" variant="danger" size="sm" disabled={!canDelete} onClick={handleDelete}>
-            Delete workspace
+          <Button
+            type="button"
+            variant="danger"
+            size="sm"
+            disabled={!canDelete || busy}
+            onClick={() => void handleDelete()}
+          >
+            {busy ? 'Deleting…' : 'Delete workspace'}
           </Button>
         </>
       }
@@ -75,6 +90,7 @@ export function DeleteWorkspaceModal({ open, onClose, workspaceName }: Props) {
             quiet
             autoComplete="off"
             spellCheck={false}
+            disabled={busy}
           />
           <p className="m-0 text-xs leading-relaxed text-slate-500">
             Enter <span className="font-medium text-slate-700">{trimmedName || 'the workspace name'}</span>{' '}

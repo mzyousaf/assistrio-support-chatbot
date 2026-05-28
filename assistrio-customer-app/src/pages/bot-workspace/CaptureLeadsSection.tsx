@@ -275,7 +275,7 @@ export function CaptureLeadsSection() {
         }}
         aria-label="Lead capture settings"
       >
-        <div className={cn('w-full min-w-0 flex-1', ws.workspaceEditorCardGap)}>
+        <div className={cn('w-full min-w-0 flex-1 pb-10', ws.workspaceEditorCardGap)}>
           <header className={ws.workspaceEditorPageHeader}>
             <div className={ws.workspaceEditorTitleBlock}>
               <div className={ws.workspaceEditorHeadingStack}>

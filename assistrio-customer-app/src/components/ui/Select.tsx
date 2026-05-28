@@ -28,6 +28,10 @@ export type SelectProps = Omit<SelectHTMLAttributes<HTMLSelectElement>, 'size'> 
   triggerClassName?: string;
   /** Applied to the portaled listbox menu. */
   menuClassName?: string;
+  /** `tag` shows the selected value as a pill badge (compact tables, role pickers). */
+  triggerVariant?: 'default' | 'tag';
+  /** Badge classes per option value when `triggerVariant` is `tag`. */
+  tagClassNameForValue?: (value: string) => string;
 };
 
 type OptionRow = { value: string; label: string; disabled?: boolean; sectionLabel?: string };
@@ -127,6 +131,22 @@ const listboxVisual = cn(
   'ring-1 ring-slate-900/[0.05]',
 );
 
+const tagPillBase =
+  'inline-flex items-center gap-0.5 rounded-full py-0.5 pl-2 pr-1.5 text-[11px] font-medium leading-none';
+
+const tagTriggerBase = cn(
+  'inline-flex w-auto max-w-full items-center gap-1 rounded-md border-0 bg-transparent p-0',
+  'font-normal text-slate-900 antialiased shadow-none',
+  'cursor-pointer transition-opacity duration-150 ease-out',
+  'focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-900/10 focus-visible:ring-offset-1',
+  'disabled:cursor-not-allowed disabled:opacity-50',
+);
+
+const tagOptionButtonClass = cn(
+  'flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors duration-100',
+  'hover:bg-slate-50 focus:bg-slate-50 focus:outline-none',
+);
+
 type MenuRect = { left: number; width: number; maxHeight: number } & (
   | { top: number; bottom?: undefined }
   | { bottom: number; top?: undefined }
@@ -172,6 +192,8 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(function Select
     selectSize = 'lg',
     triggerClassName,
     menuClassName,
+    triggerVariant = 'default',
+    tagClassNameForValue,
     disabled,
     children,
     value,
@@ -251,6 +273,8 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(function Select
     }
   };
 
+  const isTagTrigger = triggerVariant === 'tag';
+
   const listContent =
     open && menuRect ? (
       <ul
@@ -258,19 +282,20 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(function Select
         id={listId}
         role="listbox"
         data-ui-select-menu
-        className={cn(listboxVisual, menuClassName)}
+        className={cn(listboxVisual, isTagTrigger && 'min-w-[7rem]', menuClassName)}
         tabIndex={-1}
         style={{
           position: 'fixed',
           ...(menuRect.bottom != null ? { bottom: menuRect.bottom } : { top: menuRect.top }),
           left: menuRect.left,
-          width: menuRect.width,
+          width: isTagTrigger ? Math.max(menuRect.width, 112) : menuRect.width,
           maxHeight: menuRect.maxHeight,
           zIndex: 1100,
         }}
       >
         {opts.map((o, idx) => {
           const isSelected = o.value === current;
+          const tagClass = isTagTrigger ? tagClassNameForValue?.(o.value) : undefined;
           return (
           <Fragment key={o.value}>
             {o.sectionLabel ? (
@@ -291,11 +316,13 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(function Select
                 aria-selected={isSelected}
                 disabled={o.disabled}
                 className={cn(
-                  optionButtonClass[selectSize],
-                  'transition-colors duration-100',
-                  'hover:bg-slate-50 focus:bg-slate-50 focus:outline-none',
-                  isSelected &&
+                  isTagTrigger ? tagOptionButtonClass : optionButtonClass[selectSize],
+                  !isTagTrigger && 'transition-colors duration-100',
+                  !isTagTrigger && 'hover:bg-slate-50 focus:bg-slate-50 focus:outline-none',
+                  !isTagTrigger &&
+                    isSelected &&
                     'bg-[var(--teal-50)] text-[var(--color-teal-800)] hover:bg-[color-mix(in_srgb,var(--teal-50)_92%,var(--color-teal-600)_8%)]',
+                  isTagTrigger && isSelected && 'bg-slate-50',
                   o.disabled && 'cursor-not-allowed opacity-45 hover:bg-transparent',
                 )}
                 onClick={() => {
@@ -304,15 +331,23 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(function Select
                   setOpen(false);
                 }}
               >
-                <span
-                  className={cn(optionCheckWrapClass[selectSize], !isSelected && 'opacity-0')}
-                  aria-hidden
-                >
-                  {isSelected ? (
-                    <Check className={optionCheckIconClass[selectSize]} strokeWidth={2.5} />
-                  ) : null}
-                </span>
-                <span className="min-w-0 flex-1">{o.label}</span>
+                {!isTagTrigger ? (
+                  <span
+                    className={cn(optionCheckWrapClass[selectSize], !isSelected && 'opacity-0')}
+                    aria-hidden
+                  >
+                    {isSelected ? (
+                      <Check className={optionCheckIconClass[selectSize]} strokeWidth={2.5} />
+                    ) : null}
+                  </span>
+                ) : null}
+                {isTagTrigger ? (
+                  <span className={cn(tagPillBase, tagClass ?? 'bg-slate-100 text-slate-700 ring-1 ring-slate-200/80')}>
+                    {o.label}
+                  </span>
+                ) : (
+                  <span className="min-w-0 flex-1">{o.label}</span>
+                )}
               </button>
             </li>
           </Fragment>
@@ -321,8 +356,13 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(function Select
       </ul>
     ) : null;
 
+  const currentTagClass = isTagTrigger ? tagClassNameForValue?.(current) : undefined;
+
   return (
-    <div ref={containerRef} className={cn('relative w-full min-w-0', className)}>
+    <div
+      ref={containerRef}
+      className={cn(isTagTrigger ? 'relative inline-flex min-w-0' : 'relative w-full min-w-0', className)}
+    >
       {name ? <input type="hidden" name={name} value={current} readOnly /> : null}
       <button
         type="button"
@@ -336,26 +376,48 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(function Select
         aria-required={required || undefined}
         aria-label={ariaLabel}
         className={cn(
-          triggerBase,
-          triggerSizeClass[selectSize],
-          invalid
-            ? 'border-[var(--color-danger-border)] focus-visible:border-[var(--color-danger-text-emphasis)] focus-visible:ring-red-900/10'
-            : 'border-[var(--ui-border)] hover:enabled:border-[var(--ui-border-hover)] hover:enabled:bg-white',
+          isTagTrigger ? tagTriggerBase : triggerBase,
+          !isTagTrigger && triggerSizeClass[selectSize],
+          !isTagTrigger &&
+            (invalid
+              ? 'border-[var(--color-danger-border)] focus-visible:border-[var(--color-danger-text-emphasis)] focus-visible:ring-red-900/10'
+              : 'border-[var(--ui-border)] hover:enabled:border-[var(--ui-border-hover)] hover:enabled:bg-white'),
           triggerClassName,
         )}
         onClick={() => !disabled && setOpen((o) => !o)}
         onKeyDown={onTriggerKeyDown}
       >
-        <span className="min-w-0 flex-1 truncate text-left">{displayLabel}</span>
-        <ChevronDown
-          strokeWidth={2}
-          className={cn(
-            chevronSizeClass[selectSize],
-            'shrink-0 text-slate-400 transition-transform duration-200',
-            open && 'rotate-180',
-          )}
-          aria-hidden
-        />
+        {isTagTrigger ? (
+          <span
+            className={cn(
+              tagPillBase,
+              currentTagClass ?? 'bg-slate-100 text-slate-700 ring-1 ring-slate-200/80',
+            )}
+          >
+            {displayLabel}
+            <ChevronDown
+              strokeWidth={2}
+              className={cn(
+                'h-3 w-3 shrink-0 opacity-70 transition-transform duration-200',
+                open && 'rotate-180',
+              )}
+              aria-hidden
+            />
+          </span>
+        ) : (
+          <>
+            <span className="min-w-0 flex-1 truncate text-left">{displayLabel}</span>
+            <ChevronDown
+              strokeWidth={2}
+              className={cn(
+                chevronSizeClass[selectSize],
+                'shrink-0 text-slate-400 transition-transform duration-200',
+                open && 'rotate-180',
+              )}
+              aria-hidden
+            />
+          </>
+        )}
       </button>
 
       {typeof document !== 'undefined' && listContent ? createPortal(listContent, document.body) : null}

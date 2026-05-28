@@ -3,11 +3,13 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import {
   User,
+  Bot,
   WorkspaceBotAccessGrant,
   WorkspaceInvite,
   WorkspaceMembership,
   type WorkspaceMemberRole,
 } from '../models';
+import { botNotDeletedClause } from '../bots/bot-not-deleted.util';
 import type { WorkspaceInviteStatus } from '../models/workspace-invite.constants';
 import { isWorkspaceOwnerRole } from '../models/workspace-membership-role.util';
 import {
@@ -17,10 +19,32 @@ import {
 import {
   BotAccessGrantInput,
   BotAccessGrantRow,
+  BotViewAccessPreviewMember,
   normalizeGrantFlags,
   oidString,
 } from './workspace-bot-access-grant.util';
+import {
+  resolveWorkspaceMemberAvatarUrl,
+  resolveWorkspaceMemberDisplayName,
+} from './workspace-member-display.util';
+import {
+  filterCustomerVisibleInvites,
+  getCustomerInviteRowStatus,
+  normalizeWorkspacePersonEmail,
+} from './workspace-invite-visibility.util';
 import type { WorkspaceDefaultBotAccessPolicy } from './workspace-default-bot-access-policy.util';
+
+export type SubjectBotGrantItem = {
+  botId: string;
+  botName: string;
+  canView: boolean;
+  canPreview: boolean;
+};
+
+export type SubjectBotGrantsResponse = {
+  grants: SubjectBotGrantItem[];
+  botAccessSummary: { viewable: number; previewable: number };
+};
 
 type GrantDoc = {
   _id: Types.ObjectId;
@@ -39,6 +63,7 @@ export class WorkspaceBotAccessGrantService {
   constructor(
     @InjectModel(WorkspaceBotAccessGrant.name)
     private readonly grantModel: Model<WorkspaceBotAccessGrant>,
+    @InjectModel(Bot.name) private readonly botModel: Model<Bot>,
     @InjectModel(WorkspaceMembership.name)
     private readonly membershipModel: Model<WorkspaceMembership>,
     @InjectModel(WorkspaceInvite.name) private readonly inviteModel: Model<WorkspaceInvite>,
@@ -84,8 +109,9 @@ export class WorkspaceBotAccessGrantService {
       return { canView: true, canPreview: true };
     }
     const botId = oidString(bot._id);
-    const explicit = await this.botHasExplicitUserGrants(botId);
-    if (explicit) {
+    const ws = bot.workspaceId;
+    const isWorkspaceBot = ws != null && String(ws).length > 0;
+    if (isWorkspaceBot) {
       const grant = await this.findUserGrant(botId, userId);
       return grant ?? { canView: false, canPreview: false };
     }
@@ -136,13 +162,29 @@ export class WorkspaceBotAccessGrantService {
 
     const userIds = (memberships as { userId: Types.ObjectId }[]).map((m) => m.userId);
     const users = userIds.length
-      ? await this.userModel.find({ _id: { $in: userIds } }).select('email firstName lastName').lean()
+      ? await this.userModel
+          .find({ _id: { $in: userIds } })
+          .select('email firstName lastName picture displayNameOverride pictureOverride')
+          .lean()
       : [];
     const userById = new Map(
-      (users as { _id: Types.ObjectId; email?: string; firstName?: string; lastName?: string }[]).map((u) => [
-        String(u._id),
-        u,
-      ]),
+      (users as {
+        _id: Types.ObjectId;
+        email?: string;
+        firstName?: string;
+        lastName?: string;
+        picture?: string | null;
+        displayNameOverride?: string | null;
+        pictureOverride?: string | null;
+      }[]).map((u) => [String(u._id), u]),
+    );
+
+    const memberEmails = (memberships as { userId: Types.ObjectId }[]).map((membership) =>
+      normalizeWorkspacePersonEmail(String(userById.get(String(membership.userId))?.email ?? '')),
+    );
+    const visibleInvites = filterCustomerVisibleInvites(
+      invites as { email: string; status: WorkspaceInviteStatus; expiresAt: Date }[],
+      memberEmails,
     );
 
     const grantByUserId = new Map<string, GrantDoc>();
@@ -157,14 +199,20 @@ export class WorkspaceBotAccessGrantService {
     for (const m of memberships as { userId: Types.ObjectId; role: WorkspaceMemberRole }[]) {
       const uid = String(m.userId);
       const user = userById.get(uid);
-      const name = [user?.firstName, user?.lastName].filter(Boolean).join(' ').trim();
+      const displayName = user
+        ? resolveWorkspaceMemberDisplayName(user)
+        : '';
       const grant = grantByUserId.get(uid);
       const isOwner = isWorkspaceOwnerRole(m.role);
       rows.push({
         subjectType: 'user',
         userId: uid,
         email: String(user?.email ?? '').trim(),
-        displayName: name || String(user?.email ?? '').trim(),
+        displayName: displayName || String(user?.email ?? '').trim(),
+        firstName: user?.firstName ?? null,
+        lastName: user?.lastName ?? null,
+        avatarUrl: user ? resolveWorkspaceMemberAvatarUrl(user) : null,
+        picture: user?.picture ?? null,
         status: 'active',
         role: m.role,
         canView: isOwner ? true : grant?.canView === true,
@@ -173,21 +221,17 @@ export class WorkspaceBotAccessGrantService {
       });
     }
 
-    for (const inv of invites as {
+    for (const inv of visibleInvites as {
       _id: Types.ObjectId;
       email: string;
       role: 'admin' | 'member';
       status: WorkspaceInviteStatus;
+      expiresAt: Date;
     }[]) {
-      if (inv.status === 'accepted') continue;
       const inviteId = String(inv._id);
       const grant = grantByInviteId.get(inviteId);
-      const status =
-        inv.status === 'pending'
-          ? ('pending_invite' as const)
-          : inv.status === 'expired'
-            ? ('expired' as const)
-            : ('cancelled' as const);
+      const rowStatus = getCustomerInviteRowStatus(inv);
+      const status = rowStatus === 'expired' ? ('expired' as const) : ('pending_invite' as const);
       rows.push({
         subjectType: 'invite',
         inviteId,
@@ -205,6 +249,114 @@ export class WorkspaceBotAccessGrantService {
       if (a.locked !== b.locked) return a.locked ? -1 : 1;
       return a.displayName.localeCompare(b.displayName, undefined, { sensitivity: 'base' });
     });
+  }
+
+  async buildViewAccessPreviewByBotIds(
+    workspaceId: string,
+    botIds: string[],
+  ): Promise<Record<string, BotViewAccessPreviewMember[]>> {
+    if (!Types.ObjectId.isValid(workspaceId)) return {};
+    const validBotIds = [...new Set(botIds.map((id) => String(id).trim()).filter((id) => Types.ObjectId.isValid(id)))];
+    if (!validBotIds.length) return {};
+
+    const wsOid = new Types.ObjectId(workspaceId);
+    const botOids = validBotIds.map((id) => new Types.ObjectId(id));
+
+    type GrantDoc = {
+      botId: Types.ObjectId;
+      subjectType: 'user' | 'invite';
+      userId?: Types.ObjectId;
+      inviteId?: Types.ObjectId;
+      canView?: boolean;
+    };
+
+    const [memberships, invites, grants] = await Promise.all([
+      this.membershipModel.find({ workspaceId: wsOid }).lean(),
+      this.inviteModel.find({ workspaceId: wsOid }).sort({ createdAt: -1 }).lean(),
+      this.grantModel.find({ workspaceId: wsOid, botId: { $in: botOids }, canView: true }).lean(),
+    ]);
+
+    const userIds = (memberships as { userId: Types.ObjectId }[]).map((m) => m.userId);
+    const users = userIds.length
+      ? await this.userModel
+          .find({ _id: { $in: userIds } })
+          .select('email firstName lastName picture displayNameOverride pictureOverride')
+          .lean()
+      : [];
+    const userById = new Map(
+      (users as {
+        _id: Types.ObjectId;
+        email?: string;
+        firstName?: string | null;
+        lastName?: string | null;
+        picture?: string | null;
+        displayNameOverride?: string | null;
+        pictureOverride?: string | null;
+      }[]).map((u) => [String(u._id), u]),
+    );
+
+    const memberEmails = (memberships as { userId: Types.ObjectId }[]).map((membership) =>
+      normalizeWorkspacePersonEmail(String(userById.get(String(membership.userId))?.email ?? '')),
+    );
+    const visibleInvites = filterCustomerVisibleInvites(
+      invites as { _id: Types.ObjectId; email: string; status: WorkspaceInviteStatus; expiresAt: Date }[],
+      memberEmails,
+    );
+
+    const grantByBotUserId = new Map<string, GrantDoc>();
+    const grantByBotInviteId = new Map<string, GrantDoc>();
+    for (const grant of grants as GrantDoc[]) {
+      const botKey = String(grant.botId);
+      if (grant.subjectType === 'user' && grant.userId) {
+        grantByBotUserId.set(`${botKey}:${String(grant.userId)}`, grant);
+      }
+      if (grant.subjectType === 'invite' && grant.inviteId) {
+        grantByBotInviteId.set(`${botKey}:${String(grant.inviteId)}`, grant);
+      }
+    }
+
+    const out: Record<string, BotViewAccessPreviewMember[]> = {};
+    for (const botId of validBotIds) {
+      const preview: BotViewAccessPreviewMember[] = [];
+
+      for (const membership of memberships as { userId: Types.ObjectId; role: WorkspaceMemberRole }[]) {
+        if (isWorkspaceOwnerRole(membership.role)) continue;
+        const uid = String(membership.userId);
+        if (!grantByBotUserId.has(`${botId}:${uid}`)) continue;
+        const user = userById.get(uid);
+        const email = String(user?.email ?? '').trim();
+        if (!email) continue;
+        const displayName = user ? resolveWorkspaceMemberDisplayName(user) : email;
+        preview.push({
+          email,
+          displayName: displayName || email,
+          firstName: user?.firstName ?? null,
+          lastName: user?.lastName ?? null,
+          avatarUrl: user ? resolveWorkspaceMemberAvatarUrl(user) : null,
+          picture: user?.picture ?? null,
+        });
+      }
+
+      for (const invite of visibleInvites as { _id: Types.ObjectId; email: string }[]) {
+        const inviteId = String(invite._id);
+        if (!grantByBotInviteId.has(`${botId}:${inviteId}`)) continue;
+        const email = String(invite.email ?? '').trim();
+        if (!email) continue;
+        preview.push({
+          email,
+          displayName: email,
+          firstName: null,
+          lastName: null,
+          avatarUrl: null,
+          picture: null,
+        });
+      }
+
+      preview.sort((a, b) => a.displayName.localeCompare(b.displayName, undefined, { sensitivity: 'base' }));
+      out[botId] = preview;
+    }
+
+    return out;
   }
 
   async applyDefaultAccessGrantsForNewBot(params: {
@@ -434,5 +586,111 @@ export class WorkspaceBotAccessGrantService {
       viewable: grants.filter((g) => g.canView === true).length,
       previewable: grants.filter((g) => g.canPreview === true && g.canView === true).length,
     };
+  }
+
+  private summarizeGrantItems(grants: SubjectBotGrantItem[]): { viewable: number; previewable: number } {
+    return {
+      viewable: grants.filter((g) => g.canView).length,
+      previewable: grants.filter((g) => g.canPreview && g.canView).length,
+    };
+  }
+
+  private async loadWorkspaceBots(workspaceId: string): Promise<Array<{ _id: Types.ObjectId; name?: string }>> {
+    if (!Types.ObjectId.isValid(workspaceId)) return [];
+    return (await this.botModel
+      .find({
+        $and: [{ workspaceId: new Types.ObjectId(workspaceId) }, botNotDeletedClause()],
+      })
+      .select('name')
+      .sort({ createdAt: -1 })
+      .lean()) as Array<{ _id: Types.ObjectId; name?: string }>;
+  }
+
+  async listSubjectBotGrants(params: {
+    workspaceId: string;
+    subjectType: 'user' | 'invite';
+    userId?: string;
+    inviteId?: string;
+  }): Promise<SubjectBotGrantsResponse> {
+    const { workspaceId, subjectType } = params;
+    if (!Types.ObjectId.isValid(workspaceId)) {
+      throw new BadRequestException({ message: 'Invalid workspace id.' });
+    }
+
+    const wsOid = new Types.ObjectId(workspaceId);
+    const bots = await this.loadWorkspaceBots(workspaceId);
+
+    const grantFilter: Record<string, unknown> = { workspaceId: wsOid, subjectType };
+    if (subjectType === 'user') {
+      const userId = String(params.userId ?? '').trim();
+      if (!Types.ObjectId.isValid(userId)) {
+        throw new BadRequestException({ message: 'Invalid user id.' });
+      }
+      grantFilter.userId = new Types.ObjectId(userId);
+    } else {
+      const inviteId = String(params.inviteId ?? '').trim();
+      if (!Types.ObjectId.isValid(inviteId)) {
+        throw new BadRequestException({ message: 'Invalid invite id.' });
+      }
+      grantFilter.inviteId = new Types.ObjectId(inviteId);
+    }
+
+    const grants = (await this.grantModel.find(grantFilter).lean()) as GrantDoc[];
+    const grantByBotId = new Map(grants.map((g) => [String(g.botId), g]));
+
+    const items: SubjectBotGrantItem[] = bots.map((bot) => {
+      const botId = String(bot._id);
+      const grant = grantByBotId.get(botId);
+      const flags = normalizeGrantFlags(grant?.canView, grant?.canPreview);
+      return {
+        botId,
+        botName: String(bot.name ?? '').trim() || 'Agent',
+        canView: flags.canView,
+        canPreview: flags.canPreview,
+      };
+    });
+
+    return {
+      grants: items,
+      botAccessSummary: this.summarizeGrantItems(items),
+    };
+  }
+
+  async updateSubjectBotGrants(params: {
+    workspaceId: string;
+    createdByUserId: string;
+    subjectType: 'user' | 'invite';
+    userId?: string;
+    inviteId?: string;
+    grants: Array<{ botId: string; canView: boolean; canPreview: boolean }>;
+  }): Promise<SubjectBotGrantsResponse> {
+    const { workspaceId, createdByUserId, subjectType, grants } = params;
+    for (const item of grants) {
+      const botId = String(item.botId ?? '').trim();
+      if (!botId) continue;
+      const patch: BotAccessGrantInput = {
+        subjectType,
+        canView: item.canView === true,
+        canPreview: item.canPreview === true,
+      };
+      if (subjectType === 'user') {
+        patch.userId = String(params.userId ?? '').trim();
+      } else {
+        patch.inviteId = String(params.inviteId ?? '').trim();
+      }
+      await this.upsertGrantsForBot({
+        workspaceId,
+        botId,
+        createdByUserId,
+        grants: [patch],
+      });
+    }
+
+    return this.listSubjectBotGrants({
+      workspaceId,
+      subjectType,
+      userId: params.userId,
+      inviteId: params.inviteId,
+    });
   }
 }

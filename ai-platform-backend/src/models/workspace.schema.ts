@@ -38,6 +38,10 @@ export class Workspace {
   @Prop({ type: Date, required: false })
   onboardingCompletedAt?: Date;
 
+  /** When set, workspace is soft-deleted and hidden from customer session lists. */
+  @Prop({ type: Date, required: false })
+  deletedAt?: Date;
+
   /** Default per-person bot grants applied when a new agent is created in this workspace. */
   @Prop({
     type: {

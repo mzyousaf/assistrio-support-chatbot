@@ -6,7 +6,9 @@ import {
   Eye,
   EyeOff,
   Globe,
+  Loader2,
   Lock,
+  Info,
   Pencil,
   PencilLine,
   Plus,
@@ -20,8 +22,19 @@ import { normalizeCustomerEmbedOrigin } from '@/lib/embedOrigin';
 import { cn } from '@/lib/utils';
 import { FeStackTags } from './FeStackTags';
 import { getInstallSetupGuide } from './installSetupGuide';
+import {
+  getInstallSnippetCopiedToastMessage,
+  getInstallSnippetCopyButtonLabel,
+  getInstallSnippetUpdateNotice,
+} from './installSnippetUpdateNotice';
+import { VISIBILITY_CHOICE_OPTIONS, VISIBILITY_CHOICE_SUBTITLE } from './visibilityChoiceCopy';
+import { appToast } from '@/lib/app-toast';
 import { MAX_ALLOWED_ORIGINS } from './publishConstants';
-import { usePublishWorkspace, type EmbedInstallMode, type EmbedVisibility } from './PublishWorkspaceContext';
+import {
+  wouldLoseAllActiveOriginsAfterRemove,
+  wouldLoseAllActiveOriginsAfterUpdate,
+} from './publishOriginHelpers';
+import { usePublishWorkspace, type EmbedInstallMode } from './PublishWorkspaceContext';
 import { useBotWorkspace } from './BotWorkspaceContext';
 import { WorkspaceSectionHeader } from './WorkspaceSectionHeader';
 import { ws } from './workspace';
@@ -47,9 +60,34 @@ type ChoiceCardProps<T extends string> = {
   value: T;
   options: { value: T; label: string; hint: string; disabled?: boolean }[];
   onChange: (next: T) => void;
+  savingTarget?: T | null;
 };
 
-function ChoiceCardGroup<T extends string>({ name, subtitle, value, options, onChange }: ChoiceCardProps<T>) {
+function ChoiceCardOptionSavingOverlay() {
+  return (
+    <div
+      className="absolute inset-0 z-[2] rounded-lg"
+      aria-busy="true"
+      aria-live="polite"
+      aria-label="Saving visibility"
+    >
+      <div className="absolute inset-0 rounded-lg bg-white/[0.72] backdrop-blur-[2px] backdrop-saturate-[1.05]" aria-hidden />
+      <div className="relative z-[1] flex h-full min-h-[4.5rem] items-center justify-center">
+        <Loader2 className="h-5 w-5 animate-spin text-[var(--color-teal-600)]" strokeWidth={2} aria-hidden />
+      </div>
+    </div>
+  );
+}
+
+function ChoiceCardGroup<T extends string>({
+  name,
+  subtitle,
+  value,
+  options,
+  onChange,
+  savingTarget = null,
+}: ChoiceCardProps<T>) {
+  const choiceSaving = savingTarget !== null;
   return (
     <div className="w-full min-w-0 space-y-2" role="radiogroup" aria-label={name}>
       <div>
@@ -60,31 +98,40 @@ function ChoiceCardGroup<T extends string>({ name, subtitle, value, options, onC
       </div>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         {options.map((opt) => {
-          const disabled = Boolean(opt.disabled);
-          const selected = value === opt.value && !disabled;
+          const interactionDisabled = Boolean(opt.disabled) || choiceSaving;
+          const selected = value === opt.value;
+          const savingThisOption = savingTarget === opt.value;
           return (
             <button
               key={opt.value}
               type="button"
               role="radio"
               aria-checked={selected}
-              aria-disabled={disabled}
-              disabled={disabled}
+              aria-disabled={interactionDisabled}
+              aria-busy={savingThisOption || undefined}
+              disabled={interactionDisabled}
               onClick={() => {
-                if (!disabled) onChange(opt.value);
+                if (!interactionDisabled) onChange(opt.value);
               }}
               className={cn(
-                'flex w-full flex-col items-start rounded-lg border px-3.5 py-3 text-left transition-colors',
+                'relative flex w-full flex-col items-start rounded-lg border px-3.5 py-3 text-left transition-colors',
                 'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-teal-600)]',
-                disabled &&
+                interactionDisabled &&
+                  !selected &&
                   'cursor-not-allowed border-slate-200/80 bg-slate-50/90 text-slate-500 opacity-[0.85] hover:border-slate-200/80 hover:bg-slate-50/90',
-                !disabled &&
+                interactionDisabled &&
+                  selected &&
+                  'cursor-not-allowed border-[var(--color-teal-600)] bg-[var(--teal-50)] ring-1 ring-[var(--color-teal-600)]/25',
+                !interactionDisabled &&
                   (selected
                     ? 'border-[var(--color-teal-600)] bg-[var(--teal-50)] ring-1 ring-[var(--color-teal-600)]/25'
                     : 'border-slate-200/90 bg-white hover:border-slate-300 hover:bg-slate-50/80'),
               )}
             >
-              <span className={cn('text-sm font-semibold', disabled ? 'text-slate-500' : 'text-slate-900')}>{opt.label}</span>
+              {savingThisOption ? <ChoiceCardOptionSavingOverlay /> : null}
+              <span className={cn('text-sm font-semibold', !selected && interactionDisabled ? 'text-slate-500' : 'text-slate-900')}>
+                {opt.label}
+              </span>
               <span className="mt-1 text-xs leading-snug text-slate-500">{opt.hint}</span>
             </button>
           );
@@ -96,6 +143,40 @@ function ChoiceCardGroup<T extends string>({ name, subtitle, value, options, onC
 
 const keyFieldTrailingBtn =
   'inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-[var(--ui-radius)] text-slate-400 transition-colors hover:bg-slate-100/80 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-teal-600)] focus-visible:ring-offset-1';
+
+/** Blurred overlay while deploy visibility settings are saving. */
+function WidgetSetupChoicesSavingOverlay() {
+  return (
+    <div
+      className="absolute inset-0 z-[2] min-h-[8rem] rounded-lg"
+      aria-busy="true"
+      aria-live="polite"
+      aria-label="Saving deploy settings"
+    >
+      <div className="absolute inset-0 rounded-lg bg-white/[0.72] backdrop-blur-[2px] backdrop-saturate-[1.05]" aria-hidden />
+      <div className="relative z-[1] flex h-full min-h-[8rem] items-center justify-center">
+        <Loader2 className="h-6 w-6 animate-spin text-[var(--color-teal-600)]" strokeWidth={2} aria-hidden />
+      </div>
+    </div>
+  );
+}
+
+function ModalButtonLabel({
+  loading,
+  children,
+  savingLabel,
+}: {
+  loading: boolean;
+  children: ReactNode;
+  savingLabel: string;
+}) {
+  return (
+    <span className="inline-flex items-center justify-center gap-2">
+      {loading ? <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden /> : null}
+      {loading ? savingLabel : children}
+    </span>
+  );
+}
 
 /** Same overlay pattern as Quick links / Lead capture when the section is gated. */
 function InstallApiKeysLockedOverlay({ children }: { children: ReactNode }) {
@@ -118,7 +199,7 @@ function InstallApiKeysLockedOverlay({ children }: { children: ReactNode }) {
             >
               <Lock className="h-4 w-4" strokeWidth={2} />
             </div>
-            <p className="m-0 text-sm font-semibold leading-snug text-slate-900">Add a website first</p>
+            <p className="m-0 text-sm font-semibold leading-snug text-slate-900">Add an active website first</p>
             <div className={cn(ws.workspaceEditorControlHint, 'mt-1.5 text-pretty')}>{children}</div>
           </div>
         </div>
@@ -128,6 +209,107 @@ function InstallApiKeysLockedOverlay({ children }: { children: ReactNode }) {
 }
 
 type OriginModal = null | { mode: 'add' } | { mode: 'edit'; index: number };
+
+type LiveOriginDraftWarning =
+  | { kind: 'delete'; index: number; row: { origin: string; label: string; isActive: boolean } }
+  | {
+      kind: 'update';
+      index: number;
+      patch: { origin: string; label: string; isActive: boolean };
+    };
+
+type DeleteOriginTarget = {
+  index: number;
+  row: { origin: string; label: string; isActive: boolean };
+};
+
+type OriginPreviewStatus = 'active' | 'inactive' | 'removing';
+
+function OriginPreviewCard({
+  label,
+  origin,
+  statusLabel,
+  statusTone = 'active',
+}: {
+  label: string;
+  origin: string;
+  statusLabel?: string;
+  statusTone?: OriginPreviewStatus;
+}) {
+  const originLine = origin.trim() || '—';
+  const badgeClass =
+    statusTone === 'removing'
+      ? 'bg-amber-50 text-amber-800 ring-amber-200/90'
+      : statusTone === 'inactive'
+        ? 'bg-slate-100 text-slate-500 ring-slate-200/90'
+        : 'bg-emerald-50 text-emerald-800 ring-emerald-200/90';
+
+  return (
+    <div className="flex items-center gap-3 rounded-lg border border-slate-200/90 bg-slate-50/50 px-3 py-2.5">
+      <div
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-200/90 bg-white text-slate-700 shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
+        aria-hidden
+      >
+        <Globe className="h-4 w-4" strokeWidth={2} />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="m-0 truncate text-sm font-medium text-slate-900">{label}</p>
+        <p className="m-0 truncate font-mono text-[0.6875rem] leading-snug text-slate-500" title={originLine}>
+          {originLine}
+        </p>
+      </div>
+      {statusLabel ? (
+        <span
+          className={cn(
+            'shrink-0 rounded-full px-2 py-0.5 text-[0.6875rem] font-semibold uppercase tracking-wide ring-1',
+            badgeClass,
+          )}
+        >
+          {statusLabel}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+function LiveDraftWarningOriginBody({
+  warning,
+  rowTitle,
+}: {
+  warning: LiveOriginDraftWarning;
+  rowTitle: (row: { origin: string; label: string }) => string;
+}) {
+  const intro =
+    'Your agent is live. After this change, no active allowed websites will remain, and it will move to draft. Add a website again and go live when you are ready to embed.';
+
+  if (warning.kind === 'delete') {
+    return (
+      <div className="space-y-3">
+        <p className={cn(ws.workspaceEditorControlHint, 'mb-4 mt-0 text-sm leading-relaxed text-slate-600')}>{intro}</p>
+        <OriginPreviewCard
+          label={rowTitle(warning.row)}
+          origin={warning.row.origin}
+          statusLabel="Removing"
+          statusTone="removing"
+        />
+      </div>
+    );
+  }
+
+  const merged = warning.patch;
+
+  return (
+    <div className="space-y-3">
+      <p className={cn(ws.workspaceEditorControlHint, 'mb-4 mt-0 text-sm leading-relaxed text-slate-600')}>{intro}</p>
+      <OriginPreviewCard
+        label={rowTitle(merged)}
+        origin={merged.origin}
+        statusLabel={merged.isActive ? 'Active' : 'Inactive'}
+        statusTone={merged.isActive ? 'active' : 'inactive'}
+      />
+    </div>
+  );
+}
 
 /** Inline markers in flat setup lines: `**bold**` and `` `mono` ``. */
 function renderInstallGuideFlatLine(line: string): ReactNode {
@@ -173,20 +355,25 @@ export function PublishSection() {
 
   const {
     copyText,
+    markCopied,
     copiedId,
     onSubmit,
     saveError,
     status,
+    syncLifecycleStatus,
     rows,
     updateRow,
     addRow,
     removeRow,
     visibility,
     setVisibility,
+    visibilitySavingTarget,
     accessKeyDisplay,
     secretKeyDisplay,
     secretRevealed,
     setSecretRevealed,
+    accessRevealed,
+    setAccessRevealed,
     embedInstallMode,
     setEmbedInstallMode,
     activeValidOriginsForSelect,
@@ -197,11 +384,38 @@ export function PublishSection() {
     keyActionError,
     rotateAccessKey,
     rotateSecretKey,
+    snippetUpdateNotice,
+    dismissSnippetUpdateNotice,
     activeValidOriginCount,
+    canPublishBackend,
+    saving,
+    savingDeploymentMeta,
   } = ctx;
 
+  const goingLive = Boolean(
+    lifecycle?.busy && lifecycle?.action === 'publish' && !lifecycle?.optimisticStatus,
+  );
+  const goingDraft = Boolean(
+    lifecycle?.busy && lifecycle?.action === 'draft' && !lifecycle?.optimisticStatus,
+  );
+  const displayStatus = lifecycle?.optimisticStatus ?? status;
+
+  useEffect(() => {
+    if (!lifecycle?.optimisticStatus) return;
+    syncLifecycleStatus(lifecycle.optimisticStatus);
+  }, [lifecycle?.optimisticStatus, syncLifecycleStatus]);
+
+  useEffect(() => {
+    lifecycle?.setDeployPublishReady?.(canPublishBackend);
+    return () => lifecycle?.setDeployPublishReady?.(null);
+  }, [canPublishBackend, lifecycle]);
+
   const [originModal, setOriginModal] = useState<OriginModal>(null);
-  const [deleteOriginIndex, setDeleteOriginIndex] = useState<number | null>(null);
+  const [deleteOriginTarget, setDeleteOriginTarget] = useState<DeleteOriginTarget | null>(null);
+  const [liveDraftWarning, setLiveDraftWarning] = useState<LiveOriginDraftWarning | null>(null);
+  const [liveDraftWarningSaving, setLiveDraftWarningSaving] = useState(false);
+  const [originModalSaving, setOriginModalSaving] = useState(false);
+  const [deleteOriginSaving, setDeleteOriginSaving] = useState(false);
   const [setupGuideOpen, setSetupGuideOpen] = useState(false);
   const [draftOrigin, setDraftOrigin] = useState('');
   const [draftLabel, setDraftLabel] = useState('');
@@ -238,7 +452,7 @@ export function PublishSection() {
     if (!originModal) resetOriginDraft();
   }, [originModal, resetOriginDraft]);
 
-  const saveOriginModal = useCallback(() => {
+  const saveOriginModal = useCallback(async () => {
     const trimmed = draftOrigin.trim();
     const err: { origin?: string } = {};
     if (!trimmed) {
@@ -257,18 +471,60 @@ export function PublishSection() {
         setOriginFieldErrors({ origin: `You can add up to ${MAX_ALLOWED_ORIGINS} websites.` });
         return;
       }
-      addRow({ origin: normalized, label, isActive: draftActive });
-    } else if (originModal?.mode === 'edit') {
-      updateRow(originModal.index, { origin: normalized, label, isActive: draftActive });
+      setOriginModalSaving(true);
+      const ok = await addRow({ origin: normalized, label, isActive: draftActive });
+      setOriginModalSaving(false);
+      if (ok) setOriginModal(null);
+      return;
     }
-    setOriginModal(null);
-  }, [draftOrigin, draftLabel, draftActive, originModal, rows.length, addRow, updateRow]);
+    if (originModal?.mode === 'edit') {
+      const patch = { origin: normalized, label, isActive: draftActive };
+      if (
+        status === 'published' &&
+        wouldLoseAllActiveOriginsAfterUpdate(rows, originModal.index, patch)
+      ) {
+        setLiveDraftWarning({ kind: 'update', index: originModal.index, patch });
+        setOriginModal(null);
+        return;
+      }
+      setOriginModalSaving(true);
+      const ok = await updateRow(originModal.index, patch);
+      setOriginModalSaving(false);
+      if (ok) setOriginModal(null);
+    }
+  }, [draftOrigin, draftLabel, draftActive, originModal, rows, status, addRow, updateRow]);
 
-  const confirmDeleteOrigin = useCallback(() => {
-    if (deleteOriginIndex == null) return;
-    removeRow(deleteOriginIndex);
-    setDeleteOriginIndex(null);
-  }, [deleteOriginIndex, removeRow]);
+  const confirmLiveDraftWarning = useCallback(async () => {
+    if (!liveDraftWarning || liveDraftWarningSaving) return;
+    setLiveDraftWarningSaving(true);
+    const ok =
+      liveDraftWarning.kind === 'delete'
+        ? await removeRow(liveDraftWarning.index)
+        : await updateRow(liveDraftWarning.index, liveDraftWarning.patch);
+    setLiveDraftWarningSaving(false);
+    if (ok) setLiveDraftWarning(null);
+  }, [liveDraftWarning, liveDraftWarningSaving, removeRow, updateRow]);
+
+  const requestRemoveOrigin = useCallback(
+    (index: number) => {
+      const row = rows[index];
+      if (!row) return;
+      if (status === 'published' && wouldLoseAllActiveOriginsAfterRemove(rows, index)) {
+        setLiveDraftWarning({ kind: 'delete', index, row });
+        return;
+      }
+      setDeleteOriginTarget({ index, row });
+    },
+    [rows, status],
+  );
+
+  const confirmDeleteOrigin = useCallback(async () => {
+    if (!deleteOriginTarget || deleteOriginSaving) return;
+    setDeleteOriginSaving(true);
+    const ok = await removeRow(deleteOriginTarget.index);
+    setDeleteOriginSaving(false);
+    if (ok) setDeleteOriginTarget(null);
+  }, [deleteOriginTarget, deleteOriginSaving, removeRow]);
 
   const snippetWithDomainHint = useMemo(() => {
     if (embedInstallMode !== 'chat-widget') return installSnippet;
@@ -277,10 +533,7 @@ export function PublishSection() {
     return `// Install on pages served from:\n// ${origin}\n\n${chatWidgetSnippet}`;
   }, [embedInstallMode, activeValidOriginsForSelect, installSnippet, chatWidgetSnippet]);
 
-  const visibilityOptions: { value: EmbedVisibility; label: string; hint: string }[] = [
-    { value: 'public', label: 'Public', hint: 'Anyone who has your install code can use the widget.' },
-    { value: 'private', label: 'Private', hint: 'Only approved installs can use the widget (recommended for secure setups).' },
-  ];
+  const visibilityOptions = VISIBILITY_CHOICE_OPTIONS;
 
   const embedTypeOptions: { value: EmbedInstallMode; label: string; hint: string; disabled?: boolean }[] = [
     { value: 'chat-widget', label: 'Chat widget', hint: 'Add a floating chat bubble to your website.' },
@@ -288,6 +541,10 @@ export function PublishSection() {
   ];
 
   const installSetupGuide = useMemo(() => getInstallSetupGuide(embedInstallMode), [embedInstallMode]);
+  const snippetUpdateCopy = useMemo(
+    () => (snippetUpdateNotice ? getInstallSnippetUpdateNotice(snippetUpdateNotice, embedInstallMode) : null),
+    [snippetUpdateNotice, embedInstallMode],
+  );
   const setupGuideLinkLabel =
     embedInstallMode === 'chat-widget' ? 'How to set up widget' : 'How to set up iframe';
 
@@ -323,7 +580,7 @@ export function PublishSection() {
               </div>
             </div>
             <div className="flex shrink-0 flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:justify-end sm:pt-0">
-              {status === 'published' ? (
+              {displayStatus === 'published' ? (
                 <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end">
                   <Button
                     type="button"
@@ -362,11 +619,17 @@ export function PublishSection() {
                     size="sm"
                     className={cn(ws.workspaceEditorButtonLabel, 'h-9 w-full gap-1.5 px-4 shadow-sm sm:w-auto [&_svg]:text-white')}
                     onClick={() => lifecycle?.openDraft()}
+                    disabled={goingDraft}
+                    aria-busy={goingDraft}
                     aria-label="Move agent to draft"
                     title="Stop showing this agent on your allowed websites until you publish again"
                   >
-                    <PencilLine size={15} strokeWidth={2} aria-hidden />
-                    Move to draft
+                    <ModalButtonLabel loading={goingDraft} savingLabel="Moving to draft">
+                      <span className="inline-flex items-center gap-1.5">
+                        {!goingDraft ? <PencilLine size={15} strokeWidth={2} aria-hidden /> : null}
+                        Move to draft
+                      </span>
+                    </ModalButtonLabel>
                   </Button>
                   ) : null}
                 </div>
@@ -379,13 +642,18 @@ export function PublishSection() {
                     ws.workspaceEditorButtonLabel,
                     'h-9 w-full gap-1.5 px-4 shadow-sm sm:w-auto sm:min-w-[10rem] [&_svg]:text-white',
                   )}
-                  disabled={!installKeysUnlocked}
+                  disabled={!installKeysUnlocked || goingLive}
+                  aria-busy={goingLive}
                   onClick={() => lifecycle?.openPublish()}
                   aria-label="Go live to publish"
                   title="Go live to publish"
                 >
-                  <Rocket size={15} strokeWidth={2} className="text-white" aria-hidden />
-                  Go Live
+                  <ModalButtonLabel loading={goingLive} savingLabel="Going Live">
+                    <span className="inline-flex items-center gap-1.5">
+                      <Rocket size={15} strokeWidth={2} className="text-white" aria-hidden />
+                      Go Live
+                    </span>
+                  </ModalButtonLabel>
                 </Button>
               ) : null}
             </div>
@@ -509,7 +777,7 @@ export function PublishSection() {
                                   size="sm"
                                   className="h-8 w-8 p-0 text-slate-400 hover:text-[var(--color-danger-text-emphasis)]"
                                   aria-label={`Remove ${label}`}
-                                  onClick={() => setDeleteOriginIndex(index)}
+                                  onClick={() => requestRemoveOrigin(index)}
                                 >
                                   <Trash2 size={16} strokeWidth={1.75} aria-hidden />
                                 </Button>
@@ -553,10 +821,10 @@ export function PublishSection() {
                     />
 
                     <div className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-2 lg:gap-8">
-                      <div className="flex min-w-0 flex-col gap-6">
+                      <div className="relative flex min-w-0 flex-col gap-6">
                         <ChoiceCardGroup
                           name="Install method"
-                          subtitle="These are the two ways to run the chatbot on websites you list under Allowed origins. For an Assistrio-hosted preview link, use Share Agent Preview in the top bar."
+                          subtitle="Widget or iframe for allowed sites. Hosted preview: Share Agent Preview (top bar)."
                           value={embedInstallMode}
                           options={embedTypeOptions}
                           onChange={setEmbedInstallMode}
@@ -564,11 +832,16 @@ export function PublishSection() {
 
                         <ChoiceCardGroup
                           name="Visibility"
-                          subtitle="Choose who can use your widget after it is installed on your website."
-                          value={visibility}
+                          subtitle={VISIBILITY_CHOICE_SUBTITLE}
+                          value={visibilitySavingTarget ?? visibility}
                           options={visibilityOptions}
                           onChange={setVisibility}
+                          savingTarget={visibilitySavingTarget}
                         />
+
+                        {savingDeploymentMeta && !visibilitySavingTarget ? (
+                          <WidgetSetupChoicesSavingOverlay />
+                        ) : null}
 
                         <div
                           className="flex gap-2.5 rounded-lg border border-orange-200/90 bg-orange-50/90 px-3 py-2.5 text-sm text-orange-950"
@@ -650,11 +923,26 @@ export function PublishSection() {
                                     quiet
                                     readOnly
                                     inputSize="lg"
+                                    type={accessRevealed ? 'text' : 'password'}
                                     value={accessKeyDisplay}
+                                    autoComplete="off"
                                     className={readOnlyMono}
                                     revealable={false}
                                     trailingIcon={
+                                      canManageBot ? (
                                       <span className="inline-flex items-center gap-0.5">
+                                        <button
+                                          type="button"
+                                          className={keyFieldTrailingBtn}
+                                          onClick={() => setAccessRevealed(!accessRevealed)}
+                                          aria-label={accessRevealed ? 'Hide access key' : 'Reveal access key'}
+                                        >
+                                          {accessRevealed ? (
+                                            <EyeOff size={15} strokeWidth={2} aria-hidden />
+                                          ) : (
+                                            <Eye size={15} strokeWidth={2} aria-hidden />
+                                          )}
+                                        </button>
                                         <button
                                           type="button"
                                           className={keyFieldTrailingBtn}
@@ -668,6 +956,7 @@ export function PublishSection() {
                                           )}
                                         </button>
                                       </span>
+                                      ) : undefined
                                     }
                                   />
                                 </div>
@@ -775,8 +1064,8 @@ export function PublishSection() {
                   {!installKeysUnlocked ? (
                     <InstallApiKeysLockedOverlay>
                       <>
-                        Add at least one <span className="font-medium text-slate-700">allowed origin</span> in the
-                        section above. The widget only runs on websites you list there.
+                        Add at least one <span className="font-medium text-slate-700">active allowed origin</span> in
+                        the section above. The widget only runs on active websites you list there.
                       </>
                     </InstallApiKeysLockedOverlay>
                   ) : null}
@@ -786,6 +1075,68 @@ export function PublishSection() {
           </div>
         </div>
       </form>
+
+      <Modal
+        open={snippetUpdateNotice != null}
+        onClose={dismissSnippetUpdateNotice}
+        title={
+          <span className="inline-flex items-center gap-3">
+            <span
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-teal-100 bg-teal-50 text-teal-600 shadow-sm"
+              aria-hidden
+            >
+              <Info className="h-5 w-5" strokeWidth={2} />
+            </span>
+            {snippetUpdateCopy?.title ?? 'Update your install code'}
+          </span>
+        }
+        description={snippetUpdateCopy?.description}
+        size="md"
+        footer={
+          <>
+            <Button type="button" variant="secondary" size="sm" onClick={dismissSnippetUpdateNotice}>
+              Got it
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              disabled={!installKeysUnlocked}
+              onClick={() => {
+                void (async () => {
+                  const text =
+                    embedInstallMode === 'chat-widget' ? snippetWithDomainHint : installSnippet;
+                  try {
+                    await navigator.clipboard.writeText(text);
+                    markCopied('snippet');
+                    appToast.success(getInstallSnippetCopiedToastMessage(embedInstallMode));
+                    dismissSnippetUpdateNotice();
+                  } catch {
+                    appToast.error('Could not copy install code.');
+                  }
+                })();
+              }}
+            >
+              <Copy size={14} strokeWidth={2} aria-hidden />
+              {getInstallSnippetCopyButtonLabel(embedInstallMode)}
+            </Button>
+          </>
+        }
+      >
+        {snippetUpdateCopy ? (
+          <div className="rounded-xl border border-slate-200/90 bg-slate-50/80 p-3.5 ring-1 ring-slate-900/[0.04]">
+            <p className="m-0 text-[11px] font-semibold uppercase tracking-wide text-slate-500">What to do next</p>
+            <ul className="m-0 mt-2.5 list-none space-y-2 p-0 text-sm leading-snug text-slate-700">
+              {snippetUpdateCopy.bullets.map((line) => (
+                <li key={line} className="flex items-start gap-2">
+                  <Check size={14} strokeWidth={2.5} className="mt-0.5 shrink-0 text-teal-600" aria-hidden />
+                  <span>{line}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+      </Modal>
 
       <Modal
         open={setupGuideOpen}
@@ -808,23 +1159,37 @@ export function PublishSection() {
 
       <Modal
         open={originModal !== null}
-        onClose={() => setOriginModal(null)}
+        onClose={() => {
+          if (originModalSaving) return;
+          setOriginModal(null);
+        }}
+        allowDismiss={!originModalSaving}
         title={originModal?.mode === 'edit' ? 'Edit website' : 'Add website'}
         description="Production HTTPS URL only. Localhost cannot be saved."
         size="lg"
         footer={
           <>
-            <Button type="button" variant="secondary" size="lg" onClick={() => setOriginModal(null)}>
+            <Button
+              type="button"
+              variant="secondary"
+              size="lg"
+              onClick={() => setOriginModal(null)}
+              disabled={originModalSaving}
+            >
               Cancel
             </Button>
             <Button
               type="button"
               variant="primary"
               size="lg"
+              disabled={originModalSaving}
+              aria-busy={originModalSaving}
               onClick={() => void saveOriginModal()}
               aria-label="Save website to allowed origins"
             >
-              Save website
+              <ModalButtonLabel loading={originModalSaving} savingLabel="Saving…">
+                Save website
+              </ModalButtonLabel>
             </Button>
           </>
         }
@@ -848,6 +1213,7 @@ export function PublishSection() {
               placeholder="https://www.example.com"
               autoComplete="off"
               invalid={Boolean(originFieldErrors.origin)}
+              disabled={originModalSaving}
             />
           </FieldRow>
           <FieldRow label="Label (optional)" htmlFor={`${baseId}-origin-label`} className="gap-1.5" helperText="Shown in your list only.">
@@ -858,6 +1224,7 @@ export function PublishSection() {
               onChange={(e) => setDraftLabel(e.target.value)}
               placeholder="Marketing site"
               autoComplete="off"
+              disabled={originModalSaving}
             />
           </FieldRow>
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200/80 bg-slate-50/50 px-3 py-2.5">
@@ -868,34 +1235,101 @@ export function PublishSection() {
               checked={draftActive}
               onCheckedChange={setDraftActive}
               aria-labelledby={`${baseId}-origin-active`}
+              disabled={originModalSaving}
             />
           </div>
         </div>
       </Modal>
 
       <Modal
-        open={deleteOriginIndex !== null}
-        onClose={() => setDeleteOriginIndex(null)}
+        open={liveDraftWarning !== null}
+        onClose={() => {
+          if (liveDraftWarningSaving) return;
+          setLiveDraftWarning(null);
+        }}
+        allowDismiss={!liveDraftWarningSaving}
+        tone="warning"
+        title={
+          <span className="inline-flex items-center gap-2.5">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-50 text-amber-700 ring-1 ring-amber-100">
+              <AlertTriangle className="h-4 w-4" strokeWidth={2} aria-hidden />
+            </span>
+            Move agent to draft?
+          </span>
+        }
+        footer={
+          <>
+            <Button
+              type="button"
+              variant="secondary"
+              size="lg"
+              onClick={() => setLiveDraftWarning(null)}
+              disabled={liveDraftWarningSaving}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              size="lg"
+              disabled={liveDraftWarningSaving}
+              aria-busy={liveDraftWarningSaving}
+              onClick={() => void confirmLiveDraftWarning()}
+            >
+              <ModalButtonLabel loading={liveDraftWarningSaving} savingLabel="Confirming…">
+                Confirm
+              </ModalButtonLabel>
+            </Button>
+          </>
+        }
+      >
+        {liveDraftWarning ? (
+          <LiveDraftWarningOriginBody warning={liveDraftWarning} rowTitle={rowTitle} />
+        ) : null}
+      </Modal>
+
+      <Modal
+        open={deleteOriginTarget !== null}
+        onClose={() => {
+          if (deleteOriginSaving) return;
+          setDeleteOriginTarget(null);
+        }}
+        allowDismiss={!deleteOriginSaving}
         tone="danger"
         title="Remove website?"
         description="Visitors on this origin will no longer be able to load the widget if it was the only match."
         footer={
           <>
-            <Button type="button" variant="secondary" size="lg" onClick={() => setDeleteOriginIndex(null)}>
+            <Button
+              type="button"
+              variant="secondary"
+              size="lg"
+              onClick={() => setDeleteOriginTarget(null)}
+              disabled={deleteOriginSaving}
+            >
               Cancel
             </Button>
-            <Button type="button" variant="danger" size="lg" onClick={() => void confirmDeleteOrigin()}>
-              Remove
+            <Button
+              type="button"
+              variant="danger"
+              size="lg"
+              disabled={deleteOriginSaving}
+              aria-busy={deleteOriginSaving}
+              onClick={() => void confirmDeleteOrigin()}
+            >
+              <ModalButtonLabel loading={deleteOriginSaving} savingLabel="Removing…">
+                Remove
+              </ModalButtonLabel>
             </Button>
           </>
         }
       >
         <p className={cn(ws.workspaceEditorControlHint, 'm-0 text-sm')}>
-          {deleteOriginIndex !== null && rows[deleteOriginIndex] ? (
+          {deleteOriginTarget ? (
             <>
-              <span className="font-medium text-slate-800">{rowTitle(rows[deleteOriginIndex])}</span>
-              {rows[deleteOriginIndex].origin.trim() ? (
-                <span className="mt-1 block truncate text-slate-600">{rows[deleteOriginIndex].origin.trim()}</span>
+              <span className="font-medium text-slate-800">{rowTitle(deleteOriginTarget.row)}</span>
+              {deleteOriginTarget.row.origin.trim() ? (
+                <span className="mt-1 block truncate text-slate-600">{deleteOriginTarget.row.origin.trim()}</span>
               ) : null}
             </>
           ) : null}

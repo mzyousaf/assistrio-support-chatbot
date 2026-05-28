@@ -387,12 +387,14 @@ describe('UsagePage', () => {
     expect(mockGetWorkspaceBillingSummary).not.toHaveBeenCalled();
   });
 
-  it('shows add-ons preview as full-width coming soon rows', async () => {
+  it('shows add-ons preview as full-width disabled cards', async () => {
     renderPage();
     expect(await screen.findByText('Available add-ons')).toBeTruthy();
     expect(screen.getByText('Add-ons are not available yet.')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Coming soon' }).hasAttribute('disabled')).toBe(true);
-    expect(screen.getByText('Extra bot')).toBeTruthy();
-    expect(screen.getByText('Monthly · workspace')).toBeTruthy();
+    expect(screen.getAllByText('The add-on requires a paid plan').length).toBeGreaterThan(0);
+    expect(screen.getByText('Extra agent')).toBeTruthy();
+    expect(screen.getByText('$49 per month')).toBeTruthy();
+    expect(screen.getAllByText('Auto charge').length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('switch', { hidden: true }).length).toBeGreaterThan(0);
   });
 });

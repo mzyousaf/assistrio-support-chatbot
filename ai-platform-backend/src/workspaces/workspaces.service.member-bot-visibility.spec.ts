@@ -14,10 +14,7 @@ describe('WorkspacesService member bot visibility', () => {
   const adminUserId = '507f1f77bcf86cd799439012';
   const memberUserId = '507f1f77bcf86cd799439013';
 
-  function makeService(roleByUserId: Record<string, string>, grantOverrides?: {
-    userGrants?: Record<string, { canView: boolean; canPreview: boolean }>;
-    explicitGrants?: boolean;
-  }) {
+  function makeService(roleByUserId: Record<string, string>, userGrants?: Record<string, { canView: boolean; canPreview: boolean }>) {
     const membershipModel = {
       findOne: jest.fn(({ userId }: { userId: Types.ObjectId }) => ({
         select: jest.fn().mockReturnValue({
@@ -41,15 +38,17 @@ describe('WorkspacesService member bot visibility', () => {
     const grantService = {
       userCanViewBot: jest.fn(async (userId: string, memberRole: string | null, bot: Record<string, unknown>) => {
         if (memberRole != null && isWorkspaceOwnerRole(memberRole)) return true;
-        if (grantOverrides?.explicitGrants) {
-          return grantOverrides.userGrants?.[userId]?.canView === true;
+        const ws = bot.workspaceId;
+        if (ws != null && String(ws).length > 0) {
+          return userGrants?.[userId]?.canView === true;
         }
         return isBotVisibleToWorkspaceMembers(bot);
       }),
       userCanPreviewBot: jest.fn(async (userId: string, memberRole: string | null, bot: Record<string, unknown>) => {
         if (memberRole != null && isWorkspaceOwnerRole(memberRole)) return true;
-        if (grantOverrides?.explicitGrants) {
-          const g = grantOverrides.userGrants?.[userId];
+        const ws = bot.workspaceId;
+        if (ws != null && String(ws).length > 0) {
+          const g = userGrants?.[userId];
           return g?.canPreview === true && g?.canView === true;
         }
         return isBotVisibleToWorkspaceMembers(bot) && isBotMemberPreviewAllowed(bot);
@@ -61,8 +60,9 @@ describe('WorkspacesService member bot visibility', () => {
             out.push(bot);
             continue;
           }
-          if (grantOverrides?.explicitGrants) {
-            if (grantOverrides.userGrants?.[userId]?.canView) out.push(bot);
+          const ws = bot.workspaceId;
+          if (ws != null && String(ws).length > 0) {
+            if (userGrants?.[userId]?.canView) out.push(bot);
           } else if (isBotVisibleToWorkspaceMembers(bot)) {
             out.push(bot);
           }
@@ -71,9 +71,17 @@ describe('WorkspacesService member bot visibility', () => {
       }),
     };
 
+    const workspaceModel = {
+      findById: jest.fn(() => ({
+        select: jest.fn(() => ({
+          lean: jest.fn().mockResolvedValue({ deletedAt: null }),
+        })),
+      })),
+    };
+
     const service = new WorkspacesService(
       {} as never,
-      {} as never,
+      workspaceModel as never,
       membershipModel as never,
       {} as never,
       {} as never,
@@ -107,30 +115,40 @@ describe('WorkspacesService member bot visibility', () => {
   it('allows admin with canView grant to access bot', async () => {
     const { service } = makeService(
       { [adminUserId]: 'admin' },
-      { explicitGrants: true, userGrants: { [adminUserId]: { canView: true, canPreview: false } } },
+      { [adminUserId]: { canView: true, canPreview: false } },
     );
     await expect(service.canUserAccessWorkspaceBot(adminUserId, 'customer', hiddenBot)).resolves.toBe(true);
     await expect(service.canUserPreviewWorkspaceBot(adminUserId, 'customer', viewOnlyBot)).resolves.toBe(false);
   });
 
-  it('blocks member from hidden bot access', async () => {
+  it('blocks member without grant from bot access even when legacy visibility is true', async () => {
     const { service } = makeService({ [memberUserId]: 'member' });
+    await expect(service.canUserAccessWorkspaceBot(memberUserId, 'customer', visibleBot)).resolves.toBe(false);
     await expect(service.canUserAccessWorkspaceBot(memberUserId, 'customer', hiddenBot)).resolves.toBe(false);
   });
 
-  it('allows member to access visible bot but not preview when disabled', async () => {
-    const { service } = makeService({ [memberUserId]: 'member' });
+  it('allows member with canView grant to access bot but not preview when canPreview is false', async () => {
+    const { service } = makeService(
+      { [memberUserId]: 'member' },
+      { [memberUserId]: { canView: true, canPreview: false } },
+    );
     await expect(service.canUserAccessWorkspaceBot(memberUserId, 'customer', viewOnlyBot)).resolves.toBe(true);
     await expect(service.canUserPreviewWorkspaceBot(memberUserId, 'customer', viewOnlyBot)).resolves.toBe(false);
   });
 
-  it('allows member preview when visible and allowMemberPreview', async () => {
-    const { service } = makeService({ [memberUserId]: 'member' });
+  it('allows member preview when canView and canPreview grants are set', async () => {
+    const { service } = makeService(
+      { [memberUserId]: 'member' },
+      { [memberUserId]: { canView: true, canPreview: true } },
+    );
     await expect(service.canUserPreviewWorkspaceBot(memberUserId, 'customer', visibleBot)).resolves.toBe(true);
   });
 
   it('assertCanPreviewWorkspaceBot throws workspace_bot_preview_access_denied', async () => {
-    const { service } = makeService({ [memberUserId]: 'member' });
+    const { service } = makeService(
+      { [memberUserId]: 'member' },
+      { [memberUserId]: { canView: true, canPreview: false } },
+    );
     await expect(
       service.assertCanPreviewWorkspaceBot(memberUserId, 'customer', viewOnlyBot),
     ).rejects.toMatchObject({
@@ -142,7 +160,10 @@ describe('WorkspacesService member bot visibility', () => {
   });
 
   it('assertCanManageWorkspaceBot still uses workspace_admin_required for members', async () => {
-    const { service } = makeService({ [memberUserId]: 'member' });
+    const { service } = makeService(
+      { [memberUserId]: 'member' },
+      { [memberUserId]: { canView: true, canPreview: true } },
+    );
     await expect(
       service.assertCanManageWorkspaceBot(memberUserId, 'customer', visibleBot),
     ).rejects.toMatchObject({

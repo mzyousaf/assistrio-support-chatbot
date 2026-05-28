@@ -427,7 +427,7 @@ export class BotsService {
       .find({ $and: [base, botNotDeletedClause()] })
       .sort({ createdAt: -1 })
       .select(
-        'name agentsPackAgent category status isPublic createdAt _id slug visibility workspaceId workspaceMemberVisibility chatUI avatarEmoji imageUrl shortDescription allowedOrigins leadCapture isPlatformBot platformBotType',
+        'name agentsPackAgent category categories status isPublic createdAt _id slug visibility workspaceId workspaceMemberVisibility chatUI avatarEmoji imageUrl shortDescription allowedOrigins leadCapture isPlatformBot platformBotType',
       )
       .lean();
   }
@@ -1550,7 +1550,7 @@ export class BotsService {
       return { ok: true, botId: id, status: st };
     }
 
-    const effectiveStatus: 'draft' | 'published' =
+    let effectiveStatus: 'draft' | 'published' =
       patch.touched.has('status') && patch.status
         ? patch.status === 'published'
           ? 'published'
@@ -1571,6 +1571,15 @@ export class BotsService {
       mergedOriginsForPublish = patch.allowedOrigins ?? [];
     } else if (Array.isArray(ex.allowedOrigins)) {
       mergedOriginsForPublish = ex.allowedOrigins as AllowedOrigin[];
+    }
+
+    const wasPublished = String(ex.status ?? '') === 'published';
+    if (effectiveStatus === 'published' && !hasActiveAllowedOrigin(mergedOriginsForPublish)) {
+      if (wasPublished && patch.touched.has('allowedOrigins')) {
+        effectiveStatus = 'draft';
+      } else {
+        throw new Error('At least one active allowed embed origin is required to publish.');
+      }
     }
 
     if (effectiveStatus === 'published') {
@@ -1687,7 +1696,14 @@ export class BotsService {
       updateDoc.isPublic = patch.isPublic !== false;
     }
     if (patch.touched.has('status') && patch.status) {
-      updateDoc.status = patch.status === 'published' ? 'published' : 'draft';
+      updateDoc.status = effectiveStatus;
+    } else if (
+      effectiveStatus === 'draft' &&
+      wasPublished &&
+      patch.touched.has('allowedOrigins') &&
+      !hasActiveAllowedOrigin(mergedOriginsForPublish)
+    ) {
+      updateDoc.status = 'draft';
     }
     if (patch.touched.has('includeNameInKnowledge')) {
       updateDoc.includeNameInKnowledge = patch.includeNameInKnowledge === true;
@@ -1710,14 +1726,7 @@ export class BotsService {
       updateDoc.knowledgeReplyPriority = patch.knowledgeReplyPriority;
     }
 
-    const outStatus =
-      patch.touched.has('status') && patch.status
-        ? patch.status === 'published'
-          ? 'published'
-          : 'draft'
-        : String(ex.status ?? '') === 'published'
-          ? 'published'
-          : 'draft';
+    const outStatus = effectiveStatus;
 
     const mongoKeys = Object.keys(updateDoc);
     if (mongoKeys.length === 0) {

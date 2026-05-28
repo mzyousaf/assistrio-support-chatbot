@@ -22,6 +22,7 @@ import { CustomerKnowledgeController } from './customer-knowledge.controller';
 import { CustomerWorkspaceEntitlementsController } from './customer-workspace-entitlements.controller';
 import { CustomerWorkspaceBillingController } from './customer-workspace-billing.controller';
 import { CustomerWorkspaceActiveController } from './customer-workspace-active.controller';
+import { CustomerWorkspaceController } from './customer-workspace.controller';
 import { CustomerWorkspaceMembersController } from './customer-workspace-members.controller';
 import { CustomerWorkspaceSettingsController } from './customer-workspace-settings.controller';
 import { CustomerWorkspaceInviteController } from './customer-workspace-invite.controller';
@@ -91,6 +92,7 @@ import { OnboardingKbTransferModule } from './onboarding-kb-transfer.module';
     CustomerWorkspaceEntitlementsController,
     CustomerWorkspaceBillingController,
     CustomerWorkspaceActiveController,
+    CustomerWorkspaceController,
     CustomerWorkspaceMembersController,
     CustomerWorkspaceSettingsController,
     CustomerWorkspaceInviteController,

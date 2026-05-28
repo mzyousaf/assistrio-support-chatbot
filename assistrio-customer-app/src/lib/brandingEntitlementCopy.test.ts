@@ -16,10 +16,10 @@ describe('brandingEntitlementCopy', () => {
     ).toBe(PLAN_LIMIT_REMOVE_BRANDING_MESSAGE);
   });
 
-  it('forces showBranding on in local chat UI when locked', () => {
-    expect(applyBrandingEntitlementToLocalChatUi({ showBranding: false }, false)).toMatchObject({
-      showBranding: true,
-      brandingMessage: 'Powered by Assistrio',
+  it('forces showAssistrioBrandingPaid on in local chat UI when locked', () => {
+    expect(applyBrandingEntitlementToLocalChatUi({ showBranding: false, showAssistrioBrandingPaid: false }, false)).toMatchObject({
+      showBranding: false,
+      showAssistrioBrandingPaid: true,
     });
   });
 

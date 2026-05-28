@@ -1,4 +1,4 @@
-import { Copy, Loader2, Send, Trash2, X } from 'lucide-react';
+import { Copy, Loader2, Send, Trash2, UserCog, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { WorkspaceInviteRole, WorkspaceInviteSummary, WorkspaceMemberSummary } from '@/api/types';
 import { Button, Card, CardBody, CardDescription, CardHeader, CardTitle, Select, Tooltip } from '@/components/ui';
@@ -6,107 +6,30 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { appToast } from '@/lib/app-toast';
 import {
   copyTextToClipboard,
-  formatWorkspaceMemberDate,
-  formatWorkspaceMemberName,
 } from '@/lib/workspaceMembersMessages';
+import { WorkspacePersonIdentity } from '@/components/settings/WorkspacePersonIdentity';
+import { WorkspaceRolePill } from '@/components/settings/WorkspaceRolePill';
+import type { WorkspacePersonRow } from '@/lib/workspacePeopleRows.util';
+export { buildWorkspacePersonRows, type WorkspacePersonRow } from '@/lib/workspacePeopleRows.util';
 import {
   isWorkspaceOwnerRole,
-  workspaceRoleBadgeClassName,
-  workspaceRoleBadgeVariant,
-  workspaceRoleLabel,
+  workspaceRolePillClassName,
 } from '@/lib/workspaceRoles';
 import { cn } from '@/lib/utils';
 
-export type WorkspacePersonRow =
-  | {
-      kind: 'member';
-      id: string;
-      name: string;
-      email: string;
-      status: 'Active';
-      role: WorkspaceMemberSummary['role'];
-      dateLabel: string;
-      botAccessSummary?: { viewable: number; previewable: number };
-      member: WorkspaceMemberSummary;
-    }
-  | {
-      kind: 'invite';
-      id: string;
-      name: string;
-      email: string;
-      status: 'Pending invite' | 'Expired' | 'Cancelled';
-      role: WorkspaceInviteSummary['role'];
-      dateLabel: string;
-      botAccessSummary?: { viewable: number; previewable: number };
-      invite: WorkspaceInviteSummary;
-    };
-
-export function formatBotAccessSummary(summary?: { viewable: number; previewable: number }): string {
-  if (!summary || (summary.viewable === 0 && summary.previewable === 0)) return 'No agent access';
-  const parts: string[] = [];
-  if (summary.viewable > 0) parts.push(`${summary.viewable} viewable`);
-  if (summary.previewable > 0) parts.push(`${summary.previewable} previewable`);
-  return parts.join(', ');
-}
-
-export function buildWorkspacePersonRows(
-  members: WorkspaceMemberSummary[],
-  invites: WorkspaceInviteSummary[],
-): WorkspacePersonRow[] {
-  const memberRows: WorkspacePersonRow[] = members.map((member) => ({
-    kind: 'member',
-    id: member.userId,
-    name: formatWorkspaceMemberName(member),
-    email: member.email,
-    status: 'Active',
-    role: member.role,
-    dateLabel: formatWorkspaceMemberDate(member.joinedAt),
-    botAccessSummary: member.botAccessSummary,
-    member,
-  }));
-
-  const inviteRows: WorkspacePersonRow[] = invites
-    .filter((invite) => invite.status === 'pending')
-    .map((invite) => ({
-      kind: 'invite',
-      id: invite.id,
-      name: invite.email,
-      email: invite.email,
-      status: 'Pending invite' as const,
-      role: invite.role,
-      dateLabel: formatWorkspaceMemberDate(invite.createdAt ?? invite.expiresAt),
-      botAccessSummary: invite.botAccessSummary,
-      invite,
-    }));
-
-  return [...memberRows, ...inviteRows];
-}
-
-function personInitials(name: string, email: string): string {
-  const trimmed = name.trim();
-  if (trimmed && trimmed !== email) {
-    const parts = trimmed.split(/\s+/).filter(Boolean);
-    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
-    if (parts[0].length >= 2) return parts[0].slice(0, 2).toUpperCase();
-    return parts[0].slice(0, 1).toUpperCase();
-  }
-  const local = email.split('@')[0] || '';
-  const segments = local.split(/[._-]+/).filter(Boolean);
-  if (segments.length >= 2) return (segments[0][0] + segments[1][0]).toUpperCase();
-  if (local.length >= 2) return local.slice(0, 2).toUpperCase();
-  return (local[0] || '?').toUpperCase();
-}
-
-function PersonAvatar({ name, email }: { name: string; email: string }) {
-  const initials = personInitials(name, email);
-  return (
-    <span
-      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-[11px] font-semibold text-slate-600 ring-1 ring-slate-200/80"
-      aria-hidden
-    >
-      {initials}
-    </span>
-  );
+function PersonCell({ row }: { row: WorkspacePersonRow }) {
+  const profile =
+    row.kind === 'member'
+      ? row.member
+      : {
+          email: row.email,
+          firstName: null,
+          lastName: null,
+          displayName: null,
+          avatarUrl: null,
+          picture: null,
+        };
+  return <WorkspacePersonIdentity profile={profile} />;
 }
 
 function StatusBadge({ status }: { status: WorkspacePersonRow['status'] }) {
@@ -127,19 +50,7 @@ function StatusBadge({ status }: { status: WorkspacePersonRow['status'] }) {
 }
 
 function RoleBadge({ role }: { role: WorkspacePersonRow['role'] }) {
-  const variant = workspaceRoleBadgeVariant(role);
-  return (
-    <span
-      className={cn(
-        'inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium',
-        variant === 'owner' && 'bg-violet-50 text-violet-700',
-        variant === 'admin' && 'bg-sky-50 text-sky-700',
-        variant === 'member' && workspaceRoleBadgeClassName('member', 'pill'),
-      )}
-    >
-      {workspaceRoleLabel(role)}
-    </span>
-  );
+  return <WorkspaceRolePill role={role} />;
 }
 
 function RoleSelect(props: {
@@ -149,8 +60,8 @@ function RoleSelect(props: {
   const { row, onRoleChange } = props;
   return (
     <Select
-      className="w-full max-w-[8rem] min-w-[6.5rem]"
-      triggerClassName="h-7 min-h-7 px-2 text-xs"
+      triggerVariant="tag"
+      tagClassNameForValue={workspaceRolePillClassName}
       value={row.role === 'owner' ? 'admin' : row.role}
       onChange={(e) => onRoleChange(row, e.target.value as WorkspaceInviteRole)}
       aria-label={`Role for ${row.email}`}
@@ -188,17 +99,33 @@ function IconActionButton(props: {
   );
 }
 
-function PersonCell({ row }: { row: WorkspacePersonRow }) {
+function BotAccessCell(props: {
+  row: WorkspacePersonRow;
+  canEditBotAccess: boolean;
+  onEditAccess: (row: WorkspacePersonRow) => void;
+}) {
+  const { row, canEditBotAccess, onEditAccess } = props;
+  const isOwner = row.kind === 'member' && isWorkspaceOwnerRole(row.role);
+  const canViewAccess =
+    canEditBotAccess &&
+    !isOwner &&
+    (row.kind === 'member' ||
+      (row.kind === 'invite' && (row.status === 'Pending invite' || row.status === 'Expired')));
+
+  if (!canViewAccess) {
+    return <span className="text-xs text-slate-300" aria-hidden>—</span>;
+  }
+
   return (
-    <div className="flex min-w-0 items-center gap-2.5">
-      <PersonAvatar name={row.name} email={row.email} />
-      <div className="min-w-0">
-        <div className="truncate text-sm font-medium text-slate-900">{row.name}</div>
-        {row.name !== row.email ? (
-          <div className="truncate text-xs text-slate-500">{row.email}</div>
-        ) : null}
-      </div>
-    </div>
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      className="h-7 shrink-0 px-2 text-xs text-slate-600 hover:text-slate-900"
+      onClick={() => onEditAccess(row)}
+    >
+      View Access
+    </Button>
   );
 }
 
@@ -208,21 +135,59 @@ function RowActions(props: {
   onRemoveMember: (member: WorkspaceMemberSummary) => void;
   onCancelInvite: (invite: WorkspaceInviteSummary) => void;
   onResendInvite: (invite: WorkspaceInviteSummary) => void;
+  canEditBotAccess: boolean;
+  onEditAccess: (row: WorkspacePersonRow) => void;
 }) {
-  const { row, resending, onRemoveMember, onCancelInvite, onResendInvite } = props;
+  const { row, resending, onRemoveMember, onCancelInvite, onResendInvite, canEditBotAccess, onEditAccess } = props;
+  const isOwner = row.kind === 'member' && isWorkspaceOwnerRole(row.role);
+  const showViewAccess =
+    canEditBotAccess &&
+    !isOwner &&
+    (row.kind === 'member' ||
+      (row.kind === 'invite' && (row.status === 'Pending invite' || row.status === 'Expired')));
 
   if (row.kind === 'member') {
-    if (isWorkspaceOwnerRole(row.role)) {
+    if (isOwner) {
       return <span className="text-xs text-slate-300" aria-hidden>—</span>;
     }
     return (
-      <IconActionButton
-        label={`Remove ${row.name}`}
-        destructive
-        onClick={() => onRemoveMember(row.member)}
-      >
-        <Trash2 className="h-3.5 w-3.5" aria-hidden />
-      </IconActionButton>
+      <div className="inline-flex items-center justify-end gap-0.5">
+        {showViewAccess ? (
+          <IconActionButton label={`View access for ${row.name}`} onClick={() => onEditAccess(row)}>
+            <UserCog className="h-3.5 w-3.5" aria-hidden />
+          </IconActionButton>
+        ) : null}
+        <IconActionButton
+          label={`Remove ${row.name}`}
+          destructive
+          onClick={() => onRemoveMember(row.member)}
+        >
+          <Trash2 className="h-3.5 w-3.5" aria-hidden />
+        </IconActionButton>
+      </div>
+    );
+  }
+
+  if (row.status === 'Expired') {
+    return (
+      <div className="inline-flex items-center justify-end gap-0.5">
+        {showViewAccess ? (
+          <IconActionButton label={`View access for ${row.email}`} onClick={() => onEditAccess(row)}>
+            <UserCog className="h-3.5 w-3.5" aria-hidden />
+          </IconActionButton>
+        ) : null}
+        <IconActionButton
+          label={`Send again to ${row.email}`}
+          disabled={resending}
+          onClick={() => onResendInvite(row.invite)}
+        >
+          {resending ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+          ) : (
+            <Send className="h-3.5 w-3.5" aria-hidden />
+          )}
+        </IconActionButton>
+      </div>
     );
   }
 
@@ -232,6 +197,11 @@ function RowActions(props: {
 
   return (
     <div className="inline-flex items-center justify-end gap-0.5">
+      {showViewAccess ? (
+        <IconActionButton label={`View access for ${row.email}`} onClick={() => onEditAccess(row)}>
+          <UserCog className="h-3.5 w-3.5" aria-hidden />
+        </IconActionButton>
+      ) : null}
       {row.invite.inviteUrl ? (
         <IconActionButton
           label={`Copy invite link for ${row.email}`}
@@ -274,7 +244,7 @@ function RoleCell(props: {
 }) {
   const { row, canManageRoles, onRoleChange } = props;
   const isOwner = row.kind === 'member' && isWorkspaceOwnerRole(row.role);
-  if (canManageRoles && !isOwner && row.status !== 'Cancelled') {
+  if (canManageRoles && !isOwner) {
     return <RoleSelect row={row} onRoleChange={onRoleChange} />;
   }
   return <RoleBadge role={row.role} />;
@@ -283,11 +253,13 @@ function RoleCell(props: {
 function MobilePersonCard(props: {
   row: WorkspacePersonRow;
   canManageRoles: boolean;
+  canEditBotAccess: boolean;
   resending: boolean;
   onRemoveMember: (member: WorkspaceMemberSummary) => void;
   onCancelInvite: (invite: WorkspaceInviteSummary) => void;
   onResendInvite: (invite: WorkspaceInviteSummary) => void;
   onRoleChange: (row: WorkspacePersonRow, role: WorkspaceInviteRole) => void;
+  onEditAccess: (row: WorkspacePersonRow) => void;
 }) {
   const { row } = props;
   return (
@@ -300,6 +272,8 @@ function MobilePersonCard(props: {
           onRemoveMember={props.onRemoveMember}
           onCancelInvite={props.onCancelInvite}
           onResendInvite={props.onResendInvite}
+          canEditBotAccess={props.canEditBotAccess}
+          onEditAccess={props.onEditAccess}
         />
       </div>
       <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
@@ -317,7 +291,13 @@ function MobilePersonCard(props: {
         </div>
         <div className="col-span-2">
           <dt className="text-slate-500">Agent access</dt>
-          <dd className="mt-0.5 text-slate-700">{formatBotAccessSummary(row.botAccessSummary)}</dd>
+          <dd className="mt-0.5 text-slate-700">
+            <BotAccessCell
+              row={row}
+              canEditBotAccess={props.canEditBotAccess}
+              onEditAccess={props.onEditAccess}
+            />
+          </dd>
         </div>
         <div className="col-span-2">
           <dt className="text-slate-500">Joined / invited</dt>
@@ -331,23 +311,27 @@ function MobilePersonCard(props: {
 type Props = {
   rows: WorkspacePersonRow[];
   canManageRoles: boolean;
+  canEditBotAccess?: boolean;
   resendBusyId: string | null;
   showInviteHint?: boolean;
   onRemoveMember: (member: WorkspaceMemberSummary) => void;
   onCancelInvite: (invite: WorkspaceInviteSummary) => void;
   onResendInvite: (invite: WorkspaceInviteSummary) => void;
   onRoleChange: (row: WorkspacePersonRow, role: WorkspaceInviteRole) => void;
+  onEditAccess: (row: WorkspacePersonRow) => void;
 };
 
 export function WorkspacePeopleTable({
   rows,
   canManageRoles,
+  canEditBotAccess = false,
   resendBusyId,
   showInviteHint = false,
   onRemoveMember,
   onCancelInvite,
   onResendInvite,
   onRoleChange,
+  onEditAccess,
 }: Props) {
   const isMobile = useIsMobile();
   const peopleCountLabel = `${rows.length} ${rows.length === 1 ? 'person' : 'people'}`;
@@ -378,11 +362,13 @@ export function WorkspacePeopleTable({
                     key={`${row.kind}:${row.id}`}
                     row={row}
                     canManageRoles={canManageRoles}
+                    canEditBotAccess={canEditBotAccess}
                     resending={row.kind === 'invite' && resendBusyId === row.id}
                     onRemoveMember={onRemoveMember}
                     onCancelInvite={onCancelInvite}
                     onResendInvite={onResendInvite}
                     onRoleChange={onRoleChange}
+                    onEditAccess={onEditAccess}
                   />
                 ))}
               </div>
@@ -419,8 +405,12 @@ export function WorkspacePeopleTable({
                             onRoleChange={onRoleChange}
                           />
                         </td>
-                        <td className="hidden py-2.5 pr-3 align-middle text-xs text-slate-600 lg:table-cell">
-                          {formatBotAccessSummary(row.botAccessSummary)}
+                        <td className="hidden py-2.5 pr-3 align-middle lg:table-cell">
+                          <BotAccessCell
+                            row={row}
+                            canEditBotAccess={canEditBotAccess}
+                            onEditAccess={onEditAccess}
+                          />
                         </td>
                         <td className="py-2.5 pr-3 align-middle text-xs tabular-nums text-slate-600">
                           {row.dateLabel}
@@ -432,6 +422,8 @@ export function WorkspacePeopleTable({
                             onRemoveMember={onRemoveMember}
                             onCancelInvite={onCancelInvite}
                             onResendInvite={onResendInvite}
+                            canEditBotAccess={canEditBotAccess}
+                            onEditAccess={onEditAccess}
                           />
                         </td>
                       </tr>

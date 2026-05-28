@@ -14,6 +14,11 @@ import { postCustomerBotLifecycleAction } from '../api/customerApi';
 import type { CustomerBotLifecycleResponse } from '../api/types';
 import { PostPublishInstallPanel } from '@/components/go-live/PostPublishInstallPanel';
 import { getCustomerAppPublicOrigin, iframeEmbedSnippet } from '@/lib/embedOrigin';
+import {
+  toastPlaygroundAgentLifecycleFailed,
+  toastPlaygroundAgentMovedToDraft,
+  toastPlaygroundAgentWentLive,
+} from '@/lib/playgroundSectionSaveToasts';
 import { Modal } from '@/components/ui/Modal';
 import { cn } from '@/lib/utils';
 
@@ -33,7 +38,7 @@ const DRAFT_STEPS = [
   'Finalizing draft state…',
 ] as const;
 
-const LAST_STEP_DWELL_MS = 550;
+const LAST_STEP_DWELL_MS = 250;
 
 type Phase = 'running' | 'success' | 'error';
 
@@ -71,6 +76,7 @@ export function BotLifecycleModal({
   publishRunner,
   onBusyChange,
   onClose,
+  onApiSuccess,
   onSuccess,
   openingDashboard = false,
   navigateToDashboardAfterPublish = false,
@@ -84,6 +90,7 @@ export function BotLifecycleModal({
   publishRunner?: () => Promise<BotLifecyclePublishRunnerResult>;
   onBusyChange?: (busy: boolean) => void;
   onClose: () => void;
+  onApiSuccess?: (data: CustomerBotLifecycleResponse) => void;
   onSuccess: () => void;
   /** Keep success UI visible and block dismiss while routing to dashboard (onboarding). */
   openingDashboard?: boolean;
@@ -200,8 +207,14 @@ export function BotLifecycleModal({
         clearProgressInterval();
         setPhase('error');
         setErrMsg(res.error || 'Request failed');
+        if (action === 'publish' || action === 'draft') {
+          toastPlaygroundAgentLifecycleFailed(action, res.error);
+        }
         return;
       }
+      clearProgressInterval();
+      setStepIndex(animationCap);
+      onApiSuccess?.(res.data);
       setPendingSuccess(res.data);
     })();
 
@@ -213,7 +226,7 @@ export function BotLifecycleModal({
         lastStepDwellTimeoutRef.current = null;
       }
     };
-  }, [open, runKey, action, botId, publishRunner, initialDashboardNavigation, navigateToDashboardAfterPublish]);
+  }, [open, runKey, action, botId, publishRunner, initialDashboardNavigation, navigateToDashboardAfterPublish, onApiSuccess]);
 
   useEffect(() => {
     if (!open || phase !== 'running' || !pendingSuccess || !action) {
@@ -250,8 +263,15 @@ export function BotLifecycleModal({
       if (navigateToDashboardAfterPublish && action === 'publish') {
         setDashboardNavigationActive(true);
         setStepIndex(PUBLISH_STEPS.length);
+        toastPlaygroundAgentWentLive();
         onSuccess();
         return;
+      }
+
+      if (action === 'publish') {
+        toastPlaygroundAgentWentLive();
+      } else if (action === 'draft') {
+        toastPlaygroundAgentMovedToDraft();
       }
 
       setPhase('success');

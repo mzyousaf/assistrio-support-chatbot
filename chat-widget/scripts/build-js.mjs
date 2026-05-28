@@ -33,6 +33,9 @@ await esbuild.build({
   define: {
     "process.env.NODE_ENV": JSON.stringify(isDebug ? "development" : "production"),
   },
+  loader: {
+    ".png": "dataurl",
+  },
 });
 
 console.log(`Built ${outfile}`);

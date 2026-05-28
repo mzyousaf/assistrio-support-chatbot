@@ -27,7 +27,11 @@ import {
 import {
   toastPlaygroundAccessKeyRotateFailed,
   toastPlaygroundAccessKeyRotated,
+  toastPlaygroundAgentAutoDraftedNoOrigins,
+  toastPlaygroundAgentMovedToDraft,
+  toastPlaygroundAgentWentLive,
   toastPlaygroundDeployOriginsSaveFailed,
+  toastPlaygroundDeployOriginsSaved,
   toastPlaygroundSecretKeyRotateFailed,
   toastPlaygroundSecretKeyRotated,
   toastPlaygroundSectionSaveFailed,
@@ -74,6 +78,12 @@ function rowsFromBot(bot: AdminBotWorkspaceBot): OriginRow[] {
   }));
 }
 
+function patchResultStatus(data: unknown): PublishStatus | null {
+  if (!data || typeof data !== 'object') return null;
+  const status = (data as { status?: unknown }).status;
+  return status === 'published' || status === 'draft' ? status : null;
+}
+
 function buildEmbedSnippet(
   botId: string,
   accessKey: string,
@@ -100,6 +110,7 @@ type PublishWorkspaceContextValue = {
   setStatus: (v: PublishStatus) => void;
   visibility: EmbedVisibility;
   setVisibility: (v: EmbedVisibility) => void;
+  visibilitySavingTarget: EmbedVisibility | null;
   rows: OriginRow[];
   embedInstallMode: EmbedInstallMode;
   setEmbedInstallMode: (v: EmbedInstallMode) => void;
@@ -109,14 +120,19 @@ type PublishWorkspaceContextValue = {
   setSecretRevealed: Dispatch<SetStateAction<boolean>>;
   dirty: boolean;
   saving: boolean;
+  savingOrigins: boolean;
+  savingDeploymentMeta: boolean;
   saveError: string | null;
   markDirty: () => void;
   copiedId: string | null;
   markCopied: (id: string) => void;
   copyText: (text: string, id: string) => Promise<void>;
-  updateRow: (index: number, patch: Partial<Pick<OriginRow, 'origin' | 'label' | 'isActive'>>) => void;
-  addRow: (initial?: Partial<Pick<OriginRow, 'origin' | 'label' | 'isActive'>>) => void;
-  removeRow: (index: number) => void;
+  updateRow: (
+    index: number,
+    patch: Partial<Pick<OriginRow, 'origin' | 'label' | 'isActive'>>,
+  ) => Promise<boolean>;
+  addRow: (initial?: Partial<Pick<OriginRow, 'origin' | 'label' | 'isActive'>>) => Promise<boolean>;
+  removeRow: (index: number) => Promise<boolean>;
   onSubmit: (e: FormEvent) => Promise<void>;
   accessKeyDisplay: string;
   secretKeyDisplay: string;
@@ -144,6 +160,9 @@ export function PublishWorkspaceProvider({ children }: { children: ReactNode }) 
 
   const [status, setStatusInternal] = useState<PublishStatus>('draft');
   const [visibility, setVisibilityState] = useState<EmbedVisibility>('public');
+  const [visibilitySavingTarget, setVisibilitySavingTarget] = useState<EmbedVisibility | null>(null);
+  const visibilitySavingTargetRef = useRef<EmbedVisibility | null>(null);
+  visibilitySavingTargetRef.current = visibilitySavingTarget;
   const [rows, setRows] = useState<OriginRow[]>([]);
   const [embedInstallMode, setEmbedInstallModeState] = useState<EmbedInstallMode>('chat-widget');
   const [selectedInstallOrigin, setSelectedInstallOriginState] = useState('');
@@ -153,7 +172,9 @@ export function PublishWorkspaceProvider({ children }: { children: ReactNode }) 
   const [metaDirty, setMetaDirty] = useState(false);
   const metaDirtyRef = useRef(false);
   metaDirtyRef.current = metaDirty;
-  const [saving, setSaving] = useState(false);
+  const [savingOrigins, setSavingOrigins] = useState(false);
+  const [savingMeta, setSavingMeta] = useState(false);
+  const [deploymentMetaSavePending, setDeploymentMetaSavePending] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [rotatingAccessKey, setRotatingAccessKey] = useState(false);
   const [rotatingSecretKey, setRotatingSecretKey] = useState(false);
@@ -188,7 +209,7 @@ export function PublishWorkspaceProvider({ children }: { children: ReactNode }) 
 
   useEffect(() => {
     if (!bot) return;
-    if (metaDirtyRef.current) {
+    if (metaDirtyRef.current || visibilitySavingTargetRef.current) {
       setSaveError(null);
       setKeyActionError(null);
       return;
@@ -271,16 +292,19 @@ export function PublishWorkspaceProvider({ children }: { children: ReactNode }) 
 
   const installSnippet = embedInstallMode === 'chat-widget' ? chatWidgetSnippet : iframeSnippetText;
 
+  const saving = savingOrigins || savingMeta;
+  const savingDeploymentMeta = deploymentMetaSavePending || savingMeta;
+
   const persistOriginsSnapshot = useCallback(
-    async (nextRows: OriginRow[]) => {
-      if (!bot || !botId || saving) return;
+    async (nextRows: OriginRow[]): Promise<boolean> => {
+      if (!bot || !botId || savingOrigins || savingMeta) return false;
       if (nextRows.length > MAX_ALLOWED_ORIGINS) {
         setSaveError(`You can add up to ${MAX_ALLOWED_ORIGINS} websites.`);
         toastPlaygroundValidationWarning(
           'Too many allowed websites',
           `Remove entries until you have at most ${MAX_ALLOWED_ORIGINS} sites.`,
         );
-        return;
+        return false;
       }
       for (let i = 0; i < nextRows.length; i++) {
         const r = nextRows[i];
@@ -294,24 +318,10 @@ export function PublishWorkspaceProvider({ children }: { children: ReactNode }) 
             'Website URL not valid',
             'Use a production https:// URL for each allowed site. Localhost cannot be saved.',
           );
-          return;
+          return false;
         }
       }
       const st = statusRef.current;
-      const activeValidOriginCountSnap = nextRows.filter(
-        (r) => r.isActive && normalizeCustomerEmbedOrigin(r.origin),
-      ).length;
-      const canPublishSnap = nameOk && descOk && activeValidOriginCountSnap >= 1;
-      if (st === 'published' && !canPublishSnap) {
-        const msg =
-          'To publish, add an bot name and profile description in Profile, and at least one active allowed website below.';
-        setSaveError(msg);
-        toastPlaygroundValidationWarning(
-          'Publish requirements not met',
-          'Complete Profile (name and description) and add at least one active allowed website.',
-        );
-        return;
-      }
       const allowedOrigins = nextRows
         .map((r) => {
           const origin = normalizeCustomerEmbedOrigin(r.origin.trim());
@@ -324,61 +334,118 @@ export function PublishWorkspaceProvider({ children }: { children: ReactNode }) 
           };
         })
         .filter((x): x is { origin: string; label?: string; isActive: boolean } => x != null);
-      if (st === 'published' && !allowedOrigins.some((o) => o.isActive)) {
-        setSaveError('Published requires at least one active allowed website.');
-        toastPlaygroundValidationWarning(
-          'Active website required',
-          'Turn on at least one allowed website while your bot is published.',
-        );
-        return;
-      }
-      setSaving(true);
+      setSavingOrigins(true);
       setSaveError(null);
-      /** Origins-only PATCH: avoids duplicating the debounced deploy save (status/visibility + origins). */
       const res = await patchAdminBot(botId, {
         allowedOrigins,
       });
-      setSaving(false);
+      setSavingOrigins(false);
       if (!res.ok) {
         setSaveError(res.error);
         toastPlaygroundDeployOriginsSaveFailed(res.error);
-        return;
+        return false;
       }
+      const nextStatus = patchResultStatus(res.data);
+      if (st === 'published' && nextStatus === 'draft') {
+        setStatusInternal('draft');
+        setMetaDirty(false);
+        setDeploymentMetaSavePending(false);
+        toastPlaygroundAgentAutoDraftedNoOrigins();
+      } else {
+        toastPlaygroundDeployOriginsSaved();
+      }
+      setRows(nextRows);
       void softReload();
+      return true;
     },
-    [bot, botId, descOk, nameOk, saving, softReload],
+    [bot, botId, savingOrigins, savingMeta, softReload],
   );
 
-  function updateRow(index: number, patch: Partial<Pick<OriginRow, 'origin' | 'label' | 'isActive'>>) {
-    setRows((prev) => {
-      const next = [...prev];
-      const cur = next[index];
-      if (!cur) return prev;
-      next[index] = { ...cur, ...patch };
-      void persistOriginsSnapshot(next);
-      return next;
-    });
-  }
+  const applyOriginsChange = useCallback(
+    (buildNext: (prev: OriginRow[]) => OriginRow[] | null): Promise<boolean> =>
+      new Promise((resolve) => {
+        setRows((prev) => {
+          const next = buildNext(prev);
+          if (!next) {
+            resolve(false);
+            return prev;
+          }
+          void persistOriginsSnapshot(next).then(resolve);
+          return prev;
+        });
+      }),
+    [persistOriginsSnapshot],
+  );
 
-  function addRow(initial?: Partial<Pick<OriginRow, 'origin' | 'label' | 'isActive'>>) {
-    setRows((prev) => {
-      if (prev.length >= MAX_ALLOWED_ORIGINS) return prev;
-      const next = [...prev, { ...newRow(), ...initial }];
-      void persistOriginsSnapshot(next);
-      return next;
-    });
-  }
+  const updateRow = useCallback(
+    (index: number, patch: Partial<Pick<OriginRow, 'origin' | 'label' | 'isActive'>>) =>
+      applyOriginsChange((prev) => {
+        const cur = prev[index];
+        if (!cur) return null;
+        const next = [...prev];
+        next[index] = { ...cur, ...patch };
+        return next;
+      }),
+    [applyOriginsChange],
+  );
 
-  function removeRow(index: number) {
-    setRows((prev) => {
-      const next = prev.filter((_, i) => i !== index);
-      void persistOriginsSnapshot(next);
-      return next;
-    });
-  }
+  const addRow = useCallback(
+    (initial?: Partial<Pick<OriginRow, 'origin' | 'label' | 'isActive'>>) =>
+      applyOriginsChange((prev) => {
+        if (prev.length >= MAX_ALLOWED_ORIGINS) return null;
+        return [...prev, { ...newRow(), ...initial }];
+      }),
+    [applyOriginsChange],
+  );
+
+  const removeRow = useCallback(
+    (index: number) => applyOriginsChange((prev) => prev.filter((_, i) => i !== index)),
+    [applyOriginsChange],
+  );
+
+  const saveVisibility = useCallback(
+    async (nextVisibility: EmbedVisibility) => {
+      if (!bot || !botId || savingMeta || savingOrigins || visibilitySavingTarget) return;
+      if (nextVisibility === visibility) return;
+
+      const allowedOrigins = rows
+        .map((r) => {
+          const origin = normalizeCustomerEmbedOrigin(r.origin.trim());
+          if (!origin) return null;
+          const label = r.label.trim();
+          return {
+            origin,
+            ...(label ? { label } : {}),
+            isActive: r.isActive,
+          };
+        })
+        .filter((x): x is { origin: string; label?: string; isActive: boolean } => x != null);
+
+      setVisibilitySavingTarget(nextVisibility);
+      setSaveError(null);
+
+      const res = await patchAdminBot(botId, {
+        status,
+        visibility: nextVisibility,
+        allowedOrigins,
+      });
+
+      setVisibilitySavingTarget(null);
+      if (!res.ok) {
+        setSaveError(res.error);
+        toastPlaygroundSectionSaveFailed('deploy', res.error);
+        return;
+      }
+
+      setVisibilityState(nextVisibility);
+      toastPlaygroundSectionSaved('deploy');
+      await softReload();
+    },
+    [bot, botId, savingMeta, savingOrigins, visibilitySavingTarget, visibility, rows, status, softReload],
+  );
 
   const saveDeploymentSettings = useCallback(async () => {
-    if (!bot || !botId || saving) return;
+    if (!bot || !botId || savingMeta || savingOrigins) return;
 
     if (rows.length > MAX_ALLOWED_ORIGINS) {
       setSaveError(`You can add up to ${MAX_ALLOWED_ORIGINS} websites.`);
@@ -386,6 +453,7 @@ export function PublishWorkspaceProvider({ children }: { children: ReactNode }) 
         'Too many allowed websites',
         `Remove entries until you have at most ${MAX_ALLOWED_ORIGINS} sites.`,
       );
+      setDeploymentMetaSavePending(false);
       return;
     }
 
@@ -401,19 +469,25 @@ export function PublishWorkspaceProvider({ children }: { children: ReactNode }) 
           'Website URL not valid',
           'Use a production https:// URL for each allowed site. Localhost cannot be saved.',
         );
+        setDeploymentMetaSavePending(false);
         return;
       }
     }
 
     if (status === 'published' && !canPublishBackend) {
-      const msg =
-        'To publish, add an bot name and profile description in Profile, and at least one active allowed website below.';
-      setSaveError(msg);
-      toastPlaygroundValidationWarning(
-        'Publish requirements not met',
-        'Complete Profile (name and description) and add at least one active allowed website.',
-      );
-      return;
+      const wasLive = bot.status === 'published';
+      const onlyClearingOrigins = wasLive && activeValidOriginCount === 0 && nameOk && descOk;
+      if (!onlyClearingOrigins) {
+        const msg =
+          'To publish, add an bot name and profile description in Profile, and at least one active allowed website below.';
+        setSaveError(msg);
+        toastPlaygroundValidationWarning(
+          'Publish requirements not met',
+          'Complete Profile (name and description) and add at least one active allowed website.',
+        );
+        setDeploymentMetaSavePending(false);
+        return;
+      }
     }
 
     const allowedOrigins = rows
@@ -429,16 +503,17 @@ export function PublishWorkspaceProvider({ children }: { children: ReactNode }) 
       })
       .filter((x): x is { origin: string; label?: string; isActive: boolean } => x != null);
 
-    if (status === 'published' && !allowedOrigins.some((o) => o.isActive)) {
+    if (status === 'published' && !allowedOrigins.some((o) => o.isActive) && bot.status !== 'published') {
       setSaveError('Published requires at least one active allowed website.');
       toastPlaygroundValidationWarning(
         'Active website required',
-        'Turn on at least one allowed website while your bot is published.',
+        'Add at least one active allowed website before going live.',
       );
+      setDeploymentMetaSavePending(false);
       return;
     }
 
-    setSaving(true);
+    setSavingMeta(true);
     setSaveError(null);
 
     const res = await patchAdminBot(botId, {
@@ -446,28 +521,42 @@ export function PublishWorkspaceProvider({ children }: { children: ReactNode }) 
       visibility,
       allowedOrigins,
     });
-    setSaving(false);
+    setSavingMeta(false);
+    setDeploymentMetaSavePending(false);
     if (!res.ok) {
       setSaveError(res.error);
       toastPlaygroundSectionSaveFailed('deploy', res.error);
       return;
     }
-    toastPlaygroundSectionSaved('deploy');
+    const wasPublished = bot.status === 'published';
+    const nextStatus = patchResultStatus(res.data);
+    if (nextStatus === 'published' && !wasPublished && status === 'published') {
+      toastPlaygroundAgentWentLive();
+    } else if (nextStatus === 'draft' && wasPublished) {
+      setStatusInternal('draft');
+      if (status === 'draft') {
+        toastPlaygroundAgentMovedToDraft();
+      } else {
+        toastPlaygroundAgentAutoDraftedNoOrigins();
+      }
+    } else {
+      toastPlaygroundSectionSaved('deploy');
+    }
     setMetaDirty(false);
     await softReload();
-  }, [bot, botId, saving, rows, status, visibility, canPublishBackend, softReload]);
+  }, [bot, botId, savingMeta, savingOrigins, rows, status, visibility, canPublishBackend, softReload, nameOk, descOk, activeValidOriginCount]);
 
   const onSubmit = useCallback(async (e: FormEvent) => {
     e.preventDefault();
   }, []);
 
   useEffect(() => {
-    if (!metaDirty || saving || saveError) return;
+    if (!metaDirty || savingMeta || savingOrigins || saveError) return;
     const id = window.setTimeout(() => {
       void saveDeploymentSettings();
     }, 650);
     return () => window.clearTimeout(id);
-  }, [metaDirty, saving, saveError, saveDeploymentSettings]);
+  }, [metaDirty, savingMeta, savingOrigins, saveError, saveDeploymentSettings]);
 
   const rotateAccessKey = useCallback(async () => {
     if (!botId || rotatingAccessKey) return;
@@ -508,14 +597,13 @@ export function PublishWorkspaceProvider({ children }: { children: ReactNode }) 
       setStatus,
       visibility,
       setVisibility: (v: EmbedVisibility) => {
-        setVisibilityState(v);
-        markDirty();
+        void saveVisibility(v);
       },
+      visibilitySavingTarget,
       rows,
       embedInstallMode,
       setEmbedInstallMode: (v: EmbedInstallMode) => {
         setEmbedInstallModeState(v);
-        markDirty();
       },
       selectedInstallOrigin,
       setSelectedInstallOrigin: (v: string) => {
@@ -526,6 +614,8 @@ export function PublishWorkspaceProvider({ children }: { children: ReactNode }) 
       setSecretRevealed,
       dirty: metaDirty,
       saving,
+      savingOrigins,
+      savingDeploymentMeta,
       saveError,
       markDirty,
       copiedId,
@@ -558,12 +648,15 @@ export function PublishWorkspaceProvider({ children }: { children: ReactNode }) 
       status,
       setStatus,
       visibility,
+      visibilitySavingTarget,
       rows,
       embedInstallMode,
       selectedInstallOrigin,
       secretRevealed,
       metaDirty,
       saving,
+      savingOrigins,
+      savingDeploymentMeta,
       saveError,
       markDirty,
       copiedId,
@@ -584,6 +677,7 @@ export function PublishWorkspaceProvider({ children }: { children: ReactNode }) 
       keyActionError,
       rotateAccessKey,
       rotateSecretKey,
+      saveVisibility,
     ],
   );
 

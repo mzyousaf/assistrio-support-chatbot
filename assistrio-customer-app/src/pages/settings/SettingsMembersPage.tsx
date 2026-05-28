@@ -12,6 +12,7 @@ import {
 import type { WorkspaceInviteRole, WorkspaceInviteSummary, WorkspaceMemberSummary } from '@/api/types';
 import { useCustomerAuth } from '@/auth/CustomerAuthContext';
 import { InviteMemberModal } from '@/components/settings/InviteMemberModal';
+import { EditMemberBotAccessModal } from '@/components/settings/EditMemberBotAccessModal';
 import { MembersPageSkeleton } from '@/components/settings/MembersPageSkeleton';
 import { SettingsMembersConfirmModal } from '@/components/settings/SettingsMembersConfirmModal';
 import { SettingsPageHeader } from '@/components/settings/SettingsPageHeader';
@@ -77,6 +78,7 @@ export function SettingsMembersPage() {
   const [removeBusy, setRemoveBusy] = useState(false);
   const [cancelBusy, setCancelBusy] = useState(false);
   const [resendBusyId, setResendBusyId] = useState<string | null>(null);
+  const [editAccessRow, setEditAccessRow] = useState<WorkspacePersonRow | null>(null);
 
   const canManageMembers = isWorkspaceManagerRole(role);
 
@@ -296,17 +298,29 @@ export function SettingsMembersPage() {
               <WorkspacePeopleTable
                 rows={directoryRows}
                 canManageRoles={canManageRoles}
+                canEditBotAccess={canManageRoles}
                 resendBusyId={resendBusyId}
                 showInviteHint={showInviteHint}
                 onRemoveMember={setRemoveTarget}
                 onCancelInvite={setCancelTarget}
                 onResendInvite={(invite) => void handleResendInvite(invite)}
                 onRoleChange={(row, nextRole) => void handleRoleChange(row, nextRole)}
+                onEditAccess={setEditAccessRow}
               />
             </div>
           )
         ) : null}
       </WorkspaceContentContainer>
+
+      {activeWorkspaceId ? (
+        <EditMemberBotAccessModal
+          open={!!editAccessRow}
+          workspaceId={activeWorkspaceId}
+          row={editAccessRow}
+          onClose={() => setEditAccessRow(null)}
+          onSaved={refreshData}
+        />
+      ) : null}
 
       {activeWorkspaceId ? (
         <InviteMemberModal

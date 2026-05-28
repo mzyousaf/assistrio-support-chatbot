@@ -1,4 +1,6 @@
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { deleteWorkspace, patchWorkspace } from '@/api/customerApi';
 import { useCustomerAuth } from '@/auth/CustomerAuthContext';
 import { DeleteWorkspaceModal } from '@/components/settings/DeleteWorkspaceModal';
 import { SettingsCopyButton } from '@/components/settings/SettingsCopyButton';
@@ -8,25 +10,72 @@ import { Button, Card, CardBody, CardDescription, CardHeader, CardTitle, Input, 
 import { WorkspaceContentContainer } from '@/layout/workspace-layout/WorkspaceContentContainer';
 import { appToast } from '@/lib/app-toast';
 import { resolveActiveCustomerWorkspace } from '@/lib/resolveActiveCustomerWorkspace';
+import { resolvePathAfterWorkspaceSwitch } from '@/lib/workspaceSwitchNavigation';
+import { isWorkspaceManagerRole } from '@/lib/workspaceRoles';
+
+function isPaidWorkspace(planKey?: string, subscriptionStatus?: string): boolean {
+  if (!planKey || planKey === 'free') return false;
+  if (subscriptionStatus === 'free' || subscriptionStatus === 'trialing') return false;
+  return true;
+}
 
 export function WorkspaceSettingsPage() {
-  const { customer } = useCustomerAuth();
-  const { workspace, activeWorkspaceId } = resolveActiveCustomerWorkspace(customer);
+  const navigate = useNavigate();
+  const { customer, applyCustomerSession } = useCustomerAuth();
+  const { workspace, activeWorkspaceId, role } = resolveActiveCustomerWorkspace(customer);
+  const canManageWorkspace = isWorkspaceManagerRole(role);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [savingName, setSavingName] = useState(false);
   const nameInputId = useId();
 
   const workspaceName = workspace?.name?.trim() || 'Workspace';
   const workspaceId = activeWorkspaceId ?? '';
   const [editedName, setEditedName] = useState(workspaceName);
   const hasUnsavedNameChange = editedName.trim() !== workspaceName;
+  const paidWorkspace = isPaidWorkspace(workspace?.planKey, workspace?.subscriptionStatus);
+  const canDeleteWorkspace = role === 'owner' && paidWorkspace;
 
   useEffect(() => {
     setEditedName(workspaceName);
   }, [workspaceName]);
 
-  function handleSaveNamePlaceholder() {
-    appToast.info('Workspace name editing is not connected yet.');
+  async function handleSaveName() {
+    if (!activeWorkspaceId || !canManageWorkspace) return;
+    const trimmed = editedName.trim();
+    if (!trimmed) {
+      appToast.error('Workspace name cannot be empty.');
+      return;
+    }
+    setSavingName(true);
+    const result = await patchWorkspace(activeWorkspaceId, { name: trimmed });
+    setSavingName(false);
+    if (!result.ok) {
+      appToast.error(result.error || 'Could not save workspace name.');
+      return;
+    }
+    applyCustomerSession(result.data.session);
+    setEditedName(result.data.workspace.name);
+    appToast.success('Workspace name saved.');
   }
+
+  async function handleDeleteWorkspace() {
+    if (!activeWorkspaceId) return;
+    const result = await deleteWorkspace(activeWorkspaceId);
+    if (!result.ok) {
+      appToast.error(result.error || 'Could not delete workspace.');
+      return;
+    }
+    applyCustomerSession(result.data.session);
+    appToast.success('Workspace deleted.');
+    setDeleteModalOpen(false);
+    navigate(resolvePathAfterWorkspaceSwitch(result.data.session), { replace: true });
+  }
+
+  const deleteDisabledCopy = useMemo(() => {
+    if (role !== 'owner') return null;
+    if (!paidWorkspace) return 'Workspace deletion is available for paid workspaces.';
+    return null;
+  }, [paidWorkspace, role]);
 
   if (!activeWorkspaceId || !workspace) {
     return (
@@ -93,20 +142,18 @@ export function WorkspaceSettingsPage() {
                     className="w-full"
                     autoComplete="off"
                     spellCheck={false}
+                    readOnly={!canManageWorkspace}
                   />
-                  {hasUnsavedNameChange ? (
-                    <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
-                      <p className="m-0 text-xs leading-relaxed text-slate-500">
-                        Workspace name changes are not saved yet.
-                      </p>
+                  {canManageWorkspace ? (
+                    <div className="mt-2 flex justify-end">
                       <Button
                         type="button"
-                        variant="secondary"
                         size="sm"
-                        className="shrink-0 self-start sm:self-auto"
-                        onClick={handleSaveNamePlaceholder}
+                        className="shrink-0"
+                        disabled={!hasUnsavedNameChange || savingName || !editedName.trim()}
+                        onClick={() => void handleSaveName()}
                       >
-                        Save changes
+                        {savingName ? 'Updating…' : 'Update settings'}
                       </Button>
                     </div>
                   ) : null}
@@ -130,12 +177,16 @@ export function WorkspaceSettingsPage() {
                     <p className="m-0 mt-1 max-w-xl text-sm leading-relaxed text-slate-600">
                       Permanently delete this workspace and remove its data. This action cannot be undone.
                     </p>
+                    {deleteDisabledCopy ? (
+                      <p className="m-0 mt-2 text-sm text-slate-500">{deleteDisabledCopy}</p>
+                    ) : null}
                   </div>
                   <Button
                     type="button"
                     variant="danger"
                     size="sm"
                     className="shrink-0 self-start sm:self-center"
+                    disabled={!canDeleteWorkspace}
                     onClick={() => setDeleteModalOpen(true)}
                   >
                     Delete workspace
@@ -151,6 +202,7 @@ export function WorkspaceSettingsPage() {
         open={deleteModalOpen}
         onClose={() => setDeleteModalOpen(false)}
         workspaceName={workspaceName}
+        onDelete={handleDeleteWorkspace}
       />
     </>
   );

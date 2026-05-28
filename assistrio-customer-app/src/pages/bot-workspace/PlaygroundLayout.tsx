@@ -6,8 +6,7 @@ import { BehaviorWorkspaceProvider } from './BehaviorWorkspaceContext';
 /**
  * One workspace shell for all playground sub-routes: editor (`<Outlet />`) + a **single** inline
  * widget preview with a stable portal `mountId`. The live embed (`CustomerWidgetPreviewHost`) remounts per playground section and per Knowledge Base *item path* (not separately for `/edit`).
- * Deploy & Go Live uses the same grid without the right-lane slot (matches prior `PublishWorkspacePage`); the
- * host still uses floating preview for that path.
+ * Deploy & Go Live uses the same grid without the right-lane slot; the live preview is a bottom-right floating widget.
  */
 const PLAYGROUND_WIDGET_PREVIEW_MOUNT_ID = 'playground-widget-preview-root';
 

@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { User, Workspace, WorkspaceMembership, WorkspaceInvite, type UserRole, type WorkspaceMemberRole } from '../models';
@@ -45,11 +45,25 @@ import {
   type WorkspaceDefaultBotAccessPolicy,
 } from './workspace-default-bot-access-policy.util';
 import {
+  WORKSPACE_DELETE_PAID_REQUIRED_CODE,
+  WORKSPACE_DELETE_PAID_REQUIRED_MESSAGE,
+  WORKSPACE_DELETE_PLATFORM_FORBIDDEN_CODE,
+  WORKSPACE_DELETE_PLATFORM_FORBIDDEN_MESSAGE,
+  WORKSPACE_DELETE_NOT_FOUND_CODE,
+  WORKSPACE_NAME_MAX_LENGTH,
+} from './workspace-delete.constants';
+import {
+  resolveWorkspaceMemberAvatarUrl,
+  resolveWorkspaceMemberDisplayName,
+} from './workspace-member-display.util';
+import {
   WORKSPACE_LAST_MANAGER_REQUIRED_CODE,
   WORKSPACE_OWNER_PROTECTED_CODE,
   WORKSPACE_INVITE_ROLES,
   type WorkspaceInviteRole,
 } from '../models/workspace-invite.constants';
+import type { PlanKey } from '../entitlements/plan-catalog';
+import type { WorkspaceSubscriptionStatus } from '../models/workspace-subscription.schema';
 
 export type WorkspaceMemberListItem = {
   userId: string;
@@ -57,6 +71,8 @@ export type WorkspaceMemberListItem = {
   firstName: string | null;
   lastName: string | null;
   picture: string | null;
+  displayName: string;
+  avatarUrl: string | null;
   role: WorkspaceMemberRole;
   joinedAt: Date | null;
 };
@@ -233,8 +249,8 @@ export class WorkspacesService {
     const ordered = orderWorkspaceRowsForSession(rows, activeWorkspaceId ?? null);
     const ids = ordered.map((row) => new Types.ObjectId(row.workspaceId));
     const docs = await this.workspaceModel
-      .find({ _id: { $in: ids } })
-      .select('name onboardingStatus onboardingCurrentStep onboardingCreatedBotId')
+      .find({ _id: { $in: ids }, deletedAt: { $exists: false } })
+      .select('name onboardingStatus onboardingCurrentStep onboardingCreatedBotId deletedAt')
       .lean();
     const byId = new Map(
       (docs as {
@@ -286,8 +302,8 @@ export class WorkspacesService {
 
     const workspaceIds = (memberships as { workspaceId: Types.ObjectId }[]).map((row) => row.workspaceId);
     const workspaces = await this.workspaceModel
-      .find({ _id: { $in: workspaceIds } })
-      .select('name createdAt')
+      .find({ _id: { $in: workspaceIds }, deletedAt: { $exists: false } })
+      .select('name createdAt deletedAt')
       .lean();
 
     const workspaceById = new Map(
@@ -309,19 +325,21 @@ export class WorkspacesService {
         workspaceCreatedAt: workspace?.createdAt ?? new Date(0),
         workspaceName: workspace?.name ?? 'Workspace',
       };
-    });
+    }).filter((row) => workspaceById.has(row.workspaceId));
   }
 
   /** Lightweight workspace label for list responses. */
   async getWorkspaceDisplayName(workspaceId: string): Promise<string | null> {
     if (!Types.ObjectId.isValid(workspaceId)) return null;
-    const ws = await this.workspaceModel.findById(workspaceId).select('name').lean();
-    if (!ws) return null;
+    const ws = await this.workspaceModel.findById(workspaceId).select('name deletedAt').lean();
+    if (!ws || (ws as { deletedAt?: Date }).deletedAt) return null;
     return String((ws as { name?: string }).name ?? '').trim() || 'Workspace';
   }
 
   async isUserMemberOfWorkspace(userId: string, workspaceId: string): Promise<boolean> {
     if (!Types.ObjectId.isValid(userId) || !Types.ObjectId.isValid(workspaceId)) return false;
+    const ws = await this.workspaceModel.findById(workspaceId).select('deletedAt').lean();
+    if (!ws || (ws as { deletedAt?: Date }).deletedAt) return false;
     const m = await this.membershipModel
       .findOne({
         userId: new Types.ObjectId(userId),
@@ -349,7 +367,7 @@ export class WorkspacesService {
     const userIds = (memberships as { userId: Types.ObjectId }[]).map((row) => row.userId);
     const users = await this.userModel
       .find({ _id: { $in: userIds } })
-      .select('email firstName lastName picture')
+      .select('email firstName lastName picture displayNameOverride pictureOverride')
       .lean();
 
     const userById = new Map(
@@ -359,18 +377,30 @@ export class WorkspacesService {
         firstName?: string;
         lastName?: string;
         picture?: string;
+        displayNameOverride?: string | null;
+        pictureOverride?: string | null;
       }[]).map((user) => [String(user._id), user]),
     );
 
     return (memberships as { _id: Types.ObjectId; userId: Types.ObjectId; role: WorkspaceMemberRole }[])
       .map((membership) => {
         const user = userById.get(String(membership.userId));
-        return {
-          userId: String(membership.userId),
+        const profile = {
           email: String(user?.email ?? ''),
           firstName: user?.firstName ?? null,
           lastName: user?.lastName ?? null,
+          displayNameOverride: user?.displayNameOverride ?? null,
           picture: user?.picture ?? null,
+          pictureOverride: user?.pictureOverride ?? null,
+        };
+        return {
+          userId: String(membership.userId),
+          email: profile.email,
+          firstName: profile.firstName,
+          lastName: profile.lastName,
+          picture: profile.picture,
+          displayName: resolveWorkspaceMemberDisplayName(profile),
+          avatarUrl: resolveWorkspaceMemberAvatarUrl(profile),
           role: membership.role ?? 'member',
           joinedAt: membership._id?.getTimestamp?.() ?? null,
         };
@@ -474,6 +504,13 @@ export class WorkspacesService {
 
   async listBotAccessGrantRows(workspaceId: string, botId: string): Promise<BotAccessGrantRow[]> {
     return this.botAccessGrantService.listGrantRowsForBot({ workspaceId, botId });
+  }
+
+  async buildBotViewAccessPreviewByBotIds(
+    workspaceId: string,
+    botIds: string[],
+  ): Promise<Record<string, import('./workspace-bot-access-grant.util').BotViewAccessPreviewMember[]>> {
+    return this.botAccessGrantService.buildViewAccessPreviewByBotIds(workspaceId, botIds);
   }
 
   async upsertBotAccessGrants(params: {
@@ -589,7 +626,7 @@ export class WorkspacesService {
 
   /**
    * Access to workspace bot detail, analytics, knowledge read.
-   * Workspace owner: all bots. Admin/member: per-person canView grant (legacy fallback when no grants).
+   * Workspace owner: all bots. Admin/member: per-person canView grant (no legacy fallback for workspace bots).
    */
   async canUserAccessWorkspaceBot(
     userId: string,
@@ -721,6 +758,140 @@ export class WorkspacesService {
     await this.botAccessGrantService.applyDefaultAccessGrantsForNewBot({
       ...params,
       policy,
+    });
+  }
+
+  async updateWorkspaceName(
+    workspaceId: string,
+    actingUserId: string,
+    name: string,
+  ): Promise<{ id: string; name: string }> {
+    await assertWorkspaceManagerMembership(this.membershipModel, actingUserId, workspaceId);
+    const trimmed = String(name ?? '').trim().replace(/\s+/g, ' ');
+    if (!trimmed) {
+      throw new BadRequestException({ message: 'Workspace name cannot be empty.' });
+    }
+    if (trimmed.length > WORKSPACE_NAME_MAX_LENGTH) {
+      throw new BadRequestException({ message: 'Workspace name is too long.' });
+    }
+    const ws = await this.workspaceModel.findById(workspaceId).select('name deletedAt').lean();
+    if (!ws || (ws as { deletedAt?: Date }).deletedAt) {
+      throw new NotFoundException({ message: 'Workspace not found.', errorCode: WORKSPACE_DELETE_NOT_FOUND_CODE });
+    }
+    await this.workspaceModel.updateOne({ _id: new Types.ObjectId(workspaceId) }, { $set: { name: trimmed } });
+    return { id: workspaceId, name: trimmed };
+  }
+
+  private isPaidWorkspaceSubscription(subscription: {
+    planKey: PlanKey;
+    status: WorkspaceSubscriptionStatus;
+  } | null): boolean {
+    if (!subscription) return false;
+    if (subscription.planKey === 'free') return false;
+    if (subscription.status === 'free' || subscription.status === 'trialing') return false;
+    return true;
+  }
+
+  async deleteWorkspaceForOwner(workspaceId: string, actingUserId: string): Promise<void> {
+    await assertWorkspaceOwnerMembership(this.membershipModel, actingUserId, workspaceId);
+    if (!Types.ObjectId.isValid(workspaceId)) {
+      throw new NotFoundException({ message: 'Workspace not found.', errorCode: WORKSPACE_DELETE_NOT_FOUND_CODE });
+    }
+
+    const ws = await this.workspaceModel.findById(workspaceId).select('name deletedAt').lean();
+    if (!ws || (ws as { deletedAt?: Date }).deletedAt) {
+      throw new NotFoundException({ message: 'Workspace not found.', errorCode: WORKSPACE_DELETE_NOT_FOUND_CODE });
+    }
+
+    const workspaceName = String((ws as { name?: string }).name ?? '').trim();
+    if (workspaceName === ASSISTRIO_PLATFORM_WORKSPACE_NAME) {
+      throw new ForbiddenException({
+        message: WORKSPACE_DELETE_PLATFORM_FORBIDDEN_MESSAGE,
+        errorCode: WORKSPACE_DELETE_PLATFORM_FORBIDDEN_CODE,
+      });
+    }
+
+    const subscription = await this.workspaceSubscriptionsService.findByWorkspaceId(workspaceId);
+    if (!this.isPaidWorkspaceSubscription(subscription)) {
+      throw new ForbiddenException({
+        message: WORKSPACE_DELETE_PAID_REQUIRED_MESSAGE,
+        errorCode: WORKSPACE_DELETE_PAID_REQUIRED_CODE,
+      });
+    }
+
+    const wsOid = new Types.ObjectId(workspaceId);
+    const deletedAt = new Date();
+    await this.workspaceModel.updateOne({ _id: wsOid }, { $set: { deletedAt } });
+
+    const memberUserIds = (await this.membershipModel.find({ workspaceId: wsOid }).select('userId').lean()) as {
+      userId: Types.ObjectId;
+    }[];
+    for (const row of memberUserIds) {
+      await this.clearActiveWorkspaceIfMatches(String(row.userId), workspaceId);
+    }
+  }
+
+  async getMemberBotGrants(workspaceId: string, userId: string) {
+    return this.botAccessGrantService.listSubjectBotGrants({
+      workspaceId,
+      subjectType: 'user',
+      userId,
+    });
+  }
+
+  async getInviteBotGrants(workspaceId: string, inviteId: string) {
+    return this.botAccessGrantService.listSubjectBotGrants({
+      workspaceId,
+      subjectType: 'invite',
+      inviteId,
+    });
+  }
+
+  async updateMemberBotGrants(params: {
+    workspaceId: string;
+    userId: string;
+    actingUserId: string;
+    grants: Array<{ botId: string; canView: boolean; canPreview: boolean }>;
+  }) {
+    await assertWorkspaceOwnerMembership(this.membershipModel, params.actingUserId, params.workspaceId);
+    const membership = await this.membershipModel
+      .findOne({
+        workspaceId: new Types.ObjectId(params.workspaceId),
+        userId: new Types.ObjectId(params.userId),
+      })
+      .select('role')
+      .lean();
+    if (!membership) {
+      throw new NotFoundException({ message: 'Member not found in workspace.' });
+    }
+    if (isWorkspaceOwnerRole((membership as { role?: WorkspaceMemberRole }).role ?? 'member')) {
+      throw new ForbiddenException({
+        message: 'Workspace owner access cannot be edited.',
+        errorCode: WORKSPACE_OWNER_PROTECTED_CODE,
+      });
+    }
+    return this.botAccessGrantService.updateSubjectBotGrants({
+      workspaceId: params.workspaceId,
+      createdByUserId: params.actingUserId,
+      subjectType: 'user',
+      userId: params.userId,
+      grants: params.grants,
+    });
+  }
+
+  async updateInviteBotGrants(params: {
+    workspaceId: string;
+    inviteId: string;
+    actingUserId: string;
+    grants: Array<{ botId: string; canView: boolean; canPreview: boolean }>;
+  }) {
+    await assertWorkspaceOwnerMembership(this.membershipModel, params.actingUserId, params.workspaceId);
+    return this.botAccessGrantService.updateSubjectBotGrants({
+      workspaceId: params.workspaceId,
+      createdByUserId: params.actingUserId,
+      subjectType: 'invite',
+      inviteId: params.inviteId,
+      grants: params.grants,
     });
   }
 }

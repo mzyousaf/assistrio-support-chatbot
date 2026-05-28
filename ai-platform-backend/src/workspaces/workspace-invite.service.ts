@@ -33,6 +33,7 @@ import {
   hashWorkspaceInviteToken,
 } from './workspace-invite-token.util';
 import { serializeWorkspaceInvite, type WorkspaceInvitePreview } from './workspace-invite.types';
+import { filterCustomerVisibleInvites } from './workspace-invite-visibility.util';
 
 export type CreatePendingInviteInput = {
   workspaceId: string;
@@ -132,11 +133,24 @@ export class WorkspaceInviteService {
 
   async listInvitesForWorkspace(workspaceId: string): Promise<ReturnType<typeof serializeWorkspaceInvite>[]> {
     if (!Types.ObjectId.isValid(workspaceId)) return [];
-    const rows = await this.inviteModel
-      .find({ workspaceId: new Types.ObjectId(workspaceId) })
-      .sort({ createdAt: -1 })
-      .exec();
-    return rows.map((row) => serializeWorkspaceInvite(row as InviteDoc));
+    const wsOid = new Types.ObjectId(workspaceId);
+    const [rows, memberships] = await Promise.all([
+      this.inviteModel.find({ workspaceId: wsOid }).sort({ createdAt: -1 }).exec(),
+      this.membershipModel.find({ workspaceId: wsOid }).select('userId').lean(),
+    ]);
+
+    const userIds = (memberships as { userId: Types.ObjectId }[]).map((row) => row.userId);
+    const users = userIds.length
+      ? await this.userModel.find({ _id: { $in: userIds } }).select('email').lean()
+      : [];
+    const memberEmails = (users as { email?: string }[]).map((user) => String(user.email ?? ''));
+
+    const visible = filterCustomerVisibleInvites(
+      rows.map((row) => row as InviteDoc),
+      memberEmails,
+    );
+
+    return visible.map((row) => serializeWorkspaceInvite(row as InviteDoc));
   }
 
   async cancelInvite(workspaceId: string, inviteId: string, now: Date = new Date()): Promise<void> {
@@ -159,11 +173,8 @@ export class WorkspaceInviteService {
       return;
     }
 
-    await this.inviteModel.updateOne(
-      { _id: invite._id },
-      { $set: { status: 'cancelled' as WorkspaceInviteStatus, cancelledAt: now } },
-    );
     await this.botAccessGrantService.deleteInviteGrants(workspaceId, inviteId);
+    await this.inviteModel.deleteOne({ _id: invite._id });
   }
 
   async resendInvite(

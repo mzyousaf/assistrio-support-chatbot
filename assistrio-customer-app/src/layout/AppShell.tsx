@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type MouseEvent } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type MouseEvent, type MutableRefObject, type RefObject } from 'react';
 import {
   Database,
   CheckCircle2,
@@ -11,6 +11,7 @@ import {
   Info,
   LayoutDashboard,
   Link2,
+  Loader2,
   LogOut,
   PencilLine,
   Rocket,
@@ -22,7 +23,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { PostGoLiveInstallModalHost } from '@/components/onboarding/PostGoLiveInstallModalHost';
 import { getCustomerBot } from '../api/customerApi';
 import { getCustomerApiOrigin } from '../api/client';
-import type { CustomerBotDetail, CustomerMe, CustomerShareLinkResponse } from '../api/types';
+import type { CustomerBotDetail, CustomerBotLifecycleResponse, CustomerMe, CustomerShareLinkResponse } from '../api/types';
 import { AgentWorkspaceSidebar } from '../pages/bot-workspace/AgentWorkspaceSidebar';
 import { SharePreviewModal } from '../pages/bot-workspace/SharePreviewModal';
 import { useWorkspaceDiscardModal } from '../pages/bot-workspace/WorkspaceDiscardModal';
@@ -333,12 +334,14 @@ export function AppShell() {
   const [lifecycleBusy, setLifecycleBusy] = useState(false);
   const [lifecycleOpen, setLifecycleOpen] = useState(false);
   const [lifecycleAction, setLifecycleAction] = useState<'publish' | 'draft' | null>(null);
+  const [lifecycleOptimisticStatus, setLifecycleOptimisticStatus] = useState<'draft' | 'published' | null>(null);
   const [lifecycleRunKey, setLifecycleRunKey] = useState(0);
   const [statusToast, setStatusToast] = useState<string | null>(null);
   const statusToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [publishRequirementsOpen, setPublishRequirementsOpen] = useState(false);
   const [lifecycleConfirmOpen, setLifecycleConfirmOpen] = useState(false);
   const [lifecycleConfirmAction, setLifecycleConfirmAction] = useState<'publish' | 'draft' | null>(null);
+  const deployPublishReadyRef = useRef<boolean | null>(null);
   const [agentInfoExpanded, setAgentInfoExpanded] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [userCollapsed, setUserCollapsed] = useState(false);
@@ -395,12 +398,28 @@ export function AppShell() {
     [agentId, location.pathname, navigate, requestDiscardIfNeeded],
   );
   const currentStatus = String(agentBot?.status ?? '').toLowerCase() === 'published' ? 'published' : 'draft';
+  const effectiveAgentStatus = lifecycleOptimisticStatus ?? currentStatus;
+
+  useEffect(() => {
+    if (!lifecycleOptimisticStatus) return;
+    if (currentStatus === lifecycleOptimisticStatus) {
+      setLifecycleOptimisticStatus(null);
+    }
+  }, [currentStatus, lifecycleOptimisticStatus]);
   const visibilityLabel = String(agentBot?.visibility ?? '').toLowerCase() === 'private' ? 'Private' : 'Public';
   const canPublishFromNavbar = Boolean(
     String(agentBot?.name ?? '').trim() &&
       String(agentBot?.description ?? '').trim() &&
       (agentBot?.allowedOrigins ?? []).some((o) => o?.isActive !== false && String(o?.origin ?? '').trim()),
   );
+  const resolveCanPublish = useCallback(() => {
+    const deployReady = deployPublishReadyRef.current;
+    if (deployReady != null) return deployReady;
+    return canPublishFromNavbar;
+  }, [canPublishFromNavbar]);
+  const setDeployPublishReady = useCallback((ready: boolean | null) => {
+    deployPublishReadyRef.current = ready;
+  }, []);
   const lastTrainedAt = healthIsoString(agentHealth, 'lastIngestedAt');
   const docsPending = healthNum(agentHealth, 'docsPending');
   const docsQueued = healthNum(agentHealth, 'docsQueued');
@@ -496,6 +515,9 @@ export function AppShell() {
   const hideAgentWorkspaceChrome = /\/playground\/knowledgebase\/datasheets\/[^/]+\/fullscreen\/?$/.test(
     location.pathname,
   );
+  /** Playground uses `WidgetPreviewContainer` with its own scroll lane — avoid nested page scrollbars. */
+  const playgroundScrollContained = Boolean(agentId && /\/playground\//.test(location.pathname));
+  const workspaceScrollContained = playgroundScrollContained || hideAgentWorkspaceChrome;
 
   const settingsSubNav: [string, string][] = [
     ['/settings/workspace', 'General'],
@@ -642,6 +664,16 @@ export function AppShell() {
     });
   }, []);
 
+  const onLifecycleApiSuccess = useCallback(
+    (data: CustomerBotLifecycleResponse) => {
+      if (!agentId) return;
+      const nextStatus = data.action === 'publish' ? 'published' : 'draft';
+      setLifecycleOptimisticStatus(nextStatus);
+      requestWorkspaceBotRefresh(agentId);
+    },
+    [agentId],
+  );
+
   const onLifecycleModalSuccess = useCallback(() => {
     if (!agentId) return;
     void (async () => {
@@ -650,9 +682,11 @@ export function AppShell() {
     })();
   }, [agentId, refreshAgentFromApi]);
 
+  const lifecycleUiBusy = Boolean(lifecycleOpen && lifecycleAction);
+
   const openPublishLifecycle = useCallback(() => {
-    if (!agentId || currentStatus === 'published' || lifecycleBusy) return;
-    if (!canPublishFromNavbar) {
+    if (!agentId || effectiveAgentStatus === 'published' || lifecycleUiBusy) return;
+    if (!resolveCanPublish()) {
       setPublishRequirementsOpen(true);
       return;
     }
@@ -660,15 +694,15 @@ export function AppShell() {
     setAgentInfoExpanded(false);
     setLifecycleConfirmAction('publish');
     setLifecycleConfirmOpen(true);
-  }, [agentId, currentStatus, lifecycleBusy, canPublishFromNavbar]);
+  }, [agentId, effectiveAgentStatus, lifecycleUiBusy, resolveCanPublish]);
 
   const openDraftLifecycle = useCallback(() => {
-    if (!agentId || currentStatus === 'draft' || lifecycleBusy) return;
+    if (!agentId || effectiveAgentStatus === 'draft' || lifecycleUiBusy) return;
     agentInfoDetailsRef.current?.removeAttribute('open');
     setAgentInfoExpanded(false);
     setLifecycleConfirmAction('draft');
     setLifecycleConfirmOpen(true);
-  }, [agentId, currentStatus, lifecycleBusy]);
+  }, [agentId, effectiveAgentStatus, lifecycleUiBusy]);
 
   const cancelLifecycleConfirm = useCallback(() => {
     setLifecycleConfirmOpen(false);
@@ -681,10 +715,10 @@ export function AppShell() {
     setLifecycleConfirmAction(null);
     agentInfoDetailsRef.current?.removeAttribute('open');
     setAgentInfoExpanded(false);
-    if (!agentId || lifecycleBusy) return;
+    if (!agentId || lifecycleUiBusy) return;
     if (act === 'publish') {
-      if (currentStatus === 'published') return;
-      if (!canPublishFromNavbar) {
+      if (effectiveAgentStatus === 'published') return;
+      if (!resolveCanPublish()) {
         setPublishRequirementsOpen(true);
         return;
       }
@@ -692,7 +726,7 @@ export function AppShell() {
       setLifecycleRunKey((k) => k + 1);
       setLifecycleOpen(true);
     } else if (act === 'draft') {
-      if (currentStatus === 'draft') return;
+      if (effectiveAgentStatus === 'draft') return;
       setLifecycleAction('draft');
       setLifecycleRunKey((k) => k + 1);
       setLifecycleOpen(true);
@@ -700,17 +734,28 @@ export function AppShell() {
   }, [
     lifecycleConfirmAction,
     agentId,
-    lifecycleBusy,
-    currentStatus,
-    canPublishFromNavbar,
+    lifecycleUiBusy,
+    effectiveAgentStatus,
+    resolveCanPublish,
   ]);
 
   const lifecycleControls = useMemo(
     () => ({
       openPublish: openPublishLifecycle,
       openDraft: openDraftLifecycle,
+      busy: lifecycleUiBusy,
+      action: lifecycleAction,
+      optimisticStatus: lifecycleOptimisticStatus,
+      setDeployPublishReady,
     }),
-    [openPublishLifecycle, openDraftLifecycle],
+    [
+      openPublishLifecycle,
+      openDraftLifecycle,
+      lifecycleUiBusy,
+      lifecycleAction,
+      lifecycleOptimisticStatus,
+      setDeployPublishReady,
+    ],
   );
 
   useEffect(() => {
@@ -775,14 +820,104 @@ export function AppShell() {
         : 'text-slate-400 nav-hover',
     );
 
+  const toggleWorkspaceSettings = useCallback(() => {
+    clearTimeout(sidebarHoverTimer.current);
+    setSettingsOpen((open) => {
+      const next = !open;
+      if (next && sidebarCollapsed) setSidebarHovered(true);
+      return next;
+    });
+  }, [sidebarCollapsed]);
+
+  const renderWorkspaceSettingsNav = ({
+    trackRef,
+    subNavRefs,
+    activeIndicator,
+    wrapperClassName,
+    subNavClassName,
+  }: {
+    trackRef: RefObject<HTMLDivElement | null>;
+    subNavRefs: MutableRefObject<(HTMLAnchorElement | null)[]>;
+    activeIndicator: { top: number; height: number } | null;
+    wrapperClassName?: string;
+    subNavClassName?: string;
+  }) => (
+    <div className={wrapperClassName}>
+      <button
+        type="button"
+        className={cn(
+          'group relative flex w-full items-center gap-2.5 rounded-md px-2.5 py-[0.4375rem] text-sm font-medium cursor-pointer border-none bg-transparent text-left',
+          'transition-[background-color,color] duration-150 ease-out',
+          isSettingsActive
+            ? 'font-semibold text-[var(--active-text)]'
+            : 'text-slate-500 nav-hover',
+        )}
+        aria-expanded={settingsOpen}
+        onClick={toggleWorkspaceSettings}
+      >
+        <Settings
+          size={18}
+          strokeWidth={1.75}
+          className={cn(
+            'shrink-0 transition-colors duration-150',
+            isSettingsActive ? 'text-teal-600' : 'text-slate-400 group-hover:text-teal-600',
+          )}
+          aria-hidden
+        />
+        <span className="flex-1">Workspace Settings</span>
+        <ChevronDown
+          size={14}
+          strokeWidth={1.8}
+          className={cn(
+            'shrink-0 text-slate-300 transition-transform duration-200',
+            settingsOpen && 'rotate-180',
+          )}
+          aria-hidden
+        />
+      </button>
+      {settingsOpen ? (
+        <div ref={trackRef} className={subNavClassName}>
+          <div
+            className="absolute bottom-1 left-0 top-1 w-[2px] rounded-full max-[900px]:hidden"
+            style={{ background: 'var(--border-soft)' }}
+            aria-hidden
+          />
+          {activeIndicator ? (
+            <div
+              className="absolute left-0 w-[2px] rounded-full bg-teal-500 max-[900px]:hidden"
+              style={{
+                top: activeIndicator.top,
+                height: activeIndicator.height,
+                transition: 'top 250ms cubic-bezier(0.4,0,0.2,1), height 250ms cubic-bezier(0.4,0,0.2,1)',
+              }}
+              aria-hidden
+            />
+          ) : null}
+          {settingsSubNav.map(([to, label], i) => (
+            <NavLink
+              key={to}
+              to={to}
+              className={sideSubNavLink}
+              onClick={(e) => workspaceLeaveGuard(e, to)}
+              ref={(el) => {
+                subNavRefs.current[i] = el;
+              }}
+            >
+              {label}
+            </NavLink>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+
   const workspaceOutlet = useMemo(
     () => (
       <main
         className={cn(
           'flex min-h-0 min-w-0 flex-1 flex-col overflow-x-visible',
-          hideAgentWorkspaceChrome
-            ? 'h-[calc(100dvh-var(--nav-height))] min-h-0 overflow-y-hidden'
-            : 'overflow-y-auto',
+          workspaceScrollContained &&
+            'h-full min-h-0 flex-1 overflow-y-hidden',
         )}
         style={{ background: 'var(--bg-workspace-canvas)' }}
       >
@@ -791,15 +926,12 @@ export function AppShell() {
         </BotLifecycleProvider>
       </main>
     ),
-    [hideAgentWorkspaceChrome, lifecycleControls],
+    [workspaceScrollContained, lifecycleControls],
   );
 
   return (
     <div
-      className={cn(
-        'flex flex-col text-slate-900',
-        agentId ? 'h-svh min-h-0 overflow-hidden' : 'min-h-svh',
-      )}
+      className="flex h-svh min-h-0 flex-col overflow-hidden text-slate-900"
       style={{ background: 'var(--bg-app)' }}
     >
 
@@ -912,44 +1044,60 @@ export function AppShell() {
                   <button
                     type="button"
                     role="radio"
-                    aria-checked={currentStatus === 'draft'}
+                    aria-checked={effectiveAgentStatus === 'draft'}
                     className={cn(
                       'inline-flex h-7 flex-1 items-center justify-center whitespace-nowrap rounded-md px-2.5 text-xs font-semibold transition-[background-color,color] duration-150',
-                      currentStatus === 'draft'
+                      effectiveAgentStatus === 'draft'
                         ? 'bg-slate-100 text-slate-800'
                         : 'bg-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-700',
-                      (lifecycleBusy || currentStatus === 'draft') && 'cursor-default',
+                      (lifecycleBusy || effectiveAgentStatus === 'draft') && 'cursor-default',
                     )}
                     onClick={openDraftLifecycle}
-                    disabled={lifecycleBusy || currentStatus === 'draft'}
-                    title={currentStatus === 'draft' ? 'Agent currently in draft' : 'Move agent to draft'}
+                    disabled={lifecycleUiBusy || effectiveAgentStatus === 'draft'}
+                    title={effectiveAgentStatus === 'draft' ? 'Agent currently in draft' : 'Move agent to draft'}
                   >
                     <PencilLine size={12} strokeWidth={2} className="mr-1 shrink-0" aria-hidden />
-                    {lifecycleBusy && lifecycleAction === 'draft' ? 'Going to draft…' : 'Draft'}
+                    {lifecycleUiBusy && lifecycleAction === 'draft' && !lifecycleOptimisticStatus ? (
+                      <span className="inline-flex items-center gap-1">
+                        <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+                        Moving to draft
+                      </span>
+                    ) : (
+                      'Draft'
+                    )}
                   </button>
                   <button
                     type="button"
                     role="radio"
-                    aria-checked={currentStatus === 'published'}
+                    aria-checked={effectiveAgentStatus === 'published'}
                     className={cn(
                       'inline-flex h-7 flex-1 items-center justify-center whitespace-nowrap rounded-md px-2.5 text-xs font-semibold transition-[background-color,color] duration-150',
-                      currentStatus === 'published'
+                      effectiveAgentStatus === 'published'
                         ? 'bg-teal-50 text-teal-700'
                         : 'bg-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-700',
-                      (lifecycleBusy || currentStatus === 'published') && 'cursor-default',
+                      (lifecycleUiBusy || effectiveAgentStatus === 'published') && 'cursor-default',
                     )}
                     onClick={openPublishLifecycle}
-                    disabled={lifecycleBusy || currentStatus === 'published'}
+                    disabled={lifecycleUiBusy || effectiveAgentStatus === 'published'}
                     title={
-                      currentStatus === 'published'
+                      effectiveAgentStatus === 'published'
                         ? 'Agent is live'
                         : canPublishFromNavbar
                           ? 'Go live with this agent'
                           : 'Go live — complete requirements first if prompted'
                     }
                   >
-                    <Rocket size={12} strokeWidth={2} className="mr-1 shrink-0" aria-hidden />
-                    {lifecycleBusy && lifecycleAction === 'publish' ? 'Going live…' : 'Go Live'}
+                    {lifecycleUiBusy && lifecycleAction === 'publish' && !lifecycleOptimisticStatus ? (
+                      <>
+                        <Loader2 className="mr-1 h-3 w-3 shrink-0 animate-spin" aria-hidden />
+                        Going Live
+                      </>
+                    ) : (
+                      <>
+                        <Rocket size={12} strokeWidth={2} className="mr-1 shrink-0" aria-hidden />
+                        Go Live
+                      </>
+                    )}
                   </button>
                 </div>
                 ) : null}
@@ -1101,16 +1249,15 @@ export function AppShell() {
 
       {/* ── Body ──────────────────────────────────────────────────── */}
       <div
-        className="flex min-h-0 flex-1 max-[900px]:flex-col"
-        style={{
-          minHeight: 'calc(100vh - var(--nav-height))',
-          background: 'var(--bg-workspace-canvas)',
-        }}
+        className="flex min-h-0 flex-1 overflow-hidden max-[900px]:flex-col max-[900px]:overflow-y-auto"
+        style={{ background: 'var(--bg-workspace-canvas)' }}
       >
         {/* Sidebar */}
         <aside
           className={cn(
-            'relative flex shrink-0 flex-col bg-white transition-[width] duration-200 ease-out max-[900px]:w-full max-[900px]:border-b',
+            'relative flex min-h-0 shrink-0 flex-col bg-white transition-[width] duration-200 ease-out max-[900px]:w-full max-[900px]:border-b',
+            sidebarCollapsed ? 'overflow-visible' : 'overflow-hidden',
+            sidebarPeeking && 'z-40',
             hideAgentWorkspaceChrome && 'hidden',
           )}
           style={{ borderRight: '1px solid var(--border-sidebar)', width: sidebarCollapsed ? 'var(--sidebar-width-collapsed)' : 'var(--sidebar-width)' }}
@@ -1130,7 +1277,7 @@ export function AppShell() {
             <>
               <nav
                 className={cn(
-                  'absolute inset-y-0 left-0 z-30 flex flex-col overflow-hidden bg-white',
+                  'absolute inset-y-0 left-0 z-50 flex flex-col overflow-hidden bg-white',
                   'transition-[width,box-shadow] duration-250 ease-[cubic-bezier(0.25,0.1,0.25,1)]',
                   sidebarPeeking
                     ? 'w-[var(--sidebar-width)] shadow-[4px_0_24px_-4px_rgba(0,0,0,0.08)]'
@@ -1174,58 +1321,12 @@ export function AppShell() {
                     )}
                   </div>
 
-                  {/* Settings */}
-                  <div>
-                    <button
-                      type="button"
-                      className={cn(
-                        'group relative flex w-full items-center gap-2.5 rounded-md px-2.5 py-[0.4375rem] text-sm font-medium cursor-pointer border-none bg-transparent text-left',
-                        'transition-[background-color,color] duration-150 ease-out',
-                        isSettingsActive
-                          ? 'font-semibold text-[var(--active-text)]'
-                          : 'text-slate-500 nav-hover',
-                      )}
-                      onClick={() => {
-                        const opening = !settingsOpen;
-                        setSettingsOpen(opening);
-                        if (opening && !isSettingsActive) navigate('/settings/workspace');
-                      }}
-                    >
-                      <Settings size={18} strokeWidth={1.75} className={cn('shrink-0 transition-colors duration-150', isSettingsActive ? 'text-teal-600' : 'text-slate-400 group-hover:text-teal-600')} aria-hidden />
-                      <span className="flex-1">Settings</span>
-                      <ChevronDown size={14} strokeWidth={1.8} className={cn('shrink-0 text-slate-300 transition-transform duration-200', settingsOpen && 'rotate-180')} aria-hidden />
-                    </button>
-                    {settingsOpen && (
-                      <div
-                        ref={peekTrackRef}
-                        className="relative ml-4 mt-1 flex flex-col gap-1 pb-1 pl-3"
-                      >
-                        <div className="absolute bottom-1 left-0 top-1 w-[2px] rounded-full" style={{ background: 'var(--border-soft)' }} aria-hidden />
-                        {peekIndicator && (
-                          <div
-                            className="absolute left-0 w-[2px] rounded-full bg-teal-500"
-                            style={{
-                              top: peekIndicator.top,
-                              height: peekIndicator.height,
-                              transition: 'top 250ms cubic-bezier(0.4,0,0.2,1), height 250ms cubic-bezier(0.4,0,0.2,1)',
-                            }}
-                            aria-hidden
-                          />
-                        )}
-                        {settingsSubNav.map(([to, label], i) => (
-                          <NavLink
-                            key={to}
-                            to={to}
-                            className={sideSubNavLink}
-                            onClick={(e) => workspaceLeaveGuard(e, to)}
-                            ref={(el) => { peekSubNavRefs.current[i] = el; }}
-                          >
-                            {label}
-                          </NavLink>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                  {renderWorkspaceSettingsNav({
+                    trackRef: peekTrackRef,
+                    subNavRefs: peekSubNavRefs,
+                    activeIndicator: peekIndicator,
+                    subNavClassName: 'relative ml-4 mt-1 flex flex-col gap-1 pb-1 pl-3',
+                  })}
                 </div>
 
                 <AppShellCreditsWidget
@@ -1311,95 +1412,38 @@ export function AppShell() {
             {/* Workspace Settings */}
             {sidebarCollapsed ? (
               <div className="flex w-full flex-col items-center gap-1">
-                {/* Settings icon only — no sub-nav when collapsed */}
-                <NavLink
-                  to="/settings/workspace"
-                  className={sideNavLink}
-                  title="Settings"
-                  onClick={(e) => workspaceLeaveGuard(e, '/settings/workspace')}
-                >
-                  {({ isActive }) => (
-                    <Settings
-                      size={18}
-                      strokeWidth={1.75}
-                      className={cn('shrink-0 transition-colors duration-150', isActive || isSettingsActive ? 'text-teal-600' : 'text-slate-400 group-hover:text-teal-600')}
-                      aria-hidden
-                    />
-                  )}
-                </NavLink>
-              </div>
-            ) : (
-              <div className="max-[900px]:flex max-[900px]:flex-wrap max-[900px]:gap-0.5">
                 <button
                   type="button"
                   className={cn(
-                    'group relative flex w-full items-center gap-2.5 rounded-md px-2.5 py-[0.4375rem] text-sm font-medium cursor-pointer border-none bg-transparent text-left',
-                    'transition-[background-color,color] duration-150 ease-out',
+                    'group relative flex items-center justify-center rounded-md p-2 text-sm font-medium cursor-pointer border-none bg-transparent',
+                    'transition-[background-color,color,box-shadow] duration-150 ease-out',
                     isSettingsActive
-                      ? 'font-semibold text-[var(--active-text)]'
+                      ? 'nav-active font-semibold'
                       : 'text-slate-500 nav-hover',
                   )}
-                  onClick={() => {
-                    const opening = !settingsOpen;
-                    setSettingsOpen(opening);
-                    if (opening && !isSettingsActive) navigate('/settings/workspace');
-                  }}
+                  title="Workspace Settings"
+                  aria-expanded={settingsOpen}
+                  onClick={toggleWorkspaceSettings}
                 >
                   <Settings
                     size={18}
                     strokeWidth={1.75}
-                    className={cn('shrink-0 transition-colors duration-150', isSettingsActive ? 'text-teal-600' : 'text-slate-400 group-hover:text-teal-600')}
-                    aria-hidden
-                  />
-                  <span className="flex-1">Workspace Settings</span>
-                  <ChevronDown
-                    size={14}
-                    strokeWidth={1.8}
                     className={cn(
-                      'shrink-0 text-slate-300 transition-transform duration-200',
-                      settingsOpen && 'rotate-180',
+                      'shrink-0 transition-colors duration-150',
+                      isSettingsActive ? 'text-teal-600' : 'text-slate-400 group-hover:text-teal-600',
                     )}
                     aria-hidden
                   />
                 </button>
-
-                {settingsOpen && (
-                  <div
-                    ref={settingsTrackRef}
-                    className="relative ml-4 mt-1 flex flex-col gap-1 pb-1 pl-3 max-[900px]:ml-0"
-                  >
-                    {/* Track bar */}
-                    <div
-                      className="absolute bottom-1 left-0 top-1 w-[2px] rounded-full max-[900px]:hidden"
-                      style={{ background: 'var(--border-soft)' }}
-                      aria-hidden
-                    />
-                    {/* Sliding active indicator */}
-                    {indicator && (
-                      <div
-                        className="absolute left-0 w-[2px] rounded-full bg-teal-500 max-[900px]:hidden"
-                        style={{
-                          top: indicator.top,
-                          height: indicator.height,
-                          transition: 'top 250ms cubic-bezier(0.4,0,0.2,1), height 250ms cubic-bezier(0.4,0,0.2,1)',
-                        }}
-                        aria-hidden
-                      />
-                    )}
-                    {settingsSubNav.map(([to, label], i) => (
-                      <NavLink
-                        key={to}
-                        to={to}
-                        className={sideSubNavLink}
-                        onClick={(e) => workspaceLeaveGuard(e, to)}
-                        ref={(el) => { settingsSubNavRefs.current[i] = el; }}
-                      >
-                        {label}
-                      </NavLink>
-                    ))}
-                  </div>
-                )}
               </div>
+            ) : (
+              renderWorkspaceSettingsNav({
+                trackRef: settingsTrackRef,
+                subNavRefs: settingsSubNavRefs,
+                activeIndicator: indicator,
+                wrapperClassName: 'max-[900px]:flex max-[900px]:flex-wrap max-[900px]:gap-0.5',
+                subNavClassName: 'relative ml-4 mt-1 flex flex-col gap-1 pb-1 pl-3 max-[900px]:ml-0',
+              })
             )}
           </nav>
 
@@ -1440,15 +1484,24 @@ export function AppShell() {
 
         {agentId ? (
           <KbWorkspacePollingProvider botId={agentId}>
-            <div className="flex min-h-0 min-w-0 flex-1 flex-row overflow-hidden max-[900px]:flex-col">
+            <div className="relative z-0 flex h-full min-h-0 min-w-0 flex-1 flex-row overflow-hidden max-[900px]:flex-col">
               {!hideAgentWorkspaceChrome && <AgentWorkspaceSidebar bot={agentBot} health={agentHealth} />}
-              <div className="relative min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-y-contain">
+              <div
+                className={cn(
+                  'relative flex min-h-0 min-w-0 flex-1 flex-col',
+                  workspaceScrollContained
+                    ? 'h-full overflow-y-hidden'
+                    : 'overflow-y-auto overscroll-y-contain',
+                )}
+              >
                 {workspaceOutlet}
               </div>
             </div>
           </KbWorkspacePollingProvider>
         ) : (
-          workspaceOutlet
+          <div className="relative min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-y-contain">
+            {workspaceOutlet}
+          </div>
         )}
       </div>
 
@@ -1461,7 +1514,9 @@ export function AppShell() {
         onClose={() => {
           setLifecycleOpen(false);
           setLifecycleAction(null);
+          setLifecycleBusy(false);
         }}
+        onApiSuccess={onLifecycleApiSuccess}
         onSuccess={onLifecycleModalSuccess}
       />
 
@@ -1512,19 +1567,17 @@ export function AppShell() {
         />
       ) : null}
 
-      {lifecycleConfirmAction ? (
-        <GoLiveConfirmModal
-          open={lifecycleConfirmOpen}
-          onClose={cancelLifecycleConfirm}
-          onConfirm={confirmLifecycleTransition}
-          action={lifecycleConfirmAction}
-          whatHappensNext={
-            lifecycleConfirmAction === 'draft'
-              ? WORKSPACE_DRAFT_WHAT_HAPPENS_NEXT
-              : WORKSPACE_PUBLISH_WHAT_HAPPENS_NEXT
-          }
-        />
-      ) : null}
+      <GoLiveConfirmModal
+        open={lifecycleConfirmOpen && lifecycleConfirmAction != null}
+        onClose={cancelLifecycleConfirm}
+        onConfirm={confirmLifecycleTransition}
+        action={lifecycleConfirmAction ?? 'publish'}
+        whatHappensNext={
+          lifecycleConfirmAction === 'draft'
+            ? WORKSPACE_DRAFT_WHAT_HAPPENS_NEXT
+            : WORKSPACE_PUBLISH_WHAT_HAPPENS_NEXT
+        }
+      />
 
       <PostGoLiveInstallModalHost />
 

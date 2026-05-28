@@ -58,9 +58,11 @@ function BotWorkspaceShell() {
         Single flex child so the active route (Playground w/ fixed height, or Insights full-bleed)
         always gets a consistent min-h-0 flex column — fixes layout when switching e.g. conversations → profile.
       */}
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
         {!canManageBot ? <ReadOnlyWorkspaceNotice className="border-b border-[var(--border-soft)] rounded-none bg-slate-50 px-4 py-2.5" /> : null}
-        <Outlet />
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <Outlet />
+        </div>
       </div>
       {/* After route tree: playground preview surface lives in `PlaygroundLayout` (stable mount). */}
       <CustomerWidgetPreviewHost />

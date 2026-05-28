@@ -28,6 +28,8 @@ describe('CustomerWorkspaceMembersController', () => {
       removeWorkspaceMember: options?.removeError
         ? jest.fn().mockRejectedValue(options.removeError)
         : jest.fn().mockResolvedValue(undefined),
+      summarizeMemberBotAccess: jest.fn().mockResolvedValue({ viewable: 0, previewable: 0 }),
+      summarizeInviteBotAccess: jest.fn().mockResolvedValue({ viewable: 0, previewable: 0 }),
     };
 
     const inviteDoc = {

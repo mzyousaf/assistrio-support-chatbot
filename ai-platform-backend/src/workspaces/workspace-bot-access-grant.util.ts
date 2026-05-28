@@ -19,11 +19,24 @@ export type BotAccessGrantRow = {
   inviteId?: string;
   email: string;
   displayName: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  avatarUrl?: string | null;
+  picture?: string | null;
   status: 'active' | 'pending_invite' | 'expired' | 'cancelled';
   role: 'owner' | 'admin' | 'member';
   canView: boolean;
   canPreview: boolean;
   locked: boolean;
+};
+
+export type BotViewAccessPreviewMember = {
+  email: string;
+  displayName: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  avatarUrl?: string | null;
+  picture?: string | null;
 };
 
 export function normalizeGrantFlags(canView?: boolean, canPreview?: boolean): { canView: boolean; canPreview: boolean } {

@@ -159,7 +159,10 @@ export abstract class WorkspaceBotsControllerBase {
   protected mapBotRecordsToListResponse(
     bots: Record<string, unknown>[],
     statsMap: Awaited<ReturnType<BotsService['getListStatsForBots']>>,
-    listContext?: { workspaceName?: string },
+    listContext?: {
+      workspaceName?: string;
+      viewAccessPreviewByBotId?: Record<string, import('../../workspaces/workspace-bot-access-grant.util').BotViewAccessPreviewMember[]>;
+    },
   ) {
     return bots.map((b) => {
       const chatUI =
@@ -197,6 +200,11 @@ export abstract class WorkspaceBotsControllerBase {
         name: b.name ?? '',
         agentsPackAgent: Boolean((b as { agentsPackAgent?: boolean }).agentsPackAgent),
         category: b.category ?? '',
+        categories: Array.isArray(b.categories)
+          ? (b.categories as string[]).map((c) => String(c).trim()).filter(Boolean)
+          : b.category
+            ? [String(b.category).trim()].filter(Boolean)
+            : [],
         status: b.status ?? 'draft',
         isPublic: Boolean(b.isPublic),
         visibility: b.visibility ?? 'public',
@@ -223,6 +231,9 @@ export abstract class WorkspaceBotsControllerBase {
             : undefined,
         ...(workspaceId ? { workspaceId } : {}),
         ...(listContext?.workspaceName ? { workspaceName: listContext.workspaceName } : {}),
+        ...(listContext?.viewAccessPreviewByBotId != null
+          ? { viewAccessPreview: listContext.viewAccessPreviewByBotId[id] ?? [] }
+          : {}),
       };
     });
   }

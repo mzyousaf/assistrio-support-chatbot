@@ -1,4 +1,5 @@
 import React, { useCallback, useId, useState } from "react";
+import { pickBrandChipForeground } from "../../lib/accentLuminance";
 import type { UserBubbleStyle } from "../../models/botChatUI";
 import type { ChatSpeechInputMeta } from "./types";
 import { ChatUserVoiceMessage } from "./ChatUserVoiceMessage";
@@ -102,22 +103,29 @@ export function ChatVoiceMessageDetailScreen({
   const neutralBubbleBlack = userVoiceBubbleStyle === "defaultDark";
   const userUsesPrimaryBubble = userVoiceBubbleStyle === "primary";
   const userIsDefaultDark = userVoiceBubbleStyle === "defaultDark";
+  const userPrimaryForeground =
+    userUsesPrimaryBubble && accentColor ? pickBrandChipForeground(accentColor) : undefined;
   const radiusPx = Math.max(0, Math.min(32, bubbleBorderRadius));
 
   const bubbleSurfaceClass = cx(
     "chat-bubble-surface inline-block max-w-full min-w-0 align-top box-border px-3 py-2.5 text-left text-sm font-normal leading-relaxed",
     "break-words [overflow-wrap:anywhere]",
-    userUsesPrimaryBubble && "text-white",
+    userUsesPrimaryBubble && userPrimaryForeground === "#ffffff" && "text-white",
+    userUsesPrimaryBubble && userPrimaryForeground === "#111827" && "text-gray-900",
     !userUsesPrimaryBubble && userIsDefaultDark && "text-white bg-black border border-gray-600/80",
     !userUsesPrimaryBubble &&
       !userIsDefaultDark &&
       (dark
-        ? "text-gray-100 bg-gray-600/78 border border-gray-500/40"
-        : "text-gray-800 bg-gray-100 border border-gray-200/85"),
+        ? "text-white bg-gray-700 border border-gray-600/70"
+        : "text-gray-900 bg-gray-200 border border-gray-300/75"),
   );
 
   const bubbleInlineStyle: React.CSSProperties = userUsesPrimaryBubble && accentColor
-    ? { backgroundColor: accentColor, color: "#fff", borderRadius: `${radiusPx}px` }
+    ? {
+        backgroundColor: accentColor,
+        color: userPrimaryForeground ?? "#ffffff",
+        borderRadius: `${radiusPx}px`,
+      }
     : { borderRadius: `${radiusPx}px` };
 
   const url = (speech.audioUrl ?? "").trim();

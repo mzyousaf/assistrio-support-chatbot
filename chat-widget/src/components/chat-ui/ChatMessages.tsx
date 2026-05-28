@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { ScrollChromeStyle, UserBubbleStyle } from "../../models/botChatUI";
+import type { ScrollChromeStyle, ScrollToBottomAlign, UserBubbleStyle } from "../../models/botChatUI";
 import type { SuggestedQuestionChip } from "../../types";
 import type { ChatUIMessage, ChatUISource } from "./types";
 import { ChatBubble } from "./ChatBubble";
@@ -7,6 +7,17 @@ import { cx } from "./utils";
 
 const SCROLL_THRESHOLD = 80;
 const DEFAULT_SCROLL_TO_BOTTOM_TEXT = "Scroll to latest";
+
+function scrollToBottomButtonPositionClass(align: ScrollToBottomAlign | undefined): string {
+  switch (align) {
+    case "left":
+      return "left-3 translate-x-0";
+    case "right":
+      return "right-3 left-auto translate-x-0";
+    default:
+      return "left-1/2 -translate-x-1/2";
+  }
+}
 
 /** Pin the message row to the top of the conversation scroller (`listRef` when it overflows; else nearest overflow ancestor). */
 function scrollAnchorRowToTopOfScroller(anchorEl: HTMLElement, list: HTMLElement | null, marginTop = 8): void {
@@ -82,6 +93,8 @@ export interface ChatMessagesProps {
   scrollChromeStyle?: ScrollChromeStyle;
   /** Floating scroll-to-latest button; when omitted, matches `scrollChromeStyle`. */
   scrollToBottomChromeStyle?: ScrollChromeStyle;
+  /** Floating scroll-to-latest button alignment (default `center`). */
+  scrollToBottomAlign?: ScrollToBottomAlign;
   /** Typed user messages only. */
   userTextBubbleStyle?: UserBubbleStyle;
   /** Voice user messages only. */
@@ -193,6 +206,7 @@ export function ChatMessages({
   showScrollbar = true,
   scrollChromeStyle = "default",
   scrollToBottomChromeStyle: scrollToBottomChromeStyleProp,
+  scrollToBottomAlign = "center",
   userTextBubbleStyle = "primary",
   userVoiceBubbleStyle = "primary",
   emptyState,
@@ -349,7 +363,14 @@ export function ChatMessages({
           messageListOverflow === "hidden" ? "overflow-y-hidden" : "overflow-y-auto overscroll-contain",
           conversationLoading && "overflow-hidden",
           showScrollbar ? "chat-ui-messages-scroll" : "chat-ui-messages-scroll-hidden",
-          !conversationLoading && (compact ? "p-2 gap-[calc(0.25rem*5)]" : "p-4 gap-[calc(0.25rem*5)]"),
+          !conversationLoading &&
+            (compact
+              ? cx("p-2 gap-[calc(0.25rem*5)]", showSuggestedBlock && "pb-0")
+              : cx(
+                  "gap-[calc(0.25rem*5)]",
+                  showScrollbar ? "pl-3 pr-2" : "px-3",
+                  showSuggestedBlock ? "pt-3 pb-0" : "py-3",
+                )),
           className
         )}
         style={{
@@ -454,12 +475,7 @@ export function ChatMessages({
           })
           : null}
         {showSuggestedBlock ? (
-          <div
-            className={cx(
-              "mt-auto flex w-full min-w-0 max-w-full flex-shrink-0 flex-col items-stretch justify-end",
-              compact ? "px-2 pt-4 pb-0" : "px-4 pt-6 pb-0",
-            )}
-          >
+          <div className="mt-auto mb-2 flex w-full min-w-0 max-w-full flex-shrink-0 flex-col items-stretch justify-end">
             <div className="flex w-full min-w-0 max-w-full flex-wrap justify-end gap-2">
               {visibleSuggestionChips.map((chip, qIndex) => (
                 <button
@@ -473,7 +489,7 @@ export function ChatMessages({
                   }
                   disabled={isSending}
                   className={cx(
-                    "max-w-[min(100%,20rem)] min-w-0 border px-4 py-2.5 text-left text-sm font-medium break-words whitespace-normal text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50",
+                    "max-w-[min(100%,20rem)] min-w-0 border px-4 py-2.5 text-left text-sm font-normal break-words whitespace-normal text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50",
                   )}
                   style={{
                     backgroundColor: accentColor,
@@ -485,6 +501,7 @@ export function ChatMessages({
                 </button>
               ))}
             </div>
+            <div ref={endRef} aria-hidden className="h-0 w-0 shrink-0 overflow-hidden" />
           </div>
         ) : null}
         {showTypingIndicator ? (
@@ -515,14 +532,15 @@ export function ChatMessages({
             </div>
           </div>
         ) : null}
-        {visibleMessages.length > 0 ? <div ref={endRef} aria-hidden /> : null}
+        {!showSuggestedBlock && visibleMessages.length > 0 ? <div ref={endRef} aria-hidden /> : null}
       </div>
       {showScrollToBottom && scrollButtonVisible ? (
         <button
           type="button"
           onClick={scrollToBottom}
           className={cx(
-            "absolute bottom-3 left-1/2 -translate-x-1/2 z-10 inline-flex items-center rounded-full text-xs font-medium text-white shadow-lg transition-opacity hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2",
+            "absolute bottom-3 z-10 inline-flex items-center rounded-full text-xs font-medium text-white shadow-lg transition-opacity hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2",
+            scrollToBottomButtonPositionClass(scrollToBottomAlign),
             showScrollToBottomLabel ? "gap-1.5 px-3 py-2" : "p-2.5",
             dark ? "focus:ring-offset-gray-900" : "focus:ring-offset-white"
           )}

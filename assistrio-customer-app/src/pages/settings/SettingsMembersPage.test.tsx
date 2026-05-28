@@ -252,7 +252,7 @@ describe('SettingsMembersPage', () => {
     });
   });
 
-  it('shows active members and pending invites only', async () => {
+  it('shows active members, pending invites, and expired invites', async () => {
     mockGetInvites.mockResolvedValue({
       ok: true,
       data: [
@@ -286,7 +286,47 @@ describe('SettingsMembersPage', () => {
     });
     renderPage();
     expect(await screen.findByText('pending@test.com')).toBeTruthy();
-    expect(screen.queryByText('expired@test.com')).toBeNull();
+    expect(screen.getByText('expired@test.com')).toBeTruthy();
+    expect(screen.getByText('Expired')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Send again to expired@test.com/i })).toBeTruthy();
+  });
+
+  it('does not render cancelled invites or accepted duplicate rows', async () => {
+    mockGetInvites.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'inv-cancelled',
+          email: 'cancelled@test.com',
+          role: 'member',
+          status: 'cancelled',
+          expiresAt: '2026-12-01T00:00:00.000Z',
+          invitedByUserId: 'user-owner',
+          acceptedByUserId: null,
+          acceptedAt: null,
+          cancelledAt: '2026-06-01T00:00:00.000Z',
+          createdAt: '2026-06-01T00:00:00.000Z',
+          updatedAt: '2026-06-01T00:00:00.000Z',
+        },
+        {
+          id: 'inv-accepted-dup',
+          email: 'admin@example.com',
+          role: 'member',
+          status: 'accepted',
+          expiresAt: '2026-12-01T00:00:00.000Z',
+          invitedByUserId: 'user-owner',
+          acceptedByUserId: 'user-1',
+          acceptedAt: '2026-06-01T00:00:00.000Z',
+          cancelledAt: null,
+          createdAt: '2026-06-01T00:00:00.000Z',
+          updatedAt: '2026-06-01T00:00:00.000Z',
+        },
+      ],
+    });
+    renderPage();
+    await screen.findByText(/Admin User/i);
+    expect(screen.queryByText('cancelled@test.com')).toBeNull();
+    expect(screen.getAllByText('admin@example.com')).toHaveLength(1);
   });
 
   it('shows retry on load error', async () => {

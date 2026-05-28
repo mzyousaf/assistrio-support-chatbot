@@ -1,11 +1,8 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CustomerMe, WorkspaceBillingSummary } from '@/api/types';
-import {
-  TRAINED_KNOWLEDGE_STORAGE_HELPER,
-  TRAINED_KNOWLEDGE_STORAGE_LABEL,
-} from '@/lib/trainedKnowledgeStorageCopy';
+import { TRAINED_KNOWLEDGE_STORAGE_HELPER } from '@/lib/trainedKnowledgeStorageCopy';
 import { PlansPage } from './PlansPage';
 
 const mockGetWorkspaceBillingSummary = vi.fn();
@@ -191,6 +188,13 @@ function renderPage() {
   );
 }
 
+function cardForPlan(plansRegion: HTMLElement, planName: string) {
+  const heading = within(plansRegion).getByRole('heading', { name: planName, level: 3 });
+  const card = heading.closest('article');
+  expect(card).toBeTruthy();
+  return within(card!);
+}
+
 describe('PlansPage', () => {
   beforeEach(() => {
     mockCustomer = ownerCustomer;
@@ -207,54 +211,180 @@ describe('PlansPage', () => {
     await waitFor(() => {
       expect(mockGetWorkspaceBillingSummary).toHaveBeenCalledWith('ws-1');
     });
-    expect(await screen.findByText('Compare workspace plans, limits, and add-ons.')).toBeTruthy();
+    expect(
+      await screen.findByText('Choose the plan and add-ons that fit your workspace.'),
+    ).toBeTruthy();
     expect(screen.getByText('Checkout is not enabled yet.')).toBeTruthy();
   });
 
-  it('renders current plan hero with entitlements', async () => {
+  it('does not render removed sections', async () => {
     renderPage();
-    expect(await screen.findByRole('heading', { name: 'Free', level: 2 })).toBeTruthy();
-    expect(screen.getAllByText('Current plan').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText(TRAINED_KNOWLEDGE_STORAGE_LABEL)).toBeTruthy();
-    expect(screen.getAllByText(TRAINED_KNOWLEDGE_STORAGE_HELPER).length).toBeGreaterThan(0);
-    expect(screen.getByText('50 / month')).toBeTruthy();
+    await screen.findByRole('region', { name: 'Plans' });
+    expect(screen.queryByRole('heading', { name: 'About trained knowledge storage' })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Trained knowledge guide' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Free', level: 2 })).toBeNull();
   });
 
-  it('renders Free, Starter, and Pro from planCatalog', async () => {
+  it('renders grouped feature comparison table below pricing cards', async () => {
     renderPage();
-    expect(await screen.findByRole('heading', { name: 'Starter' })).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Pro' })).toBeTruthy();
-    expect(screen.getAllByText('$49/month').length).toBeGreaterThan(0);
-    expect(screen.getByText('$99/month')).toBeTruthy();
+    const comparison = within(
+      await screen.findByRole('region', { name: 'What each plan includes' }),
+    );
+    expect(comparison.getByText('Compare Free, Starter, and Pro at a glance.')).toBeTruthy();
+    expect(comparison.getByText('Core limits')).toBeTruthy();
+    expect(comparison.getByText('Analytics & exports')).toBeTruthy();
+    expect(comparison.getByText('Widget & sharing')).toBeTruthy();
+    expect(comparison.getByText('Messaging')).toBeTruthy();
+    expect(comparison.getByText('Leads')).toBeTruthy();
+    expect(comparison.getByText('Collaboration & support')).toBeTruthy();
+    expect(comparison.getByRole('rowheader', { name: 'Basic analytics' })).toBeTruthy();
+    expect(comparison.queryByRole('rowheader', { name: 'Conversations Coverage' })).toBeNull();
+    expect(comparison.queryByRole('rowheader', { name: 'Leads Coverage' })).toBeNull();
+    expect(comparison.queryByRole('rowheader', { name: 'History' })).toBeNull();
+    expect(comparison.queryByRole('rowheader', { name: 'Analytics' })).toBeNull();
+    expect(comparison.getByRole('rowheader', { name: 'Export reports' })).toBeTruthy();
+    expect(comparison.getByRole('rowheader', { name: 'Agent-level access' })).toBeTruthy();
+    expect(comparison.getByRole('rowheader', { name: 'Member-level access' })).toBeTruthy();
+    expect(comparison.queryByRole('rowheader', { name: 'Export leads' })).toBeNull();
+    expect(comparison.getAllByLabelText('Included').length).toBeGreaterThan(0);
+    expect(comparison.queryByText('Included', { selector: 'span' })).toBeNull();
+    expect(comparison.getAllByText('7 days').length).toBeGreaterThan(0);
+    expect(comparison.getAllByText('Unlimited').length).toBeGreaterThan(0);
+    expect(comparison.queryByText('Feature')).toBeNull();
+    expect(comparison.queryByText('Current')).toBeNull();
   });
 
-  it('shows current plan badge and disabled current plan button', async () => {
+  it('renders pricing cards for Free, Starter, and Pro', async () => {
     renderPage();
-    expect(await screen.findByText('Current plan', { selector: 'span' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Current plan' }).hasAttribute('disabled')).toBe(true);
+    const plans = within(await screen.findByRole('region', { name: 'Plans' }));
+    expect(plans.getByRole('heading', { name: '7-day free trial', level: 3 })).toBeTruthy();
+    expect(plans.getByRole('heading', { name: 'Starter', level: 3 })).toBeTruthy();
+    expect(plans.getByRole('heading', { name: 'Pro', level: 3 })).toBeTruthy();
+    expect(plans.queryByRole('heading', { name: 'Free', level: 3 })).toBeNull();
+    expect(plans.getByText('$0')).toBeTruthy();
+    expect(plans.getByText('$49')).toBeTruthy();
+    expect(plans.getByText('$99')).toBeTruthy();
+    expect(plans.getAllByText('per month').length).toBeGreaterThanOrEqual(3);
+    expect(plans.getByText('Start testing Assistrio')).toBeTruthy();
+    expect(plans.getByText('Best for testing')).toBeTruthy();
+    expect(
+      plans.getByText('Auto-expires after 7 days or when included AI credits run out.'),
+    ).toBeTruthy();
+    expect(plans.getByText('Best value for small businesses')).toBeTruthy();
+    expect(plans.getByText('Best value for growing business')).toBeTruthy();
+    expect(plans.getAllByText('Priority support').length).toBe(1);
   });
 
-  it('shows disabled Coming soon for other plans', async () => {
+  it('renders why-plan sections on each pricing card', async () => {
     renderPage();
-    const comingSoonButtons = await screen.findAllByRole('button', { name: 'Coming soon' });
-    expect(comingSoonButtons.length).toBeGreaterThanOrEqual(2);
-    expect(comingSoonButtons.every((button) => button.hasAttribute('disabled'))).toBe(true);
-    expect(screen.getByText('Plan changes are not available yet.')).toBeTruthy();
+    const plansRegion = await screen.findByRole('region', { name: 'Plans' });
+
+    const freeCard = cardForPlan(plansRegion, '7-day free trial');
+    expect(freeCard.getByRole('heading', { name: 'Why Free?', level: 4 })).toBeTruthy();
+    expect(freeCard.getByText('Test your first AI agent')).toBeTruthy();
+    expect(freeCard.getByText('Good for early validation')).toBeTruthy();
+    expect(freeCard.queryByText('1 agent')).toBeNull();
+
+    const starterCard = cardForPlan(plansRegion, 'Starter');
+    expect(starterCard.getByRole('heading', { name: 'Why Starter?', level: 4 })).toBeTruthy();
+    expect(starterCard.getByText('10x more AI credits than Free')).toBeTruthy();
+    expect(starterCard.getByText('Export reports and leads')).toBeTruthy();
+
+    const proCard = cardForPlan(plansRegion, 'Pro');
+    expect(proCard.getByRole('heading', { name: 'Why Pro?', level: 4 })).toBeTruthy();
+    expect(proCard.getByText('3,000 AI credits/month')).toBeTruthy();
+    expect(proCard.getByText('30 MB trained knowledge storage')).toBeTruthy();
+    expect(proCard.getByText('Best for larger teams and higher traffic')).toBeTruthy();
+    expect(proCard.getByText('5 workspace members')).toBeTruthy();
+    expect(proCard.queryByText('5 members')).toBeNull();
   });
 
-  it('renders add-on cards from addonCatalog', async () => {
+  it('shows plan limit lines in the comparison table core limits section', async () => {
     renderPage();
-    expect(await screen.findByText('1,000 extra AI credits')).toBeTruthy();
-    expect(screen.getByText('Extra bot')).toBeTruthy();
-    expect(screen.getByText('Remove Powered by Assistrio')).toBeTruthy();
-    expect(screen.getByText('+5 MB trained KB storage')).toBeTruthy();
-    expect(screen.getByText('+10 MB trained KB storage')).toBeTruthy();
-    expect(screen.getByText('Add-ons are not available yet.')).toBeTruthy();
+    const comparison = within(
+      await screen.findByRole('region', { name: 'What each plan includes' }),
+    );
+    expect(comparison.getByRole('rowheader', { name: 'Agents' })).toBeTruthy();
+    expect(comparison.getByRole('rowheader', { name: 'Workspace members' })).toBeTruthy();
+    expect(comparison.getByRole('rowheader', { name: 'AI credits' })).toBeTruthy();
+    expect(comparison.getByRole('rowheader', { name: 'KB storage / bot' })).toBeTruthy();
+    expect(comparison.queryByRole('rowheader', { name: 'Analytics history' })).toBeNull();
+    expect(comparison.getByText('50 Credits only')).toBeTruthy();
+    expect(comparison.getByText('500 Credits / month')).toBeTruthy();
+    expect(comparison.getByText('3,000 Credits / month')).toBeTruthy();
+    expect(comparison.getByText('5 MB')).toBeTruthy();
+    expect(comparison.getByText('15 MB')).toBeTruthy();
+    expect(comparison.getByText('30 MB')).toBeTruthy();
+
+    const plansRegion = await screen.findByRole('region', { name: 'Plans' });
+    const freeCard = cardForPlan(plansRegion, '7-day free trial');
+    expect(freeCard.getAllByText('Capture leads').length).toBe(1);
+  });
+
+  it('shows current plan indicator and button on the Free pricing card', async () => {
+    renderPage();
+    const plansRegion = await screen.findByRole('region', { name: 'Plans' });
+    const freeHeading = within(plansRegion).getByRole('heading', {
+      name: '7-day free trial',
+      level: 3,
+    });
+    const freeArticle = freeHeading.closest('article');
+    expect(freeArticle?.getAttribute('aria-current')).toBe('true');
+    const freeCard = within(freeArticle!);
+    expect(freeCard.getByRole('button', { name: 'Current plan' }).hasAttribute('disabled')).toBe(true);
+    expect(freeCard.queryByText('Your current plan')).toBeNull();
+  });
+
+  it('does not repeat long feature lists on pricing cards', async () => {
+    renderPage();
+    const plansRegion = await screen.findByRole('region', { name: 'Plans' });
+    const freeCard = cardForPlan(plansRegion, '7-day free trial');
+    expect(freeCard.queryByText('Export reports')).toBeNull();
+    expect(freeCard.queryByText('Voice messages (uses AI credits)')).toBeNull();
+  });
+
+  it('does not repeat Included on pricing card rows', async () => {
+    renderPage();
+    const plans = within(await screen.findByRole('region', { name: 'Plans' }));
+    expect(plans.queryByText('Included')).toBeNull();
+  });
+
+  it('renders add-ons using the Usage page add-on card', async () => {
+    renderPage();
+    const addons = within(await screen.findByRole('region', { name: 'Add-ons' }));
+    expect(addons.getByText('Add capacity when your workspace grows.')).toBeTruthy();
+    expect(addons.getByRole('heading', { name: '1,000 extra AI credits', level: 3 })).toBeTruthy();
+    expect(addons.getByRole('heading', { name: 'Extra agent', level: 3 })).toBeTruthy();
+    expect(addons.getByRole('heading', { name: 'Remove Powered by Assistrio', level: 3 })).toBeTruthy();
+    expect(addons.getByRole('heading', { name: '+5 MB trained KB storage', level: 3 })).toBeTruthy();
+    expect(addons.getByRole('heading', { name: '+10 MB trained KB storage', level: 3 })).toBeTruthy();
+    expect(addons.getAllByText('The add-on requires a paid plan').length).toBeGreaterThanOrEqual(5);
+    expect(addons.getAllByText('Auto charge').length).toBeGreaterThanOrEqual(5);
   });
 
   it('shows owner billing note in header', async () => {
     renderPage();
     expect(await screen.findByText('Checkout is not enabled yet.')).toBeTruthy();
+    expect(screen.getByRole('tablist', { name: 'Billing period' })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: /Monthly/i }).getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('updates paid plan prices when switching to annual billing', async () => {
+    renderPage();
+    const plans = within(await screen.findByRole('region', { name: 'Plans' }));
+    expect(plans.getByText('$49')).toBeTruthy();
+    expect(plans.getByText('$99')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('tab', { name: /Annually/i }));
+
+    expect(screen.getByRole('tab', { name: /Annually/i }).getAttribute('aria-selected')).toBe('true');
+    await waitFor(() => {
+      expect(plans.getByText('$39')).toBeTruthy();
+      expect(plans.getByText('$79')).toBeTruthy();
+    });
+    expect(plans.getByText('per month, $470 billed annually')).toBeTruthy();
+    expect(plans.getByText('per month, $950 billed annually')).toBeTruthy();
+    expect(plans.getAllByText('Save 20%').length).toBe(2);
   });
 
   it('shows non-owner billing note in header', async () => {
@@ -285,7 +415,7 @@ describe('PlansPage', () => {
     expect(screen.getByText('Network error')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
-    expect(await screen.findByText('Compare plans')).toBeTruthy();
+    expect(await screen.findByRole('region', { name: 'Plans' })).toBeTruthy();
   });
 
   it('shows loading skeleton while fetching', async () => {
@@ -295,7 +425,7 @@ describe('PlansPage', () => {
       }),
     );
     renderPage();
-    expect(await screen.findByLabelText('Loading billing')).toBeTruthy();
+    expect(await screen.findByLabelText('Loading plans')).toBeTruthy();
   });
 
   it('refetches when active workspace changes', async () => {

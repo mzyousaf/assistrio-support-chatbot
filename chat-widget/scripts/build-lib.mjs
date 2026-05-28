@@ -28,6 +28,9 @@ await esbuild.build({
   logLevel: "info",
   legalComments: "none",
   external: ["react", "react-dom", "react/jsx-runtime"],
+  loader: {
+    ".png": "dataurl",
+  },
 });
 
 console.log(`Built ${outfile}`);

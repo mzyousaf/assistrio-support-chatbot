@@ -1,9 +1,19 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CustomerMe } from '@/api/types';
 import { appToast } from '@/lib/app-toast';
 import { WorkspaceSettingsPage } from './WorkspaceSettingsPage';
+
+const mockPatchWorkspace = vi.fn();
+const mockDeleteWorkspace = vi.fn();
+const mockApplyCustomerSession = vi.fn();
+const mockNavigate = vi.fn();
+
+vi.mock('@/api/customerApi', () => ({
+  patchWorkspace: (...args: unknown[]) => mockPatchWorkspace(...args),
+  deleteWorkspace: (...args: unknown[]) => mockDeleteWorkspace(...args),
+}));
 
 vi.mock('@/lib/app-toast', () => ({
   appToast: {
@@ -12,6 +22,14 @@ vi.mock('@/lib/app-toast', () => ({
     error: vi.fn(),
   },
 }));
+
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+  return {
+    ...actual,
+    useNavigate: () => mockNavigate,
+  };
+});
 
 let mockCustomer: CustomerMe | null = {
   id: 'user-1',
@@ -39,10 +57,19 @@ let mockCustomer: CustomerMe | null = {
 };
 
 vi.mock('@/auth/CustomerAuthContext', () => ({
-  useCustomerAuth: () => ({ customer: mockCustomer }),
+  useCustomerAuth: () => ({
+    customer: mockCustomer,
+    applyCustomerSession: mockApplyCustomerSession,
+  }),
 }));
 
 describe('WorkspaceSettingsPage', () => {
+  function requireWorkspaceFixture() {
+    const ws = mockCustomer?.workspaces?.[0];
+    if (!ws) throw new Error('missing workspace fixture');
+    return ws;
+  }
+
   beforeEach(() => {
     mockCustomer = {
       id: 'user-1',
@@ -83,18 +110,40 @@ describe('WorkspaceSettingsPage', () => {
     );
 
     expect(screen.getByText('General')).toBeTruthy();
-    expect(screen.getByText(/View workspace details and manage permanent deletion/i)).toBeTruthy();
-    expect(screen.getByText('Workspace details')).toBeTruthy();
     expect((screen.getByLabelText('Workspace name') as HTMLInputElement).value).toBe('Acme Workspace');
-    expect(screen.getByText('ws-1')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^Update settings$/i }).hasAttribute('disabled')).toBe(true);
     expect(screen.getByText('Danger zone')).toBeTruthy();
-    expect(screen.getAllByRole('button', { name: /Delete workspace/i }).length).toBeGreaterThanOrEqual(1);
-    expect(screen.queryByText('Workspace limits')).toBeNull();
-    expect(screen.queryByText('Access and collaboration')).toBeNull();
-    expect(screen.queryByText('Workspace actions')).toBeNull();
   });
 
-  it('shows unsaved helper and placeholder save toast when workspace name changes', () => {
+  it('enables Save when workspace name is edited', () => {
+    render(
+      <MemoryRouter>
+        <WorkspaceSettingsPage />
+      </MemoryRouter>,
+    );
+
+    const saveButton = screen.getByRole('button', { name: /^Update settings$/i });
+    expect(saveButton.hasAttribute('disabled')).toBe(true);
+
+    fireEvent.change(screen.getByLabelText('Workspace name'), {
+      target: { value: 'Acme Workspace Updated' },
+    });
+    expect(saveButton.hasAttribute('disabled')).toBe(false);
+  });
+
+  it('owner can save workspace name and updates session', async () => {
+    const baseWs = requireWorkspaceFixture();
+    mockPatchWorkspace.mockResolvedValue({
+      ok: true,
+      data: {
+        workspace: { id: 'ws-1', name: 'Acme Workspace Updated' },
+        session: {
+          ...mockCustomer!,
+          workspaces: [{ ...baseWs, name: 'Acme Workspace Updated' }],
+        },
+      },
+    });
+
     render(
       <MemoryRouter>
         <WorkspaceSettingsPage />
@@ -104,10 +153,47 @@ describe('WorkspaceSettingsPage', () => {
     fireEvent.change(screen.getByLabelText('Workspace name'), {
       target: { value: 'Acme Workspace Updated' },
     });
+    fireEvent.click(screen.getByRole('button', { name: /^Update settings$/i }));
 
-    expect(screen.getByText('Workspace name changes are not saved yet.')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: /Save changes/i }));
-    expect(appToast.info).toHaveBeenCalledWith('Workspace name editing is not connected yet.');
+    await waitFor(() => {
+      expect(mockPatchWorkspace).toHaveBeenCalledWith('ws-1', { name: 'Acme Workspace Updated' });
+    });
+    expect(mockApplyCustomerSession).toHaveBeenCalled();
+    expect(appToast.success).toHaveBeenCalledWith('Workspace name saved.');
+  });
+
+  it('shows paid-workspace delete lock copy for free plan owner', () => {
+    const baseWs = requireWorkspaceFixture();
+    mockCustomer = {
+      ...mockCustomer!,
+      workspaces: [{ ...baseWs, planKey: 'free', subscriptionStatus: 'free' }],
+    };
+
+    render(
+      <MemoryRouter>
+        <WorkspaceSettingsPage />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText('Workspace deletion is available for paid workspaces.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^Delete workspace$/i }).hasAttribute('disabled')).toBe(true);
+  });
+
+  it('member sees read-only workspace name input', () => {
+    const baseWs = requireWorkspaceFixture();
+    mockCustomer = {
+      ...mockCustomer!,
+      workspaces: [{ ...baseWs, role: 'member' }],
+    };
+
+    render(
+      <MemoryRouter>
+        <WorkspaceSettingsPage />
+      </MemoryRouter>,
+    );
+
+    expect((screen.getByLabelText('Workspace name') as HTMLInputElement).readOnly).toBe(true);
+    expect(screen.queryByRole('button', { name: /^Update settings$/i })).toBeNull();
   });
 
   it('requires typed confirmation before enabling delete in modal', () => {
@@ -126,24 +212,5 @@ describe('WorkspaceSettingsPage', () => {
       target: { value: 'Acme Workspace' },
     });
     expect(modalDeleteButton.hasAttribute('disabled')).toBe(false);
-  });
-
-  it('shows empty state when no active workspace is selected', () => {
-    mockCustomer = {
-      id: 'user-1',
-      email: 'owner@example.com',
-      role: 'customer',
-      activeWorkspaceId: null,
-      workspaceIds: [],
-      workspaces: [],
-    };
-
-    render(
-      <MemoryRouter>
-        <WorkspaceSettingsPage />
-      </MemoryRouter>,
-    );
-
-    expect(screen.getByText(/no active workspace selected/i)).toBeTruthy();
   });
 });

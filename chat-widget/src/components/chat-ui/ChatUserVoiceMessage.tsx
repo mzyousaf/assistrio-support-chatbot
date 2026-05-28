@@ -345,10 +345,10 @@ export function ChatUserVoiceMessage({
 
   const timeClass = onAccent
     ? accentIsLight
-      ? "text-gray-900/85"
-      : "text-white/85"
+      ? "text-gray-900"
+      : "text-white"
     : neutralBubbleBlack
-      ? "text-white/90"
+      ? "text-white"
       : useDarkNeutralChrome
         ? "text-gray-300"
         : "text-gray-500";

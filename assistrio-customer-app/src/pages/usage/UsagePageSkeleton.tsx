@@ -108,17 +108,20 @@ function UsageKnowledgePanelSkeleton(props: { rows?: number }) {
 
 function UsageAddonRowSkeleton() {
   return (
-    <article className="flex w-full flex-col gap-4 rounded-xl border border-slate-200/90 bg-white px-4 py-3.5 shadow-[var(--shadow-card)] sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:px-5">
-      <div className="flex min-w-0 items-center gap-3">
-        <SkeletonBone className="h-9 w-9 shrink-0 rounded-lg" />
-        <div className="min-w-0 space-y-1.5">
-          <SkeletonBone className="h-3.5 w-24 max-w-full" />
-          <SkeletonBone className="h-3 w-32 max-w-full" />
+    <article className="w-full rounded-xl border border-slate-200/90 bg-white p-5 shadow-[var(--shadow-card)]">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex min-w-0 items-start gap-3">
+          <SkeletonBone className="h-9 w-9 shrink-0 rounded-lg" />
+          <SkeletonBone className="h-4 w-40 max-w-full" />
         </div>
+        <SkeletonBone className="h-8 w-52 max-w-full rounded-lg" />
       </div>
-      <div className="flex shrink-0 items-center justify-between gap-4 sm:justify-end">
-        <SkeletonBone className="h-4 w-10" />
-        <SkeletonBone className="h-8 w-24 rounded-[var(--ui-radius)]" />
+      <SkeletonBone className="mt-3 h-4 w-36 max-w-full" />
+      <SkeletonBone className="mt-2 h-4 w-full max-w-md" />
+      <SkeletonBone className="mt-2 h-4 w-full max-w-sm" />
+      <div className="mt-5 flex items-center gap-2.5 border-t border-slate-100 pt-4">
+        <SkeletonBone className="h-5 w-9 rounded-full" />
+        <SkeletonBone className="h-4 w-16" />
       </div>
     </article>
   );

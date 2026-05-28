@@ -115,6 +115,12 @@ describe('WorkspaceInviteService', () => {
         invites.push(row);
         return row;
       }),
+      deleteOne: jest.fn(async (filter: { _id: Types.ObjectId }) => {
+        const idx = invites.findIndex((row) => String(row._id) === String(filter._id));
+        if (idx < 0) return { deletedCount: 0 };
+        invites.splice(idx, 1);
+        return { deletedCount: 1 };
+      }),
     };
 
     const membershipModel = {
@@ -126,6 +132,13 @@ describe('WorkspaceInviteService', () => {
                 String(row.workspaceId) === String(filter.workspaceId) &&
                 String(row.userId) === String(filter.userId),
             ) ?? null,
+          ),
+        })),
+      })),
+      find: jest.fn((filter: { workspaceId?: Types.ObjectId }) => ({
+        select: jest.fn(() => ({
+          lean: jest.fn(async () =>
+            memberships.filter((row) => String(row.workspaceId) === String(filter.workspaceId)),
           ),
         })),
       })),
@@ -144,6 +157,15 @@ describe('WorkspaceInviteService', () => {
       findById: jest.fn((id: Types.ObjectId) => ({
         select: jest.fn(() => ({
           lean: jest.fn(async () => users.find((user) => String(user._id) === String(id)) ?? null),
+        })),
+      })),
+      find: jest.fn((filter: { _id?: { $in: Types.ObjectId[] } }) => ({
+        select: jest.fn(() => ({
+          lean: jest.fn(async () =>
+            users.filter((user) =>
+              filter._id?.$in?.some((id) => String(id) === String(user._id)),
+            ),
+          ),
         })),
       })),
     };
@@ -191,6 +213,7 @@ describe('WorkspaceInviteService', () => {
       membershipModel,
       memberLimitService,
       workspacesService,
+      grantService,
       invites,
       memberships,
     };
@@ -472,9 +495,9 @@ describe('WorkspaceInviteService', () => {
     expect(rows[0]).not.toHaveProperty('tokenHash');
   });
 
-  it('cancel pending invite sets cancelled status', async () => {
+  it('cancel pending invite hard-deletes invite document', async () => {
     const inviteId = new Types.ObjectId();
-    const { service, invites } = makeService({
+    const { service, invites, grantService } = makeService({
       initialInvites: [
         {
           _id: inviteId,
@@ -490,7 +513,82 @@ describe('WorkspaceInviteService', () => {
     });
 
     await service.cancelInvite(workspaceId, String(inviteId), now);
-    expect(invites[0]?.status).toBe('cancelled');
+    expect(invites).toHaveLength(0);
+    expect(grantService.deleteInviteGrants).toHaveBeenCalledWith(workspaceId, String(inviteId));
+  });
+
+  it('listInvites omits cancelled, accepted, and member-duplicate invites', async () => {
+    const memberUserId = new Types.ObjectId();
+    const { service } = makeService({
+      users: [{ _id: memberUserId, email: 'member@example.com' }],
+      initialMemberships: [{ workspaceId: wsOid, userId: memberUserId, role: 'member' }],
+      initialInvites: [
+        {
+          _id: new Types.ObjectId(),
+          workspaceId: wsOid,
+          email: 'pending@example.com',
+          role: 'member',
+          tokenHash: 'h1',
+          status: 'pending',
+          invitedByUserId: new Types.ObjectId(invitedByUserId),
+          expiresAt: new Date(now.getTime() + 60_000),
+        },
+        {
+          _id: new Types.ObjectId(),
+          workspaceId: wsOid,
+          email: 'expired@example.com',
+          role: 'member',
+          tokenHash: 'h2',
+          status: 'expired',
+          invitedByUserId: new Types.ObjectId(invitedByUserId),
+          expiresAt: new Date(now.getTime() - 60_000),
+        },
+        {
+          _id: new Types.ObjectId(),
+          workspaceId: wsOid,
+          email: 'cancelled@example.com',
+          role: 'member',
+          tokenHash: 'h3',
+          status: 'cancelled',
+          invitedByUserId: new Types.ObjectId(invitedByUserId),
+          expiresAt: new Date(now.getTime() + 60_000),
+        },
+        {
+          _id: new Types.ObjectId(),
+          workspaceId: wsOid,
+          email: 'member@example.com',
+          role: 'member',
+          tokenHash: 'h4',
+          status: 'accepted',
+          invitedByUserId: new Types.ObjectId(invitedByUserId),
+          expiresAt: new Date(now.getTime() + 60_000),
+        },
+      ],
+    });
+
+    const rows = await service.listInvitesForWorkspace(workspaceId);
+    expect(rows.map((row) => row.email).sort()).toEqual(['expired@example.com', 'pending@example.com']);
+  });
+
+  it('listInvites returns expired invite status for customer resend flow', async () => {
+    const { service } = makeService({
+      initialInvites: [
+        {
+          _id: new Types.ObjectId(),
+          workspaceId: wsOid,
+          email: 'expired@example.com',
+          role: 'member',
+          tokenHash: 'h2',
+          status: 'expired',
+          invitedByUserId: new Types.ObjectId(invitedByUserId),
+          expiresAt: new Date(now.getTime() - 60_000),
+        },
+      ],
+    });
+
+    const rows = await service.listInvitesForWorkspace(workspaceId);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.status).toBe('expired');
   });
 
   it('resend regenerates token for expired invite', async () => {

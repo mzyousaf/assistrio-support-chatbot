@@ -14,7 +14,7 @@ const {
 } = vi.hoisted(() => {
   const mockSoftReload = vi.fn();
   const mockBotWorkspace = {
-    bot: { id: 'bot-1', chatUI: { showBranding: false } },
+    bot: { id: 'bot-1', chatUI: { showBranding: true, showAssistrioBrandingPaid: false } },
     botId: 'bot-1',
     softReload: mockSoftReload,
     canManageBot: true,
@@ -86,10 +86,12 @@ describe('WidgetAppearanceSection branding entitlement', () => {
     expect(screen.getByRole('link', { name: /view add-ons/i }).getAttribute('href')).toBe('/settings/plans');
     const brandingSwitch = document.getElementById('appearance-show-branding');
     expect(brandingSwitch).toBeTruthy();
-    expect(brandingSwitch?.hasAttribute('disabled')).toBe(true);
+    expect(brandingSwitch?.hasAttribute('disabled')).toBe(false);
+    const assistrioSwitch = document.getElementById('appearance-show-assistrio-branding-paid');
+    expect(assistrioSwitch?.hasAttribute('disabled')).toBe(true);
   });
 
-  it('does not send hidden branding on save when locked', async () => {
+  it('does not send hidden Assistrio branding on save when locked', async () => {
     mockPatchBot.mockResolvedValue({ ok: true, data: {} });
 
     render(
@@ -98,16 +100,19 @@ describe('WidgetAppearanceSection branding entitlement', () => {
       </MemoryRouter>,
     );
 
-    fireEvent.change(screen.getByLabelText(/branding text/i), {
-      target: { value: 'Powered by Assistrio — Test Co' },
-    });
+    const brandingLineToggle = document.getElementById('appearance-show-branding');
+    expect(brandingLineToggle).toBeTruthy();
+    fireEvent.click(brandingLineToggle!);
     fireEvent.click(screen.getByRole('button', { name: /save widget appearance/i }));
 
     await waitFor(() => {
       expect(mockPatchBot).toHaveBeenCalled();
     });
 
-    const payload = mockPatchBot.mock.calls[0]?.[1] as { chatUI?: { showBranding?: boolean } };
-    expect(payload.chatUI?.showBranding).not.toBe(false);
+    const payload = mockPatchBot.mock.calls[0]?.[1] as {
+      chatUI?: { showBranding?: boolean; showAssistrioBrandingPaid?: boolean };
+    };
+    expect(payload.chatUI?.showAssistrioBrandingPaid).not.toBe(false);
+    expect(payload.chatUI?.showBranding).toBe(false);
   });
 });

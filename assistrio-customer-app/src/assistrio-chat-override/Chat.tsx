@@ -10,6 +10,7 @@ import type {
   ChatShadowIntensity,
   ComposerControlStyle,
   ScrollChromeStyle,
+  ScrollToBottomAlign,
   SpeechRecordingWaveStyle,
   UserBubbleStyle,
 } from "@acw/models/botChatUI";
@@ -27,6 +28,8 @@ import { chatShadowIntensityClass } from "@acw/components/chat-ui/chatShadowStyl
 import { ChatHeader } from "@acw/components/chat-ui/ChatHeader";
 import { ChatMessages } from "@acw/components/chat-ui/ChatMessages";
 import { ChatComposer } from "@acw/components/chat-ui/ChatComposer";
+import { AssistrioBrandingPaid } from "@acw/components/chat-ui/AssistrioBrandingPaid";
+import { WidgetBranding } from "@acw/components/chat-ui/WidgetBranding";
 import { ChatAttachmentsScreen } from "@acw/components/chat-ui/ChatAttachmentsScreen";
 import { ChatVoiceMessageDetailScreen } from "@acw/components/chat-ui/ChatVoiceMessageDetailScreen";
 import {
@@ -113,6 +116,8 @@ export interface ChatProps {
   scrollChromeStyle?: ScrollChromeStyle;
   /** Floating scroll-to-latest button; when omitted, matches `scrollChromeStyle`. */
   scrollToBottomChromeStyle?: ScrollChromeStyle;
+  /** Floating scroll-to-latest button alignment (default `center`). */
+  scrollToBottomAlign?: ScrollToBottomAlign;
   /**
    * `"auto"` (default): message list scrolls when content overflows.
    * `"hidden"`: no scroll in the message list (e.g. embed preview; content may be clipped).
@@ -239,7 +244,9 @@ export interface ChatProps {
 
   // Footer
   showFooter?: boolean;
-  /** Primary footer line (e.g. "Powered by …"). */
+  /** Logo + “Powered by Assistrio” above composer before the first visitor message (default true). */
+  showAssistrioBrandingPaid?: boolean;
+  /** Footer branding text line (e.g. "Powered by …"). */
   brandingMessage?: string;
   /** Optional second line (e.g. privacy notice). Shown below branding when both are set. */
   privacyText?: string;
@@ -337,6 +344,7 @@ export function Chat({
   showScrollbar = true,
   scrollChromeStyle = "default",
   scrollToBottomChromeStyle,
+  scrollToBottomAlign = "center",
   messageListOverflow = "auto",
   composerAsSeparateBox = true,
   composerBorderWidth = 1,
@@ -401,6 +409,7 @@ export function Chat({
   hideSuggestionChipText = false,
   onSuggestedQuestion,
   showFooter = true,
+  showAssistrioBrandingPaid = true,
   brandingMessage,
   privacyText,
   compact = false,
@@ -807,6 +816,11 @@ export function Chat({
 
   const historyEnabled = sessionHistoryEnabled ?? showSessionMenu;
   const hasUserMessage = messages.some((m) => m.role === "user");
+  const showBrandingLine = showFooter && Boolean((brandingMessage ?? "").trim());
+  const showBrandingPaidAboveComposer =
+    showFooter && showAssistrioBrandingPaid !== false && !hasUserMessage;
+  const showFooterBrandingText = showBrandingLine;
+  const showFooterContent = showFooterBrandingText || Boolean((privacyText ?? "").trim());
   const showAttachmentsChrome = attachmentsScreen != null;
   const hasSuggestionChips =
     (suggestedQuestions && suggestedQuestions.length > 0) ||
@@ -1129,6 +1143,7 @@ export function Chat({
             showScrollbar={showScrollbar}
             scrollChromeStyle={scrollChromeStyle}
             scrollToBottomChromeStyle={scrollToBottomChromeStyle}
+            scrollToBottomAlign={scrollToBottomAlign}
             messageListOverflow={messageListOverflow}
             emptyState={emptyState}
             onSourceClick={onSourceClick}
@@ -1261,6 +1276,9 @@ export function Chat({
                   e.target.value = "";
                 }}
               />
+              {showBrandingPaidAboveComposer ? (
+                <AssistrioBrandingPaid dark={dark} compact={compact} />
+              ) : null}
               <ChatComposer
               dark={dark}
               value={input}
@@ -1320,25 +1338,23 @@ export function Chat({
       {showFooter &&
       !showHistoryChrome &&
       !showAttachmentsChrome &&
-      ((brandingMessage ?? "").trim() || (privacyText ?? "").trim()) ? (
+      showFooterContent ? (
         <footer
           className={cx(
-            "flex-shrink-0 text-center border-t rounded-b-2xl",
+            "flex-shrink-0 text-center border-t",
             dark ? "border-gray-700" : "border-gray-200",
-            compact ? "px-2 py-1.5" : "px-4 py-2"
+            compact ? "px-2 py-1.5" : "px-3 py-1.5"
           )}
         >
-          {(brandingMessage ?? "").trim() ? (
-            <p className={cx("text-xs", dark ? "text-gray-300" : "text-gray-500")}>
-              {(brandingMessage ?? "").trim()}
-            </p>
+          {showFooterBrandingText ? (
+            <WidgetBranding message={brandingMessage ?? ""} dark={dark} />
           ) : null}
           {(privacyText ?? "").trim() ? (
             <p
               className={cx(
-                "text-[10px] leading-snug",
-                (brandingMessage ?? "").trim() ? "mt-1" : "",
-                dark ? "text-gray-400" : "text-gray-500",
+                "text-[10px] font-normal leading-snug",
+                showFooterBrandingText ? "mt-1" : "",
+                dark ? "text-gray-500" : "text-gray-400",
               )}
             >
               {(privacyText ?? "").trim()}

@@ -16,7 +16,7 @@ export function resolveBrandingSaveErrorMessage(result: {
   return result.error?.trim() || 'Something went wrong. Please try again.';
 }
 
-/** Keep branding visible in local editor/preview when workspace cannot remove it. */
+/** Keep Assistrio branding visible in local editor/preview when workspace cannot remove it. */
 export function applyBrandingEntitlementToLocalChatUi(
   chatUi: Record<string, unknown>,
   canRemoveBranding: boolean,
@@ -24,10 +24,6 @@ export function applyBrandingEntitlementToLocalChatUi(
   if (canRemoveBranding) return chatUi;
   return {
     ...chatUi,
-    showBranding: true,
-    brandingMessage:
-      typeof chatUi.brandingMessage === 'string' && chatUi.brandingMessage.trim()
-        ? chatUi.brandingMessage.trim()
-        : 'Powered by Assistrio',
+    showAssistrioBrandingPaid: true,
   };
 }

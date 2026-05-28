@@ -39,9 +39,22 @@ function resolvePlaygroundPreviewVisitorScope(pathname: string, botId: string | 
   return head || 'playground';
 }
 
+/** Routes without the inline preview lane (`PlaygroundLayout` hides the right column). */
+function isPlaygroundInlinePreviewHidden(pathname: string): boolean {
+  return (
+    /\/playground\/deploy\/?$/.test(pathname) ||
+    /\/playground\/knowledgebase\/datasheets\/[^/]+\/fullscreen\/?$/.test(pathname)
+  );
+}
+
+/** No widget preview at all (not even floating). */
+function isPlaygroundWidgetPreviewFullyHidden(pathname: string): boolean {
+  return /\/playground\/knowledgebase\/datasheets\/[^/]+\/fullscreen\/?$/.test(pathname);
+}
+
 /**
  * Live widget **only** under `/bots/:id/playground/...` (customer dashboard). Inside playground:
- * contained when the inline slot is open, else floating. React `key` includes the playground section for thread isolation (`previewVisitorScope`); KB item **Edit** routes reuse the same scope as **Detail** so the embed does not remount. After ~1h without activity, sending a message shows an idle refresh modal (see `assistrio-chat-override/AdminLiveChatAdapter.tsx`, not `chat-widget`).
+ * contained when the inline slot is open, else floating (bottom-right). Deploy & Go Live uses floating only.
  */
 export function CustomerWidgetPreviewHost() {
   const { botId, loadState } = useBotWorkspace();
@@ -59,8 +72,10 @@ export function CustomerWidgetPreviewHost() {
   } = useCustomerWidgetPreview();
 
   useLayoutEffect(() => {
-    if (!isPlaygroundRoute) setInlineSlotWantsContained(false);
-  }, [isPlaygroundRoute, setInlineSlotWantsContained]);
+    if (!isPlaygroundRoute || isPlaygroundInlinePreviewHidden(pathname)) {
+      setInlineSlotWantsContained(false);
+    }
+  }, [isPlaygroundRoute, pathname, setInlineSlotWantsContained]);
   const [fallbackEl, setFallbackEl] = useState<HTMLDivElement | null>(null);
 
   const activeSurface = useMemo(() => {
@@ -121,14 +136,15 @@ export function CustomerWidgetPreviewHost() {
     return { ...previewBase, presentation: 'floating' };
   }, [previewBase]);
 
-  // Only the playground flow uses "contained" — keep false on insights/elsewhere (must not depend on early return: hooks run every render).
-  const isDeployPlayground = isPlaygroundRoute && /\/playground\/deploy\/?$/.test(pathname);
-  const useContained = isPlaygroundRoute && inlineSlotWantsContained && !isDeployPlayground;
-  const rawConfig = isPlaygroundRoute
-    ? useContained
-      ? containedRawConfig
-      : floatingRawConfig
-    : null;
+  const hideInlinePreview = isPlaygroundInlinePreviewHidden(pathname);
+  const hideWidgetPreviewEntirely = isPlaygroundWidgetPreviewFullyHidden(pathname);
+  const useContained = isPlaygroundRoute && inlineSlotWantsContained && !hideInlinePreview;
+  const rawConfig =
+    isPlaygroundRoute && !hideWidgetPreviewEntirely
+      ? useContained
+        ? containedRawConfig
+        : floatingRawConfig
+      : null;
 
   useLayoutEffect(() => {
     if (!useContained) {
@@ -182,5 +198,5 @@ export function CustomerWidgetPreviewHost() {
     );
   }
 
-  return typeof document !== 'undefined' ? createPortal(wrapped, document.body) : null;
+  return typeof document !== 'undefined' ? createPortal(root, document.body) : null;
 }

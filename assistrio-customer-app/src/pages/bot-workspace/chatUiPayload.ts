@@ -20,6 +20,7 @@ export const DEFAULT_CHAT_UI: Record<string, unknown> = {
   chatOpenAnimation: 'slide-up-fade',
   openChatOnLoad: true,
   showBranding: true,
+  showAssistrioBrandingPaid: true,
   showPrivacyText: true,
   liveIndicatorStyle: 'label',
   statusIndicator: 'none',
@@ -29,6 +30,7 @@ export const DEFAULT_CHAT_UI: Record<string, unknown> = {
   scrollToBottomLabel: '',
   showScrollbar: true,
   scrollChromeStyle: 'default',
+  scrollToBottomAlign: 'center',
   composerAsSeparateBox: true,
   composerBorderWidth: 1,
   composerBorderColor: 'primary',
@@ -127,6 +129,12 @@ function normalizeScrollToBottomChromeStyleForPayload(chatUI: ChatUiLike): 'defa
   return normalizeScrollChromeStyleForPayload(chatUI);
 }
 
+function normalizeScrollToBottomAlignForPayload(chatUI: ChatUiLike): 'left' | 'center' | 'right' {
+  const s = chatUI.scrollToBottomAlign;
+  if (s === 'left' || s === 'right') return s;
+  return 'center';
+}
+
 /** Normalized chat UI for PATCH (same rules as admin `buildChatUiPayload`). */
 export function buildChatUiPayload(chatUI: ChatUiLike): ChatUiLike {
   const menuQuickLinksMenuIcon = normalizeQuickLinkIcon(chatUI.menuQuickLinksMenuIcon);
@@ -156,6 +164,7 @@ export function buildChatUiPayload(chatUI: ChatUiLike): ChatUiLike {
     chatOpenAnimation: chatUI.chatOpenAnimation ?? DEFAULT_CHAT_UI.chatOpenAnimation,
     openChatOnLoad: chatUI.openChatOnLoad ?? DEFAULT_CHAT_UI.openChatOnLoad,
     showBranding: chatUI.showBranding ?? DEFAULT_CHAT_UI.showBranding,
+    showAssistrioBrandingPaid: chatUI.showAssistrioBrandingPaid ?? DEFAULT_CHAT_UI.showAssistrioBrandingPaid,
     brandingMessage: clampStr(
       typeof chatUI.brandingMessage === 'string' ? String(chatUI.brandingMessage).trim() : '',
       BOT_FIELD_MAX.brandingMessage,
@@ -177,6 +186,7 @@ export function buildChatUiPayload(chatUI: ChatUiLike): ChatUiLike {
     showScrollbar: chatUI.showScrollbar ?? DEFAULT_CHAT_UI.showScrollbar,
     scrollChromeStyle: normalizeScrollChromeStyleForPayload(chatUI),
     scrollToBottomChromeStyle: normalizeScrollToBottomChromeStyleForPayload(chatUI),
+    scrollToBottomAlign: normalizeScrollToBottomAlignForPayload(chatUI),
     composerAsSeparateBox: chatUI.composerAsSeparateBox ?? DEFAULT_CHAT_UI.composerAsSeparateBox,
     composerBorderWidth:
       typeof chatUI.composerBorderWidth === 'number' &&
@@ -244,6 +254,7 @@ export const WIDGET_APPEARANCE_CHAT_UI_KEYS = [
   'chatPanelBorderWidth',
   'bubbleBorderRadius',
   'showBranding',
+  'showAssistrioBrandingPaid',
   'brandingMessage',
   'showPrivacyText',
   'privacyText',
@@ -275,7 +286,6 @@ export const CHAT_EXPERIENCE_CHAT_UI_KEYS = [
   'hideSuggestionChipText',
   'showCopyButton',
   'showMessageFeedback',
-  'showSources',
   'userTextBubbleStyle',
   'userVoiceBubbleStyle',
   'showAvatarInHeader',
@@ -288,6 +298,7 @@ export const CHAT_EXPERIENCE_CHAT_UI_KEYS = [
   'showScrollbar',
   'scrollChromeStyle',
   'scrollToBottomChromeStyle',
+  'scrollToBottomAlign',
   'showMenuExpand',
   'openChatOnLoad',
   'showMenuQuickLinks',

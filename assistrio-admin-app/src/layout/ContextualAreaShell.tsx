@@ -9,9 +9,9 @@ export function ContextualAreaShell({
   children: ReactNode;
 }) {
   return (
-    <div className="flex min-h-full min-w-0 flex-1">
+    <div className="flex min-h-0 min-w-0 flex-1">
       {sidebar}
-      <div className="min-h-0 min-w-0 flex-1 overflow-auto">{children}</div>
+      <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-y-contain">{children}</div>
     </div>
   );
 }

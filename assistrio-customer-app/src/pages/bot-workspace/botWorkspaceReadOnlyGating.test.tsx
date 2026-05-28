@@ -19,6 +19,7 @@ vi.mock('./BotWorkspaceContext', () => ({
     botId: 'bot-1',
     loadState: 'ok',
     softReload: vi.fn(),
+    patchBot: vi.fn(),
     canManageBot: mockCanManageBot,
   }),
   useCanManageBot: () => mockCanManageBot,

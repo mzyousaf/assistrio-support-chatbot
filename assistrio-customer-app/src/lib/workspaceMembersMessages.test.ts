@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   countWorkspaceSeatsUsed,
+  enrichBotAccessGrantRowsWithMembers,
   isPendingWorkspaceInvite,
   isValidInviteEmail,
   workspaceMembersErrorMessage,
 } from './workspaceMembersMessages';
+import type { BotAccessGrantRow } from '@/api/types';
 
 describe('workspaceMembersMessages', () => {
   it('validates invite emails', () => {
@@ -56,5 +58,36 @@ describe('workspaceMembersMessages', () => {
         'fallback',
       ),
     ).toContain('owner or admin');
+  });
+
+  it('enriches grant rows with member avatar and name fields', () => {
+    const rows: BotAccessGrantRow[] = [
+      {
+        subjectType: 'user',
+        userId: 'user-2',
+        email: 'member@test.com',
+        displayName: 'Member User',
+        status: 'active',
+        role: 'member',
+        canView: true,
+        canPreview: false,
+        locked: false,
+      },
+    ];
+    const enriched = enrichBotAccessGrantRowsWithMembers(rows, [
+      {
+        userId: 'user-2',
+        email: 'member@test.com',
+        firstName: 'Member',
+        lastName: 'User',
+        picture: 'https://lh3.googleusercontent.com/a/google-photo',
+        displayName: 'Member User',
+        avatarUrl: 'https://lh3.googleusercontent.com/a/google-photo',
+        role: 'member',
+        joinedAt: null,
+      },
+    ]);
+    expect(enriched[0]?.avatarUrl).toContain('google-photo');
+    expect(enriched[0]?.firstName).toBe('Member');
   });
 });

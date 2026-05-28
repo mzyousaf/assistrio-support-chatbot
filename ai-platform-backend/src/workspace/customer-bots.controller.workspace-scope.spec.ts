@@ -37,6 +37,7 @@ describe('CustomerBotsController workspace scope', () => {
             )
           : jest.fn().mockResolvedValue(undefined),
       ensurePersonalWorkspaceForUser: jest.fn().mockResolvedValue(new Types.ObjectId(wsPersonal)),
+      filterWorkspaceBotsForUser: jest.fn(async (_uid, _ws, bots) => bots),
     };
 
     const botOnboardingService = { onboardNewBot: jest.fn().mockResolvedValue(undefined) };

@@ -7,6 +7,7 @@ import { workspacePageHeaderTopPaddingClass } from './workspacePageHeaderLayout'
 type Props = {
   title: string;
   description?: ReactNode;
+  titleAddon?: ReactNode;
   actions?: ReactNode;
   children: ReactNode;
   containerSize?: WorkspaceContainerSize;
@@ -16,6 +17,7 @@ type Props = {
 export function DataPageLayout({
   title,
   description,
+  titleAddon,
   actions,
   children,
   containerSize = 'wide',
@@ -26,7 +28,7 @@ export function DataPageLayout({
       size={containerSize}
       className={cn(containerSize === 'editor' && workspacePageHeaderTopPaddingClass, className)}
     >
-      <PageIntroStrip title={title} description={description} actions={actions} />
+      <PageIntroStrip title={title} description={description} titleAddon={titleAddon} actions={actions} />
       {children}
     </WorkspaceContentContainer>
   );

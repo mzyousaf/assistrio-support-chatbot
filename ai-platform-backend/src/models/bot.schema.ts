@@ -161,6 +161,9 @@ export class BotChatUI {
   speechRecordingWaveStyle?: 'brand' | 'default' | 'defaultDark';
   @Prop({ default: true })
   showBranding?: boolean;
+  /** Logo + “Powered by Assistrio” above composer before first visitor message (default true). */
+  @Prop({ default: true })
+  showAssistrioBrandingPaid?: boolean;
   /** Editable text shown in footer when showBranding is true (e.g. "Powered by ...") */
   @Prop({ default: '' })
   brandingMessage?: string;
@@ -197,6 +200,9 @@ export class BotChatUI {
   /** Floating scroll-to-latest button; when unset, matches `scrollChromeStyle`. */
   @Prop({ enum: ['default', 'defaultDark', 'primary', 'gray'], required: false })
   scrollToBottomChromeStyle?: 'default' | 'defaultDark' | 'primary' | 'gray';
+  /** Floating scroll-to-latest button horizontal alignment (default center). */
+  @Prop({ enum: ['left', 'center', 'right'], default: 'center' })
+  scrollToBottomAlign?: 'left' | 'center' | 'right';
   /** @deprecated Use scrollChromeStyle. */
   @Prop({ required: false })
   scrollChromeUsesPrimary?: boolean;

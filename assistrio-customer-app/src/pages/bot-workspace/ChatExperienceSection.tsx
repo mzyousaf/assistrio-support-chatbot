@@ -103,6 +103,12 @@ function getScrollToBottomChromeStyle(ui: Record<string, unknown>): 'default' | 
   return getScrollbarChromeStyle(ui);
 }
 
+function getScrollToBottomAlign(ui: Record<string, unknown>): 'left' | 'center' | 'right' {
+  const v = ui.scrollToBottomAlign;
+  if (v === 'left' || v === 'right') return v;
+  return 'center';
+}
+
 type ToggleRowProps = {
   id: string;
   label: string;
@@ -448,33 +454,6 @@ export function ChatExperienceSection() {
                           checked={getBool(chatUi, 'showMessageFeedback', true)}
                           onChange={(v) => patch('showMessageFeedback', v)}
                         />
-                        <div className="rounded-lg border border-blue-200/90 bg-blue-50/90 px-3.5 py-3 text-sm text-slate-800 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.6)]">
-                          <p className="font-semibold text-blue-900">Preview mode only</p>
-                          <p className="mt-1 text-[13px] leading-relaxed text-blue-950/85">
-                            The option below applies to the in-dashboard chat preview. Your live embedded widget does not
-                            show citation sources to visitors.
-                          </p>
-                          <div className="mt-3 flex flex-wrap items-start justify-between gap-3 border-t border-blue-200/80 pt-3">
-                            <div className="min-w-0 flex-1">
-                              <span
-                                id="chat-show-sources-preview-label"
-                                className={ws.workspaceEditorControlLabel}
-                              >
-                                Show sources on assistant replies
-                              </span>
-                              <p className={cn(ws.workspaceEditorControlHint, 'mt-1')}>
-                                Lists knowledge citations under bot answers in the preview only.
-                              </p>
-                            </div>
-                            <Switch
-                              id="chat-show-sources-preview"
-                              checked={getBool(chatUi, 'showSources', false)}
-                              onCheckedChange={(v) => patch('showSources', v)}
-                              aria-labelledby="chat-show-sources-preview-label"
-                              className="mt-0.5 shrink-0"
-                            />
-                          </div>
-                        </div>
                         <div className="border-b border-slate-100 py-3.5 last:border-b-0">
                           <FieldRow
                             label="Visitor text messages"
@@ -789,6 +768,30 @@ export function ChatExperienceSection() {
                                 </FieldRow>
                               </div>
                             ) : null}
+                            <div className="border-b border-slate-100 py-3.5">
+                              <FieldRow
+                                label="Scroll button alignment"
+                                htmlFor="chat-scroll-to-bottom-align"
+                                className="min-w-0 gap-1.5"
+                                helperText="Horizontal placement of the floating scroll-to-latest control."
+                              >
+                                <Select
+                                  id="chat-scroll-to-bottom-align"
+                                  quiet
+                                  value={getScrollToBottomAlign(chatUi)}
+                                  onChange={(e) =>
+                                    patch(
+                                      'scrollToBottomAlign',
+                                      e.target.value as 'left' | 'center' | 'right',
+                                    )
+                                  }
+                                >
+                                  <option value="left">Left</option>
+                                  <option value="center">Center</option>
+                                  <option value="right">Right</option>
+                                </Select>
+                              </FieldRow>
+                            </div>
                           </>
                         ) : null}
                         <ToggleRow

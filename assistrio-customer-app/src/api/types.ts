@@ -314,6 +314,16 @@ export type PatchCustomerMeProfileResponse = {
   customer: CustomerMe;
 };
 
+export type PatchWorkspaceResponse = {
+  workspace: { id: string; name: string };
+  session: CustomerMe;
+};
+
+export type DeleteWorkspaceResponse = {
+  success: boolean;
+  session: CustomerMe;
+};
+
 export type WorkspaceMemberRole = 'owner' | 'admin' | 'member';
 
 /** Roles assignable via workspace invite (owner is never invitable). */
@@ -333,9 +343,23 @@ export type WorkspaceMemberSummary = {
   firstName: string | null;
   lastName: string | null;
   picture: string | null;
+  displayName?: string;
+  avatarUrl?: string | null;
   role: WorkspaceMemberRole;
   joinedAt: string | null;
   botAccessSummary?: WorkspaceBotAccessSummary;
+};
+
+export type SubjectBotGrantItem = {
+  botId: string;
+  botName: string;
+  canView: boolean;
+  canPreview: boolean;
+};
+
+export type SubjectBotGrantsResponse = {
+  grants: SubjectBotGrantItem[];
+  botAccessSummary: WorkspaceBotAccessSummary;
 };
 
 /** GET /api/customer/workspaces/:workspaceId/invites */
@@ -363,6 +387,10 @@ export type BotAccessGrantRow = {
   inviteId?: string;
   email: string;
   displayName: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  avatarUrl?: string | null;
+  picture?: string | null;
   status: 'active' | 'pending_invite' | 'expired' | 'cancelled';
   role: WorkspaceMemberRole;
   canView: boolean;
@@ -407,6 +435,7 @@ export type CustomerBotListItem = {
   name: string;
   agentsPackAgent: boolean;
   category: string;
+  categories?: string[];
   status: string;
   isPublic: boolean;
   visibility: string;
@@ -429,12 +458,22 @@ export type CustomerBotListItem = {
   workspaceId: string;
   workspaceName?: string;
   workspaceMemberVisibility?: BotWorkspaceMemberVisibility;
+  viewAccessPreview?: BotViewAccessPreviewMember[];
 };
 
 /** Member visibility / preview access for workspace members (defaults: both true). */
 export type BotWorkspaceMemberVisibility = {
   visibleToMembers: boolean;
   allowMemberPreview: boolean;
+};
+
+export type BotViewAccessPreviewMember = {
+  email: string;
+  displayName: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  avatarUrl?: string | null;
+  picture?: string | null;
 };
 
 /** GET /api/customer/bots/:botId/conversations — origin subset on each row */

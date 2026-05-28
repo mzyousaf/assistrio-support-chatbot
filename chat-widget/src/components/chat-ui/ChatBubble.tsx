@@ -6,6 +6,7 @@ import {
 } from "../../lib/chatMessageDisplay.util";
 import { chatRemarkPlugins } from "../../lib/chatMarkdownPlugins";
 import { chatMarkdownComponents } from "./chatMarkdownComponents";
+import { pickBrandChipForeground } from "../../lib/accentLuminance";
 import type { UserBubbleStyle } from "../../models/botChatUI";
 import type { ChatUIMessage, ChatUISource } from "./types";
 import { cx } from "./utils";
@@ -162,7 +163,6 @@ export function ChatBubble({
     return () => window.clearInterval(id);
   }, [isAssistant]);
   const userFailed = isUser && message.status === "error";
-  const userSending = isUser && message.status === "sending";
   const radiusPx = Math.max(0, Math.min(32, bubbleBorderRadius ?? 20));
 
   const roleLabel = isAssistant && senderName ? senderName : isUser ? "User" : "Assistant";
@@ -170,6 +170,10 @@ export function ChatBubble({
   /** Text vs voice each has its own setting; this drives the outer bubble fill only. */
   const userUsesPrimaryBubble = isUser && resolvedUserBubbleStyle === "primary";
   const userIsDefaultDark = isUser && resolvedUserBubbleStyle === "defaultDark";
+  const userPrimaryForeground =
+    isUser && userUsesPrimaryBubble && accentColor
+      ? pickBrandChipForeground(accentColor)
+      : undefined;
   const showTimeAbove = showTime && timePosition !== "bottom";
   const showTimeBelow = showTime && timePosition === "bottom";
 
@@ -236,14 +240,15 @@ export function ChatBubble({
   const bubbleSurfaceClass = cx(
     "chat-bubble-surface inline-block max-w-full min-w-0 align-top box-border px-3 py-2.5 text-left text-sm font-normal leading-relaxed",
     "break-words [overflow-wrap:anywhere]",
-    isUser && userUsesPrimaryBubble && "text-white",
+    isUser && userUsesPrimaryBubble && userPrimaryForeground === "#ffffff" && "text-white",
+    isUser && userUsesPrimaryBubble && userPrimaryForeground === "#111827" && "text-gray-900",
     isUser && !userUsesPrimaryBubble && userIsDefaultDark && "text-white bg-black border border-gray-600/80",
     isUser &&
       !userUsesPrimaryBubble &&
       !userIsDefaultDark &&
       (dark
-        ? "text-gray-100 bg-gray-600/78 border border-gray-500/40"
-        : "text-gray-800 bg-gray-100 border border-gray-200/85"),
+        ? "text-white bg-gray-700 border border-gray-600/70"
+        : "text-gray-900 bg-gray-200 border border-gray-300/75"),
     isAssistant &&
     (dark
       ? "bg-gray-600/70 text-gray-300 border border-gray-500/55"
@@ -254,13 +259,11 @@ export function ChatBubble({
     isUser && userUsesPrimaryBubble && accentColor
       ? {
           backgroundColor: accentColor,
-          color: "#fff",
+          color: userPrimaryForeground ?? "#ffffff",
           borderRadius: `${radiusPx}px`,
-          ...(userSending ? { opacity: 0.88 } : {}),
         }
       : {
           borderRadius: `${radiusPx}px`,
-          ...(isUser && userSending ? { opacity: 0.88 } : {}),
         };
 
   const contentWrapperClass = cx(

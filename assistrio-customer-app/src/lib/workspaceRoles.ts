@@ -1,4 +1,5 @@
 import type { WorkspaceMemberRole, WorkspaceInviteRole } from '@/api/types';
+import { cn } from '@/lib/utils';
 
 export function isWorkspaceOwnerRole(role: string | null | undefined): role is 'owner' {
   return role === 'owner';
@@ -55,6 +56,16 @@ export function workspaceRoleBadgeClassName(
     default:
       return 'border-slate-200 bg-white text-slate-500';
   }
+}
+
+/** Pill badge styling for members table and role tag dropdown. */
+export function workspaceRolePillClassName(role: string | null | undefined): string {
+  const variant = workspaceRoleBadgeVariant(role);
+  return cn(
+    variant === 'owner' && 'bg-violet-50 text-violet-700',
+    variant === 'admin' && 'bg-sky-50 text-sky-700',
+    variant === 'member' && workspaceRoleBadgeClassName('member', 'pill'),
+  );
 }
 
 export function isWorkspaceMembershipRole(value: string): value is WorkspaceMemberRole {

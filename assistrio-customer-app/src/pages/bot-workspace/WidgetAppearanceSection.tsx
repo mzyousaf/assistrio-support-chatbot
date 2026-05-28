@@ -185,7 +185,7 @@ export function WidgetAppearanceSection() {
 
   const patch = useCallback(
     (key: string, value: unknown) => {
-      if (brandingLocked && key === 'showBranding' && value === false) return;
+      if (brandingLocked && key === 'showAssistrioBrandingPaid' && value === false) return;
       setChatUi((prev) => ({ ...prev, [key]: value }));
       markDirty();
     },
@@ -217,10 +217,13 @@ export function WidgetAppearanceSection() {
     [bot, botId, chatUi, dirty, softReload, saving, canRemoveBranding],
   );
 
-  const showBrandingEnabled = brandingLocked ? true : getBool(chatUi, 'showBranding', true);
-  const storedBrandingHidden =
+  const showBrandingEnabled = getBool(chatUi, 'showBranding', true);
+  const showAssistrioBrandingPaidEnabled = brandingLocked
+    ? true
+    : getBool(chatUi, 'showAssistrioBrandingPaid', true);
+  const storedAssistrioBrandingHidden =
     brandingLocked && bot?.chatUI && typeof bot.chatUI === 'object'
-      ? (bot.chatUI as { showBranding?: boolean }).showBranding === false
+      ? (bot.chatUI as { showAssistrioBrandingPaid?: boolean }).showAssistrioBrandingPaid === false
       : false;
 
   const primaryColor = getStr(chatUi, 'primaryColor') || DEFAULT_PRIMARY_HEX;
@@ -564,8 +567,15 @@ export function WidgetAppearanceSection() {
                           label="Show branding line"
                           description="Attribution or product line at the bottom of the widget."
                           checked={showBrandingEnabled}
-                          disabled={brandingLocked}
                           onChange={(v) => patch('showBranding', v)}
+                        />
+                        <ToggleRow
+                          id="appearance-show-assistrio-branding-paid"
+                          label="Show Assistrio branding"
+                          description="Logo and Powered by Assistrio link above the composer before the first visitor message."
+                          checked={showAssistrioBrandingPaidEnabled}
+                          disabled={brandingLocked}
+                          onChange={(v) => patch('showAssistrioBrandingPaid', v)}
                         />
                         {brandingLocked ? (
                           <div className="border-b border-slate-100 py-3.5">
@@ -575,9 +585,9 @@ export function WidgetAppearanceSection() {
                                 View add-ons
                               </Link>
                             </p>
-                            {storedBrandingHidden ? (
+                            {storedAssistrioBrandingHidden ? (
                               <p className="mt-2 text-sm text-amber-800">
-                                Branding is required on your current plan and will stay visible in the live widget.
+                                Assistrio branding is required on your current plan and will stay visible in the live widget.
                               </p>
                             ) : null}
                           </div>

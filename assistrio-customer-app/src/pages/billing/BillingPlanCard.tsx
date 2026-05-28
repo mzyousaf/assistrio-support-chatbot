@@ -1,66 +1,125 @@
 import { Check } from 'lucide-react';
 import type { WorkspaceBillingPlanCatalogCard } from '@/api/types';
 import { Button } from '@/components/ui';
+import { AnimatedPlanPriceDisplay } from '@/pages/billing/AnimatedPlanPriceDisplay';
 import {
-  formatPlanPriceMonthly,
-  planCatalogFeatureLines,
-} from '@/pages/billing/billingSummaryDisplay';
+  isRecommendedPlan,
+  type PlanBillingPeriod,
+  planPricingCardBestFor,
+  planPricingCardIcon,
+  planPricingCardTitle,
+  planPricingCardTrialNote,
+  planPricingCardWhySection,
+} from '@/pages/billing/planPricingCardDisplay';
 import { cn } from '@/lib/utils';
 
 type Props = {
   plan: WorkspaceBillingPlanCatalogCard;
   isCurrent: boolean;
+  billingPeriod?: PlanBillingPeriod;
 };
 
-export function BillingPlanCard({ plan, isCurrent }: Props) {
-  const features = planCatalogFeatureLines(plan);
-
+function PlanCornerTag({ label, planKey }: { label: string; planKey: string }) {
   return (
-    <article
+    <span
       className={cn(
-        'flex h-full flex-col rounded-2xl border bg-white p-5 shadow-[var(--shadow-card)]',
-        isCurrent
-          ? 'border-teal-300/80 ring-2 ring-teal-200/60'
-          : 'border-slate-200/90',
+        'absolute right-0 top-0 max-w-[11rem] rounded-bl-xl rounded-tr-2xl px-2.5 py-1 text-[10px] font-semibold leading-snug shadow-sm',
+        planKey === 'starter' && 'bg-amber-50 text-amber-900 ring-1 ring-amber-200/80',
+        planKey === 'pro' && 'bg-slate-900 text-white',
+        (planKey === 'free' || !['starter', 'pro'].includes(planKey)) &&
+          'bg-teal-50 text-teal-800 ring-1 ring-teal-200/80',
       )}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h3 className="m-0 text-lg font-semibold tracking-tight text-slate-900">{plan.name}</h3>
-          <p className="m-0 mt-1 text-2xl font-semibold tabular-nums text-slate-900">
-            {formatPlanPriceMonthly(plan.priceMonthly)}
-          </p>
-        </div>
-        {isCurrent ? (
-          <span className="shrink-0 rounded-full bg-teal-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-teal-800 ring-1 ring-teal-200/80">
-            Current plan
-          </span>
-        ) : null}
-      </div>
+      {label}
+    </span>
+  );
+}
 
-      <ul className="m-0 mt-5 flex-1 space-y-2.5 p-0">
-        {features.map((line) => (
-          <li key={line} className="flex items-start gap-2.5 text-sm leading-relaxed text-slate-700">
+function PlanIcon({ planKey }: { planKey: string }) {
+  const { icon: Icon, className } = planPricingCardIcon(planKey);
+
+  return (
+    <Icon size={22} strokeWidth={1.75} className={cn('shrink-0', className)} aria-hidden />
+  );
+}
+
+function PlanWhySection({ planKey }: { planKey: string }) {
+  const { heading, bullets, footnote } = planPricingCardWhySection(planKey);
+
+  return (
+    <div className="text-left">
+      <h4 className="m-0 text-xs font-semibold tracking-wide text-slate-800">{heading}</h4>
+      <ul className="m-0 mt-3 list-none space-y-2 p-0">
+        {bullets.map((bullet) => (
+          <li key={bullet} className="flex items-start gap-2">
             <Check
-              size={16}
+              size={14}
               strokeWidth={2.25}
-              className="mt-0.5 shrink-0 text-teal-600"
+              className="mt-0.5 shrink-0 text-teal-600/80"
               aria-hidden
             />
-            <span>{line}</span>
+            <span className="text-[13px] leading-snug text-slate-600">{bullet}</span>
           </li>
         ))}
       </ul>
+      {footnote ? (
+        <p className="m-0 mt-2.5 border-t border-slate-100/90 pt-2 text-[11px] font-normal text-slate-400">
+          {footnote}
+        </p>
+      ) : null}
+    </div>
+  );
+}
 
-      <Button
-        type="button"
-        variant={isCurrent ? 'secondary' : 'primary'}
-        size="sm"
-        disabled
-        className="mt-5 self-start"
-      >
-        {isCurrent ? 'Current plan' : 'Coming soon'}
-      </Button>
+export function BillingPlanCard({ plan, isCurrent, billingPeriod = 'monthly' }: Props) {
+  const recommended = isRecommendedPlan(plan.key);
+  const trialNote = planPricingCardTrialNote(plan.key);
+
+  return (
+    <article
+      aria-current={isCurrent ? 'true' : undefined}
+      className="relative flex h-full flex-col rounded-2xl border border-slate-200/90 bg-white p-6 shadow-[var(--shadow-card)]"
+    >
+      <PlanCornerTag label={planPricingCardBestFor(plan.key)} planKey={plan.key} />
+
+      <div className="pr-14 text-left">
+        <div className="flex min-h-11 items-start gap-3">
+          <PlanIcon planKey={plan.key} />
+          <div className="min-w-0">
+            <h3 className="m-0 min-w-0 text-lg font-semibold leading-snug tracking-tight text-slate-900">
+              {planPricingCardTitle(plan.key, plan.name)}
+            </h3>
+          </div>
+        </div>
+
+        <AnimatedPlanPriceDisplay
+          priceMonthly={plan.priceMonthly}
+          planKey={plan.key}
+          billingPeriod={billingPeriod}
+        />
+      </div>
+
+      <div className="mt-4 w-full">
+        <Button
+          type="button"
+          variant={recommended ? 'primary' : 'secondary'}
+          size="md"
+          disabled
+          className="h-10 w-full min-w-full text-sm"
+        >
+          {isCurrent ? 'Current plan' : 'Coming soon'}
+        </Button>
+      </div>
+
+      <div className="mt-6 flex-1 border-t border-slate-100 pt-5">
+        <PlanWhySection planKey={plan.key} />
+      </div>
+
+      {trialNote ? (
+        <p className="m-0 mt-4 border-t border-slate-100 pt-4 text-left text-[11px] leading-snug text-slate-400">
+          {trialNote}
+        </p>
+      ) : null}
     </article>
   );
 }

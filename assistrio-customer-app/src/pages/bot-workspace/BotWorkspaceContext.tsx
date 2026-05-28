@@ -21,6 +21,8 @@ type BotWorkspaceValue = {
   reload: () => Promise<void>;
   /** Refetch bot + health without setting `loadState` to loading (use after PATCH saves). */
   softReload: () => Promise<void>;
+  /** Merge fields into the cached bot (e.g. rotate-key responses) without waiting for refetch. */
+  patchBot: (patch: Partial<CustomerBotDetail>) => void;
 };
 
 const BotWorkspaceContext = createContext<BotWorkspaceValue | null>(null);
@@ -152,6 +154,10 @@ export function BotWorkspaceProvider({ children }: { children: ReactNode }) {
     await promise;
   }, [id, navigate]);
 
+  const patchBot = useCallback((patch: Partial<CustomerBotDetail>) => {
+    setBot((prev) => (prev ? { ...prev, ...patch } : prev));
+  }, []);
+
   useEffect(() => {
     if (!id) return;
     const onShellRefresh = (e: Event) => {
@@ -176,8 +182,9 @@ export function BotWorkspaceProvider({ children }: { children: ReactNode }) {
       canManageBot,
       reload,
       softReload,
+      patchBot,
     }),
-    [id, bot, health, loadState, loadMessage, canManageBot, reload, softReload],
+    [id, bot, health, loadState, loadMessage, canManageBot, reload, softReload, patchBot],
   );
 
   return <BotWorkspaceContext.Provider value={value}>{children}</BotWorkspaceContext.Provider>;

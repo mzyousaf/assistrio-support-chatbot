@@ -33,18 +33,31 @@ function entitlements(canRemoveBranding: boolean) {
 }
 
 describe('workspace-branding-entitlement.util', () => {
-  it('forces showBranding and default message when removal is not allowed', () => {
+  it('forces showAssistrioBrandingPaid when removal is not allowed', () => {
     expect(
-      applyBrandingEntitlementToChatUi({ showBranding: false, brandingMessage: '' }, false),
+      applyBrandingEntitlementToChatUi({ showBranding: false, showAssistrioBrandingPaid: false, brandingMessage: '' }, false),
     ).toEqual({
-      showBranding: true,
-      brandingMessage: DEFAULT_POWERED_BY_BRANDING_MESSAGE,
+      showBranding: false,
+      showAssistrioBrandingPaid: true,
+      brandingMessage: '',
     });
   });
 
-  it('preserves hidden branding when removal is allowed', () => {
-    expect(applyBrandingEntitlementToChatUi({ showBranding: false }, true)).toEqual({
+  it('preserves generic branding line when removal is not allowed', () => {
+    expect(
+      applyBrandingEntitlementToChatUi({ showBranding: false, brandingMessage: 'Custom footer' }, false),
+    ).toEqual({
       showBranding: false,
+      showAssistrioBrandingPaid: true,
+      brandingMessage: 'Custom footer',
+    });
+  });
+
+  it('preserves hidden Assistrio branding when removal is allowed', () => {
+    expect(
+      applyBrandingEntitlementToChatUi({ showAssistrioBrandingPaid: false }, true),
+    ).toEqual({
+      showAssistrioBrandingPaid: false,
     });
   });
 });
@@ -60,10 +73,10 @@ describe('WorkspaceBrandingEntitlementService', () => {
     };
   }
 
-  it('blocks chatUI updates that hide branding when canRemoveBranding=false', async () => {
+  it('blocks chatUI updates that hide Assistrio branding when canRemoveBranding=false', async () => {
     const { service } = createService(false);
     await expect(
-      service.assertCanHideBranding(workspaceId, { showBranding: false }),
+      service.assertCanHideBranding(workspaceId, { showAssistrioBrandingPaid: false }),
     ).rejects.toMatchObject({
       status: HttpStatus.FORBIDDEN,
       response: {
@@ -73,20 +86,29 @@ describe('WorkspaceBrandingEntitlementService', () => {
     });
   });
 
-  it('allows hidden branding when canRemoveBranding=true', async () => {
-    const { service } = createService(true);
+  it('allows hiding generic branding line when canRemoveBranding=false', async () => {
+    const { service } = createService(false);
     await expect(
       service.assertCanHideBranding(workspaceId, { showBranding: false }),
     ).resolves.toBeUndefined();
   });
 
-  it('returns runtime chatUI with branding visible when entitlement false', async () => {
+  it('allows hidden Assistrio branding when canRemoveBranding=true', async () => {
+    const { service } = createService(true);
+    await expect(
+      service.assertCanHideBranding(workspaceId, { showAssistrioBrandingPaid: false }),
+    ).resolves.toBeUndefined();
+  });
+
+  it('returns runtime chatUI with Assistrio branding visible when entitlement false', async () => {
     const { service } = createService(false);
     const out = await service.applyBrandingEntitlementToChatUi(workspaceId, {
       showBranding: false,
-      brandingMessage: '',
+      showAssistrioBrandingPaid: false,
+      brandingMessage: 'Custom footer',
     });
-    expect(out.showBranding).toBe(true);
-    expect(out.brandingMessage).toBe(DEFAULT_POWERED_BY_BRANDING_MESSAGE);
+    expect(out.showBranding).toBe(false);
+    expect(out.showAssistrioBrandingPaid).toBe(true);
+    expect(out.brandingMessage).toBe('Custom footer');
   });
 });

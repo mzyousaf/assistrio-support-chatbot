@@ -386,7 +386,7 @@ export function WidgetPreviewContainer({
     return (
       <div
         className={cn(
-          'flex h-[calc(100dvh-var(--nav-height))] min-h-0 min-w-0 w-full flex-col overflow-x-hidden overflow-y-hidden',
+          'flex h-full min-h-0 min-w-0 w-full flex-1 flex-col overflow-x-hidden overflow-y-hidden',
           className,
         )}
       >

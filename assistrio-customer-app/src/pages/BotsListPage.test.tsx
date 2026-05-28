@@ -229,6 +229,25 @@ describe('BotsListPage', () => {
     });
   });
 
+  it('does not render bot cards when member has no granted bots', async () => {
+    mockCustomer = memberCustomer;
+    mockGetBots.mockResolvedValue({ ok: true, data: [] });
+    renderPage();
+    await waitFor(() => expect(mockGetBots).toHaveBeenCalled());
+    expect(screen.queryByTestId(/^agent-/)).toBeNull();
+  });
+
+  it('renders only bots returned by grant-filtered list API', async () => {
+    mockCustomer = memberCustomer;
+    mockGetBots.mockResolvedValue({
+      ok: true,
+      data: [sampleBot('bot-visible', 'ws-2')],
+    });
+    renderPage();
+    expect(await screen.findByTestId('agent-bot-visible')).toBeTruthy();
+    expect(screen.queryByTestId('agent-bot-hidden')).toBeNull();
+  });
+
   it('hides delete menu for members on bot cards', async () => {
     mockCustomer = memberCustomer;
     mockGetBots.mockResolvedValue({
@@ -245,6 +264,27 @@ describe('BotsListPage', () => {
     renderPage();
     expect(await screen.findByText(BOTS_LIST_NO_ACTIVE_WORKSPACE)).toBeTruthy();
     expect(mockGetBots).not.toHaveBeenCalled();
+  });
+
+  it('shows agent count tag with current and plan limit', async () => {
+    mockGetBots.mockResolvedValue({
+      ok: true,
+      data: [sampleBot('bot-1', 'ws-1')],
+    });
+    renderPage();
+    expect(await screen.findByLabelText('1 of 1 agents used')).toBeTruthy();
+    expect(screen.getByText('1/1')).toBeTruthy();
+  });
+
+  it('shows loading skeleton in agent count tag while fetching', async () => {
+    mockGetBots.mockImplementation(
+      () => new Promise(() => {
+        /* never resolves */
+      }),
+    );
+    renderPage();
+    expect(await screen.findByLabelText('Loading agent count')).toBeTruthy();
+    expect(screen.queryByText('…/1')).toBeNull();
   });
 
   it('shows loading skeleton while fetching agents', async () => {

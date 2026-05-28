@@ -34,6 +34,9 @@ export type SpeechRecordingWaveStyle = "brand" | "default" | "defaultDark";
 /** Scrollbar thumb + scroll-to-latest control: neutrals or brand accent. */
 export type ScrollChromeStyle = "default" | "defaultDark" | "primary";
 
+/** Horizontal placement of the floating scroll-to-latest control. */
+export type ScrollToBottomAlign = "left" | "center" | "right";
+
 export interface BotChatUI {
   primaryColor?: string;
   backgroundStyle?: ChatBackgroundStyle;
@@ -57,6 +60,8 @@ export interface BotChatUI {
   chatOpenAnimation?: ChatOpenAnimation;
   openChatOnLoad?: boolean;
   showBranding?: boolean;
+  /** Logo + “Powered by Assistrio” strip above the composer (before the first visitor message). Default true. */
+  showAssistrioBrandingPaid?: boolean;
   brandingMessage?: string;
   /** When false, hide the privacy/footer line even if `privacyText` is set (default true). */
   showPrivacyText?: boolean;
@@ -75,6 +80,8 @@ export interface BotChatUI {
   scrollChromeStyle?: ScrollChromeStyle;
   /** Floating “scroll to latest” button fill (default: same as {@link scrollChromeStyle} when omitted). */
   scrollToBottomChromeStyle?: ScrollChromeStyle;
+  /** Floating scroll-to-latest button alignment (default `center`). */
+  scrollToBottomAlign?: ScrollToBottomAlign;
   /**
    * @deprecated Use `scrollChromeStyle`. `false` → `default`, omitted/`true` → `primary`.
    */

@@ -1,4 +1,4 @@
-import type { ApiResult } from '../api/types';
+import type { ApiResult, BotAccessGrantRow, WorkspaceMemberSummary } from '../api/types';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -8,13 +8,47 @@ export function isValidInviteEmail(value: string): boolean {
 }
 
 export function formatWorkspaceMemberName(member: {
+  displayName?: string | null;
   firstName: string | null;
   lastName: string | null;
   email: string;
 }): string {
+  const displayName = member.displayName?.trim();
+  if (displayName) return displayName;
   const parts = [member.firstName?.trim(), member.lastName?.trim()].filter(Boolean);
   if (parts.length) return parts.join(' ');
   return member.email.trim();
+}
+
+export function resolveWorkspaceMemberAvatarUrl(member: {
+  avatarUrl?: string | null;
+  picture?: string | null;
+}): string | null {
+  const avatar = member.avatarUrl?.trim();
+  if (avatar) return avatar;
+  const picture = member.picture?.trim();
+  return picture || null;
+}
+
+/** Align grant rows with workspace member profile fields (avatar, name). */
+export function enrichBotAccessGrantRowsWithMembers(
+  rows: BotAccessGrantRow[],
+  members: WorkspaceMemberSummary[],
+): BotAccessGrantRow[] {
+  const memberByUserId = new Map(members.map((member) => [member.userId, member]));
+  return rows.map((row) => {
+    if (row.subjectType !== 'user' || !row.userId) return row;
+    const member = memberByUserId.get(row.userId);
+    if (!member) return row;
+    return {
+      ...row,
+      firstName: row.firstName ?? member.firstName,
+      lastName: row.lastName ?? member.lastName,
+      displayName: row.displayName?.trim() || member.displayName?.trim() || member.email,
+      avatarUrl: row.avatarUrl ?? member.avatarUrl ?? null,
+      picture: row.picture ?? member.picture ?? null,
+    };
+  });
 }
 
 export function formatWorkspaceMemberDate(iso: string | null | undefined): string {
