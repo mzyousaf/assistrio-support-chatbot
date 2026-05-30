@@ -15,6 +15,14 @@ export type PlanDefinition = {
   analyticsHistoryDays: number | null;
   canExportReports: boolean;
   showPoweredByAssistrio: boolean;
+  /** Free plan is a time-boxed trial, not a renewing monthly tier. */
+  isTrialPlan: boolean;
+  trialDays: number | null;
+  /** Included AI credits renew each billing month (paid plans only). */
+  creditsRenewMonthly: boolean;
+  autoTrainAllowed: boolean;
+  addonsAllowed: boolean;
+  memberInvitesAllowed: boolean;
 };
 
 export const FREE_PLAN: PlanDefinition = {
@@ -22,13 +30,19 @@ export const FREE_PLAN: PlanDefinition = {
   name: 'Free',
   priceMonthlyUsd: 0,
   botLimit: 1,
-  memberLimit: 3,
+  memberLimit: 1,
   monthlyAiCredits: 50,
   kbStorageMbPerBot: 5,
   maxKbStorageMbPerBot: 40,
   analyticsHistoryDays: 7,
   canExportReports: false,
   showPoweredByAssistrio: true,
+  isTrialPlan: true,
+  trialDays: 7,
+  creditsRenewMonthly: false,
+  autoTrainAllowed: false,
+  addonsAllowed: false,
+  memberInvitesAllowed: false,
 };
 
 export const STARTER_PLAN: PlanDefinition = {
@@ -36,13 +50,19 @@ export const STARTER_PLAN: PlanDefinition = {
   name: 'Starter',
   priceMonthlyUsd: 49,
   botLimit: 1,
-  memberLimit: 3,
+  memberLimit: 5,
   monthlyAiCredits: 500,
   kbStorageMbPerBot: 15,
   maxKbStorageMbPerBot: 40,
   analyticsHistoryDays: null,
   canExportReports: true,
   showPoweredByAssistrio: true,
+  isTrialPlan: false,
+  trialDays: null,
+  creditsRenewMonthly: true,
+  autoTrainAllowed: true,
+  addonsAllowed: true,
+  memberInvitesAllowed: true,
 };
 
 export const PRO_PLAN: PlanDefinition = {
@@ -50,13 +70,19 @@ export const PRO_PLAN: PlanDefinition = {
   name: 'Pro',
   priceMonthlyUsd: 99,
   botLimit: 1,
-  memberLimit: 5,
-  monthlyAiCredits: 3000,
+  memberLimit: 10,
+  monthlyAiCredits: 2000,
   kbStorageMbPerBot: 30,
   maxKbStorageMbPerBot: 40,
   analyticsHistoryDays: null,
   canExportReports: true,
   showPoweredByAssistrio: true,
+  isTrialPlan: false,
+  trialDays: null,
+  creditsRenewMonthly: true,
+  autoTrainAllowed: true,
+  addonsAllowed: true,
+  memberInvitesAllowed: true,
 };
 
 export const PLAN_CATALOG: readonly PlanDefinition[] = [FREE_PLAN, STARTER_PLAN, PRO_PLAN];

@@ -26,6 +26,15 @@ export type CustomerWorkspaceSummary = {
   analyticsHistoryDays: number | null;
   canExportReports: boolean;
   showPoweredByAssistrio: boolean;
+  isTrialPlan?: boolean;
+  trialDays?: number | null;
+  trialStartedAt?: string | null;
+  trialEndsAt?: string | null;
+  isTrialExpired?: boolean;
+  creditsRenewMonthly?: boolean;
+  autoTrainAllowed?: boolean;
+  addonsAllowed?: boolean;
+  memberInvitesAllowed?: boolean;
   onboardingStatus?: WorkspaceOnboardingStatus;
   onboardingCurrentStep?: WorkspaceOnboardingStep;
   onboardingCreatedBotId?: string | null;
@@ -190,6 +199,15 @@ export type WorkspaceBillingEntitlementsSummary = {
   analyticsHistoryDays: number | null;
   canExportReports: boolean;
   showPoweredByAssistrio: boolean;
+  isTrialPlan: boolean;
+  trialDays: number | null;
+  trialStartedAt: string | null;
+  trialEndsAt: string | null;
+  isTrialExpired: boolean;
+  creditsRenewMonthly: boolean;
+  autoTrainAllowed: boolean;
+  addonsAllowed: boolean;
+  memberInvitesAllowed: boolean;
   canRemoveBranding: boolean;
   activeAddons: string[];
   topUpCreditsRemaining: number;
@@ -205,6 +223,7 @@ export type WorkspaceBillingMemberUsageSummary = {
   pendingInvites: number;
   used: number;
   limit: number;
+  isOverMemberLimit?: boolean;
 };
 
 export type WorkspaceBillingAiCreditsUsageSummary = {
@@ -253,6 +272,8 @@ export type WorkspaceBillingPlanCatalogCard = {
   kbStorageMbPerBot: number;
   analyticsHistoryDays: number | null;
   canExportReports: boolean;
+  /** True when backend billing provider env is configured (UI may still gate on Step 2). */
+  checkoutAvailable: boolean;
 };
 
 export type WorkspaceBillingAddonCatalogCard = {
@@ -261,16 +282,169 @@ export type WorkspaceBillingAddonCatalogCard = {
   billingInterval: 'one_time' | 'monthly';
   priceUsd: number;
   scope: 'workspace' | 'bot';
-  checkoutAvailable: false;
+  checkoutAvailable: boolean;
+  description?: string;
+  active?: boolean;
+  status?: 'active' | 'inactive' | 'cancel_at_period_end' | 'expired' | 'cancelled';
+  targetBotId?: string | null;
+  targetBotName?: string | null;
+  currentPeriodEnd?: string | null;
+  cancelAtPeriodEnd?: boolean;
+  effectLabel?: string | null;
+};
+
+export type WorkspaceBillingTopUpRow = {
+  creditsPurchased: number;
+  creditsRemaining: number;
+  expiresAt: string;
+  createdAt: string;
+  amountFormatted?: string | null;
+  receiptUrl?: string | null;
+};
+
+/** POST /api/customer/workspaces/:workspaceId/billing/checkout/* */
+export type BillingCheckoutSessionResponse = {
+  checkoutUrl: string;
+  provider: 'lemon_squeezy' | 'stripe_future';
+};
+
+export type WorkspaceBillingPaymentMethodSummary = {
+  brand?: string;
+  last4?: string;
+  label?: string;
+};
+
+export type WorkspaceBillingActiveAddonRow = {
+  addonKey: string;
+  name: string;
+  status: string;
+  targetBotId: string | null;
+  targetBotName: string | null;
+  billingInterval?: 'one_time' | 'monthly';
+  priceUsd?: number;
+  currentPeriodStart: string | null;
+  currentPeriodEnd: string | null;
+  cancelAtPeriodEnd?: boolean;
+  effectLabel?: string | null;
+};
+
+export type WorkspaceBillingSubscriptionSummary = {
+  provider: 'lemon_squeezy' | 'stripe_future' | null;
+  subscriptionStatus: string;
+  cancelAtPeriodEnd: boolean;
+  currentPeriodStart: string;
+  currentPeriodEnd: string;
+  hasActivePaidSubscription: boolean;
+  hasPaymentIssue: boolean;
+  paymentMethod: WorkspaceBillingPaymentMethodSummary | null;
+  customerPortalAvailable: boolean;
+  manageBillingAvailable: boolean;
+};
+
+export type WorkspaceBillingInvoiceRow = {
+  id: string;
+  provider: 'lemon_squeezy' | 'stripe_future';
+  date: string;
+  amount: number;
+  amountCents: number;
+  amountFormatted: string;
+  currency: string;
+  status: string;
+  invoiceUrl: string | null;
+  receiptUrl: string | null;
+  description: string;
+  itemType?: 'plan' | 'addon' | 'top_up' | 'unknown';
+  itemKey?: string;
+  itemName?: string;
+  billingReason?: string;
+  source?: 'lemon_subscription_invoice' | 'lemon_order' | 'local_top_up';
+  billingKind?: 'subscription_invoice' | 'order';
+  requiresBillingDetails?: boolean;
+  officialInvoiceUrl?: string | null;
+  invoiceDeliveryMode?: 'provider_url' | 'direct_pdf' | 'local_pdf';
+};
+
+export type BillingInvoiceProviderUrlResponse = {
+  mode: 'provider_url';
+  url: string;
+  source?: string;
+};
+
+export type WorkspaceBillingInvoiceDocumentResult =
+  | { kind: 'pdf'; blob: Blob; filename: string }
+  | { kind: 'provider_url'; url: string; source?: string };
+
+export type BillingInvoiceDownloadDetails = {
+  name: string;
+  address: string;
+  city: string;
+  state?: string;
+  zipCode: string;
+  country: string;
+  email?: string;
+  taxId?: string;
+  notes?: string;
+  locale?: string;
+  saveProfile?: boolean;
+};
+
+export type WorkspaceBillingProfile = {
+  workspaceId: string;
+  name: string;
+  address: string;
+  city: string;
+  state?: string;
+  zipCode: string;
+  country: string;
+  taxId?: string;
+  email?: string;
+  notes?: string;
+  updatedAt: string;
+  updatedBy: string;
+};
+
+export type WorkspaceBillingProfileInput = {
+  name: string;
+  address: string;
+  city: string;
+  state?: string;
+  zipCode: string;
+  country: string;
+  taxId?: string;
+  email?: string;
+  notes?: string;
+};
+
+export type WorkspaceBillingProfileResponse = {
+  profile: WorkspaceBillingProfile | null;
+};
+
+export type BillingInvoiceDownloadResponse = {
+  downloadUrl: string;
+};
+
+/** POST /api/customer/workspaces/:workspaceId/billing/manage */
+export type BillingManageSessionResponse = {
+  url: string;
+  provider: 'lemon_squeezy' | 'stripe_future';
+};
+
+/** POST /api/customer/workspaces/:workspaceId/billing/subscription/cancel|change-plan */
+export type BillingSubscriptionActionResponse = {
+  summary: WorkspaceBillingSummary;
+  message: string;
 };
 
 export type WorkspaceBillingSummary = {
   workspaceId: string;
   plan: WorkspaceBillingPlanSummary;
+  subscription: WorkspaceBillingSubscriptionSummary;
   entitlements: WorkspaceBillingEntitlementsSummary;
   usage: WorkspaceBillingUsageSummary;
   planCatalog: WorkspaceBillingPlanCatalogCard[];
   addonCatalog: WorkspaceBillingAddonCatalogCard[];
+  activeAddons: WorkspaceBillingActiveAddonRow[];
+  topUps?: WorkspaceBillingTopUpRow[];
 };
 
 export type CustomerProfileLinks = {
@@ -459,6 +633,9 @@ export type CustomerBotListItem = {
   workspaceName?: string;
   workspaceMemberVisibility?: BotWorkspaceMemberVisibility;
   viewAccessPreview?: BotViewAccessPreviewMember[];
+  isOverLimitLocked?: boolean;
+  lockedReason?: 'workspace_bot_limit_exceeded';
+  lockedMessage?: string;
 };
 
 /** Member visibility / preview access for workspace members (defaults: both true). */

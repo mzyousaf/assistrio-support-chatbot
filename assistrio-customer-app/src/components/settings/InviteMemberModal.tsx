@@ -10,6 +10,8 @@ import {
   modalFormSelectSize,
 } from '@/components/ui/modalFormFieldStyles';
 import { appToast } from '@/lib/app-toast';
+import { useUpgradePlanModal } from '@/components/billing/UpgradePlanModalProvider';
+import { PLAN_LIMIT_WORKSPACE_MEMBERS_CODE } from '@/lib/planLimitError';
 import {
   copyTextToClipboard,
   isValidInviteEmail,
@@ -83,6 +85,7 @@ function ModalHeaderIcon(props: { tone?: 'default' | 'success' }) {
 export function InviteMemberModal({ open, onClose, workspaceId, canAssignBotAccess = false, onInvited }: Props) {
   const emailId = useId();
   const roleId = useId();
+  const { openUpgradeModal } = useUpgradePlanModal();
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<WorkspaceInviteRole>('member');
   const [emailError, setEmailError] = useState<string | null>(null);
@@ -146,15 +149,9 @@ export function InviteMemberModal({ open, onClose, workspaceId, canAssignBotAcce
     setSubmitting(false);
     if (!result.ok) {
       const message = workspaceMembersErrorMessage(result, 'Could not send invite.');
-      if (result.errorCode === 'plan_limit_workspace_members') {
-        appToast.error(message, {
-          primary: {
-            label: 'View plans',
-            onClick: () => {
-              window.location.assign('/settings/plans');
-            },
-          },
-        });
+      if (result.errorCode === PLAN_LIMIT_WORKSPACE_MEMBERS_CODE) {
+        appToast.error(message);
+        openUpgradeModal({ reason: 'members' });
       } else {
         appToast.error(message);
       }

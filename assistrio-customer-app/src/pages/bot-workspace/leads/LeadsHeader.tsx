@@ -1,12 +1,12 @@
 import { Download, Loader2, RefreshCw } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { PaidPlanFeatureCalloutForReason } from '@/components/billing/PaidPlanFeatureCallout';
 import { Button } from '@/components/ui';
-import { EXPORT_REPORTS_LOCKED_HELPER } from '@/lib/analyticsEntitlementCopy';
 
 type Props = {
   exportDisabled: boolean;
   exportLocked?: boolean;
   onExport: () => void;
+  onExportLocked?: () => void;
   refreshDisabled: boolean;
   refreshLoading: boolean;
   onRefresh: () => void;
@@ -16,13 +16,14 @@ export function LeadsHeader({
   exportDisabled,
   exportLocked = false,
   onExport,
+  onExportLocked,
   refreshDisabled,
   refreshLoading,
   onRefresh,
 }: Props) {
   return (
     <header className="shrink-0 border-b border-slate-200/80 bg-white px-4 py-4 sm:px-5">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <h1 className="m-0 text-xl font-semibold leading-tight tracking-tight text-slate-900 sm:text-2xl">Leads</h1>
           <p className="m-0 mt-1 max-w-2xl text-sm leading-relaxed text-slate-600">
@@ -36,11 +37,18 @@ export function LeadsHeader({
               variant="outlinePrimary"
               size="sm"
               className="!h-9 min-w-[7.5rem] gap-1.5 !px-3"
-              disabled={exportLocked || exportDisabled}
-              onClick={onExport}
+              disabled={exportLocked ? false : exportDisabled}
+              aria-disabled={exportLocked ? 'true' : undefined}
+              onClick={() => {
+                if (exportLocked) {
+                  onExportLocked?.();
+                  return;
+                }
+                onExport();
+              }}
               title={
                 exportLocked
-                  ? EXPORT_REPORTS_LOCKED_HELPER
+                  ? 'Export reports are available on Starter and Pro.'
                   : 'Exports currently loaded leads (visible pages only)'
               }
             >
@@ -64,16 +72,16 @@ export function LeadsHeader({
               Refresh
             </Button>
           </div>
-          {exportLocked ? (
-            <p className="m-0 max-w-md text-right text-xs leading-relaxed text-slate-500">
-              {EXPORT_REPORTS_LOCKED_HELPER}{' '}
-              <Link to="/settings/plans" className="font-medium text-teal-700 underline">
-                View plans
-              </Link>
-            </p>
-          ) : null}
         </div>
       </div>
+      {exportLocked ? (
+        <PaidPlanFeatureCalloutForReason
+          reason="export"
+          compact
+          className="mt-4"
+          onAction={onExportLocked}
+        />
+      ) : null}
     </header>
   );
 }

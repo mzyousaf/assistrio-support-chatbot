@@ -2,9 +2,14 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { postCustomerBotChat } from '../../api/customerApi';
 import { useCustomerAuth } from '../../auth/CustomerAuthContext';
+import { useUpgradePlanModal } from '@/components/billing/UpgradePlanModalProvider';
 import { resolveActiveCustomerWorkspace } from '../../lib/resolveActiveCustomerWorkspace';
 import {
+  isChatUpgradeModalErrorCode,
   PLAN_LIMIT_AI_CREDITS_CODE,
+  FREE_TRIAL_EXPIRED_CODE,
+} from '@/lib/planLimitError';
+import {
   resolveChatRuntimeErrorMessage,
 } from '../../lib/resolveChatRuntimeErrorMessage';
 import { isWorkspaceManagerRole } from '../../lib/workspaceRoles';
@@ -22,6 +27,7 @@ export function PlaygroundSection() {
   const { customer } = useCustomerAuth();
   const { role } = resolveActiveCustomerWorkspace(customer);
   const canViewPlans = isWorkspaceManagerRole(role);
+  const { openUpgradeModal } = useUpgradePlanModal();
   const [messages, setMessages] = useState<Turn[]>([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
@@ -47,6 +53,11 @@ export function PlaygroundSection() {
     },
     [botId],
   );
+
+  useEffect(() => {
+    if (!errCode || !canViewPlans || !isChatUpgradeModalErrorCode(errCode)) return;
+    openUpgradeModal({ errorCode: errCode });
+  }, [canViewPlans, errCode, openUpgradeModal]);
 
   if (!bot || !botId) return null;
   const id = botId;
@@ -96,10 +107,12 @@ export function PlaygroundSection() {
             {err ? (
               <div className={ws.err}>
                 <p className="m-0">{err}</p>
-                {errCode === PLAN_LIMIT_AI_CREDITS_CODE && canViewPlans ? (
+                {errCode === PLAN_LIMIT_AI_CREDITS_CODE || errCode === FREE_TRIAL_EXPIRED_CODE ? (
+                  canViewPlans ? (
                   <Link to="/settings/plans" className="mt-2 inline-block text-sm font-medium text-teal-700 underline">
                     View plans
                   </Link>
+                  ) : null
                 ) : null}
               </div>
             ) : null}

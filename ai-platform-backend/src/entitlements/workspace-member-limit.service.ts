@@ -4,11 +4,18 @@ import { Model, Types } from 'mongoose';
 import { WorkspaceInvite } from '../models/workspace-invite.schema';
 import { WorkspaceMembership } from '../models/workspace-membership.schema';
 import { WorkspaceEntitlementsService } from './workspace-entitlements.service';
+import { isWorkspaceOverMemberLimit } from './workspace-member-over-limit.util';
 
 export const PLAN_LIMIT_WORKSPACE_MEMBERS_CODE = 'plan_limit_workspace_members' as const;
 
 export const PLAN_LIMIT_WORKSPACE_MEMBERS_MESSAGE =
   'Your workspace has reached the member limit for the current plan.';
+
+export const WORKSPACE_MEMBER_LIMIT_EXCEEDED_MESSAGE =
+  'Your workspace has more members than your current plan allows. Remove members or upgrade to invite more teammates.';
+
+export const PLAN_LIMIT_WORKSPACE_MEMBERS_TRIAL_MESSAGE =
+  'Upgrade your plan to invite teammates.';
 
 export type PlanLimitWorkspaceMembersUsage = {
   current: number;
@@ -26,6 +33,7 @@ export type PlanLimitWorkspaceMembersPayload = {
 export type WorkspaceMemberUsage = PlanLimitWorkspaceMembersUsage & {
   memberCount: number;
   pendingInviteCount: number;
+  isOverMemberLimit: boolean;
 };
 
 export function isPlanLimitWorkspaceMembersPayload(x: unknown): x is PlanLimitWorkspaceMembersPayload {
@@ -88,11 +96,43 @@ export class WorkspaceMemberLimitService {
       planName: entitlements.planName,
       memberCount,
       pendingInviteCount,
+      isOverMemberLimit: isWorkspaceOverMemberLimit(memberCount, entitlements.memberLimit),
     };
   }
 
   async assertCanInviteMember(workspaceId: string, options?: { now?: Date }): Promise<void> {
     const usage = await this.getWorkspaceMemberUsage(workspaceId, options?.now);
+    const entitlements = await this.entitlementsService.resolveForWorkspace(workspaceId);
+
+    if (!entitlements.memberInvitesAllowed) {
+      const payload: PlanLimitWorkspaceMembersPayload = {
+        message: PLAN_LIMIT_WORKSPACE_MEMBERS_TRIAL_MESSAGE,
+        errorCode: PLAN_LIMIT_WORKSPACE_MEMBERS_CODE,
+        usage: {
+          current: usage.current,
+          limit: usage.limit,
+          planKey: usage.planKey,
+          planName: usage.planName,
+        },
+      };
+      throw new HttpException(payload, HttpStatus.FORBIDDEN);
+    }
+
+    // MVP policy: existing members keep access when over limit; only new invites are blocked.
+    if (usage.isOverMemberLimit) {
+      const payload: PlanLimitWorkspaceMembersPayload = {
+        message: WORKSPACE_MEMBER_LIMIT_EXCEEDED_MESSAGE,
+        errorCode: PLAN_LIMIT_WORKSPACE_MEMBERS_CODE,
+        usage: {
+          current: usage.current,
+          limit: usage.limit,
+          planKey: usage.planKey,
+          planName: usage.planName,
+        },
+      };
+      throw new HttpException(payload, HttpStatus.FORBIDDEN);
+    }
+
     if (usage.current < usage.limit) return;
 
     const payload: PlanLimitWorkspaceMembersPayload = {

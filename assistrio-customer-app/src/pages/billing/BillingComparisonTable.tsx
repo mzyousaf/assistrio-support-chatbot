@@ -7,6 +7,7 @@ import {
   PLAN_COLUMN_LABELS,
   PLAN_KEYS,
   type PlanComparisonRow,
+  type PlanComparisonTableGroup,
 } from '@/pages/billing/billingPlanComparisonCopy';
 import { cn } from '@/lib/utils';
 type SectionProps = {
@@ -118,6 +119,14 @@ function ComparisonCellValue({ value, compact = false }: { value: string; compac
     );
   }
 
+  if (normalized === 'Available on paid plans') {
+    return <span className={cn(textClass, 'text-slate-500')}>{normalized}</span>;
+  }
+
+  if (normalized === 'Coming soon') {
+    return <span className={cn(textClass, 'text-slate-500')}>{normalized}</span>;
+  }
+
   if (normalized === 'Add-on') {
     return (
       <span className="inline-flex items-center justify-center gap-1.5">
@@ -161,7 +170,7 @@ function ComparisonPlanColumnHeader(props: { name: string }) {
 
 type CompactPlanComparisonTableProps = {
   rows?: PlanComparisonRow[];
-  groups?: Array<{ id: string; title: string; rows: PlanComparisonRow[] }>;
+  groups?: PlanComparisonTableGroup[];
   planCatalog?: WorkspaceBillingPlanCatalogCard[];
   currentPlanKey?: string | null;
 };
@@ -281,6 +290,16 @@ export function BillingCompactPlanComparisonTable({
                   </th>
                 </tr>
               ) : null}
+              {group.note ? (
+                <tr className="border-b border-slate-100/80 bg-slate-50/40">
+                  <td
+                    colSpan={columnCount}
+                    className="px-5 py-2 text-left text-[11px] leading-snug text-slate-500"
+                  >
+                    {group.note}
+                  </td>
+                </tr>
+              ) : null}
               {group.rows.map((row) => (
                 <ComparisonFeatureRow
                   key={`${group.id}-${row.feature}`}
@@ -297,7 +316,7 @@ export function BillingCompactPlanComparisonTable({
 }
 
 export function BillingPlanComparisonTable(props: {
-  groups: Array<{ id: string; title: string; rows: PlanComparisonRow[] }>;
+  groups: PlanComparisonTableGroup[];
   planCatalog?: WorkspaceBillingPlanCatalogCard[];
   currentPlanKey?: string | null;
 }) {

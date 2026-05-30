@@ -9,7 +9,9 @@ import { KnowledgeModule } from '../knowledge/knowledge.module';
 import { AnalyticsModule } from '../analytics/analytics.module';
 import { AuthModule } from '../auth/auth.module';
 import { EntitlementsModule } from '../entitlements/entitlements.module';
+import { BillingModule } from '../billing/billing.module';
 import { WorkspacesModule } from '../workspaces/workspaces.module';
+import { AdminBillingWebhookController } from './admin-billing-webhook.controller';
 import { AdminWorkspaceBillingController } from './admin-workspace-billing.controller';
 import { AdminBotConversationsController } from './admin-bot-conversations.controller';
 import { AdminBotsController } from './admin-bots.controller';
@@ -21,6 +23,7 @@ import { AdminKnowledgeController } from './admin-knowledge.controller';
 import { CustomerKnowledgeController } from './customer-knowledge.controller';
 import { CustomerWorkspaceEntitlementsController } from './customer-workspace-entitlements.controller';
 import { CustomerWorkspaceBillingController } from './customer-workspace-billing.controller';
+import { CustomerWorkspaceBillingCheckoutController } from './customer-workspace-billing-checkout.controller';
 import { CustomerWorkspaceActiveController } from './customer-workspace-active.controller';
 import { CustomerWorkspaceController } from './customer-workspace.controller';
 import { CustomerWorkspaceMembersController } from './customer-workspace-members.controller';
@@ -47,6 +50,12 @@ import { ShowcaseAgentsPackService } from './shared/showcase-agents-pack.service
 import { KnowledgeOverviewService } from './knowledge-overview.service';
 import { KnowledgeItemManualRetryService } from './knowledge-item-manual-retry.service';
 import { WorkspaceOnboardingGoLiveService } from './workspace-onboarding-go-live.service';
+import { WorkspaceAddon, WorkspaceAddonSchema } from '../models/workspace-addon.schema';
+import { WorkspaceCreditTopUp, WorkspaceCreditTopUpSchema } from '../models/workspace-credit-top-up.schema';
+import {
+  WorkspaceBillingOrder,
+  WorkspaceBillingOrderSchema,
+} from '../models/workspace-billing-order.schema';
 import { WorkspaceBillingSummaryService } from './workspace-billing-summary.service';
 import { OnboardingKbTransferModule } from './onboarding-kb-transfer.module';
 
@@ -58,6 +67,7 @@ import { OnboardingKbTransferModule } from './onboarding-kb-transfer.module';
   imports: [
     AuthModule,
     EntitlementsModule,
+    BillingModule,
     WorkspacesModule,
     OnboardingKbTransferModule,
     BotsModule,
@@ -76,11 +86,15 @@ import { OnboardingKbTransferModule } from './onboarding-kb-transfer.module';
       { name: User.name, schema: UserSchema },
       { name: WorkspaceMembership.name, schema: WorkspaceMembershipSchema },
       { name: WorkspaceSubscription.name, schema: WorkspaceSubscriptionSchema },
+      { name: WorkspaceAddon.name, schema: WorkspaceAddonSchema },
+      { name: WorkspaceCreditTopUp.name, schema: WorkspaceCreditTopUpSchema },
+      { name: WorkspaceBillingOrder.name, schema: WorkspaceBillingOrderSchema },
       { name: UsageLedger.name, schema: UsageLedgerSchema },
     ]),
   ],
   controllers: [
     AdminWorkspaceBillingController,
+    AdminBillingWebhookController,
     AdminBotConversationsController,
     AdminBotsController,
     AdminKnowledgeController,
@@ -91,6 +105,7 @@ import { OnboardingKbTransferModule } from './onboarding-kb-transfer.module';
     CustomerBotsController,
     CustomerWorkspaceEntitlementsController,
     CustomerWorkspaceBillingController,
+    CustomerWorkspaceBillingCheckoutController,
     CustomerWorkspaceActiveController,
     CustomerWorkspaceController,
     CustomerWorkspaceMembersController,

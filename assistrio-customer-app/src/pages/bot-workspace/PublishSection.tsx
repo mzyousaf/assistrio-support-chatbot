@@ -388,7 +388,6 @@ export function PublishSection() {
     dismissSnippetUpdateNotice,
     activeValidOriginCount,
     canPublishBackend,
-    saving,
     savingDeploymentMeta,
   } = ctx;
 

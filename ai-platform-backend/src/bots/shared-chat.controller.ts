@@ -16,6 +16,7 @@ import { throwEmbedRuntimeIpRateLimited } from '../rate-limit/rate-limit-http-ex
 import { resolveWidgetEmbedRateLimitPerMinute } from '../models/bot.schema';
 import { exampleQuestionsToPublicLabels } from '../workspace/shared/example-questions.util';
 import { KnowledgeBaseItemService } from '../knowledge/knowledge-base-item.service';
+import { WorkspaceBotLimitService } from '../entitlements/workspace-bot-limit.service';
 import { ChatEngineService } from '../chat/chat-engine.service';
 import { WidgetSpeechService } from '../chat/widget-speech.service';
 import {
@@ -202,6 +203,7 @@ export class SharedChatController {
     private readonly knowledgeBaseItemService: KnowledgeBaseItemService,
     private readonly chatEngineService: ChatEngineService,
     private readonly widgetSpeechService: WidgetSpeechService,
+    private readonly workspaceBotLimitService: WorkspaceBotLimitService,
   ) {}
 
   @Get(':slug/init')
@@ -215,6 +217,10 @@ export class SharedChatController {
     const row = await this.botsService.findShareBotByShareSlug(slugNorm);
     const token = typeof shareTokenQuery === 'string' ? shareTokenQuery.trim() : '';
     assertSharePreviewPolicy(row, slugNorm, token || undefined);
+
+    await this.workspaceBotLimitService.assertBotDocWithinEffectiveLimitIfWorkspaceScoped(
+      row as Record<string, unknown>,
+    );
 
     const limit = resolveWidgetEmbedRateLimitPerMinute(row);
     const ip = getClientIpForRateLimit(req);

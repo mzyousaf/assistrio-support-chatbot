@@ -10,7 +10,8 @@ export function formatUsagePeriodDate(iso: string | null | undefined): string {
 export function formatSubscriptionStatusLabel(status: string | null | undefined): string {
   const raw = String(status ?? '').trim();
   if (!raw) return 'Unknown';
-  if (raw.toLowerCase() === 'free') return 'Free';
+  if (raw.toLowerCase() === 'free') return 'Free trial';
+  if (raw.toLowerCase() === 'trialing') return 'Free trial';
   if (raw.toLowerCase() === 'active') return 'Active';
   return raw.charAt(0).toUpperCase() + raw.slice(1);
 }

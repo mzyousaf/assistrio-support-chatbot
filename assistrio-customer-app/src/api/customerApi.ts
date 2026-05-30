@@ -1,4 +1,4 @@
-import { customerFetch, getCustomerApiOrigin } from './client';
+import { customerFetch, customerFetchBlob, customerFetchCsv, getCustomerApiOrigin } from './client';
 import type {
   ChatResponse,
   CreateDraftResponse,
@@ -56,6 +56,14 @@ import type {
   WorkspaceOnboardingGoLiveResponse,
   WorkspaceOnboardingResponse,
   WorkspaceBillingSummary,
+  WorkspaceBillingInvoiceRow,
+  BillingInvoiceDownloadDetails,
+  BillingInvoiceDownloadResponse,
+  WorkspaceBillingProfileResponse,
+  WorkspaceBillingProfileInput,
+  BillingManageSessionResponse,
+  BillingSubscriptionActionResponse,
+  BillingCheckoutSessionResponse,
   SharedBotInitPayload,
   WidgetIframeInitPayload,
   ApiResult,
@@ -109,6 +117,187 @@ function workspacePath(workspaceId: string): string {
 /** GET /api/customer/workspaces/:workspaceId/billing/summary */
 export function getWorkspaceBillingSummary(workspaceId: string) {
   return customerFetch<WorkspaceBillingSummary>(`${workspacePath(workspaceId)}/billing/summary`);
+}
+
+/** POST /api/customer/workspaces/:workspaceId/billing/manage */
+export function createBillingManageSession(workspaceId: string) {
+  return customerFetch<BillingManageSessionResponse>(`${workspacePath(workspaceId)}/billing/manage`, {
+    method: 'POST',
+  });
+}
+
+/** POST /api/customer/workspaces/:workspaceId/billing/subscription/restore */
+export function restoreWorkspaceSubscription(workspaceId: string) {
+  return customerFetch<BillingSubscriptionActionResponse>(
+    `${workspacePath(workspaceId)}/billing/subscription/restore`,
+    { method: 'POST' },
+  );
+}
+
+/** POST /api/customer/workspaces/:workspaceId/billing/subscription/cancel */
+export function cancelWorkspaceSubscription(workspaceId: string, body: { confirm: boolean }) {
+  return customerFetch<BillingSubscriptionActionResponse>(
+    `${workspacePath(workspaceId)}/billing/subscription/cancel`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    },
+  );
+}
+
+/** POST /api/customer/workspaces/:workspaceId/billing/subscription/change-plan */
+export function changeWorkspaceSubscriptionPlan(
+  workspaceId: string,
+  body: { planKey: 'starter' | 'pro' },
+) {
+  return customerFetch<BillingSubscriptionActionResponse>(
+    `${workspacePath(workspaceId)}/billing/subscription/change-plan`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    },
+  );
+}
+
+/** POST /api/customer/workspaces/:workspaceId/billing/addons/cancel */
+export function cancelWorkspaceAddon(
+  workspaceId: string,
+  body: { addonKey: string; targetBotId?: string },
+) {
+  return customerFetch<{ summary: WorkspaceBillingSummary; message: string }>(
+    `${workspacePath(workspaceId)}/billing/addons/cancel`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    },
+  );
+}
+
+/** GET /api/customer/workspaces/:workspaceId/billing/profile */
+export function getWorkspaceBillingProfile(workspaceId: string) {
+  return customerFetch<WorkspaceBillingProfileResponse>(
+    `${workspacePath(workspaceId)}/billing/profile`,
+  );
+}
+
+/** PATCH /api/customer/workspaces/:workspaceId/billing/profile */
+export function patchWorkspaceBillingProfile(
+  workspaceId: string,
+  input: WorkspaceBillingProfileInput,
+) {
+  return customerFetch<{ profile: WorkspaceBillingProfileResponse['profile'] }>(
+    `${workspacePath(workspaceId)}/billing/profile`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+/** GET /api/customer/workspaces/:workspaceId/billing/invoices */
+export function getWorkspaceBillingInvoices(workspaceId: string) {
+  return customerFetch<WorkspaceBillingInvoiceRow[]>(
+    `${workspacePath(workspaceId)}/billing/invoices`,
+  );
+}
+
+/** POST /api/customer/workspaces/:workspaceId/billing/invoices/:billingItemId/download */
+export function downloadWorkspaceBillingInvoice(
+  workspaceId: string,
+  billingItemId: string,
+  details?: BillingInvoiceDownloadDetails,
+) {
+  return customerFetch<BillingInvoiceDownloadResponse>(
+    `${workspacePath(workspaceId)}/billing/invoices/${encodeURIComponent(billingItemId)}/download`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(details ?? {}),
+    },
+  );
+}
+
+function appendBillingInvoiceDetailsQuery(
+  params: URLSearchParams,
+  details?: BillingInvoiceDownloadDetails,
+): void {
+  if (!details) return;
+  if (details.name?.trim()) params.set('name', details.name.trim());
+  if (details.address?.trim()) params.set('address', details.address.trim());
+  if (details.city?.trim()) params.set('city', details.city.trim());
+  if (details.state?.trim()) params.set('state', details.state.trim());
+  if (details.zipCode?.trim()) params.set('zipCode', details.zipCode.trim());
+  if (details.country?.trim()) params.set('country', details.country.trim());
+  if (details.email?.trim()) params.set('email', details.email.trim());
+  if (details.taxId?.trim()) params.set('taxId', details.taxId.trim());
+  if (details.notes?.trim()) params.set('notes', details.notes.trim());
+  if (details.locale?.trim()) params.set('locale', details.locale.trim());
+  if (details.saveProfile) params.set('saveProfile', 'true');
+}
+
+/** GET /api/customer/workspaces/:workspaceId/billing/history/download */
+export function fetchWorkspaceBillingHistoryCsv(workspaceId: string) {
+  return customerFetchCsv(`${workspacePath(workspaceId)}/billing/history/download`);
+}
+
+/** GET /api/customer/workspaces/:workspaceId/billing/invoices/:billingItemId/pdf */
+export function fetchWorkspaceBillingInvoicePdf(
+  workspaceId: string,
+  billingItemId: string,
+  details?: BillingInvoiceDownloadDetails,
+) {
+  const params = new URLSearchParams();
+  appendBillingInvoiceDetailsQuery(params, details);
+  const qs = params.toString();
+  const path = `${workspacePath(workspaceId)}/billing/invoices/${encodeURIComponent(billingItemId)}/pdf${qs ? `?${qs}` : ''}`;
+  return customerFetchBlob(path);
+}
+
+/** POST /api/customer/workspaces/:workspaceId/billing/checkout/plan */
+export function createPlanCheckoutSession(workspaceId: string, planKey: 'starter' | 'pro') {
+  return customerFetch<BillingCheckoutSessionResponse>(
+    `${workspacePath(workspaceId)}/billing/checkout/plan`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ planKey }),
+    },
+  );
+}
+
+/** POST /api/customer/workspaces/:workspaceId/billing/checkout/addon */
+export function createAddonCheckoutSession(
+  workspaceId: string,
+  addonKey: string,
+  targetBotId?: string,
+) {
+  return customerFetch<BillingCheckoutSessionResponse>(
+    `${workspacePath(workspaceId)}/billing/checkout/addon`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        addonKey,
+        ...(targetBotId?.trim() ? { targetBotId: targetBotId.trim() } : {}),
+      }),
+    },
+  );
+}
+
+/** POST /api/customer/workspaces/:workspaceId/billing/checkout/top-up */
+export function createTopUpCheckoutSession(workspaceId: string, topUpKey: 'ai_credits_1000') {
+  return customerFetch<BillingCheckoutSessionResponse>(
+    `${workspacePath(workspaceId)}/billing/checkout/top-up`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ topUpKey }),
+    },
+  );
 }
 
 /** PATCH /api/customer/workspaces/:workspaceId */

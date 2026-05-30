@@ -15,7 +15,7 @@ describe('settingsNavigation', () => {
       'General',
       'Members',
       'Plans',
-      'Billing',
+      'Billing & Invoices',
     ]);
   });
 

@@ -11,11 +11,15 @@ describe('WorkspaceBillingSummaryService', () => {
 
   function createService(options?: {
     planKey?: 'free' | 'starter' | 'pro';
+    checkoutConfigured?: boolean;
     subscription?: {
       planKey: 'free' | 'starter' | 'pro';
       status: 'free' | 'active';
       currentPeriodStart: Date;
       currentPeriodEnd: Date;
+      provider?: 'lemon_squeezy' | null;
+      providerSubscriptionId?: string | null;
+      cancelAtPeriodEnd?: boolean;
     } | null;
     memberUsage?: {
       memberCount: number;
@@ -48,6 +52,7 @@ describe('WorkspaceBillingSummaryService', () => {
         canRemoveBranding: false,
         activeAddons: [] as string[],
         topUpCreditsRemaining: 0,
+        kbStorageBonusMbByBotId: {},
       },
       starter: {
         planKey: 'starter' as const,
@@ -66,6 +71,7 @@ describe('WorkspaceBillingSummaryService', () => {
         canRemoveBranding: false,
         activeAddons: [] as string[],
         topUpCreditsRemaining: 0,
+        kbStorageBonusMbByBotId: {},
       },
       pro: {
         planKey: 'pro' as const,
@@ -84,6 +90,7 @@ describe('WorkspaceBillingSummaryService', () => {
         canRemoveBranding: false,
         activeAddons: [] as string[],
         topUpCreditsRemaining: 0,
+        kbStorageBonusMbByBotId: {},
       },
     };
     const entitlements = { workspaceId, ...planDefs[planKey] };
@@ -226,10 +233,53 @@ describe('WorkspaceBillingSummaryService', () => {
     const usageLedgerModel = {
       countDocuments: jest.fn().mockResolvedValue(42),
     };
+    const addonModel = {
+      find: jest.fn().mockReturnValue({
+        sort: jest.fn().mockReturnValue({
+          lean: jest.fn().mockReturnValue({
+            exec: jest.fn().mockResolvedValue([]),
+          }),
+        }),
+      }),
+    };
+    const topUpModel = {
+      find: jest.fn().mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          lean: jest.fn().mockReturnValue({
+            exec: jest.fn().mockResolvedValue([]),
+          }),
+        }),
+        sort: jest.fn().mockReturnValue({
+          lean: jest.fn().mockReturnValue({
+            exec: jest.fn().mockResolvedValue([]),
+          }),
+        }),
+      }),
+    };
+    const billingOrderModel = {
+      find: jest.fn().mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          lean: jest.fn().mockReturnValue({
+            exec: jest.fn().mockResolvedValue([]),
+          }),
+        }),
+      }),
+    };
+    const webhookEventsService = {
+      findRecentForWorkspace: jest.fn().mockResolvedValue([]),
+    };
 
+    const checkoutConfigured = options?.checkoutConfigured ?? false;
+    const billingProviderService = {
+      isCheckoutConfigured: jest.fn().mockReturnValue(checkoutConfigured),
+      isPlanCheckoutAvailable: jest.fn((planKey: string) => checkoutConfigured && planKey === 'starter'),
+      isAddonCheckoutAvailable: jest.fn().mockReturnValue(false),
+      isTopUpCheckoutAvailable: jest.fn().mockReturnValue(false),
+    };
     const service = new WorkspaceBillingSummaryService(
       entitlementsService as never,
       subscriptionsService as never,
+      billingProviderService as never,
       memberLimitService as never,
       botLimitService as never,
       aiCreditsUsageService as never,
@@ -240,6 +290,10 @@ describe('WorkspaceBillingSummaryService', () => {
       userModel as never,
       subscriptionModel as never,
       usageLedgerModel as never,
+      addonModel as never,
+      topUpModel as never,
+      billingOrderModel as never,
+      webhookEventsService as never,
     );
 
     return {
@@ -265,6 +319,32 @@ describe('WorkspaceBillingSummaryService', () => {
     });
     expect(summary.entitlements.kbStorageMbPerBot).toBe(5);
     expect(summary.entitlements.maxKbStorageMbPerBot).toBe(40);
+    expect(summary.subscription).toMatchObject({
+      provider: null,
+      subscriptionStatus: 'free',
+      hasActivePaidSubscription: false,
+      manageBillingAvailable: false,
+    });
+  });
+
+  it('exposes manage billing when lemon subscription exists', async () => {
+    const { service } = createService({
+      planKey: 'starter',
+      checkoutConfigured: true,
+      subscription: {
+        planKey: 'starter',
+        status: 'active',
+        currentPeriodStart: periodStart,
+        currentPeriodEnd: periodEnd,
+        provider: 'lemon_squeezy',
+        providerSubscriptionId: 'sub-99',
+        cancelAtPeriodEnd: false,
+      },
+    });
+    const summary = await service.getSummary(workspaceId);
+
+    expect(summary.subscription.manageBillingAvailable).toBe(true);
+    expect(summary.subscription.hasActivePaidSubscription).toBe(true);
   });
 
   it('includes Starter and Pro trained knowledge limits in entitlements', async () => {
@@ -358,7 +438,7 @@ describe('WorkspaceBillingSummaryService', () => {
     );
   });
 
-  it('marks add-on catalog checkout as unavailable', async () => {
+  it('marks add-on catalog checkout as unavailable when provider has no add-on variants', async () => {
     const { service } = createService();
     const summary = await service.getSummary(workspaceId);
 
@@ -366,10 +446,20 @@ describe('WorkspaceBillingSummaryService', () => {
       'ai_credits_1000',
       'extra_bot',
       'remove_branding',
-      'kb_storage_5mb',
-      'kb_storage_10mb',
     ]);
     expect(summary.addonCatalog.every((addon) => addon.checkoutAvailable === false)).toBe(true);
+    expect(summary.addonCatalog.every((addon) => addon.status === 'inactive')).toBe(true);
+    expect(summary.topUps).toEqual([]);
+  });
+
+  it('sets per-plan checkoutAvailable from provider plan availability', async () => {
+    const { service } = createService({ checkoutConfigured: true });
+    const summary = await service.getSummary(workspaceId);
+
+    const starter = summary.planCatalog.find((p) => p.key === 'starter');
+    const pro = summary.planCatalog.find((p) => p.key === 'pro');
+    expect(starter?.checkoutAvailable).toBe(true);
+    expect(pro?.checkoutAvailable).toBe(false);
   });
 
   it('returns admin metadata with plan, usage, entitlements, and Free fallback', async () => {

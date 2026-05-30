@@ -38,9 +38,17 @@ describe('CustomerBotsController workspace scope', () => {
           : jest.fn().mockResolvedValue(undefined),
       ensurePersonalWorkspaceForUser: jest.fn().mockResolvedValue(new Types.ObjectId(wsPersonal)),
       filterWorkspaceBotsForUser: jest.fn(async (_uid, _ws, bots) => bots),
+      buildBotViewAccessPreviewByBotIds: jest.fn().mockResolvedValue({}),
     };
 
     const botOnboardingService = { onboardNewBot: jest.fn().mockResolvedValue(undefined) };
+
+    const workspaceBotLimitService = {
+      resolveOverLimitLockedBotIdSet: jest.fn().mockResolvedValue(new Set()),
+      enrichBotListWithOverLimitState: jest.fn((bots) =>
+        bots.map((bot: { _id: string }) => ({ ...bot, isOverLimitLocked: false })),
+      ),
+    };
 
     const controller = new CustomerBotsController(
       botsService as never,
@@ -51,6 +59,7 @@ describe('CustomerBotsController workspace scope', () => {
       {} as never,
       {} as never,
       {} as never,
+      workspaceBotLimitService as never,
     );
 
     const req = { user: { _id: userId, role: 'customer' } } as never;

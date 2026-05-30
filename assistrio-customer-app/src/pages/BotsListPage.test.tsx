@@ -40,8 +40,29 @@ vi.mock('react-router-dom', async (importOriginal) => {
   };
 });
 
+const mockOpenUpgradeModal = vi.fn();
+
+vi.mock('@/components/billing/UpgradePlanModalProvider', () => ({
+  useUpgradePlanModal: () => ({ openUpgradeModal: mockOpenUpgradeModal }),
+}));
+
 vi.mock('../components/AgentCard', () => ({
-  AgentCard: ({ bot }: { bot: CustomerBotListItem }) => <div data-testid={`agent-${bot._id}`}>{bot.name}</div>,
+  AgentCard: ({
+    bot,
+    onReactivate,
+  }: {
+    bot: CustomerBotListItem;
+    onReactivate?: (b: CustomerBotListItem) => void;
+  }) => (
+    <div data-testid={`agent-${bot._id}`} data-locked={bot.isOverLimitLocked ? 'true' : 'false'}>
+      <span>{bot.name}</span>
+      {bot.isOverLimitLocked ? (
+        <button type="button" onClick={() => onReactivate?.(bot)}>
+          Reactivate
+        </button>
+      ) : null}
+    </div>
+  ),
   DeleteAgentDialog: () => null,
 }));
 
@@ -318,5 +339,24 @@ describe('BotsListPage', () => {
 
     expect(screen.queryByTestId('agent-bot-ws1')).toBeNull();
     expect(await screen.findByTestId('agent-bot-ws2')).toBeTruthy();
+  });
+
+  it('opens upgrade modal when Reactivate is clicked on locked bot card', async () => {
+    mockGetBots.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          ...sampleBot('bot-locked', 'ws-1'),
+          isOverLimitLocked: true,
+          lockedReason: 'workspace_bot_limit_exceeded',
+          lockedMessage: 'Workspace agent limit exceeded',
+        },
+      ],
+    });
+
+    renderPage();
+    expect((await screen.findByTestId('agent-bot-locked')).getAttribute('data-locked')).toBe('true');
+    fireEvent.click(screen.getByRole('button', { name: /reactivate/i }));
+    expect(mockOpenUpgradeModal).toHaveBeenCalledWith({ reason: 'bots', recommendedPlanKey: 'pro' });
   });
 });

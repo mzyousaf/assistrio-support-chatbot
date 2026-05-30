@@ -166,6 +166,29 @@ export {
 } from './workspace-subscription.schema';
 export type { WorkspaceSubscriptionStatus } from './workspace-subscription.schema';
 export {
+  BillingWebhookEventRecord,
+  BillingWebhookEventSchema,
+  BILLING_WEBHOOK_EVENT_STATUSES,
+} from './billing-webhook-event.schema';
+export type { BillingWebhookEventStatus } from './billing-webhook-event.schema';
+export {
+  WorkspaceAddon,
+  WorkspaceAddonSchema,
+  WORKSPACE_ADDON_STATUSES,
+} from './workspace-addon.schema';
+export type { WorkspaceAddonStatus } from './workspace-addon.schema';
+export { WorkspaceCreditTopUp, WorkspaceCreditTopUpSchema } from './workspace-credit-top-up.schema';
+export {
+  WorkspaceBillingOrder,
+  WorkspaceBillingOrderSchema,
+  WORKSPACE_BILLING_CHECKOUT_TYPES,
+} from './workspace-billing-order.schema';
+export type { WorkspaceBillingCheckoutType } from './workspace-billing-order.schema';
+export {
+  WorkspaceBillingProfile,
+  WorkspaceBillingProfileSchema,
+} from './workspace-billing-profile.schema';
+export {
   ExtractJob,
   ExtractJobSchema,
   EXTRACT_JOB_MONGO_COLLECTION,

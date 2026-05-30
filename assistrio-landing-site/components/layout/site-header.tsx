@@ -57,9 +57,15 @@ export function SiteHeader() {
         </Link>
 
         <nav
-          aria-label="Primary actions"
+          aria-label="Primary"
           className="flex min-w-0 shrink flex-wrap items-center justify-end gap-2 sm:gap-3"
         >
+          <Link
+            href="/plans"
+            className="rounded-full px-3 py-2 text-[0.65rem] font-semibold text-slate-600 transition-colors hover:bg-slate-100/90 hover:text-slate-900 sm:px-4 sm:text-sm"
+          >
+            Plans
+          </Link>
           {status === "loading" ? (
             <span
               className={headerLoadingClass}

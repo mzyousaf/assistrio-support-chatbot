@@ -7,6 +7,7 @@ import {
   resolveChatRuntimeErrorMessage,
 } from './resolveChatRuntimeErrorMessage';
 import { WORKSPACE_BOT_PREVIEW_ACCESS_DENIED_MESSAGE } from './botsListMessages';
+import { WORKSPACE_BOT_LIMIT_EXCEEDED_CODE, WORKSPACE_BOT_LIMIT_EXCEEDED_MESSAGE } from './planLimitError';
 
 describe('resolveChatRuntimeErrorMessage', () => {
   it('maps plan_limit_ai_credits to friendly copy', () => {
@@ -36,6 +37,15 @@ describe('resolveChatRuntimeErrorMessage', () => {
         errorCode: 'workspace_bot_preview_access_denied',
       }),
     ).toBe(WORKSPACE_BOT_PREVIEW_ACCESS_DENIED_MESSAGE);
+  });
+
+  it('returns over-limit locked copy for workspace_bot_limit_exceeded', () => {
+    expect(
+      resolveChatRuntimeErrorMessage({
+        ok: false,
+        errorCode: WORKSPACE_BOT_LIMIT_EXCEEDED_CODE,
+      }),
+    ).toBe(WORKSPACE_BOT_LIMIT_EXCEEDED_MESSAGE);
   });
 
   it('prefers mapped credit copy over raw backend message', () => {

@@ -42,6 +42,9 @@ export function SiteFooter() {
                 Legal
               </p>
               <nav aria-label="Legal" className="mt-4 flex flex-col gap-3">
+                <Link href="/plans" className={linkClass}>
+                  Plans
+                </Link>
                 <Link href="/privacy" className={linkClass}>
                   Privacy Policy
                 </Link>

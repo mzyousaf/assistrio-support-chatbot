@@ -503,9 +503,62 @@ export type AdminWorkspaceBillingMetadata = {
   subscriptionId: string | null;
   subscriptionCreatedAt: string | null;
   subscriptionUpdatedAt: string | null;
+  subscriptionStatus?: string;
+  providerSubscriptionId?: string | null;
+  providerCustomerId?: string | null;
   activeAddons: string[];
   topUpCreditsRemaining: number;
   usageLedgerCount: number | null;
+};
+
+export type AdminBillingProviderDetails = {
+  provider: string | null;
+  providerCustomerId: string | null;
+  providerSubscriptionId: string | null;
+  providerVariantId: string | null;
+  subscriptionStatus: string;
+  cancelAtPeriodEnd: boolean;
+  currentPeriodStart: string;
+  currentPeriodEnd: string;
+};
+
+export type AdminBillingAddonRow = {
+  addonKey: string;
+  targetBotId: string | null;
+  status: string;
+  providerSubscriptionId: string | null;
+  providerOrderId: string | null;
+  currentPeriodStart: string | null;
+  currentPeriodEnd: string | null;
+};
+
+export type AdminBillingTopUpRow = {
+  creditsPurchased: number;
+  creditsRemaining: number;
+  expiresAt: string;
+  providerOrderId: string;
+  createdAt: string;
+};
+
+export type AdminBillingWebhookEventRow = {
+  id: string;
+  eventName: string;
+  status: string;
+  createdAt: string;
+  processedAt: string | null;
+  processingError: string | null;
+};
+
+export type AdminWorkspaceBillingSupport = {
+  provider: AdminBillingProviderDetails;
+  addons: AdminBillingAddonRow[];
+  topUps: AdminBillingTopUpRow[];
+  webhookEvents: AdminBillingWebhookEventRow[];
+};
+
+export type BillingAdminSyncResult = {
+  synced: boolean;
+  message: string;
 };
 
 export type AdminWorkspaceBillingSummary = {
@@ -516,6 +569,7 @@ export type AdminWorkspaceBillingSummary = {
   planCatalog: Array<{ key: string; name: string }>;
   addonCatalog: Array<{ key: string; name: string; checkoutAvailable: false }>;
   admin: AdminWorkspaceBillingMetadata;
+  support: AdminWorkspaceBillingSupport;
 };
 
 export type AdminCustomersListParams = {

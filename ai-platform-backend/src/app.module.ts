@@ -19,6 +19,7 @@ import { JobsCronService } from './worker/jobs-cron.service';
 import { InternalModule } from './internal/internal.module';
 import { AdminCustomersModule } from './admin-customers/admin-customers.module';
 import { AdminPlatformBotsModule } from './admin-platform-bots/admin-platform-bots.module';
+import { BillingModule } from './billing/billing.module';
 
 const registerKbCrons = shouldRegisterKbInProcessCronsForAppModule();
 
@@ -33,6 +34,7 @@ const registerKbCrons = shouldRegisterKbInProcessCronsForAppModule();
     RateLimitModule,
     KnowledgeModule,
     OnboardingKbTransferModule,
+    BillingModule,
     WorkspaceModule,
     BotsModule,
     DocumentsModule,

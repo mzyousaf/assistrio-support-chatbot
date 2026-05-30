@@ -29,6 +29,16 @@ function entitlements(canRemoveBranding: boolean) {
     canRemoveBranding,
     activeAddons: [],
     topUpCreditsRemaining: 0,
+    kbStorageBonusMbByBotId: {},
+    isTrialPlan: true,
+    trialDays: 7,
+    trialStartedAt: null,
+    trialEndsAt: null,
+    isTrialExpired: false,
+    creditsRenewMonthly: false,
+    autoTrainAllowed: false,
+    addonsAllowed: false,
+    memberInvitesAllowed: false,
   };
 }
 

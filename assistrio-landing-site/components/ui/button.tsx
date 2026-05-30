@@ -2,8 +2,16 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 export type ButtonVariant = "primary" | "secondary" | "ghost";
+export type ButtonSize = "sm" | "md" | "lg";
 
 type Variant = ButtonVariant;
+type Size = ButtonSize;
+
+const sizeClass: Record<Size, string> = {
+  sm: "h-7 px-2.5 text-xs leading-none",
+  md: "h-8 px-3 text-[0.8125rem] leading-tight",
+  lg: "h-9 px-4 text-sm leading-tight",
+};
 
 export const buttonBaseClass =
   "inline-flex cursor-pointer items-center justify-center rounded-[var(--radius-lg)] px-5 py-2.5 text-sm font-semibold transition-[color,background-color,box-shadow,transform,filter] duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-[0.98] disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50";
@@ -24,6 +32,7 @@ const variantClass = buttonVariantClass;
 type ButtonProps = {
   children: ReactNode;
   variant?: Variant;
+  size?: Size;
   className?: string;
   type?: "button" | "submit";
   disabled?: boolean;
@@ -33,13 +42,19 @@ type ButtonProps = {
 export function Button({
   children,
   variant = "primary",
+  size = "md",
   className = "",
   type = "button",
   disabled,
   onClick,
 }: ButtonProps) {
   return (
-    <button type={type} disabled={disabled} onClick={onClick} className={`${base} ${variantClass[variant]} ${className}`}>
+    <button
+      type={type}
+      disabled={disabled}
+      onClick={onClick}
+      className={`${base} ${variantClass[variant]} ${sizeClass[size]} ${className}`}
+    >
       {children}
     </button>
   );

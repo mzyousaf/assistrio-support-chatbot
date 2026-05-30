@@ -36,6 +36,10 @@ import { createTranscriptionUploadFile } from "@acw/lib/transcriptionUploadFile"
 import { sanitizeChatMessageContent } from "@acw/lib/chatMessageDisplay.util";
 import { resolveBrandingFooterDisplay } from "@acw/lib/resolveBrandingFooterDisplay";
 import { resolveChatRuntimeErrorMessage } from "@acw/lib/resolveChatRuntimeErrorMessage";
+import {
+  dispatchPlanLimitUpgradeModal,
+  isChatUpgradeModalErrorCode,
+} from "@/lib/planLimitError";
 import { streamAssistantReply } from "@acw/lib/streamAssistantReply";
 import { mergeWidgetStrings, type WidgetStrings } from "@acw/lib/widgetStrings";
 import { resolveWelcomeMessage } from "@acw/lib/welcomeMessage";
@@ -1204,6 +1208,9 @@ export function AdminLiveChatAdapter({
             : [];
 
         if (!res.ok) {
+          if (mode === "preview" && isChatUpgradeModalErrorCode(data.errorCode)) {
+            dispatchPlanLimitUpgradeModal({ errorCode: data.errorCode });
+          }
           const assistantErrId = generateId();
           const errText = sanitizeChatMessageContent(
             "assistant",

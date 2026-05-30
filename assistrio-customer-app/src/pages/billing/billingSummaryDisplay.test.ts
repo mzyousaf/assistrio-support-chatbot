@@ -23,19 +23,32 @@ describe('billingSummaryDisplay', () => {
         analyticsHistoryDays: null,
         canExportReports: true,
       }),
-    ).toContain('15 MB trained knowledge storage / bot');
+    ).toContain('15 MB trained knowledge / bot');
+    expect(
+      planCatalogFeatureLines({
+        key: 'free',
+        name: 'Free',
+        priceMonthly: 0,
+        botLimit: 1,
+        memberLimit: 1,
+        monthlyAiCredits: 50,
+        kbStorageMbPerBot: 5,
+        analyticsHistoryDays: 7,
+        canExportReports: false,
+      }),
+    ).toContain('50 trial credits total');
   });
 
   it('formats add-on display names and prices', () => {
     const addon: WorkspaceBillingAddonCatalogCard = {
-      key: 'kb_storage_5mb',
-      name: '+5 MB KB storage',
+      key: 'extra_bot',
+      name: 'Extra bot',
       billingInterval: 'monthly',
-      priceUsd: 10,
-      scope: 'bot',
+      priceUsd: 49,
+      scope: 'workspace',
       checkoutAvailable: false,
     };
-    expect(formatAddonDisplayName(addon)).toBe('+5 MB trained KB storage');
-    expect(formatAddonPriceLabel(addon)).toBe('$10 / month per bot');
+    expect(formatAddonDisplayName(addon)).toBe('Extra agent');
+    expect(formatAddonPriceLabel(addon)).toBe('$49 / month');
   });
 });

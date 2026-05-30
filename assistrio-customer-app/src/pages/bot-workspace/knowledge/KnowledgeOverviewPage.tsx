@@ -59,6 +59,10 @@ import { knowledgeOverviewResponseCache } from './knowledgeRouteDataCache';
 import { KnowledgeOverviewSkeleton } from './knowledgeScreenSkeletons';
 import { KnowledgeTrainingStatusesModal } from './KnowledgeTrainingStatusesModal';
 import { useCanManageBot } from '../BotWorkspaceContext';
+import { useCustomerAuth } from '@/auth/CustomerAuthContext';
+import { PaidPlanFeatureCalloutForReason } from '@/components/billing/PaidPlanFeatureCallout';
+import { resolveActiveCustomerWorkspace } from '@/lib/resolveActiveCustomerWorkspace';
+import { workspaceAutoTrainAllowed } from '@/lib/planEntitlements';
 import { ReadOnlyWorkspaceNotice } from '@/components/workspace/ReadOnlyWorkspaceNotice';
 
 function formatDateTimeLabel(iso: string | null | undefined): string {
@@ -128,6 +132,9 @@ function CardSectionHeader({
 export function KnowledgeOverviewPage() {
   const { id: botId } = useParams<{ id: string }>();
   const canManageBot = useCanManageBot();
+  const { customer } = useCustomerAuth();
+  const { workspace } = resolveActiveCustomerWorkspace(customer);
+  const autoTrainAllowed = workspaceAutoTrainAllowed(workspace);
   const {
     trainingStatus: agentTs,
     trainingStatusError: agentTsError,
@@ -222,6 +229,7 @@ export function KnowledgeOverviewPage() {
 
   const onAutoTrainSwitchIntent = (wantOn: boolean) => {
     if (!botId || !data || !data.knowledgeTraining) return;
+    if (wantOn && !autoTrainAllowed) return;
     const current = Boolean(data.knowledgeTraining.autoTrainEnabled);
     if (wantOn === current) return;
     if (wantOn) setEnableAutoTrainModalOpen(true);
@@ -617,7 +625,7 @@ export function KnowledgeOverviewPage() {
                       <Switch
                         checked={tr.autoTrainEnabled}
                         onCheckedChange={(next) => onAutoTrainSwitchIntent(next)}
-                        disabled={settingsBusy}
+                        disabled={settingsBusy || !autoTrainAllowed}
                         aria-label="Auto Train"
                       />
                       ) : null}
@@ -629,6 +637,9 @@ export function KnowledgeOverviewPage() {
                       : 'Changes stay pending until you queue training — use Retrain Agent in the sidebar when you’re ready.'}{' '}
                     Retrain Agent only adjusts scheduling; use Retry on a failed row when you need a fresh extract or train attempt.
                   </p>
+                  {!autoTrainAllowed ? (
+                    <PaidPlanFeatureCalloutForReason reason="auto_train" compact className="mt-3" />
+                  ) : null}
                 </div>
               </div>
             </div>

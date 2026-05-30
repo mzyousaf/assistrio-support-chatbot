@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { Download, MessagesSquare } from 'lucide-react';
 import { getCustomerBotChatsAnalytics } from '@/api/customerApi';
 import type { CustomerChatsAnalyticsResponse } from '@/api/types';
 import { useCustomerAuth } from '@/auth/CustomerAuthContext';
 import { useWorkspaceBillingSummary } from '@/hooks/useWorkspaceBillingSummary';
+import { PaidPlanFeatureCalloutForReason } from '@/components/billing/PaidPlanFeatureCallout';
 import {
   ANALYTICS_WINDOW_CLAMPED_NOTE,
-  EXPORT_REPORTS_LOCKED_HELPER,
   canExportReportsEntitlement,
 } from '@/lib/analyticsEntitlementCopy';
 import { shouldShowAnalyticsWindowClampedNote } from '@/lib/analyticsEntitlementWindow';
@@ -144,16 +143,12 @@ export function ChatsAnalyticsPage() {
                           />
                           <span>Export</span>
                         </button>
-                      ) : topPagesExportable && !canExportReports ? (
-                        <span className="max-w-[12rem] text-right text-[10px] leading-snug text-slate-500 sm:text-[11px]">
-                          {EXPORT_REPORTS_LOCKED_HELPER}{' '}
-                          <Link to="/settings/plans" className="font-medium text-teal-700 underline">
-                            View plans
-                          </Link>
-                        </span>
                       ) : null
                     }
                   >
+                    {!canExportReports && topPagesExportable ? (
+                      <PaidPlanFeatureCalloutForReason reason="export" compact className="mb-4" />
+                    ) : null}
                     <ChatsTopPagesPanel rows={topPagesRows} />
                   </AnalyticsChartCard>
                 </div>

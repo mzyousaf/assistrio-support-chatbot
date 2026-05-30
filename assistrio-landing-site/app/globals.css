@@ -23,6 +23,7 @@
   --border-teal-soft: rgba(13, 148, 136, 0.22);
 
   --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-card: var(--shadow-xs);
   --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.05), 0 1px 2px rgba(15, 23, 42, 0.03);
   --shadow-md: 0 4px 14px rgba(15, 23, 42, 0.06), 0 2px 4px rgba(15, 23, 42, 0.03);
   --shadow-teal-glow: 0 8px 30px rgba(13, 148, 136, 0.07);
@@ -44,6 +45,28 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
+}
+
+@keyframes planPriceTagIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes planPriceNoteIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @layer base {

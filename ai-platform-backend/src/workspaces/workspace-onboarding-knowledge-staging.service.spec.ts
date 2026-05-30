@@ -93,6 +93,7 @@ describe('WorkspaceOnboardingKnowledgeStagingService', () => {
         canRemoveBranding: false,
         activeAddons: [],
         topUpCreditsRemaining: 0,
+        kbStorageBonusMbByBotId: {},
       })),
     };
 

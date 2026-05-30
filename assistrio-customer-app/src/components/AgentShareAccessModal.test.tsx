@@ -153,6 +153,17 @@ describe('AgentShareAccessModal', () => {
             canPreview: false,
             locked: false,
           },
+          {
+            subjectType: 'invite',
+            inviteId: 'inv-dup',
+            email: 'member@test.com',
+            displayName: 'member@test.com',
+            status: 'pending_invite',
+            role: 'member',
+            canView: false,
+            canPreview: false,
+            locked: false,
+          },
         ],
       },
     });
@@ -163,6 +174,7 @@ describe('AgentShareAccessModal', () => {
       expect(screen.getByText('member@test.com')).toBeTruthy();
     });
     expect(screen.queryByText('cancelled@test.com')).toBeNull();
+    expect(screen.getAllByText('member@test.com')).toHaveLength(1);
   });
 
   it('uses workspace member avatar when grant row is missing profile image fields', async () => {

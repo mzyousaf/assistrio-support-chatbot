@@ -116,7 +116,10 @@ import { getServerLocalMonthlyBillingPeriod } from './chat-billing-period.util';
 import { calculateMessageCreditUsage } from './message-credit.util';
 import type { MessageCreditCalculation } from './message-credit.util';
 import { WorkspaceAiCreditGateService } from '../entitlements/workspace-ai-credit-gate.service';
+import { WorkspaceAiCreditsUsageService } from '../entitlements/workspace-ai-credits-usage.service';
+import { WorkspaceCreditTopUpService } from '../entitlements/workspace-credit-topup.service';
 import { WorkspaceEntitlementsService } from '../entitlements/workspace-entitlements.service';
+import { WorkspaceBotLimitService } from '../entitlements/workspace-bot-limit.service';
 import { resolveUsageLedgerPlanAtTime } from '../entitlements/usage-ledger-plan-at-time.util';
 import { normalizeAssistantMessageSourcesForPersistence } from './assistant-message-sources.normalize';
 import { resolveChatLlmParams, resolveCompletionMaxTokens } from './chat-llm-params.util';
@@ -375,6 +378,9 @@ export class ChatEngineService {
     private readonly topicSentimentClassificationService: TopicSentimentClassificationService,
     private readonly workspaceEntitlementsService: WorkspaceEntitlementsService,
     private readonly workspaceAiCreditGateService: WorkspaceAiCreditGateService,
+    private readonly workspaceBotLimitService: WorkspaceBotLimitService,
+    private readonly workspaceAiCreditsUsageService: WorkspaceAiCreditsUsageService,
+    private readonly workspaceCreditTopUpService: WorkspaceCreditTopUpService,
   ) { }
 
   private parseOptionalObjectId(s?: string): Types.ObjectId | null {
@@ -446,6 +452,7 @@ export class ChatEngineService {
   }): Promise<void> {
     try {
       const workspaceOid = this.parseOptionalObjectId(params.bot.workspaceId?.trim());
+      const workspaceIdStr = workspaceOid ? String(workspaceOid) : '';
       const previewCust = this.parseOptionalObjectId(String(params.previewInitiatedByUserId ?? '').trim());
       const ownerOid = this.parseOptionalObjectId(params.bot.ownerId?.trim());
       const customerOid = previewCust ?? ownerOid;
@@ -453,8 +460,20 @@ export class ChatEngineService {
       const vm = params.voiceMeta;
       const planAtTime = await resolveUsageLedgerPlanAtTime(
         this.workspaceEntitlementsService,
-        workspaceOid ? String(workspaceOid) : undefined,
+        workspaceIdStr || undefined,
       );
+
+      let monthlyUsedBefore = 0;
+      let monthlyLimit = 0;
+      if (workspaceIdStr && params.credit.creditsUsed > 0) {
+        const usage = await this.workspaceAiCreditsUsageService.getWorkspaceAiCreditsUsage(
+          workspaceIdStr,
+          params.now,
+        );
+        monthlyUsedBefore = usage.monthlyCreditsUsed;
+        monthlyLimit = usage.monthlyAiCredits;
+      }
+
       await this.usageLedgerModel.create({
         ...(workspaceOid ? { workspaceId: workspaceOid } : {}),
         ...(customerOid ? { customerId: customerOid } : {}),
@@ -488,6 +507,16 @@ export class ChatEngineService {
         },
         createdAt: params.now,
       });
+
+      if (workspaceIdStr && params.credit.creditsUsed > 0 && monthlyLimit > 0) {
+        await this.workspaceCreditTopUpService.debitSpillAfterMonthlyUsed(
+          workspaceIdStr,
+          monthlyLimit,
+          monthlyUsedBefore,
+          params.credit.creditsUsed,
+          params.now,
+        );
+      }
     } catch (err) {
       chatLog({
         event: 'usage_ledger.write_failed',
@@ -841,6 +870,15 @@ export class ChatEngineService {
       endpoint,
       metadata: { sessionSource },
     });
+
+    const workspaceIdForBotLimit = String(bot.workspaceId ?? '').trim();
+    const botIdForLimit = bot._id != null ? String(bot._id) : '';
+    if (workspaceIdForBotLimit && botIdForLimit) {
+      await this.workspaceBotLimitService.assertWorkspaceBotWithinEffectiveLimit(
+        workspaceIdForBotLimit,
+        botIdForLimit,
+      );
+    }
 
     const resolvedApiKey = this.resolveOpenAIKey({ userApiKey, bot });
     if (!resolvedApiKey) {

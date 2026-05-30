@@ -1,6 +1,9 @@
+import { useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertTriangle, HardDrive } from 'lucide-react';
 import type { CustomerKnowledgeUsage } from '@/api/types';
+import { PaidPlanFeatureCalloutForReason } from '@/components/billing/PaidPlanFeatureCallout';
+import { useUpgradePlanModal } from '@/components/billing/UpgradePlanModalProvider';
 import { Button, Modal } from '@/components/ui';
 import { formatKnowledgeBytes } from '@/lib/formatKnowledgeBytes';
 import { clampKnowledgeUsagePercent, KnowledgeUsageMeterBar } from '@/components/knowledge/KnowledgeUsageMeterBar';
@@ -13,7 +16,12 @@ import {
   TRAINED_KNOWLEDGE_STORAGE_VIEW_ACTION,
 } from '@/lib/trainedKnowledgeStorageCopy';
 
-const PLANS_PATH = '/settings/plans';
+function useOpenTrainedKnowledgeUpgradeModal() {
+  const { openUpgradeModal } = useUpgradePlanModal();
+  return useCallback(() => {
+    openUpgradeModal({ reason: 'trained_knowledge' });
+  }, [openUpgradeModal]);
+}
 
 export function StorageLimitModal(props: {
   open: boolean;
@@ -24,6 +32,7 @@ export function StorageLimitModal(props: {
   backendMessage?: string | null;
 }) {
   const navigate = useNavigate();
+  const openUpgradeModal = useOpenTrainedKnowledgeUpgradeModal();
   const overviewPath = `/bots/${props.botId}/playground/knowledgebase/overview`;
   const usage = props.knowledgeUsage;
 
@@ -34,7 +43,7 @@ export function StorageLimitModal(props: {
 
   function goPlans() {
     props.onClose();
-    void navigate(PLANS_PATH);
+    openUpgradeModal();
   }
 
   const pctRaw = usage ? clampKnowledgeUsagePercent(usage) : 100;
@@ -77,6 +86,7 @@ export function StorageLimitModal(props: {
           <li>Open the knowledge overview to delete documents, Q&amp;A, snippets, or other sources you no longer need.</li>
           <li>Upgrade your plan if this assistant should keep more content online.</li>
         </ul>
+        <PaidPlanFeatureCalloutForReason reason="trained_knowledge" compact onAction={goPlans} />
         {props.backendMessage ? (
           <div className="rounded-xl border border-red-200/90 bg-red-50/70 px-3.5 py-3 text-red-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.5)]">
             <p className="m-0 flex gap-2 text-sm font-medium leading-relaxed">
@@ -192,6 +202,7 @@ export function KnowledgePlanLimitDetailActions({
   className?: string;
 }) {
   const navigate = useNavigate();
+  const openUpgradeModal = useOpenTrainedKnowledgeUpgradeModal();
   const overviewPath = `/bots/${botId}/playground/knowledgebase/overview`;
 
   return (
@@ -205,7 +216,7 @@ export function KnowledgePlanLimitDetailActions({
       >
         {TRAINED_KNOWLEDGE_STORAGE_VIEW_ACTION}
       </Button>
-      <Button type="button" variant="secondary" size="sm" onClick={() => void navigate(PLANS_PATH)}>
+      <Button type="button" variant="secondary" size="sm" onClick={openUpgradeModal}>
         {TRAINED_KNOWLEDGE_STORAGE_UPGRADE_ACTION}
       </Button>
     </div>

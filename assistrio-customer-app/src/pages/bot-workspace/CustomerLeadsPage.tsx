@@ -4,6 +4,7 @@ import type { CustomerBotLeadsListParams, CustomerLeadFieldDefinition, CustomerL
 import { getCustomerBotLeads } from '@/api/customerApi';
 import { useCustomerAuth } from '@/auth/CustomerAuthContext';
 import { useWorkspaceBillingSummary } from '@/hooks/useWorkspaceBillingSummary';
+import { useUpgradePlanModal } from '@/components/billing/UpgradePlanModalProvider';
 import { canExportReportsEntitlement, resolveExportReportsSaveErrorMessage } from '@/lib/analyticsEntitlementCopy';
 import { resolveActiveCustomerWorkspace } from '@/lib/resolveActiveCustomerWorkspace';
 import { useBotWorkspace } from './BotWorkspaceContext';
@@ -45,6 +46,7 @@ export function CustomerLeadsPage() {
   const { activeWorkspaceId } = resolveActiveCustomerWorkspace(customer);
   const { summary: billingSummary } = useWorkspaceBillingSummary(activeWorkspaceId);
   const canExportReports = canExportReportsEntitlement(billingSummary?.entitlements.canExportReports);
+  const { openUpgradeModal } = useUpgradePlanModal();
   const navigate = useNavigate();
   const leadsSearchInputId = useId();
   const leadsPerPageSelectId = useId();
@@ -246,6 +248,7 @@ export function CustomerLeadsPage() {
   const handleExportCsv = useCallback(() => {
     if (!canExportReports) {
       appToast.error(resolveExportReportsSaveErrorMessage({ errorCode: 'plan_limit_export_reports' }));
+      openUpgradeModal({ reason: 'export' });
       return;
     }
     if (leads.length === 0) {
@@ -261,7 +264,12 @@ export function CustomerLeadsPage() {
     } catch {
       appToast.error('Could not export CSV');
     }
-  }, [canExportReports, leads, leadFieldDefinitions]);
+  }, [canExportReports, leads, leadFieldDefinitions, openUpgradeModal]);
+
+  const handleExportLocked = useCallback(() => {
+    appToast.error(resolveExportReportsSaveErrorMessage({ errorCode: 'plan_limit_export_reports' }));
+    openUpgradeModal({ reason: 'export' });
+  }, [openUpgradeModal]);
 
   const clearAllFilters = useCallback(() => {
     cancelSearchDebounce();
@@ -289,6 +297,7 @@ export function CustomerLeadsPage() {
           exportLocked={!canExportReports}
           exportDisabled={leads.length === 0}
           onExport={handleExportCsv}
+          onExportLocked={handleExportLocked}
           refreshDisabled={disableRefresh}
           refreshLoading={listRefreshing}
           onRefresh={handleRefresh}

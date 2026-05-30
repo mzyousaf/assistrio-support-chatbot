@@ -371,7 +371,6 @@ export function PublishSection() {
     rotateAccessKey,
     rotateSecretKey,
     activeValidOriginCount,
-    saving,
     savingDeploymentMeta,
   } = ctx;
 

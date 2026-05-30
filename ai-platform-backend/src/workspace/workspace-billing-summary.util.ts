@@ -1,5 +1,5 @@
-import { PLAN_CATALOG, type PlanDefinition } from '../entitlements/plan-catalog';
-import { WORKSPACE_ADDON_CATALOG } from '../entitlements/addon-catalog';
+import { PLAN_CATALOG, type PlanDefinition, type PlanKey } from '../entitlements/plan-catalog';
+import { WORKSPACE_ADDON_CATALOG, type WorkspaceAddonKey } from '../entitlements/addon-catalog';
 import type { WorkspaceEntitlements } from '../entitlements/workspace-entitlements.types';
 import type { WorkspaceAiCreditsUsageSummary } from '../entitlements/workspace-ai-credits-usage.types';
 import type { WorkspaceMemberUsage } from '../entitlements/workspace-member-limit.service';
@@ -36,6 +36,15 @@ export function mapEntitlementsToBillingSummary(
     analyticsHistoryDays: entitlements.analyticsHistoryDays,
     canExportReports: entitlements.canExportReports,
     showPoweredByAssistrio: entitlements.showPoweredByAssistrio,
+    isTrialPlan: entitlements.isTrialPlan,
+    trialDays: entitlements.trialDays,
+    trialStartedAt: entitlements.trialStartedAt,
+    trialEndsAt: entitlements.trialEndsAt,
+    isTrialExpired: entitlements.isTrialExpired,
+    creditsRenewMonthly: entitlements.creditsRenewMonthly,
+    autoTrainAllowed: entitlements.autoTrainAllowed,
+    addonsAllowed: entitlements.addonsAllowed,
+    memberInvitesAllowed: entitlements.memberInvitesAllowed,
     canRemoveBranding: entitlements.canRemoveBranding,
     activeAddons: entitlements.activeAddons,
     topUpCreditsRemaining: entitlements.topUpCreditsRemaining,
@@ -66,6 +75,7 @@ export function mapMemberUsageToBillingSummary(
     pendingInvites: memberUsage.pendingInviteCount,
     used: memberUsage.current,
     limit: memberUsage.limit,
+    isOverMemberLimit: memberUsage.isOverMemberLimit,
   };
 }
 
@@ -134,7 +144,10 @@ export function mapBotUsageToBillingSummary(
   };
 }
 
-export function mapPlanDefinitionToCatalogCard(plan: PlanDefinition): WorkspaceBillingPlanCatalogCard {
+export function mapPlanDefinitionToCatalogCard(
+  plan: PlanDefinition,
+  checkoutAvailable: boolean,
+): WorkspaceBillingPlanCatalogCard {
   return {
     key: plan.key,
     name: plan.name,
@@ -145,20 +158,30 @@ export function mapPlanDefinitionToCatalogCard(plan: PlanDefinition): WorkspaceB
     kbStorageMbPerBot: plan.kbStorageMbPerBot,
     analyticsHistoryDays: plan.analyticsHistoryDays,
     canExportReports: plan.canExportReports,
+    checkoutAvailable: checkoutAvailable && plan.key !== 'free',
   };
 }
 
-export function buildPublicPlanCatalogSnapshot(): WorkspaceBillingPlanCatalogCard[] {
-  return PLAN_CATALOG.map(mapPlanDefinitionToCatalogCard);
+export function buildPublicPlanCatalogSnapshot(
+  checkoutAvailableForPlan: (planKey: PlanKey) => boolean = () => false,
+): WorkspaceBillingPlanCatalogCard[] {
+  return PLAN_CATALOG.map((plan) =>
+    mapPlanDefinitionToCatalogCard(
+      plan,
+      plan.key === 'free' ? false : checkoutAvailableForPlan(plan.key),
+    ),
+  );
 }
 
-export function buildPublicAddonCatalogSnapshot(): WorkspaceBillingAddonCatalogCard[] {
+export function buildPublicAddonCatalogSnapshot(
+  checkoutAvailableForAddon: (addonKey: WorkspaceAddonKey) => boolean = () => false,
+): WorkspaceBillingAddonCatalogCard[] {
   return WORKSPACE_ADDON_CATALOG.map((addon) => ({
     key: addon.key,
     name: addon.name,
     billingInterval: addon.billingInterval,
     priceUsd: addon.priceUsd,
     scope: addon.scope,
-    checkoutAvailable: false as const,
+    checkoutAvailable: checkoutAvailableForAddon(addon.key),
   }));
 }

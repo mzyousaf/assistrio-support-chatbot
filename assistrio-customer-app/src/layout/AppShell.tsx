@@ -523,7 +523,7 @@ export function AppShell() {
     ['/settings/workspace', 'General'],
     ['/settings/members', 'Members'],
     ['/settings/plans', 'Plans'],
-    ['/settings/billing', 'Billing'],
+    ['/settings/billing', 'Billing & Invoices'],
   ];
   const settingsSubNavRefs = useRef<(HTMLAnchorElement | null)[]>([]);
   const settingsTrackRef = useRef<HTMLDivElement>(null);

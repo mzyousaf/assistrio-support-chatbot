@@ -6,6 +6,7 @@ import { WorkspacePersonIdentity, botAccessGrantRowToProfile } from '@/component
 import { Modal, Checkbox, Button } from '@/components/ui';
 import { appToast } from '@/lib/app-toast';
 import { enrichBotAccessGrantRowsWithMembers } from '@/lib/workspaceMembersMessages';
+import { normalizeWorkspacePersonEmail } from '@/lib/workspacePeopleRows.util';
 import { WorkspaceRolePill } from '@/components/settings/WorkspaceRolePill';
 
 type Props = {
@@ -16,7 +17,22 @@ type Props = {
 };
 
 function filterCustomerVisibleGrantRows(rows: BotAccessGrantRow[]): BotAccessGrantRow[] {
-  return rows.filter((row) => row.status !== 'cancelled');
+  const activeMemberEmails = new Set(
+    rows
+      .filter((row) => row.subjectType === 'user' && row.status === 'active')
+      .map((row) => normalizeWorkspacePersonEmail(row.email)),
+  );
+  const seenInviteEmails = new Set<string>();
+
+  return rows.filter((row) => {
+    if (row.status === 'cancelled') return false;
+    if (row.subjectType === 'invite') {
+      const email = normalizeWorkspacePersonEmail(row.email);
+      if (!email || activeMemberEmails.has(email) || seenInviteEmails.has(email)) return false;
+      seenInviteEmails.add(email);
+    }
+    return true;
+  });
 }
 
 function buildViewAccessPreview(rows: BotAccessGrantRow[]): BotViewAccessPreviewMember[] {

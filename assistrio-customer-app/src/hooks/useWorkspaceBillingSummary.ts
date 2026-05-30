@@ -55,5 +55,7 @@ export function useWorkspaceBillingSummary(
     loadState,
     errorMessage,
     loadSummary,
+    /** Refetch without clearing the current summary (used for post-checkout refresh). */
+    reload: loadSummary,
   };
 }

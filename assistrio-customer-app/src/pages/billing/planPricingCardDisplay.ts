@@ -184,9 +184,9 @@ const PLAN_WHY_SECTIONS: Record<string, PlanWhySection> = {
   pro: {
     heading: 'Why Pro?',
     bullets: [
-      '3,000 AI credits/month',
+      '2,000 AI credits/month',
       '30 MB trained knowledge storage',
-      '5 workspace members',
+      '10 workspace members',
       'Priority support',
       'Best for larger teams and higher traffic',
     ],
@@ -228,7 +228,7 @@ export function planFeatureIntro(planKey: string): string | undefined {
 
 export function planFeatureFootnote(planKey: string): string | undefined {
   if (planKey === 'free') {
-    return 'When AI credits, trained knowledge storage, or analytics history run out, AI replies and credit-based features pause until your next billing period. Upgrade for higher limits.';
+    return 'Trial credits do not renew. Your 7-day trial includes 50 trial credits total. When the trial ends or credits run out, upgrade to keep using AI chat and paid-plan features.';
   }
   return undefined;
 }
@@ -246,11 +246,19 @@ function analyticsWindowLabel(days: number | null | undefined): string {
 export function buildPlanCardLimitItems(plan: WorkspaceBillingPlanCatalogCard): PlanChecklistItem[] {
   const analyticsWindow = analyticsWindowLabel(plan.analyticsHistoryDays);
 
+  const creditsLabel =
+    plan.key === 'free'
+      ? `${plan.monthlyAiCredits.toLocaleString()} trial credits total`
+      : `${plan.monthlyAiCredits.toLocaleString()} AI credits / month`;
+
   return [
     { label: `${plan.botLimit} agent${plan.botLimit === 1 ? '' : 's'}`, included: true },
-    { label: `${plan.memberLimit} members`, included: true },
-    { label: `${plan.monthlyAiCredits.toLocaleString()} AI credits / month`, included: true },
-    { label: `${plan.kbStorageMbPerBot} MB KB storage / bot`, included: true },
+    {
+      label: plan.key === 'free' ? 'Owner only (no invites)' : `${plan.memberLimit} members`,
+      included: plan.key !== 'free',
+    },
+    { label: creditsLabel, included: true },
+    { label: `${plan.kbStorageMbPerBot} MB trained knowledge / bot`, included: true },
     { label: analyticsWindow, included: true },
   ];
 }

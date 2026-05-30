@@ -55,13 +55,24 @@ describe('CustomerBotsController member access', () => {
       getUserWorkspaceMemberRole: jest.fn().mockResolvedValue(options?.memberRole ?? 'admin'),
       getWorkspaceDisplayName: jest.fn().mockResolvedValue('Acme Workspace'),
       filterWorkspaceBotsForUser: jest.fn(async (_uid, _ws, bots) => {
-        if (options?.memberRole === 'member') {
+        if (options?.memberRole === 'owner') {
+          return bots;
+        }
+        if (options?.memberRole === 'member' || options?.memberRole === 'admin') {
           return (bots as Record<string, unknown>[]).filter(
             (b) => String((b as { _id?: Types.ObjectId })._id) === botVisibleId,
           );
         }
         return bots;
       }),
+      buildBotViewAccessPreviewByBotIds: jest.fn().mockResolvedValue({}),
+    };
+
+    const workspaceBotLimitService = {
+      resolveOverLimitLockedBotIdSet: jest.fn().mockResolvedValue(new Set()),
+      enrichBotListWithOverLimitState: jest.fn((bots) =>
+        bots.map((bot: { _id: string }) => ({ ...bot, isOverLimitLocked: false })),
+      ),
     };
 
     const controller = new CustomerBotsController(
@@ -73,6 +84,7 @@ describe('CustomerBotsController member access', () => {
       {} as never,
       {} as never,
       {} as never,
+      workspaceBotLimitService as never,
     );
 
     const reqFor = (id: string) => ({ user: { _id: id, role: 'customer' } }) as never;
@@ -142,10 +154,11 @@ describe('CustomerBotsController member access', () => {
       expect(result.map((b) => b._id)).toEqual(expect.arrayContaining([botVisibleId, botHiddenId]));
     });
 
-    it('returns all workspace bots for admin', async () => {
+    it('filters bots without canView grant for workspace admin', async () => {
       const { controller, reqFor } = buildListController({ memberRole: 'admin' });
       const result = await controller.listBots(reqFor(userId));
-      expect(result).toHaveLength(2);
+      expect(result).toHaveLength(1);
+      expect(result[0]._id).toBe(botVisibleId);
     });
 
     it('filters bots without canView grant for workspace members', async () => {

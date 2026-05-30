@@ -4,50 +4,13 @@ import { BotsService } from './bots.service';
 import type { WorkspaceBotLimitService } from '../entitlements/workspace-bot-limit.service';
 import type { WorkspaceEntitlementsService } from '../entitlements/workspace-entitlements.service';
 import type { WorkspaceEntitlements } from '../entitlements/workspace-entitlements.types';
+import {
+  mockFreeWorkspaceEntitlements,
+  mockProWorkspaceEntitlements,
+  mockStarterWorkspaceEntitlements,
+} from '../entitlements/test/workspace-entitlements.fixture';
 
 const MB = 1024 * 1024;
-
-function freeEntitlements() {
-  return {
-    workspaceId: '507f1f77bcf86cd799439011',
-    planKey: 'free' as const,
-    planName: 'Free',
-    subscriptionStatus: 'free' as const,
-    botLimit: 1,
-    memberLimit: 3,
-    monthlyAiCredits: 50,
-    kbStorageMbPerBot: 5,
-    kbStorageBytesPerBot: megabytesToBytes(5),
-    maxKbStorageMbPerBot: 40,
-    maxKbStorageBytesPerBot: megabytesToBytes(40),
-    analyticsHistoryDays: 7,
-    canExportReports: false,
-    showPoweredByAssistrio: true,
-    canRemoveBranding: false,
-    activeAddons: [],
-    topUpCreditsRemaining: 0,
-  };
-}
-
-function starterEntitlements() {
-  return {
-    ...freeEntitlements(),
-    planKey: 'starter' as const,
-    planName: 'Starter',
-    kbStorageMbPerBot: 15,
-    kbStorageBytesPerBot: megabytesToBytes(15),
-  };
-}
-
-function proEntitlements() {
-  return {
-    ...freeEntitlements(),
-    planKey: 'pro' as const,
-    planName: 'Pro',
-    kbStorageMbPerBot: 30,
-    kbStorageBytesPerBot: megabytesToBytes(30),
-  };
-}
 
 describe('BotsService.createDraft workspace KB entitlements', () => {
   const workspaceId = new Types.ObjectId('507f1f77bcf86cd799439011');
@@ -77,7 +40,7 @@ describe('BotsService.createDraft workspace KB entitlements', () => {
     const workspaceEntitlementsService = {
       resolveForWorkspace: jest
         .fn()
-        .mockResolvedValue(overrides.entitlements ?? freeEntitlements()),
+        .mockResolvedValue(overrides.entitlements ?? mockFreeWorkspaceEntitlements()),
     } as unknown as WorkspaceEntitlementsService;
 
     const svc = new BotsService(
@@ -108,7 +71,7 @@ describe('BotsService.createDraft workspace KB entitlements', () => {
   }
 
   it('Free workspace new customer draft gets 5 MB KB limit', async () => {
-    const { svc, createSpy } = buildService({ entitlements: freeEntitlements() });
+    const { svc, createSpy } = buildService({ entitlements: mockFreeWorkspaceEntitlements() });
 
     await svc.createDraft(clientDraftId, userId, { applyWorkspaceEntitlements: true });
 
@@ -127,7 +90,7 @@ describe('BotsService.createDraft workspace KB entitlements', () => {
   });
 
   it('Starter workspace new customer draft gets 15 MB KB limit', async () => {
-    const { svc, createSpy } = buildService({ entitlements: starterEntitlements() });
+    const { svc, createSpy } = buildService({ entitlements: mockStarterWorkspaceEntitlements() });
 
     await svc.createDraft(clientDraftId, userId, { applyWorkspaceEntitlements: true });
 
@@ -141,7 +104,7 @@ describe('BotsService.createDraft workspace KB entitlements', () => {
   });
 
   it('Pro workspace new customer draft gets 30 MB KB limit', async () => {
-    const { svc, createSpy } = buildService({ entitlements: proEntitlements() });
+    const { svc, createSpy } = buildService({ entitlements: mockProWorkspaceEntitlements() });
 
     await svc.createDraft(clientDraftId, userId, { applyWorkspaceEntitlements: true });
 
@@ -156,11 +119,10 @@ describe('BotsService.createDraft workspace KB entitlements', () => {
 
   it('max KB cap is respected and never above 40 MB', async () => {
     const { svc, createSpy } = buildService({
-      entitlements: {
-        ...freeEntitlements(),
+      entitlements: mockFreeWorkspaceEntitlements({
         kbStorageBytesPerBot: megabytesToBytes(50),
         maxKbStorageBytesPerBot: megabytesToBytes(40),
-      },
+      }),
     });
 
     await svc.createDraft(clientDraftId, userId, { applyWorkspaceEntitlements: true });
@@ -199,7 +161,9 @@ describe('BotsService.createDraft workspace KB entitlements', () => {
   });
 
   it('missing subscription falls back to Free via entitlements resolver', async () => {
-    const { svc, createSpy, workspaceEntitlementsService } = buildService({ entitlements: freeEntitlements() });
+    const { svc, createSpy, workspaceEntitlementsService } = buildService({
+      entitlements: mockFreeWorkspaceEntitlements(),
+    });
 
     await svc.createDraft(clientDraftId, userId, { applyWorkspaceEntitlements: true });
 

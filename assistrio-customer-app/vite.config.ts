@@ -43,6 +43,7 @@ export default defineConfig({
       /** Always pick up `chat-widget` source edits in the playground preview. */
       ignored: ['!**/chat-widget/**'],
     },
+    allowedHosts: ['erythrismal-giovanni-unscorching.ngrok-free.dev']
   },
   optimizeDeps: {
     include: ['react-markdown', 'unist-util-visit'],

@@ -38,8 +38,8 @@ describe('AppShellCreditsWidget', () => {
 
   it('renders real credits from billing summary', () => {
     renderWidget();
-    expect(screen.getByText('12 / 50 credits')).toBeTruthy();
-    expect(screen.getByText('38 remaining')).toBeTruthy();
+    expect(screen.getByText('12 / 50 monthly used')).toBeTruthy();
+    expect(screen.getByText('38 total remaining')).toBeTruthy();
   });
 
   it('shows loading state', () => {
@@ -72,7 +72,25 @@ describe('AppShellCreditsWidget', () => {
         byBot: [],
       },
     });
-    expect(screen.getByText('55 / 50 credits')).toBeTruthy();
+    expect(screen.getByText('55 / 50 monthly used')).toBeTruthy();
     expect(screen.getByText('Over monthly limit')).toBeTruthy();
+  });
+
+  it('shows top-up credits available in sidebar widget', () => {
+    renderWidget({
+      aiCredits: {
+        periodStart: '',
+        periodEnd: '',
+        monthlyCredits: 500,
+        monthlyCreditsUsed: 12,
+        monthlyCreditsRemaining: 488,
+        topUpCreditsRemaining: 1000,
+        totalCreditsAvailable: 1500,
+        totalCreditsRemaining: 1488,
+        isOverLimit: false,
+        byBot: [],
+      },
+    });
+    expect(screen.getByText('1,000 top-up credits available')).toBeTruthy();
   });
 });

@@ -26,6 +26,7 @@ import { isWelcomeMessageActive } from './welcome-message-display.util';
 import { VisitorsService } from '../visitors/visitors.service';
 import { exampleQuestionsToPublicLabels } from '../workspace/shared/example-questions.util';
 import { KnowledgeBaseItemService } from '../knowledge/knowledge-base-item.service';
+import { WorkspaceBotLimitService } from '../entitlements/workspace-bot-limit.service';
 import { ChatEngineService } from '../chat/chat-engine.service';
 import { WidgetSpeechService } from '../chat/widget-speech.service';
 import {
@@ -275,6 +276,7 @@ export class WidgetIframeController {
     private readonly knowledgeBaseItemService: KnowledgeBaseItemService,
     private readonly chatEngineService: ChatEngineService,
     private readonly widgetSpeechService: WidgetSpeechService,
+    private readonly workspaceBotLimitService: WorkspaceBotLimitService,
   ) {}
 
   private assertBotOwnerPresent(bot: Record<string, unknown>): void {
@@ -447,6 +449,8 @@ export class WidgetIframeController {
 
     this.assertIframeRateLimit(b, req);
     this.assertIframeParentOriginOrThrow(b, parsed.parentOrigin, req);
+
+    await this.workspaceBotLimitService.assertBotDocWithinEffectiveLimitIfWorkspaceScoped(b);
 
     const chatUI = await this.botsService.sanitizeRuntimeChatUiForBot(row as { workspaceId?: unknown; chatUI?: unknown });
     const brandingMessage =

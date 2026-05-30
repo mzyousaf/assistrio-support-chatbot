@@ -14,6 +14,13 @@ export const KB_STORAGE_INFO_NOTES = [
   'Upload files up to 20 MB each. Your plan limit is based on extracted text, so the number of files depends on how much readable text is inside them.',
 ] as const;
 
+export const TRAINED_KNOWLEDGE_UPLOAD_HELPER =
+  'Upload files up to 20 MB each. Trained knowledge storage counts extracted text, not original file size.';
+
+export const MESSAGING_CREDITS_NOTE = 'Voice, dictation, and chat use AI credits.';
+
+export const TRIAL_CREDITS_NOTE = 'Trial credits do not renew.';
+
 export type PlanComparisonCell = string;
 
 export type PlanComparisonRow = {
@@ -38,8 +45,8 @@ function formatPlanPriceShort(priceMonthly: number | null | undefined): string {
 
 function formatAiCreditsCell(planKey: BillingPlanKey, credits: number): string {
   const formatted = credits.toLocaleString();
-  if (planKey === 'free') return `${formatted} Credits only`;
-  return `${formatted} Credits / month`;
+  if (planKey === 'free') return `${formatted} trial credits total`;
+  return `${formatted} AI credits / month`;
 }
 
 function formatAnalyticsHistoryCell(days: number | null | undefined): string {
@@ -94,6 +101,7 @@ export function buildMainPlanComparisonRows(
     },
     {
       feature: 'AI credits / month',
+      featureHint: [TRIAL_CREDITS_NOTE],
       values: {
         free: columnValue(catalog, 'free', (plan) => formatAiCreditsCell('free', plan.monthlyAiCredits)),
         starter: columnValue(catalog, 'starter', (plan) =>
@@ -104,6 +112,7 @@ export function buildMainPlanComparisonRows(
     },
     {
       feature: 'Trained knowledge storage / bot',
+      featureHint: [TRAINED_KNOWLEDGE_UPLOAD_HELPER],
       values: {
         free: columnValue(catalog, 'free', (plan) => `${plan.kbStorageMbPerBot} MB`),
         starter: columnValue(catalog, 'starter', (plan) => `${plan.kbStorageMbPerBot} MB`),
@@ -154,18 +163,18 @@ export function buildMainPlanComparisonRows(
     },
     {
       feature: 'Remove branding',
-      values: { free: 'Add-on', starter: 'Add-on', pro: 'Add-on' },
+      values: {
+        free: 'Available on paid plans',
+        starter: 'Coming soon',
+        pro: 'Coming soon',
+      },
     },
     {
       feature: 'Extra bots',
-      values: { free: 'Add-on', starter: 'Add-on', pro: 'Add-on' },
-    },
-    {
-      feature: 'Extra KB storage',
       values: {
-        free: 'Add-on up to 40 MB / bot',
-        starter: 'Add-on up to 40 MB / bot',
-        pro: 'Add-on up to 40 MB / bot',
+        free: 'Available on paid plans',
+        starter: 'Coming soon',
+        pro: 'Coming soon',
       },
     },
   ];
@@ -237,7 +246,7 @@ export const FEATURE_COMPARISON_GROUP_DEFS: Array<{
       'Brand color customization',
       'Deep agent UI customization',
       'Welcome message customization',
-      'Auto retrain agent',
+      'Auto-train agent',
       'Share preview link',
       'Iframe/embed widget',
       'Allowed website origins',
@@ -276,7 +285,7 @@ export const PLAN_COMPARISON_TABLE_GROUP_DEFS: Array<{
       'Agents',
       'Workspace members',
       'AI credits',
-      'KB storage / bot',
+      'Trained knowledge storage / bot',
     ],
   },
   {
@@ -299,7 +308,7 @@ export const PLAN_COMPARISON_TABLE_GROUP_DEFS: Array<{
     title: 'Widget & sharing',
     features: [
       'Widget customization',
-      'Auto retrain agent',
+      'Auto-train agent',
       'Share preview link',
       'Iframe/embed widget',
       'Remove branding',
@@ -318,8 +327,8 @@ export const PLAN_COMPARISON_TABLE_GROUP_DEFS: Array<{
 ];
 
 const TABLE_FEATURE_ALIASES: Record<string, string> = {
-  'KB storage / bot': 'Trained knowledge storage / bot',
   'AI credits': 'AI credits / month',
+  'Trained knowledge storage / bot': 'Trained knowledge storage / bot',
 };
 
 const TABLE_FEATURE_HINTS: Record<string, readonly string[]> = {
@@ -378,13 +387,26 @@ export function buildFeatureComparisonGroups(
   }));
 }
 
+const PLAN_COMPARISON_GROUP_NOTES: Record<string, string> = {
+  'core-limits': TRAINED_KNOWLEDGE_UPLOAD_HELPER,
+  messaging: MESSAGING_CREDITS_NOTE,
+};
+
+export type PlanComparisonTableGroup = {
+  id: string;
+  title: string;
+  rows: PlanComparisonRow[];
+  note?: string;
+};
+
 export function buildPlanComparisonTableGroups(
   catalog: WorkspaceBillingPlanCatalogCard[],
-): Array<{ id: string; title: string; rows: PlanComparisonRow[] }> {
+): PlanComparisonTableGroup[] {
   return PLAN_COMPARISON_TABLE_GROUP_DEFS.map((group) => ({
     id: group.id,
     title: group.title,
     rows: pickComparisonRows(catalog, group.features),
+    note: PLAN_COMPARISON_GROUP_NOTES[group.id],
   })).filter((group) => group.rows.length > 0);
 }
 
@@ -446,23 +468,15 @@ export const FEATURE_COMPARISON_ROWS: PlanComparisonRow[] = [
   },
   {
     feature: 'Voice messages',
-    values: {
-      free: 'Included, uses credits',
-      starter: 'Included, uses credits',
-      pro: 'Included, uses credits',
-    },
+    values: { free: 'Included', starter: 'Included', pro: 'Included' },
   },
   {
     feature: 'Dictation',
-    values: {
-      free: 'Included, uses credits',
-      starter: 'Included, uses credits',
-      pro: 'Included, uses credits',
-    },
+    values: { free: 'Included', starter: 'Included', pro: 'Included' },
   },
   {
-    feature: 'Auto retrain agent',
-    values: { free: 'Included', starter: 'Included', pro: 'Included' },
+    feature: 'Auto-train agent',
+    values: { free: '—', starter: 'Included', pro: 'Included' },
   },
   {
     feature: 'Language adaptation',
@@ -502,11 +516,11 @@ export const FEATURE_COMPARISON_ROWS: PlanComparisonRow[] = [
   },
   {
     feature: 'Member-level access',
-    values: { free: 'Included', starter: 'Included', pro: 'Included' },
+    values: { free: '—', starter: 'Included', pro: 'Included' },
   },
   {
     feature: 'Agent-level access',
-    values: { free: 'Included', starter: 'Included', pro: 'Included' },
+    values: { free: '—', starter: 'Included', pro: 'Included' },
   },
   {
     feature: 'Per-person agent access',
@@ -514,7 +528,7 @@ export const FEATURE_COMPARISON_ROWS: PlanComparisonRow[] = [
   },
   {
     feature: 'Workspace members/invites',
-    values: { free: 'Included', starter: 'Included', pro: 'Included' },
+    values: { free: '—', starter: 'Included', pro: 'Included' },
   },
   {
     feature: 'Powered by Assistrio branding',
@@ -522,7 +536,11 @@ export const FEATURE_COMPARISON_ROWS: PlanComparisonRow[] = [
   },
   {
     feature: 'Remove branding',
-    values: { free: 'Add-on', starter: 'Add-on', pro: 'Add-on' },
+    values: {
+      free: 'Available on paid plans',
+      starter: 'Coming soon',
+      pro: 'Coming soon',
+    },
   },
   {
     feature: 'Priority support',

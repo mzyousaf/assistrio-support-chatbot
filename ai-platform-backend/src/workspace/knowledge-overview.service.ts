@@ -28,6 +28,7 @@ import { botNotDeletedClause } from '../bots/bot-not-deleted.util';
 import { KnowledgeUsageService } from '../knowledge/knowledge-usage.service';
 import { knowledgeUsageBreakdownToApiPayload, type KnowledgeUsageApiPayload } from '../knowledge/knowledge-usage.util';
 import { ConfigService } from '@nestjs/config';
+import { WorkspaceEntitlementsService } from '../entitlements/workspace-entitlements.service';
 import {
   DEFAULT_AGENT_TRAINING_PIPELINE_STALE_MINUTES,
   pipelineTouchCutoffFromStaleMinutes,
@@ -404,6 +405,7 @@ export class KnowledgeOverviewService {
     private readonly documentsService: DocumentsService,
     private readonly knowledgeUsageService: KnowledgeUsageService,
     private readonly configService: ConfigService,
+    private readonly entitlementsService: WorkspaceEntitlementsService,
   ) {}
 
   private liveBotFilter(botId: string) {
@@ -557,7 +559,10 @@ export class KnowledgeOverviewService {
     if (!Types.ObjectId.isValid(botId)) {
       throw new HttpException({ error: 'Invalid bot id' }, HttpStatus.BAD_REQUEST);
     }
-    const bot = await this.botModel.findOne(this.liveBotFilter(botId)).select('_id').lean();
+    const bot = (await this.botModel
+      .findOne(this.liveBotFilter(botId))
+      .select('_id workspaceId')
+      .lean()) as { _id: Types.ObjectId; workspaceId?: Types.ObjectId } | null;
     if (!bot) {
       throw this.botNotFoundEx();
     }
@@ -571,6 +576,21 @@ export class KnowledgeOverviewService {
         { error: 'Provide at least one of autoTrainEnabled, trainingDelayMinutes' },
         HttpStatus.BAD_REQUEST,
       );
+    }
+    if (autoTrainEnabled === true) {
+      const wsId = bot.workspaceId != null ? String(bot.workspaceId) : '';
+      if (wsId) {
+        const entitlements = await this.entitlementsService.resolveForWorkspace(wsId);
+        if (!entitlements.autoTrainAllowed) {
+          throw new HttpException(
+            {
+              message: 'Auto-train is available on paid plans.',
+              errorCode: 'plan_limit_auto_train',
+            },
+            HttpStatus.FORBIDDEN,
+          );
+        }
+      }
     }
     const $set: Record<string, unknown> = {};
     if (autoTrainEnabled !== undefined) {

@@ -3,16 +3,21 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CustomerMe } from '@/api/types';
 import { appToast } from '@/lib/app-toast';
+import { clearWorkspaceBillingProfileCache } from '@/lib/workspaceBillingProfileStore';
 import { WorkspaceSettingsPage } from './WorkspaceSettingsPage';
 
 const mockPatchWorkspace = vi.fn();
 const mockDeleteWorkspace = vi.fn();
+const mockGetWorkspaceBillingProfile = vi.fn();
+const mockPatchWorkspaceBillingProfile = vi.fn();
 const mockApplyCustomerSession = vi.fn();
 const mockNavigate = vi.fn();
 
 vi.mock('@/api/customerApi', () => ({
   patchWorkspace: (...args: unknown[]) => mockPatchWorkspace(...args),
   deleteWorkspace: (...args: unknown[]) => mockDeleteWorkspace(...args),
+  getWorkspaceBillingProfile: (...args: unknown[]) => mockGetWorkspaceBillingProfile(...args),
+  patchWorkspaceBillingProfile: (...args: unknown[]) => mockPatchWorkspaceBillingProfile(...args),
 }));
 
 vi.mock('@/lib/app-toast', () => ({
@@ -71,6 +76,9 @@ describe('WorkspaceSettingsPage', () => {
   }
 
   beforeEach(() => {
+    clearWorkspaceBillingProfileCache();
+    mockGetWorkspaceBillingProfile.mockResolvedValue({ ok: true, data: { profile: null } });
+    mockPatchWorkspaceBillingProfile.mockResolvedValue({ ok: true, data: { profile: null } });
     mockCustomer = {
       id: 'user-1',
       email: 'owner@example.com',
@@ -100,6 +108,7 @@ describe('WorkspaceSettingsPage', () => {
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
+    clearWorkspaceBillingProfileCache();
   });
 
   it('renders workspace details and danger zone', () => {
@@ -194,6 +203,95 @@ describe('WorkspaceSettingsPage', () => {
 
     expect((screen.getByLabelText('Workspace name') as HTMLInputElement).readOnly).toBe(true);
     expect(screen.queryByRole('button', { name: /^Update settings$/i })).toBeNull();
+  });
+
+  it('shows billing details card for managers with edit button', async () => {
+    mockGetWorkspaceBillingProfile.mockResolvedValue({
+      ok: true,
+      data: {
+        profile: {
+          workspaceId: 'ws-1',
+          name: 'Acme Inc',
+          address: '123 Mall Road',
+          city: 'Lahore',
+          zipCode: '54000',
+          country: 'PK',
+          updatedAt: '2026-05-01T00:00:00.000Z',
+          updatedBy: 'user-1',
+        },
+      },
+    });
+
+    render(
+      <MemoryRouter>
+        <WorkspaceSettingsPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Billing details')).toBeTruthy();
+    });
+    expect(screen.getByText('Acme Inc')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Edit billing details' })).toBeTruthy();
+  });
+
+  it('Workspace General add/edit modal saves profile without refresh', async () => {
+    mockGetWorkspaceBillingProfile.mockResolvedValue({ ok: true, data: { profile: null } });
+    mockPatchWorkspaceBillingProfile.mockResolvedValue({
+      ok: true,
+      data: {
+        profile: {
+          workspaceId: 'ws-1',
+          name: 'Acme Inc',
+          address: '123 Mall Road',
+          city: 'Lahore',
+          zipCode: '54000',
+          country: 'PK',
+          updatedAt: '2026-05-01T00:00:00.000Z',
+          updatedBy: 'user-1',
+        },
+      },
+    });
+
+    render(
+      <MemoryRouter>
+        <WorkspaceSettingsPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Add billing details' })).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add billing details' }));
+    fireEvent.change(screen.getByLabelText(/Company \/ Name/i), {
+      target: { value: 'Acme Inc' },
+    });
+    fireEvent.change(screen.getByLabelText(/^Address$/i), { target: { value: '123 Mall Road' } });
+    fireEvent.change(screen.getByLabelText(/^City$/i), { target: { value: 'Lahore' } });
+    fireEvent.change(screen.getByLabelText(/ZIP \/ Postal code/i), { target: { value: '54000' } });
+    fireEvent.change(screen.getByLabelText(/^Country$/i), { target: { value: 'PK' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save billing details' }));
+
+    await waitFor(() => {
+      expect(mockPatchWorkspaceBillingProfile).toHaveBeenCalled();
+      expect(screen.getByText('Acme Inc')).toBeTruthy();
+    });
+  });
+
+  it('member does not see billing details card', async () => {
+    const baseWs = requireWorkspaceFixture();
+    mockCustomer = {
+      ...mockCustomer!,
+      workspaces: [{ ...baseWs, role: 'member' }],
+    };
+
+    render(
+      <MemoryRouter>
+        <WorkspaceSettingsPage />
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByText('Billing details')).toBeNull();
   });
 
   it('requires typed confirmation before enabling delete in modal', () => {

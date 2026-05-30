@@ -6,10 +6,11 @@ import { useCustomerAuth } from '../../auth/CustomerAuthContext';
 import { canManageActiveWorkspace } from '../../lib/canManageActiveWorkspace';
 import { ASSISTRIO_WORKSPACE_BOT_REFRESH, requestNavbarBotRefresh } from '../../lib/botSyncEvents';
 import { isCustomerResourceUnavailable, MSG_DELETED_BOT } from '../../lib/customerResourceUnavailable';
+import { isWorkspaceBotOverLimitLockedError } from '../../lib/planLimitError';
 import { WORKSPACE_BOT_ACCESS_DENIED_MESSAGE, WORKSPACE_BOT_PREVIEW_ACCESS_DENIED_MESSAGE, isWorkspaceBotAccessDenied, isWorkspaceBotPreviewAccessDenied } from '../../lib/botsListMessages';
 import { appToast } from '@/lib/app-toast';
 
-export type BotWorkspaceLoadState = 'loading' | 'ok' | 'not_found' | 'forbidden' | 'error';
+export type BotWorkspaceLoadState = 'loading' | 'ok' | 'not_found' | 'forbidden' | 'over_limit_locked' | 'error';
 
 type BotWorkspaceValue = {
   botId: string | undefined;
@@ -88,8 +89,14 @@ export function BotWorkspaceProvider({ children }: { children: ReactNode }) {
           return;
         }
         if (res.status === 403) {
+          const overLimitLocked = isWorkspaceBotOverLimitLockedError(res);
           const previewDenied = isWorkspaceBotPreviewAccessDenied(res);
           const accessDenied = isWorkspaceBotAccessDenied(res);
+          if (overLimitLocked) {
+            setLoadState('over_limit_locked');
+            setLoadMessage(res.error || 'This agent is inactive because your workspace is over its agent limit.');
+            return;
+          }
           const msg = previewDenied
             ? WORKSPACE_BOT_PREVIEW_ACCESS_DENIED_MESSAGE
             : accessDenied

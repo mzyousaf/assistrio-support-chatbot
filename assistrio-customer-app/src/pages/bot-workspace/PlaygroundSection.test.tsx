@@ -3,7 +3,8 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PlaygroundSection } from './PlaygroundSection';
 import { WORKSPACE_BOT_PREVIEW_ACCESS_DENIED_MESSAGE } from '@/lib/botsListMessages';
-import { PLAN_LIMIT_AI_CREDITS_CODE, PLAN_LIMIT_AI_CREDITS_MESSAGE } from '@/lib/resolveChatRuntimeErrorMessage';
+import { PLAN_LIMIT_AI_CREDITS_CODE } from '@/lib/resolveChatRuntimeErrorMessage';
+import { WORKSPACE_BOT_LIMIT_EXCEEDED_CODE, WORKSPACE_BOT_LIMIT_EXCEEDED_MESSAGE } from '@/lib/planLimitError';
 
 const mockPostChat = vi.fn();
 
@@ -25,6 +26,10 @@ vi.mock('./BotWorkspaceContext', () => ({
     bot: { id: 'bot-1', status: 'published', name: 'Test' },
     botId: 'bot-1',
   }),
+}));
+
+vi.mock('@/components/billing/UpgradePlanModalProvider', () => ({
+  useUpgradePlanModal: () => ({ openUpgradeModal: vi.fn() }),
 }));
 
 describe('PlaygroundSection chat errors', () => {
@@ -58,6 +63,30 @@ describe('PlaygroundSection chat errors', () => {
     });
   });
 
+  it('shows inactive-agent copy when chat API returns workspace_bot_limit_exceeded', async () => {
+    mockPostChat.mockResolvedValue({
+      ok: false,
+      status: 403,
+      error: WORKSPACE_BOT_LIMIT_EXCEEDED_MESSAGE,
+      errorCode: WORKSPACE_BOT_LIMIT_EXCEEDED_CODE,
+    });
+
+    render(
+      <MemoryRouter>
+        <PlaygroundSection />
+      </MemoryRouter>,
+    );
+
+    fireEvent.change(screen.getByPlaceholderText(/type a test question/i), {
+      target: { value: 'Hello' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^send$/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(WORKSPACE_BOT_LIMIT_EXCEEDED_MESSAGE)).toBeTruthy();
+    });
+  });
+
   it('shows credit limit copy when chat API returns plan_limit_ai_credits', async () => {
     mockPostChat.mockResolvedValue({
       ok: false,
@@ -78,7 +107,7 @@ describe('PlaygroundSection chat errors', () => {
     fireEvent.click(screen.getByRole('button', { name: /^send$/i }));
 
     await waitFor(() => {
-      expect(screen.getByText(PLAN_LIMIT_AI_CREDITS_MESSAGE)).toBeTruthy();
+      expect(screen.getByText(/Your workspace has used all AI credits for this billing period/i)).toBeTruthy();
       expect(screen.getByRole('link', { name: /view plans/i }).getAttribute('href')).toBe('/settings/plans');
     });
   });

@@ -9,9 +9,12 @@ import { WorkspaceContentContainer } from '@/layout/workspace-layout';
 import { WorkspaceLoadFailureCard } from '@/components/WorkspaceLoadFailureCard';
 import { resolveBotWorkspaceFailurePresentation } from '@/lib/workspaceLoadFailurePresentation';
 import { ReadOnlyWorkspaceNotice } from '@/components/workspace/ReadOnlyWorkspaceNotice';
+import { useUpgradePlanModal } from '@/components/billing/UpgradePlanModalProvider';
+import { WORKSPACE_BOT_LIMIT_EXCEEDED_MESSAGE } from '@/lib/planLimitError';
 
 function BotWorkspaceShell() {
   const { bot, loadState, loadMessage, botId, reload, canManageBot } = useBotWorkspace();
+  const { openUpgradeModal } = useUpgradePlanModal();
 
   const showStaleWorkspaceWhileRefreshing =
     loadState === 'loading' && Boolean(bot && botId && bot.id === botId);
@@ -23,6 +26,23 @@ function BotWorkspaceShell() {
           <div className="flex min-h-0 flex-1 items-center justify-center p-6">
             <InlineLoader title="Loading assistant…" />
           </div>
+        </div>
+      </WorkspaceContentContainer>
+    );
+  }
+
+  if (loadState === 'over_limit_locked') {
+    const description = loadMessage.trim() || WORKSPACE_BOT_LIMIT_EXCEEDED_MESSAGE;
+    return (
+      <WorkspaceContentContainer size="full">
+        <div className="flex min-h-0 min-h-[calc(100svh-var(--nav-height)-1.5rem)] flex-1 flex-col items-center justify-center p-6">
+          <WorkspaceLoadFailureCard
+            icon="forbidden"
+            title="This agent is inactive"
+            description={`${description} Reactivate the Extra bot add-on or remove another agent.`}
+            onPrimary={() => openUpgradeModal({ reason: 'bots', recommendedPlanKey: 'pro' })}
+            primaryLabel="View add-ons"
+          />
         </div>
       </WorkspaceContentContainer>
     );

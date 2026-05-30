@@ -3,7 +3,7 @@ export const SETTINGS_NAV_ITEMS = [
   { to: '/settings/workspace', label: 'General' },
   { to: '/settings/members', label: 'Members' },
   { to: '/settings/plans', label: 'Plans' },
-  { to: '/settings/billing', label: 'Billing' },
+  { to: '/settings/billing', label: 'Billing & Invoices' },
 ] as const;
 
 export type SettingsNavRoute = (typeof SETTINGS_NAV_ITEMS)[number]['to'];

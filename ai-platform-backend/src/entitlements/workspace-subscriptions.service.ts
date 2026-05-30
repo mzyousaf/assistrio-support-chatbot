@@ -1,19 +1,41 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { getServerLocalMonthlyBillingPeriod } from '../chat/chat-billing-period.util';
+import { computeFreeTrialPeriod } from './plan-trial-period.util';
+import type { BillingProvider } from '../billing/billing-provider.types';
 import {
   WorkspaceSubscription,
   type WorkspaceSubscriptionStatus,
 } from '../models/workspace-subscription.schema';
 import type { PlanKey } from './plan-catalog';
 
-type WorkspaceSubscriptionLean = {
+export type WorkspaceSubscriptionLean = {
   workspaceId: Types.ObjectId;
   planKey: PlanKey;
   status: WorkspaceSubscriptionStatus;
   currentPeriodStart: Date;
   currentPeriodEnd: Date;
+  provider?: BillingProvider | null;
+  providerCustomerId?: string | null;
+  providerSubscriptionId?: string | null;
+  providerVariantId?: string | null;
+  cancelAtPeriodEnd?: boolean;
+  paymentMethod?: {
+    brand?: string | null;
+    last4?: string | null;
+    label?: string | null;
+  } | null;
+  paymentFailure?: {
+    failedAt: Date;
+    invoiceId?: string | null;
+    invoiceUrl?: string | null;
+    amount?: number | null;
+    currency?: string | null;
+    cardBrand?: string | null;
+    cardLastFour?: string | null;
+    notifiedWebhookEventId?: string | null;
+    notifiedInvoiceId?: string | null;
+  } | null;
 };
 
 @Injectable()
@@ -41,15 +63,15 @@ export class WorkspaceSubscriptionsService {
       return existing as WorkspaceSubscriptionLean;
     }
 
-    const { billingPeriodStart, billingPeriodEnd } = getServerLocalMonthlyBillingPeriod();
+    const { periodStart, periodEnd } = computeFreeTrialPeriod();
 
     try {
       const created = await this.subscriptionModel.create({
         workspaceId,
         planKey: 'free' satisfies PlanKey,
-        status: 'free' satisfies WorkspaceSubscriptionStatus,
-        currentPeriodStart: billingPeriodStart,
-        currentPeriodEnd: billingPeriodEnd,
+        status: 'trialing' satisfies WorkspaceSubscriptionStatus,
+        currentPeriodStart: periodStart,
+        currentPeriodEnd: periodEnd,
       });
       return created.toObject() as WorkspaceSubscriptionLean;
     } catch (err: unknown) {

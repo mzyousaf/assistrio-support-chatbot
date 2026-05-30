@@ -41,6 +41,7 @@ import {
 } from './widget-embed-chat-multipart.util';
 import type { MessageAttachment, MessageSpeechInput } from '../models/message.schema';
 import { KnowledgeBaseItemService } from '../knowledge/knowledge-base-item.service';
+import { WorkspaceBotLimitService } from '../entitlements/workspace-bot-limit.service';
 import {
   mergeSanitizedConversationOrigins,
   parseConversationOriginFromUnknown,
@@ -331,6 +332,7 @@ export class WidgetPreviewController {
     private readonly workspacesService: WorkspacesService,
     private readonly widgetSpeechService: WidgetSpeechService,
     private readonly knowledgeBaseItemService: KnowledgeBaseItemService,
+    private readonly workspaceBotLimitService: WorkspaceBotLimitService,
   ) {}
 
   /**
@@ -620,6 +622,10 @@ export class WidgetPreviewController {
     }
 
     this.assertPreviewWidgetIpRateLimitOrThrow(request, bot as Record<string, unknown>);
+
+    await this.workspaceBotLimitService.assertBotDocWithinEffectiveLimitIfWorkspaceScoped(
+      bot as Record<string, unknown>,
+    );
 
     const ownerUserId = await this.verifyPreviewAccessOrThrow(
       request,

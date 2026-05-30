@@ -2,6 +2,8 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CustomerMe } from '../../api/types';
+import { mockTrialWorkspaceSummary } from '@/lib/planEntitlements';
+import { UpgradePlanModalProvider } from '@/components/billing/UpgradePlanModalProvider';
 import { SettingsMembersPage } from './SettingsMembersPage';
 
 const mockGetMembers = vi.fn();
@@ -19,22 +21,33 @@ vi.mock('../../api/customerApi', () => ({
   postWorkspaceInviteResend: vi.fn(),
   deleteWorkspaceMember: vi.fn(),
   getCustomerBots: vi.fn().mockResolvedValue({ ok: true, data: [] }),
+  getWorkspaceBillingSummary: vi.fn().mockResolvedValue({
+    ok: true,
+    data: {
+      workspaceId: 'ws-1',
+      plan: { key: 'free', name: 'Free', priceMonthly: 0, status: 'trialing', currentPeriodStart: '', currentPeriodEnd: '' },
+      entitlements: {},
+      usage: {},
+      planCatalog: [],
+      addonCatalog: [],
+      activeAddons: [],
+    },
+  }),
 }));
 
-const baseWorkspace = {
-  id: 'ws-1',
-  name: 'Acme',
-  planKey: 'free',
-  planName: 'Free',
+const baseWorkspace = mockTrialWorkspaceSummary();
+
+const paidWorkspace = mockTrialWorkspaceSummary({
+  planKey: 'starter',
+  planName: 'Starter',
   subscriptionStatus: 'active',
-  botLimit: 1,
-  memberLimit: 3,
-  monthlyAiCredits: 100,
-  kbStorageMbPerBot: 10,
-  analyticsHistoryDays: 7,
-  canExportReports: false,
-  showPoweredByAssistrio: true,
-} as const;
+  memberLimit: 5,
+  memberInvitesAllowed: true,
+  isTrialPlan: false,
+  autoTrainAllowed: true,
+  addonsAllowed: true,
+  creditsRenewMonthly: true,
+});
 
 const ownerCustomer: CustomerMe = {
   id: 'user-owner',
@@ -42,7 +55,7 @@ const ownerCustomer: CustomerMe = {
   role: 'customer',
   activeWorkspaceId: 'ws-1',
   workspaceIds: ['ws-1'],
-  workspaces: [{ ...baseWorkspace, role: 'owner' as const }],
+  workspaces: [{ ...paidWorkspace, role: 'owner' as const }],
 };
 
 const adminCustomer: CustomerMe = {
@@ -51,7 +64,7 @@ const adminCustomer: CustomerMe = {
   role: 'customer',
   activeWorkspaceId: 'ws-1',
   workspaceIds: ['ws-1'],
-  workspaces: [{ ...baseWorkspace, role: 'admin' as const }],
+  workspaces: [{ ...paidWorkspace, role: 'admin' as const }],
 };
 
 const memberCustomer: CustomerMe = {
@@ -75,7 +88,9 @@ vi.mock('../../auth/CustomerAuthContext', () => ({
 function renderPage() {
   return render(
     <MemoryRouter>
-      <SettingsMembersPage />
+      <UpgradePlanModalProvider>
+        <SettingsMembersPage />
+      </UpgradePlanModalProvider>
     </MemoryRouter>,
   );
 }
@@ -147,7 +162,7 @@ describe('SettingsMembersPage', () => {
     expect(screen.getByRole('heading', { name: 'Members Management' })).toBeTruthy();
     expect(screen.queryByText('Seat usage')).toBeNull();
     expect(screen.queryByText('Free plan')).toBeNull();
-    expect(screen.getByText('2/3')).toBeTruthy();
+    expect(screen.getByText('2/5')).toBeTruthy();
     expect(screen.getByText('Active members')).toBeTruthy();
     expect(screen.getByText('Pending invites')).toBeTruthy();
     expect(screen.queryByText('Seats remaining')).toBeNull();
@@ -160,10 +175,63 @@ describe('SettingsMembersPage', () => {
     expect(peopleCard?.contains(seatUsage ?? null)).toBe(false);
   });
 
+  it('disables invite button on free trial with upgrade copy', async () => {
+    mockCustomer = {
+      ...ownerCustomer,
+      workspaces: [{ ...mockTrialWorkspaceSummary(), role: 'owner' as const }],
+    };
+    renderPage();
+    const inviteButtons = await screen.findAllByRole('button', { name: /Invite member/i });
+    const disabledInvite = inviteButtons.find((el) => el.tagName === 'BUTTON');
+    expect((disabledInvite as HTMLButtonElement | undefined)?.disabled).toBe(true);
+  });
+
+  it('opens upgrade modal when invite is locked on free trial', async () => {
+    mockCustomer = {
+      ...ownerCustomer,
+      workspaces: [{ ...mockTrialWorkspaceSummary(), role: 'owner' as const }],
+    };
+    renderPage();
+    expect(await screen.findByText('Invite teammates on a paid plan')).toBeTruthy();
+    const inviteTrigger = (await screen.findAllByRole('button', { name: /Invite member/i })).find(
+      (el) => el.getAttribute('tabindex') === '0',
+    );
+    expect(inviteTrigger).toBeTruthy();
+    fireEvent.click(inviteTrigger!);
+    expect(await screen.findByRole('dialog')).toBeTruthy();
+    expect(screen.getByText('Upgrade to continue')).toBeTruthy();
+    expect(screen.getByText('Upgrade to invite teammates.')).toBeTruthy();
+  });
+
   it('shows invite button and opens invite modal from header', async () => {
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: /Invite member/i }));
     expect(await screen.findByRole('dialog')).toBeTruthy();
+  });
+
+  it('shows over seat limit warning and disables invite after downgrade', async () => {
+    mockCustomer = {
+      ...ownerCustomer,
+      workspaces: [{ ...paidWorkspace, role: 'owner' as const, memberLimit: 5 }],
+    };
+    mockGetMembers.mockResolvedValue({
+      ok: true,
+      data: Array.from({ length: 6 }, (_, index) => ({
+        userId: `user-${index}`,
+        email: `member${index}@example.com`,
+        firstName: `Member`,
+        lastName: `${index}`,
+        picture: null,
+        role: index === 0 ? 'owner' : 'member',
+        joinedAt: '2026-01-01T00:00:00.000Z',
+      })),
+    });
+    renderPage();
+    expect(await screen.findByText('Over seat limit')).toBeTruthy();
+    expect(screen.getByText(/more members than your current plan allows/i)).toBeTruthy();
+    const inviteButtons = screen.getAllByRole('button', { name: /Invite member/i });
+    const disabledInvite = inviteButtons.find((el) => el.tagName === 'BUTTON');
+    expect((disabledInvite as HTMLButtonElement | undefined)?.disabled).toBe(true);
   });
 
   it('shows subtle invite hint when only the owner is present', async () => {

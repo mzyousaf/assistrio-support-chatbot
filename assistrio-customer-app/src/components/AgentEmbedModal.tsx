@@ -181,6 +181,7 @@ export function AgentEmbedModal({ open, bot, onClose }: Props) {
           allowedOrigins={allowedOriginLabels}
           widgetSnippet={widgetSnippet}
           iframeSnippet={iframeSnippet}
+          compactCopyButton
         />
       ) : null}
     </Modal>

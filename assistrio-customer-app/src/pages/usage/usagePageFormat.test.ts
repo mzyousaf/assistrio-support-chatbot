@@ -12,7 +12,8 @@ import {
 
 describe('usagePageFormat', () => {
   it('formats subscription status labels', () => {
-    expect(formatSubscriptionStatusLabel('free')).toBe('Free');
+    expect(formatSubscriptionStatusLabel('free')).toBe('Free trial');
+    expect(formatSubscriptionStatusLabel('trialing')).toBe('Free trial');
     expect(formatSubscriptionStatusLabel('active')).toBe('Active');
   });
 

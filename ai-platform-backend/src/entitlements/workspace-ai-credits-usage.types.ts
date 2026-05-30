@@ -20,5 +20,8 @@ export type WorkspaceAiCreditsUsageSummary = {
   topUpCreditsRemaining: number;
   totalCreditsAvailable: number;
   isOverLimit: boolean;
+  isTrialPlan: boolean;
+  isTrialExpired: boolean;
+  creditsRenewMonthly: boolean;
   byBot: WorkspaceAiCreditsUsageByBot[];
 };

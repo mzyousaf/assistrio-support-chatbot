@@ -4,6 +4,8 @@ import {
   AI_CREDITS_USAGE_UNAVAILABLE_MESSAGE,
   PLAN_LIMIT_AI_CREDITS_CODE,
   PLAN_LIMIT_AI_CREDITS_MESSAGE,
+  WORKSPACE_BOT_LIMIT_EXCEEDED_CODE,
+  WORKSPACE_BOT_LIMIT_EXCEEDED_MESSAGE,
   resolveChatRuntimeErrorMessage,
 } from "./resolveChatRuntimeErrorMessage";
 
@@ -26,12 +28,12 @@ describe("resolveChatRuntimeErrorMessage", () => {
     ).toBe(AI_CREDITS_USAGE_UNAVAILABLE_MESSAGE);
   });
 
-  it("prefers mapped copy over raw backend message", () => {
+  it("maps workspace_bot_limit_exceeded to inactive-agent copy", () => {
     expect(
       resolveChatRuntimeErrorMessage({
-        errorCode: PLAN_LIMIT_AI_CREDITS_CODE,
-        error: "Your workspace has used all AI credits for this billing period.",
+        errorCode: WORKSPACE_BOT_LIMIT_EXCEEDED_CODE,
+        message: "This agent is inactive because your workspace is over its agent limit.",
       }),
-    ).toBe(PLAN_LIMIT_AI_CREDITS_MESSAGE);
+    ).toBe(WORKSPACE_BOT_LIMIT_EXCEEDED_MESSAGE);
   });
 });

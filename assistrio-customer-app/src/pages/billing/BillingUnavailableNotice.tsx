@@ -6,9 +6,18 @@ type Props = {
   role: string | null | undefined;
   variant?: 'chip' | 'banner';
   className?: string;
+  /** When true, checkout is configured and this notice is hidden. */
+  checkoutEnabled?: boolean;
 };
 
-export function BillingUnavailableNotice({ role, variant = 'banner', className }: Props) {
+export function BillingUnavailableNotice({
+  role,
+  variant = 'banner',
+  className,
+  checkoutEnabled = false,
+}: Props) {
+  if (checkoutEnabled) return null;
+
   const isOwner = isWorkspaceOwnerRole(role);
   const message = isOwner
     ? 'Checkout is not enabled yet.'

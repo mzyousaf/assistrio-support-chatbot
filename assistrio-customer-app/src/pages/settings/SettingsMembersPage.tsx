@@ -12,6 +12,8 @@ import {
 import type { WorkspaceInviteRole, WorkspaceInviteSummary, WorkspaceMemberSummary } from '@/api/types';
 import { useCustomerAuth } from '@/auth/CustomerAuthContext';
 import { InviteMemberModal } from '@/components/settings/InviteMemberModal';
+import { PaidPlanFeatureCalloutForReason } from '@/components/billing/PaidPlanFeatureCallout';
+import { useUpgradePlanModal } from '@/components/billing/UpgradePlanModalProvider';
 import { EditMemberBotAccessModal } from '@/components/settings/EditMemberBotAccessModal';
 import { MembersPageSkeleton } from '@/components/settings/MembersPageSkeleton';
 import { SettingsMembersConfirmModal } from '@/components/settings/SettingsMembersConfirmModal';
@@ -38,6 +40,14 @@ import {
   isWorkspaceManagerRole,
   isWorkspaceOwnerRole,
 } from '@/lib/workspaceRoles';
+import {
+  FREE_TRIAL_INVITE_UPGRADE_COPY,
+  workspaceMemberInvitesAllowed,
+} from '@/lib/planEntitlements';
+import {
+  isWorkspaceOverMemberLimit,
+  WORKSPACE_MEMBER_LIMIT_EXCEEDED_MESSAGE,
+} from '@/lib/workspaceMemberOverLimit';
 
 type LoadState = 'idle' | 'loading' | 'ready' | 'error';
 
@@ -81,6 +91,7 @@ export function SettingsMembersPage() {
   const [editAccessRow, setEditAccessRow] = useState<WorkspacePersonRow | null>(null);
 
   const canManageMembers = isWorkspaceManagerRole(role);
+  const { openUpgradeModal } = useUpgradePlanModal();
 
   const pendingInvites = useMemo(() => invites.filter(isPendingWorkspaceInvite), [invites]);
   const directoryRows = useMemo(
@@ -89,6 +100,12 @@ export function SettingsMembersPage() {
   );
   const seatsUsed = useMemo(() => countWorkspaceSeatsUsed(members.length, invites), [members.length, invites]);
   const memberLimit = workspace?.memberLimit ?? null;
+  const inviteAllowed = workspaceMemberInvitesAllowed(workspace);
+  const isOverMemberLimit = useMemo(
+    () => isWorkspaceOverMemberLimit(members.length, memberLimit),
+    [members.length, memberLimit],
+  );
+  const canInviteNewMember = inviteAllowed && !isOverMemberLimit;
 
   const showInviteHint = useMemo(
     () => members.length <= 1 && pendingInvites.length === 0,
@@ -224,14 +241,45 @@ export function SettingsMembersPage() {
     appToast.success('Role updated.');
   };
 
+  const openMembersUpgradeModal = useCallback(() => {
+    openUpgradeModal({ reason: 'members' });
+  }, [openUpgradeModal]);
+
   const inviteButton =
     canManageMembers && activeWorkspaceId && !accessDenied ? (
-      <Tooltip content="Invite a teammate to this workspace" side="top">
-        <Button type="button" variant="primary" size="sm" onClick={openInviteModal}>
-          <UserPlus className="h-4 w-4" aria-hidden />
-          Invite member
-        </Button>
-      </Tooltip>
+      canInviteNewMember ? (
+        <Tooltip content="Invite a teammate to this workspace" side="top">
+          <Button type="button" variant="primary" size="sm" onClick={openInviteModal}>
+            <UserPlus className="h-4 w-4" aria-hidden />
+            Invite member
+          </Button>
+        </Tooltip>
+      ) : (
+        <Tooltip
+          content={!inviteAllowed ? FREE_TRIAL_INVITE_UPGRADE_COPY : WORKSPACE_MEMBER_LIMIT_EXCEEDED_MESSAGE}
+          side="top"
+        >
+          <span
+            className="inline-flex cursor-pointer"
+            role="button"
+            tabIndex={0}
+            onClick={() => {
+              if (!inviteAllowed || isOverMemberLimit) openMembersUpgradeModal();
+            }}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                if (!inviteAllowed || isOverMemberLimit) openMembersUpgradeModal();
+              }
+            }}
+          >
+            <Button type="button" variant="primary" size="sm" disabled aria-disabled="true" tabIndex={-1}>
+              <UserPlus className="h-4 w-4" aria-hidden />
+              Invite member
+            </Button>
+          </span>
+        </Tooltip>
+      )
     ) : null;
 
   if (!activeWorkspaceId || !workspace) {
@@ -289,11 +337,37 @@ export function SettingsMembersPage() {
             />
           ) : (
             <div className="space-y-4">
+              {!inviteAllowed ? (
+                <PaidPlanFeatureCalloutForReason reason="members" />
+              ) : null}
+              {isOverMemberLimit ? (
+                <Card className="border-amber-200/90 bg-amber-50/70 shadow-[var(--shadow-card)]">
+                  <CardBody className="flex items-start gap-3">
+                    <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-800" aria-hidden />
+                    <div className="min-w-0">
+                      <p className="m-0 font-semibold text-amber-950">Over seat limit</p>
+                      <p className="m-0 mt-1 text-sm leading-relaxed text-amber-900/90">
+                        {WORKSPACE_MEMBER_LIMIT_EXCEEDED_MESSAGE}
+                      </p>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        className="mt-3"
+                        onClick={openMembersUpgradeModal}
+                      >
+                        View plans
+                      </Button>
+                    </div>
+                  </CardBody>
+                </Card>
+              ) : null}
               <WorkspaceSeatUsageCards
                 seatsUsed={seatsUsed}
                 memberLimit={memberLimit}
                 activeMembers={members.length}
                 pendingInvites={pendingInvites.length}
+                isOverMemberLimit={isOverMemberLimit}
               />
               <WorkspacePeopleTable
                 rows={directoryRows}

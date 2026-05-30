@@ -8,6 +8,7 @@ import type {
   AdminCustomersListParams,
   AdminCustomersListResponse,
   AdminWorkspaceBillingSummary,
+  BillingAdminSyncResult,
   AdminLoginResponse,
   AdminLogoutResponse,
   AdminMe,
@@ -110,6 +111,20 @@ export function getAdminCustomerWorkspaces(customerId: string) {
 export function getAdminWorkspaceBillingSummary(workspaceId: string) {
   return adminFetch<AdminWorkspaceBillingSummary>(
     `${P}/workspaces/${encodeURIComponent(workspaceId)}/billing/summary`,
+  );
+}
+
+export function postAdminWorkspaceBillingSync(workspaceId: string) {
+  return adminFetch<BillingAdminSyncResult>(
+    `${P}/workspaces/${encodeURIComponent(workspaceId)}/billing/sync`,
+    { method: 'POST' },
+  );
+}
+
+export function postAdminReplayWebhookEvent(eventId: string) {
+  return adminFetch<{ replayed: boolean; status: string; message: string }>(
+    `${P}/billing/webhook-events/${encodeURIComponent(eventId)}/replay`,
+    { method: 'POST' },
   );
 }
 

@@ -10,6 +10,10 @@ export const WORKSPACE_BOT_PREVIEW_ACCESS_DENIED_CODE = "workspace_bot_preview_a
 export const WORKSPACE_BOT_PREVIEW_ACCESS_DENIED_MESSAGE =
   "You don't have permission to preview this agent. Ask a workspace owner or admin for access.";
 
+export const WORKSPACE_BOT_LIMIT_EXCEEDED_CODE = "workspace_bot_limit_exceeded" as const;
+export const WORKSPACE_BOT_LIMIT_EXCEEDED_MESSAGE =
+  "This agent is currently inactive. Please contact the workspace owner.";
+
 export type ChatRuntimeErrorInput = {
   error?: string;
   errorCode?: string;
@@ -46,6 +50,8 @@ export function resolveChatRuntimeErrorMessage(
       return AI_CREDITS_USAGE_UNAVAILABLE_MESSAGE;
     case WORKSPACE_BOT_PREVIEW_ACCESS_DENIED_CODE:
       return WORKSPACE_BOT_PREVIEW_ACCESS_DENIED_MESSAGE;
+    case WORKSPACE_BOT_LIMIT_EXCEEDED_CODE:
+      return WORKSPACE_BOT_LIMIT_EXCEEDED_MESSAGE;
     case "BOT_NOT_PUBLISHED":
       return "This bot is not available for embedding right now.";
     case "INVALID_ACCESS_KEY":

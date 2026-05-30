@@ -45,6 +45,17 @@ export const configValidationSchema = Joi.object({
   /** Must match Google Cloud Console exactly (any non-empty string when OAuth is used). */
     GOOGLE_OAUTH_REDIRECT_URI: Joi.string().optional().allow(''),
   CUSTOMER_APP_BASE_URL: Joi.string().optional().allow(''),
+  ADMIN_APP_BASE_URL: Joi.string().optional().allow(''),
+  BILLING_ALERT_EMAIL: Joi.string().optional().allow(''),
+  SEND_ASSISTRIO_PAYMENT_RECEIPT_EMAIL: Joi.string().valid('true', 'false', '1', '0', '').optional().allow(''),
+  LEMON_SQUEEZY_API_KEY: Joi.string().optional().allow(''),
+  LEMON_SQUEEZY_STORE_ID: Joi.string().optional().allow(''),
+  LEMON_SQUEEZY_WEBHOOK_SECRET: Joi.string().optional().allow(''),
+  LEMON_SQUEEZY_STARTER_VARIANT_ID: Joi.string().optional().allow(''),
+  LEMON_SQUEEZY_PRO_VARIANT_ID: Joi.string().optional().allow(''),
+  LEMON_SQUEEZY_ADDON_EXTRA_BOT_VARIANT_ID: Joi.string().optional().allow(''),
+  LEMON_SQUEEZY_ADDON_REMOVE_BRANDING_VARIANT_ID: Joi.string().optional().allow(''),
+  LEMON_SQUEEZY_TOPUP_1000_CREDITS_VARIANT_ID: Joi.string().optional().allow(''),
   /** Optional `Domain` for customer session cookie (`ar_customer_session`) only. */
   SESSION_COOKIE_DOMAIN: Joi.string().optional().allow(''),
   TOPIC_SENTIMENT_MODEL: Joi.string().optional().allow(''),

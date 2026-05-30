@@ -6,10 +6,19 @@ import {
   isWorkspaceBotAccessDenied,
   isWorkspaceBotPreviewAccessDenied,
 } from './botsListMessages';
+import {
+  WORKSPACE_BOT_LIMIT_EXCEEDED_CODE,
+  WORKSPACE_BOT_LIMIT_EXCEEDED_MESSAGE,
+} from './planLimitError';
 
 export const PLAN_LIMIT_AI_CREDITS_CODE = 'plan_limit_ai_credits' as const;
+export const FREE_TRIAL_EXPIRED_CODE = 'free_trial_expired' as const;
 export const PLAN_LIMIT_AI_CREDITS_MESSAGE =
   'This workspace has used all AI credits for this billing period. Please upgrade your plan or wait until credits reset.';
+export const PLAN_LIMIT_AI_CREDITS_TRIAL_MESSAGE =
+  'This workspace has used all trial AI credits. Please upgrade to continue using AI chat.';
+export const FREE_TRIAL_EXPIRED_MESSAGE =
+  'Your free trial has ended. Please upgrade to continue using AI chat.';
 
 export const AI_CREDITS_USAGE_UNAVAILABLE_CODE = 'ai_credits_usage_unavailable' as const;
 export const AI_CREDITS_USAGE_UNAVAILABLE_MESSAGE =
@@ -24,10 +33,16 @@ export function resolveChatRuntimeErrorMessage(result: {
   const code = typeof result.errorCode === 'string' ? result.errorCode.trim() : '';
 
   if (code === PLAN_LIMIT_AI_CREDITS_CODE) {
-    return PLAN_LIMIT_AI_CREDITS_MESSAGE;
+    return result.error?.trim() || PLAN_LIMIT_AI_CREDITS_MESSAGE;
+  }
+  if (code === FREE_TRIAL_EXPIRED_CODE) {
+    return result.error?.trim() || FREE_TRIAL_EXPIRED_MESSAGE;
   }
   if (code === AI_CREDITS_USAGE_UNAVAILABLE_CODE) {
     return AI_CREDITS_USAGE_UNAVAILABLE_MESSAGE;
+  }
+  if (code === WORKSPACE_BOT_LIMIT_EXCEEDED_CODE) {
+    return result.error?.trim() || WORKSPACE_BOT_LIMIT_EXCEEDED_MESSAGE;
   }
 
   if (isWorkspaceBotPreviewAccessDenied(result)) {

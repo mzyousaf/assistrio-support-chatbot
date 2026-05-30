@@ -11,6 +11,7 @@ import { WorkspaceContentContainer } from '@/layout/workspace-layout/WorkspaceCo
 import { appToast } from '@/lib/app-toast';
 import { resolveActiveCustomerWorkspace } from '@/lib/resolveActiveCustomerWorkspace';
 import { resolvePathAfterWorkspaceSwitch } from '@/lib/workspaceSwitchNavigation';
+import { BillingProfileCard } from '@/pages/billing/WorkspaceBillingProfileSection';
 import { isWorkspaceManagerRole } from '@/lib/workspaceRoles';
 
 function isPaidWorkspace(planKey?: string, subscriptionStatus?: string): boolean {
@@ -24,6 +25,7 @@ export function WorkspaceSettingsPage() {
   const { customer, applyCustomerSession } = useCustomerAuth();
   const { workspace, activeWorkspaceId, role } = resolveActiveCustomerWorkspace(customer);
   const canManageWorkspace = isWorkspaceManagerRole(role);
+  const canViewBillingProfile = canManageWorkspace;
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [savingName, setSavingName] = useState(false);
   const nameInputId = useId();
@@ -161,6 +163,14 @@ export function WorkspaceSettingsPage() {
               </div>
             </CardBody>
           </Card>
+
+          {canViewBillingProfile ? (
+            <BillingProfileCard
+              workspaceId={workspaceId}
+              canManage={canViewBillingProfile}
+              cardId="workspace-billing-profile"
+            />
+          ) : null}
 
           <section className="mt-6 border-t border-slate-200/90 pt-6">
             <Card className="border-red-200/70 bg-red-50/25 shadow-[var(--shadow-card)]">

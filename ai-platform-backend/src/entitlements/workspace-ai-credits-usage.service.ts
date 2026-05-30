@@ -14,15 +14,26 @@ export class WorkspaceAiCreditsUsageService {
   ) {}
 
   /**
-   * Read-only monthly AI credit usage for a workspace (no enforcement).
-   * Sums ledger rows in the current server-local billing period.
+   * Read-only AI credit usage for a workspace (no enforcement).
+   * Free trial sums ledger rows across the trial window; paid plans use the current calendar month.
    */
   async getWorkspaceAiCreditsUsage(
     workspaceId: string,
     now: Date = new Date(),
   ): Promise<WorkspaceAiCreditsUsageSummary> {
     const entitlements = await this.entitlementsService.resolveForWorkspace(workspaceId);
-    const { billingPeriodStart, billingPeriodEnd } = getServerLocalMonthlyBillingPeriod(now);
+
+    let billingPeriodStart: Date;
+    let billingPeriodEnd: Date;
+
+    if (entitlements.isTrialPlan && entitlements.trialStartedAt && entitlements.trialEndsAt) {
+      billingPeriodStart = new Date(entitlements.trialStartedAt);
+      billingPeriodEnd = new Date(entitlements.trialEndsAt);
+    } else {
+      const period = getServerLocalMonthlyBillingPeriod(now);
+      billingPeriodStart = period.billingPeriodStart;
+      billingPeriodEnd = period.billingPeriodEnd;
+    }
 
     let monthlyCreditsUsed = 0;
     let byBot: WorkspaceAiCreditsUsageSummary['byBot'] = [];
@@ -58,9 +69,14 @@ export class WorkspaceAiCreditsUsageService {
     }
 
     const monthlyAiCredits = entitlements.monthlyAiCredits;
-    const topUpCreditsRemaining = 0;
-    const isOverLimit = monthlyCreditsUsed > monthlyAiCredits;
-    const monthlyCreditsRemaining = Math.max(0, monthlyAiCredits - monthlyCreditsUsed);
+    const isTrialExpired = entitlements.isTrialExpired;
+    const topUpCreditsRemaining = isTrialExpired ? 0 : entitlements.topUpCreditsRemaining;
+    const monthlyCreditsRemaining = isTrialExpired
+      ? 0
+      : Math.max(0, monthlyAiCredits - monthlyCreditsUsed);
+    const isOverLimit =
+      isTrialExpired ||
+      (monthlyCreditsUsed >= monthlyAiCredits && topUpCreditsRemaining <= 0);
 
     return {
       workspaceId,
@@ -74,8 +90,11 @@ export class WorkspaceAiCreditsUsageService {
       monthlyCreditsUsed,
       monthlyCreditsRemaining,
       topUpCreditsRemaining,
-      totalCreditsAvailable: monthlyAiCredits + topUpCreditsRemaining,
+      totalCreditsAvailable: isTrialExpired ? 0 : monthlyAiCredits + topUpCreditsRemaining,
       isOverLimit,
+      isTrialPlan: entitlements.isTrialPlan,
+      isTrialExpired,
+      creditsRenewMonthly: entitlements.creditsRenewMonthly,
       byBot,
     };
   }

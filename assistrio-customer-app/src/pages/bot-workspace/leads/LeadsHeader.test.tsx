@@ -1,28 +1,37 @@
-import { cleanup, render, screen } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { LeadsHeader } from './LeadsHeader';
-import { EXPORT_REPORTS_LOCKED_HELPER } from '@/lib/analyticsEntitlementCopy';
+import { resolvePaidPlanFeatureCalloutPreset } from '@/lib/paidPlanFeatureCalloutCopy';
+
+const mockOpenUpgradeModal = vi.fn();
+
+vi.mock('@/components/billing/UpgradePlanModalProvider', () => ({
+  useUpgradePlanModal: () => ({
+    openUpgradeModal: mockOpenUpgradeModal,
+    closeUpgradeModal: vi.fn(),
+  }),
+}));
 
 describe('LeadsHeader export entitlement', () => {
   afterEach(() => cleanup());
 
-  it('shows locked export helper and View plans link when exportLocked', () => {
+  it('shows export paid-plan callout and opens upgrade flow when exportLocked', () => {
+    const preset = resolvePaidPlanFeatureCalloutPreset('export');
+    const onExportLocked = vi.fn();
     render(
-      <MemoryRouter>
-        <LeadsHeader
-          exportLocked
-          exportDisabled={false}
-          onExport={vi.fn()}
-          refreshDisabled={false}
-          refreshLoading={false}
-          onRefresh={vi.fn()}
-        />
-      </MemoryRouter>,
+      <LeadsHeader
+        exportLocked
+        exportDisabled={false}
+        onExport={vi.fn()}
+        onExportLocked={onExportLocked}
+        refreshDisabled={false}
+        refreshLoading={false}
+        onRefresh={vi.fn()}
+      />,
     );
 
-    expect(screen.getByText(EXPORT_REPORTS_LOCKED_HELPER, { exact: false })).toBeTruthy();
-    expect(screen.getByRole('link', { name: /view plans/i }).getAttribute('href')).toBe('/settings/plans');
-    expect(screen.getByRole('button', { name: /export csv/i }).hasAttribute('disabled')).toBe(true);
+    expect(screen.getByText(preset.title)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'View plans' }));
+    expect(onExportLocked).toHaveBeenCalledTimes(1);
   });
 });

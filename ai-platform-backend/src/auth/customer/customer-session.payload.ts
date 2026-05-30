@@ -25,6 +25,15 @@ export type CustomerSessionWorkspaceSummary = {
   analyticsHistoryDays: number | null;
   canExportReports: boolean;
   showPoweredByAssistrio: boolean;
+  isTrialPlan: boolean;
+  trialDays: number | null;
+  trialStartedAt: string | null;
+  trialEndsAt: string | null;
+  isTrialExpired: boolean;
+  creditsRenewMonthly: boolean;
+  autoTrainAllowed: boolean;
+  addonsAllowed: boolean;
+  memberInvitesAllowed: boolean;
   onboardingStatus: WorkspaceOnboardingStatus;
   onboardingCurrentStep: WorkspaceOnboardingStep;
   onboardingCreatedBotId: string | null;
@@ -80,6 +89,15 @@ async function buildWorkspaceSummaries(
         analyticsHistoryDays: entitlements.analyticsHistoryDays,
         canExportReports: entitlements.canExportReports,
         showPoweredByAssistrio: entitlements.showPoweredByAssistrio,
+        isTrialPlan: entitlements.isTrialPlan,
+        trialDays: entitlements.trialDays,
+        trialStartedAt: entitlements.trialStartedAt,
+        trialEndsAt: entitlements.trialEndsAt,
+        isTrialExpired: entitlements.isTrialExpired,
+        creditsRenewMonthly: entitlements.creditsRenewMonthly,
+        autoTrainAllowed: entitlements.autoTrainAllowed,
+        addonsAllowed: entitlements.addonsAllowed,
+        memberInvitesAllowed: entitlements.memberInvitesAllowed,
         onboardingStatus: workspace.onboardingStatus,
         onboardingCurrentStep: workspace.onboardingCurrentStep,
         onboardingCreatedBotId: workspace.onboardingCreatedBotId,

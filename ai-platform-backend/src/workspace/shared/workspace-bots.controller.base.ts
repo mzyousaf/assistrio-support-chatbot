@@ -69,6 +69,13 @@ export abstract class WorkspaceBotsControllerBase {
     return false;
   }
 
+  /** Customer controllers may block over-limit locked bots on detail fetch. */
+  protected async assertBotDetailAccessAllowed(
+    _req: RequestWithUser,
+    _botId: string,
+    _bot: Record<string, unknown>,
+  ): Promise<void> {}
+
   protected async assertCanAccessWorkspaceBot(req: RequestWithUser, botId: string): Promise<void> {
     const bot = await this.botsService.findOne(botId);
     if (!bot) {
@@ -480,6 +487,7 @@ export abstract class WorkspaceBotsControllerBase {
     if (!bot) {
       throw new HttpException({ error: 'Bot not found', errorCode: 'bot_not_found' }, HttpStatus.NOT_FOUND);
     }
+    await this.assertBotDetailAccessAllowed(req, id, bot as Record<string, unknown>);
     const health = await this.documentsService.getHealthSummary(id);
     const listStats = await this.botsService.getListStatsForBots([id]);
     const lastTrainedAt = listStats.get(id)?.lastTrainedAt ?? null;

@@ -3,28 +3,37 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CustomerMe, WorkspaceBillingSummary } from '@/api/types';
 import { TRAINED_KNOWLEDGE_STORAGE_HELPER } from '@/lib/trainedKnowledgeStorageCopy';
+import { mockBillingSubscription } from '@/lib/billingSummaryFixtures';
+import { mockTrialBillingEntitlements, mockTrialWorkspaceSummary } from '@/lib/planEntitlements';
+import { TRAINED_KNOWLEDGE_UPLOAD_HELPER } from '@/pages/billing/billingPlanComparisonCopy';
 import { PlansPage } from './PlansPage';
 
 const mockGetWorkspaceBillingSummary = vi.fn();
+const mockChangeWorkspaceSubscriptionPlan = vi.fn();
+const mockCreatePlanCheckoutSession = vi.fn();
+const mockCreateAddonCheckoutSession = vi.fn();
+const mockCreateTopUpCheckoutSession = vi.fn();
+const mockGetCustomerBots = vi.fn();
+const mockToastError = vi.fn();
 
 vi.mock('@/api/customerApi', () => ({
   getWorkspaceBillingSummary: (...args: unknown[]) => mockGetWorkspaceBillingSummary(...args),
+  changeWorkspaceSubscriptionPlan: (...args: unknown[]) =>
+    mockChangeWorkspaceSubscriptionPlan(...args),
+  createPlanCheckoutSession: (...args: unknown[]) => mockCreatePlanCheckoutSession(...args),
+  createAddonCheckoutSession: (...args: unknown[]) => mockCreateAddonCheckoutSession(...args),
+  createTopUpCheckoutSession: (...args: unknown[]) => mockCreateTopUpCheckoutSession(...args),
+  getCustomerBots: (...args: unknown[]) => mockGetCustomerBots(...args),
 }));
 
-const baseWorkspace = {
-  id: 'ws-1',
-  name: 'Acme',
-  planKey: 'free',
-  planName: 'Free',
-  subscriptionStatus: 'free',
-  botLimit: 1,
-  memberLimit: 3,
-  monthlyAiCredits: 50,
-  kbStorageMbPerBot: 5,
-  analyticsHistoryDays: 7,
-  canExportReports: false,
-  showPoweredByAssistrio: true,
-} as const;
+vi.mock('@/lib/app-toast', () => ({
+  appToast: {
+    error: (...args: unknown[]) => mockToastError(...args),
+    success: vi.fn(),
+  },
+}));
+
+const baseWorkspace = mockTrialWorkspaceSummary();
 
 const ownerCustomer: CustomerMe = {
   id: 'user-owner',
@@ -54,7 +63,11 @@ vi.mock('@/auth/CustomerAuthContext', () => ({
   }),
 }));
 
-function buildSummary(overrides?: Partial<WorkspaceBillingSummary>): WorkspaceBillingSummary {
+function buildSummary(
+  overrides?: Partial<WorkspaceBillingSummary>,
+  options?: { checkoutAvailable?: boolean },
+): WorkspaceBillingSummary {
+  const checkoutAvailable = options?.checkoutAvailable ?? false;
   return {
     workspaceId: 'ws-1',
     plan: {
@@ -65,19 +78,8 @@ function buildSummary(overrides?: Partial<WorkspaceBillingSummary>): WorkspaceBi
       currentPeriodStart: '2026-05-01T00:00:00.000Z',
       currentPeriodEnd: '2026-06-01T00:00:00.000Z',
     },
-    entitlements: {
-      botLimit: 1,
-      memberLimit: 3,
-      monthlyAiCredits: 50,
-      kbStorageMbPerBot: 5,
-      maxKbStorageMbPerBot: 40,
-      analyticsHistoryDays: 7,
-      canExportReports: false,
-      showPoweredByAssistrio: true,
-      canRemoveBranding: false,
-      activeAddons: [],
-      topUpCreditsRemaining: 0,
-    },
+    subscription: mockBillingSubscription(),
+    entitlements: mockTrialBillingEntitlements(),
     usage: {
       bots: { current: 1, limit: 1 },
       members: { current: 2, pendingInvites: 1, used: 3, limit: 3 },
@@ -99,6 +101,7 @@ function buildSummary(overrides?: Partial<WorkspaceBillingSummary>): WorkspaceBi
         note: TRAINED_KNOWLEDGE_STORAGE_HELPER,
       },
     },
+    activeAddons: [],
     planCatalog: [
       {
         key: 'free',
@@ -110,6 +113,7 @@ function buildSummary(overrides?: Partial<WorkspaceBillingSummary>): WorkspaceBi
         kbStorageMbPerBot: 5,
         analyticsHistoryDays: 7,
         canExportReports: false,
+        checkoutAvailable: false,
       },
       {
         key: 'starter',
@@ -121,6 +125,7 @@ function buildSummary(overrides?: Partial<WorkspaceBillingSummary>): WorkspaceBi
         kbStorageMbPerBot: 15,
         analyticsHistoryDays: null,
         canExportReports: true,
+        checkoutAvailable,
       },
       {
         key: 'pro',
@@ -128,10 +133,11 @@ function buildSummary(overrides?: Partial<WorkspaceBillingSummary>): WorkspaceBi
         priceMonthly: 99,
         botLimit: 1,
         memberLimit: 5,
-        monthlyAiCredits: 3000,
+        monthlyAiCredits: 2000,
         kbStorageMbPerBot: 30,
         analyticsHistoryDays: null,
         canExportReports: true,
+        checkoutAvailable,
       },
     ],
     addonCatalog: [
@@ -141,7 +147,7 @@ function buildSummary(overrides?: Partial<WorkspaceBillingSummary>): WorkspaceBi
         billingInterval: 'one_time',
         priceUsd: 30,
         scope: 'workspace',
-        checkoutAvailable: false,
+        checkoutAvailable,
       },
       {
         key: 'extra_bot',
@@ -149,7 +155,7 @@ function buildSummary(overrides?: Partial<WorkspaceBillingSummary>): WorkspaceBi
         billingInterval: 'monthly',
         priceUsd: 49,
         scope: 'workspace',
-        checkoutAvailable: false,
+        checkoutAvailable,
       },
       {
         key: 'remove_branding',
@@ -157,23 +163,7 @@ function buildSummary(overrides?: Partial<WorkspaceBillingSummary>): WorkspaceBi
         billingInterval: 'monthly',
         priceUsd: 20,
         scope: 'workspace',
-        checkoutAvailable: false,
-      },
-      {
-        key: 'kb_storage_5mb',
-        name: '+5 MB KB storage',
-        billingInterval: 'monthly',
-        priceUsd: 10,
-        scope: 'bot',
-        checkoutAvailable: false,
-      },
-      {
-        key: 'kb_storage_10mb',
-        name: '+10 MB KB storage',
-        billingInterval: 'monthly',
-        priceUsd: 15,
-        scope: 'bot',
-        checkoutAvailable: false,
+        checkoutAvailable,
       },
     ],
     ...overrides,
@@ -199,6 +189,26 @@ describe('PlansPage', () => {
   beforeEach(() => {
     mockCustomer = ownerCustomer;
     mockGetWorkspaceBillingSummary.mockResolvedValue({ ok: true, data: buildSummary() });
+    mockCreatePlanCheckoutSession.mockResolvedValue({
+      ok: true,
+      data: { checkoutUrl: 'https://pay.example/checkout', provider: 'lemon_squeezy' },
+    });
+    mockCreateAddonCheckoutSession.mockResolvedValue({
+      ok: true,
+      data: { checkoutUrl: 'https://pay.example/addon', provider: 'lemon_squeezy' },
+    });
+    mockCreateTopUpCheckoutSession.mockResolvedValue({
+      ok: true,
+      data: { checkoutUrl: 'https://pay.example/topup', provider: 'lemon_squeezy' },
+    });
+    mockGetCustomerBots.mockResolvedValue({
+      ok: true,
+      data: [{ _id: 'bot-1', name: 'Support', agentsPackAgent: false }],
+    });
+    Object.defineProperty(window, 'location', {
+      value: { href: '' },
+      writable: true,
+    });
   });
 
   afterEach(() => {
@@ -247,6 +257,7 @@ describe('PlansPage', () => {
     expect(comparison.getByRole('rowheader', { name: 'Member-level access' })).toBeTruthy();
     expect(comparison.queryByRole('rowheader', { name: 'Export leads' })).toBeNull();
     expect(comparison.getAllByLabelText('Included').length).toBeGreaterThan(0);
+    expect(comparison.getAllByLabelText('Not included').length).toBeGreaterThanOrEqual(2);
     expect(comparison.queryByText('Included', { selector: 'span' })).toBeNull();
     expect(comparison.getAllByText('7 days').length).toBeGreaterThan(0);
     expect(comparison.getAllByText('Unlimited').length).toBeGreaterThan(0);
@@ -292,10 +303,10 @@ describe('PlansPage', () => {
 
     const proCard = cardForPlan(plansRegion, 'Pro');
     expect(proCard.getByRole('heading', { name: 'Why Pro?', level: 4 })).toBeTruthy();
-    expect(proCard.getByText('3,000 AI credits/month')).toBeTruthy();
+    expect(proCard.getByText('2,000 AI credits/month')).toBeTruthy();
     expect(proCard.getByText('30 MB trained knowledge storage')).toBeTruthy();
     expect(proCard.getByText('Best for larger teams and higher traffic')).toBeTruthy();
-    expect(proCard.getByText('5 workspace members')).toBeTruthy();
+    expect(proCard.getByText('10 workspace members')).toBeTruthy();
     expect(proCard.queryByText('5 members')).toBeNull();
   });
 
@@ -307,11 +318,16 @@ describe('PlansPage', () => {
     expect(comparison.getByRole('rowheader', { name: 'Agents' })).toBeTruthy();
     expect(comparison.getByRole('rowheader', { name: 'Workspace members' })).toBeTruthy();
     expect(comparison.getByRole('rowheader', { name: 'AI credits' })).toBeTruthy();
-    expect(comparison.getByRole('rowheader', { name: 'KB storage / bot' })).toBeTruthy();
+    expect(comparison.getByRole('rowheader', { name: 'Trained knowledge storage / bot' })).toBeTruthy();
     expect(comparison.queryByRole('rowheader', { name: 'Analytics history' })).toBeNull();
-    expect(comparison.getByText('50 Credits only')).toBeTruthy();
-    expect(comparison.getByText('500 Credits / month')).toBeTruthy();
-    expect(comparison.getByText('3,000 Credits / month')).toBeTruthy();
+    expect(comparison.getByText('50 trial credits total')).toBeTruthy();
+    expect(comparison.queryByText('50 Credits only')).toBeNull();
+    expect(comparison.queryByText('50 AI credits / month')).toBeNull();
+    expect(comparison.queryByText('50 credits monthly')).toBeNull();
+    expect(comparison.getByText('500 AI credits / month')).toBeTruthy();
+    expect(comparison.getByText('2,000 AI credits / month')).toBeTruthy();
+    expect(comparison.getByText(TRAINED_KNOWLEDGE_UPLOAD_HELPER)).toBeTruthy();
+    expect(comparison.getByText('Voice, dictation, and chat use AI credits.')).toBeTruthy();
     expect(comparison.getByText('5 MB')).toBeTruthy();
     expect(comparison.getByText('15 MB')).toBeTruthy();
     expect(comparison.getByText('30 MB')).toBeTruthy();
@@ -356,17 +372,178 @@ describe('PlansPage', () => {
     expect(addons.getByRole('heading', { name: '1,000 extra AI credits', level: 3 })).toBeTruthy();
     expect(addons.getByRole('heading', { name: 'Extra agent', level: 3 })).toBeTruthy();
     expect(addons.getByRole('heading', { name: 'Remove Powered by Assistrio', level: 3 })).toBeTruthy();
-    expect(addons.getByRole('heading', { name: '+5 MB trained KB storage', level: 3 })).toBeTruthy();
-    expect(addons.getByRole('heading', { name: '+10 MB trained KB storage', level: 3 })).toBeTruthy();
-    expect(addons.getAllByText('The add-on requires a paid plan').length).toBeGreaterThanOrEqual(5);
-    expect(addons.getAllByText('Auto charge').length).toBeGreaterThanOrEqual(5);
+    expect(addons.queryByRole('heading', { name: '+5 MB trained KB storage', level: 3 })).toBeNull();
+    expect(addons.queryByRole('heading', { name: '+10 MB trained KB storage', level: 3 })).toBeNull();
+    expect(addons.getAllByText('Available on paid plans.').length).toBeGreaterThanOrEqual(3);
+    expect(addons.queryByText('Auto charge')).toBeNull();
   });
 
-  it('shows owner billing note in header', async () => {
+  it('shows owner billing note in header when checkout is unavailable', async () => {
     renderPage();
     expect(await screen.findByText('Checkout is not enabled yet.')).toBeTruthy();
     expect(screen.getByRole('tablist', { name: 'Billing period' })).toBeTruthy();
     expect(screen.getByRole('tab', { name: /Monthly/i }).getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('Pro owner sees Downgrade to Starter instead of portal', async () => {
+    mockGetWorkspaceBillingSummary.mockResolvedValue({
+      ok: true,
+      data: buildSummary(
+        {
+          plan: {
+            key: 'pro',
+            name: 'Pro',
+            priceMonthly: 99,
+            status: 'active',
+            currentPeriodStart: '2026-05-01T00:00:00.000Z',
+            currentPeriodEnd: '2026-06-01T00:00:00.000Z',
+          },
+          entitlements: {
+            ...mockTrialBillingEntitlements(),
+            isTrialPlan: false,
+            addonsAllowed: true,
+            creditsRenewMonthly: true,
+          },
+          subscription: mockBillingSubscription({
+            subscriptionStatus: 'active',
+            hasActivePaidSubscription: true,
+          }),
+        },
+        { checkoutAvailable: true },
+      ),
+    });
+    renderPage();
+    const plansRegion = await screen.findByRole('region', { name: 'Plans' });
+    expect(within(plansRegion).queryByRole('heading', { name: '7-day free trial', level: 3 })).toBeNull();
+    const starterCard = cardForPlan(plansRegion, 'Starter');
+    expect(starterCard.getByRole('button', { name: 'Downgrade to Starter' })).toBeTruthy();
+    expect(starterCard.queryByRole('button', { name: 'Manage billing' })).toBeNull();
+  });
+
+  it('Starter owner sees Upgrade to Pro', async () => {
+    mockGetWorkspaceBillingSummary.mockResolvedValue({
+      ok: true,
+      data: buildSummary(
+        {
+          plan: {
+            key: 'starter',
+            name: 'Starter',
+            priceMonthly: 49,
+            status: 'active',
+            currentPeriodStart: '2026-05-01T00:00:00.000Z',
+            currentPeriodEnd: '2026-06-01T00:00:00.000Z',
+          },
+          entitlements: {
+            ...mockTrialBillingEntitlements(),
+            isTrialPlan: false,
+            addonsAllowed: true,
+            creditsRenewMonthly: true,
+          },
+          subscription: mockBillingSubscription({
+            subscriptionStatus: 'active',
+            hasActivePaidSubscription: true,
+          }),
+        },
+        { checkoutAvailable: true },
+      ),
+    });
+    renderPage();
+    const plansRegion = await screen.findByRole('region', { name: 'Plans' });
+    const proCard = cardForPlan(plansRegion, 'Pro');
+    expect(proCard.getByRole('button', { name: 'Upgrade to Pro' })).toBeTruthy();
+  });
+
+  it('owner sees enabled upgrade button when checkoutAvailable=true', async () => {
+    mockGetWorkspaceBillingSummary.mockResolvedValue({
+      ok: true,
+      data: buildSummary(undefined, { checkoutAvailable: true }),
+    });
+    renderPage();
+    const plans = within(await screen.findByRole('region', { name: 'Plans' }));
+    const starterButton = within(plans.getByRole('heading', { name: 'Starter', level: 3 }).closest('article')!).getByRole(
+      'button',
+      { name: 'Upgrade to Starter' },
+    );
+    expect((starterButton as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('clicking upgrade calls plan checkout API and redirects', async () => {
+    mockGetWorkspaceBillingSummary.mockResolvedValue({
+      ok: true,
+      data: buildSummary(undefined, { checkoutAvailable: true }),
+    });
+    renderPage();
+    const plans = within(await screen.findByRole('region', { name: 'Plans' }));
+    fireEvent.click(
+      within(plans.getByRole('heading', { name: 'Starter', level: 3 }).closest('article')!).getByRole('button', {
+        name: 'Upgrade to Starter',
+      }),
+    );
+    await waitFor(() => {
+      expect(mockCreatePlanCheckoutSession).toHaveBeenCalledWith('ws-1', 'starter');
+      expect(window.location.href).toBe('https://pay.example/checkout');
+    });
+  });
+
+  it('checkout unavailable shows Coming soon on paid plans', async () => {
+    renderPage();
+    const plansRegion = await screen.findByRole('region', { name: 'Plans' });
+    const starterCard = cardForPlan(plansRegion, 'Starter');
+    expect(starterCard.getByRole('button', { name: 'Coming soon' }).hasAttribute('disabled')).toBe(true);
+  });
+
+  it('checkout errors show friendly toast', async () => {
+    mockGetWorkspaceBillingSummary.mockResolvedValue({
+      ok: true,
+      data: buildSummary(undefined, { checkoutAvailable: true }),
+    });
+    mockCreatePlanCheckoutSession.mockResolvedValue({
+      ok: false,
+      status: 503,
+      error: 'Unavailable',
+      errorCode: 'billing_provider_not_configured',
+    });
+    renderPage();
+    const plans = within(await screen.findByRole('region', { name: 'Plans' }));
+    fireEvent.click(
+      within(plans.getByRole('heading', { name: 'Pro', level: 3 }).closest('article')!).getByRole('button', {
+        name: 'Upgrade to Pro',
+      }),
+    );
+    await waitFor(() => {
+      expect(mockToastError).toHaveBeenCalledWith('Checkout is not configured yet.');
+    });
+  });
+
+  it('add-on button calls top-up checkout endpoint for AI credits', async () => {
+    mockGetWorkspaceBillingSummary.mockResolvedValue({
+      ok: true,
+      data: buildSummary(
+        {
+          plan: {
+            key: 'starter',
+            name: 'Starter',
+            priceMonthly: 49,
+            status: 'active',
+            currentPeriodStart: '2026-05-01T00:00:00.000Z',
+            currentPeriodEnd: '2026-06-01T00:00:00.000Z',
+          },
+          entitlements: {
+            ...mockTrialBillingEntitlements(),
+            isTrialPlan: false,
+            addonsAllowed: true,
+            creditsRenewMonthly: true,
+          },
+        },
+        { checkoutAvailable: true },
+      ),
+    });
+    renderPage();
+    const addons = within(await screen.findByRole('region', { name: 'Add-ons' }));
+    fireEvent.click(addons.getByRole('button', { name: 'Buy add-on' }));
+    await waitFor(() => {
+      expect(mockCreateTopUpCheckoutSession).toHaveBeenCalledWith('ws-1', 'ai_credits_1000');
+    });
   });
 
   it('updates paid plan prices when switching to annual billing', async () => {

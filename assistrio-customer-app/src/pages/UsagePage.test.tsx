@@ -3,6 +3,8 @@ import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CustomerMe, WorkspaceBillingSummary } from '@/api/types';
+import { mockBillingSubscription } from '@/lib/billingSummaryFixtures';
+import { mockTrialBillingEntitlements, mockTrialWorkspaceSummary } from '@/lib/planEntitlements';
 import {
   TRAINED_KNOWLEDGE_STORAGE_HELPER,
   TRAINED_KNOWLEDGE_STORAGE_LABEL,
@@ -43,20 +45,7 @@ vi.mock('recharts', () => ({
   stop: () => null,
 }));
 
-const baseWorkspace = {
-  id: 'ws-1',
-  name: 'Acme',
-  planKey: 'free',
-  planName: 'Free',
-  subscriptionStatus: 'free',
-  botLimit: 1,
-  memberLimit: 3,
-  monthlyAiCredits: 50,
-  kbStorageMbPerBot: 5,
-  analyticsHistoryDays: 7,
-  canExportReports: false,
-  showPoweredByAssistrio: true,
-} as const;
+const baseWorkspace = mockTrialWorkspaceSummary({ role: undefined });
 
 const baseCustomer: CustomerMe = {
   id: 'user-1',
@@ -79,6 +68,13 @@ vi.mock('@/auth/CustomerAuthContext', () => ({
   }),
 }));
 
+vi.mock('@/components/billing/UpgradePlanModalProvider', () => ({
+  useUpgradePlanModal: () => ({
+    openUpgradeModal: vi.fn(),
+    closeUpgradeModal: vi.fn(),
+  }),
+}));
+
 function buildSummary(overrides?: Partial<WorkspaceBillingSummary>): WorkspaceBillingSummary {
   return {
     workspaceId: 'ws-1',
@@ -90,22 +86,11 @@ function buildSummary(overrides?: Partial<WorkspaceBillingSummary>): WorkspaceBi
       currentPeriodStart: '2026-05-01T00:00:00.000Z',
       currentPeriodEnd: '2026-06-01T00:00:00.000Z',
     },
-    entitlements: {
-      botLimit: 1,
-      memberLimit: 3,
-      monthlyAiCredits: 50,
-      kbStorageMbPerBot: 5,
-      maxKbStorageMbPerBot: 40,
-      analyticsHistoryDays: 7,
-      canExportReports: false,
-      showPoweredByAssistrio: true,
-      canRemoveBranding: false,
-      activeAddons: [],
-      topUpCreditsRemaining: 0,
-    },
+    subscription: mockBillingSubscription(),
+    entitlements: mockTrialBillingEntitlements(),
     usage: {
       bots: { current: 1, limit: 1 },
-      members: { current: 2, pendingInvites: 1, used: 3, limit: 3 },
+      members: { current: 1, pendingInvites: 0, used: 1, limit: 1 },
       aiCredits: {
         periodStart: '2026-05-01T00:00:00.000Z',
         periodEnd: '2026-06-01T00:00:00.000Z',
@@ -145,6 +130,8 @@ function buildSummary(overrides?: Partial<WorkspaceBillingSummary>): WorkspaceBi
         checkoutAvailable: false,
       },
     ],
+    activeAddons: [],
+    topUps: [],
     ...overrides,
   };
 }
@@ -200,17 +187,17 @@ describe('UsagePage', () => {
 
   it('renders header plan and subscription status chips', async () => {
     renderPage();
-    expect(await screen.findByText('Free plan')).toBeTruthy();
-    expect(screen.getAllByText('Free').length).toBeGreaterThanOrEqual(1);
+    expect(await screen.findByText('Free trial plan')).toBeTruthy();
+    expect(screen.getAllByText('Free trial').length).toBeGreaterThanOrEqual(1);
   });
 
   it('renders metric cards with circular progress and without top trained knowledge card', async () => {
     renderPage();
-    expect(await screen.findByText('10 / 50')).toBeTruthy();
-    expect(screen.getByText('40 remaining')).toBeTruthy();
-    expect(screen.getByLabelText('AI credits used this billing period')).toBeTruthy();
-    expect(screen.getByText('1 / 1')).toBeTruthy();
-    expect(screen.getByText('3 / 3')).toBeTruthy();
+    expect(await screen.findByText('10 / 50 monthly used')).toBeTruthy();
+    expect(screen.getByText(/40 total remaining/)).toBeTruthy();
+    expect(screen.getByText(/Trial credits do not renew/i)).toBeTruthy();
+    expect(screen.getByLabelText('Trial AI credits used')).toBeTruthy();
+    expect(screen.getAllByText('1 / 1').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('Includes pending invites.')).toBeTruthy();
 
     const metricTitles = screen
@@ -377,7 +364,7 @@ describe('UsagePage', () => {
 
     await fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
 
-    expect(await screen.findByText('10 / 50')).toBeTruthy();
+    expect(await screen.findByText('10 / 50 monthly used')).toBeTruthy();
   });
 
   it('shows empty state when no active workspace is selected', async () => {
@@ -390,8 +377,10 @@ describe('UsagePage', () => {
   it('shows add-ons preview as full-width disabled cards', async () => {
     renderPage();
     expect(await screen.findByText('Available add-ons')).toBeTruthy();
-    expect(screen.getByText('Add-ons are not available yet.')).toBeTruthy();
-    expect(screen.getAllByText('The add-on requires a paid plan').length).toBeGreaterThan(0);
+    expect(
+      screen.getByText(/Purchase add-ons from Plans or manage active add-ons on Billing/i),
+    ).toBeTruthy();
+    expect(screen.getByText('Add-ons are available on paid plans')).toBeTruthy();
     expect(screen.getByText('Extra agent')).toBeTruthy();
     expect(screen.getByText('$49 per month')).toBeTruthy();
     expect(screen.getAllByText('Auto charge').length).toBeGreaterThan(0);

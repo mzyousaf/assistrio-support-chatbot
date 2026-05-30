@@ -25,6 +25,7 @@ import {
 import { RUNTIME_INIT_DEPLOYMENT_HINTS } from './runtime-deployment-hints';
 import { exampleQuestionsToPublicLabels } from '../workspace/shared/example-questions.util';
 import { KnowledgeBaseItemService } from '../knowledge/knowledge-base-item.service';
+import { WorkspaceBotLimitService } from '../entitlements/workspace-bot-limit.service';
 
 type WidgetInitBody = {
   botId?: unknown;
@@ -65,6 +66,7 @@ export class WidgetInitController {
     private readonly visitorsService: VisitorsService,
     private readonly embedSessionService: EmbedSessionService,
     private readonly knowledgeBaseItemService: KnowledgeBaseItemService,
+    private readonly workspaceBotLimitService: WorkspaceBotLimitService,
   ) {}
 
   @Post('init')
@@ -134,6 +136,10 @@ export class WidgetInitController {
         HttpStatus.FORBIDDEN,
       );
     }
+
+    await this.workspaceBotLimitService.assertBotDocWithinEffectiveLimitIfWorkspaceScoped(
+      row as Record<string, unknown>,
+    );
 
     const limit = resolveWidgetEmbedRateLimitPerMinute(row);
     const ip = getClientIpForRateLimit(req);

@@ -55,6 +55,10 @@ describe('WidgetPreviewController preview access', () => {
       canUserPreviewBotAsOwner: jest.fn().mockReturnValue(options?.canPreviewAsOwner ?? false),
     };
 
+    const workspaceBotLimitService = {
+      assertBotDocWithinEffectiveLimitIfWorkspaceScoped: jest.fn().mockResolvedValue(undefined),
+    };
+
     const controller = new WidgetPreviewController(
       { get: jest.fn().mockReturnValue('development') } as never,
       authService as never,
@@ -64,6 +68,7 @@ describe('WidgetPreviewController preview access', () => {
       workspacesService as never,
       {} as never,
       {} as never,
+      workspaceBotLimitService as never,
     );
 
     const harness = controller;

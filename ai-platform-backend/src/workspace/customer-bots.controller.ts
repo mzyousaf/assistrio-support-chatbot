@@ -30,6 +30,7 @@ import { WorkspaceBotsControllerBase } from './shared/workspace-bots.controller.
 import { isWorkspaceManagerRole, isWorkspaceOwnerRole } from '../models/workspace-membership-role.util';
 import { BotKnowledgeTotalLimitService } from '../knowledge/bot-knowledge-total-limit.service';
 import { TableImportService } from '../ingestion/table-import.service';
+import { WorkspaceBotLimitService } from '../entitlements/workspace-bot-limit.service';
 
 function parseDatasheetImportCancelBody(body: unknown): { importSessionId: string } | null {
   if (!body || typeof body !== 'object') return null;
@@ -73,6 +74,16 @@ export class CustomerBotsController extends WorkspaceBotsControllerBase {
     return true;
   }
 
+  protected override async assertBotDetailAccessAllowed(
+    _req: RequestWithUser,
+    botId: string,
+    bot: Record<string, unknown>,
+  ): Promise<void> {
+    const workspaceId = bot.workspaceId != null ? String(bot.workspaceId).trim() : '';
+    if (!workspaceId) return;
+    await this.workspaceBotLimitService.assertWorkspaceBotWithinEffectiveLimit(workspaceId, botId);
+  }
+
   constructor(
     botsService: BotsService,
     documentsService: DocumentsService,
@@ -82,6 +93,7 @@ export class CustomerBotsController extends WorkspaceBotsControllerBase {
     knowledgeUsageService: KnowledgeUsageService,
     private readonly tableImportService: TableImportService,
     private readonly botKbTotalLimit: BotKnowledgeTotalLimitService,
+    private readonly workspaceBotLimitService: WorkspaceBotLimitService,
   ) {
     super(
       botsService,
@@ -145,10 +157,18 @@ export class CustomerBotsController extends WorkspaceBotsControllerBase {
       );
     }
 
-    return this.mapBotRecordsToListResponse(bots as Record<string, unknown>[], statsMap, {
+    const lockedIds = await this.workspaceBotLimitService.resolveOverLimitLockedBotIdSet(workspaceId);
+    const mapped = this.mapBotRecordsToListResponse(bots as Record<string, unknown>[], statsMap, {
       workspaceName: workspaceName ?? undefined,
       viewAccessPreviewByBotId,
     });
+    const enriched = this.workspaceBotLimitService.enrichBotListWithOverLimitState(mapped, lockedIds);
+
+    if (memberRole != null && !isWorkspaceManagerRole(memberRole)) {
+      return enriched.filter((bot) => !bot.isOverLimitLocked);
+    }
+
+    return enriched;
   }
 
   @Post('draft')

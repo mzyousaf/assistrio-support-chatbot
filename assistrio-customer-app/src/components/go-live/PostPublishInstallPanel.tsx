@@ -13,9 +13,15 @@ type Props = {
   allowedOrigins: readonly string[];
   widgetSnippet: string;
   iframeSnippet: string;
+  compactCopyButton?: boolean;
 };
 
-export function PostPublishInstallPanel({ allowedOrigins, widgetSnippet, iframeSnippet }: Props) {
+export function PostPublishInstallPanel({
+  allowedOrigins,
+  widgetSnippet,
+  iframeSnippet,
+  compactCopyButton = false,
+}: Props) {
   const [installMode, setInstallMode] = useState<PostPublishInstallMode>('chat-widget');
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
 
@@ -95,13 +101,23 @@ export function PostPublishInstallPanel({ allowedOrigins, widgetSnippet, iframeS
               <p className="m-0 text-xs font-semibold text-slate-800">Embed snippet</p>
               <button
                 type="button"
-                className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-teal-200 bg-teal-50 px-2.5 py-1.5 text-xs font-semibold text-teal-800 transition-colors hover:bg-teal-100"
+                className={cn(
+                  'inline-flex shrink-0 items-center rounded-md border border-teal-200 bg-teal-50 font-semibold text-teal-800 transition-colors hover:bg-teal-100',
+                  compactCopyButton
+                    ? 'gap-1 px-2 py-1 text-[11px]'
+                    : 'gap-1.5 px-2.5 py-1.5 text-xs',
+                )}
                 onClick={() => void copySnippet()}
               >
                 {copyFeedback === 'Copied' ? (
-                  <Check size={13} strokeWidth={2.5} className="text-teal-700" aria-hidden />
+                  <Check
+                    size={compactCopyButton ? 12 : 13}
+                    strokeWidth={2.5}
+                    className="text-teal-700"
+                    aria-hidden
+                  />
                 ) : (
-                  <Copy size={13} strokeWidth={2} aria-hidden />
+                  <Copy size={compactCopyButton ? 12 : 13} strokeWidth={2} aria-hidden />
                 )}
                 {copyFeedback ?? 'Copy snippet'}
               </button>

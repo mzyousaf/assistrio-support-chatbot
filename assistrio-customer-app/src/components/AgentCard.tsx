@@ -234,6 +234,7 @@ export type AgentCardProps = {
   onDelete: (b: CustomerBotListItem) => void;
   canDelete?: boolean;
   onShare?: (b: CustomerBotListItem) => void;
+  onReactivate?: (b: CustomerBotListItem) => void;
   /** When true, renders the view-access avatar stack (owners/admins, or dev preview). */
   showViewAccessPreview?: boolean;
 };
@@ -244,9 +245,11 @@ export function AgentCard({
   onDelete,
   canDelete = true,
   onShare,
+  onReactivate,
   showViewAccessPreview,
 }: AgentCardProps) {
   const [embedOpen, setEmbedOpen] = useState(false);
+  const locked = bot.isOverLimitLocked === true;
   const p = isPriv(bot);
   const categoryLabels = botCategoryLabels(bot);
   const dom = domain(bot.activeOrigins);
@@ -264,21 +267,30 @@ export function AgentCard({
   const datasheets = bot.knowledgeDatasheets ?? 0;
   const knowledgeTotal = docs + faqs + snippets + datasheets;
 
-  return (
-    <>
-    <article
-      className={cn('group/card relative flex h-full flex-col rounded-2xl bg-white shadow-[var(--shadow-card)] transition-all duration-150 hover:shadow-[var(--shadow-card-hover)]', deleting && 'pointer-events-none opacity-40')}
-      style={{ border: '1px solid var(--border-soft)' }}
-    >
+  function handleLockedAction(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    onReactivate?.(bot);
+  }
 
+  const cardBody = (
+    <>
       {/* ─── Header ─── */}
       <div className="flex items-start gap-3 px-4 pt-4 pb-0">
-        <Link to={href} className="shrink-0 no-underline"><Avatar bot={bot} accent={accent} /></Link>
+        {locked ? (
+          <span className="shrink-0"><Avatar bot={bot} accent={accent} /></span>
+        ) : (
+          <Link to={href} className="shrink-0 no-underline"><Avatar bot={bot} accent={accent} /></Link>
+        )}
 
         <div className="min-w-0 flex-1">
-          <Link to={href} className="no-underline text-inherit">
-            <h3 className="m-0 truncate text-sm font-semibold text-gray-900">{bot.name?.trim() || 'Untitled agent'}</h3>
-          </Link>
+          {locked ? (
+            <h3 className="m-0 truncate text-sm font-semibold text-gray-500">{bot.name?.trim() || 'Untitled agent'}</h3>
+          ) : (
+            <Link to={href} className="no-underline text-inherit">
+              <h3 className="m-0 truncate text-sm font-semibold text-gray-900">{bot.name?.trim() || 'Untitled agent'}</h3>
+            </Link>
+          )}
           <div className="mt-1 flex items-center gap-1.5 text-[0.6875rem] text-gray-500">
             <span className="inline-flex items-center gap-1">
               {p ? <Lock size={11} strokeWidth={2.5} className="text-gray-500" /> : <Globe size={11} strokeWidth={2.5} className="text-gray-500" />}
@@ -296,12 +308,19 @@ export function AgentCard({
           </div>
         </div>
 
-        <CardMenu href={href} onDelete={() => onDelete(bot)} canDelete={canDelete} />
+        <CardMenu href={href} onDelete={() => onDelete(bot)} canDelete={canDelete && !locked} />
       </div>
 
       {/* ─── Status + category tags ─── */}
       <div className="flex flex-wrap items-center gap-1.5 px-4 pt-2.5">
-        <StatusTag status={bot.status} />
+        {locked ? (
+          <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-slate-100 px-2 py-0.5 text-[0.6875rem] font-semibold leading-none text-slate-600">
+            <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+            Inactive
+          </span>
+        ) : (
+          <StatusTag status={bot.status} />
+        )}
         {categoryLabels.map((label) => (
           <CategoryTag key={label} label={label} accent={accent} />
         ))}
@@ -309,6 +328,13 @@ export function AgentCard({
 
       {/* ─── Stats + activity ─── */}
       <div className="flex flex-1 flex-col px-4 pt-3 pb-3">
+      {locked ? (
+        <div className="block text-inherit">
+          <p className="m-0 text-[0.75rem] leading-relaxed text-gray-500">
+            {bot.lockedMessage ?? 'Workspace agent limit exceeded'}
+          </p>
+        </div>
+      ) : (
       <Link to={href} className="block no-underline text-inherit">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
           <Stat
@@ -356,9 +382,10 @@ export function AgentCard({
           )}
         </div>
       </Link>
+      )}
 
         {/* activity + lead capture + view access */}
-        {(activity || bot.leadCaptureEnabled || showViewAccessStack) && (
+        {!locked && (activity || bot.leadCaptureEnabled || showViewAccessStack) && (
           <div className="mt-2 flex items-center justify-between gap-3">
             <Link to={href} className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1 text-[0.6875rem] text-gray-400 no-underline">
               {activity && (
@@ -389,15 +416,52 @@ export function AgentCard({
       {/* ─── Footer ─── */}
       <div className="flex items-center px-4 py-2" style={{ borderTop: '1px solid var(--border-soft)' }}>
         <div className="min-w-0 flex-1 text-[0.6875rem] text-gray-400">
-          {trained && (
+          {locked ? null : trained && (
             <span className="inline-flex items-center gap-1">
               <GraduationCap size={11} strokeWidth={2} className="text-gray-400" />
               Trained {trained}
             </span>
           )}
         </div>
-        <EmbedButton onClick={() => setEmbedOpen(true)} />
+        {locked ? (
+          <button
+            type="button"
+            onClick={handleLockedAction}
+            className="inline-flex cursor-pointer items-center rounded-md bg-teal-600 px-2.5 py-1 text-[0.6875rem] font-semibold text-white transition hover:bg-teal-700"
+          >
+            Reactivate
+          </button>
+        ) : (
+          <EmbedButton onClick={() => setEmbedOpen(true)} />
+        )}
       </div>
+    </>
+  );
+
+  return (
+    <>
+    <article
+      className={cn(
+        'group/card relative flex h-full flex-col rounded-2xl bg-white shadow-[var(--shadow-card)] transition-all duration-150',
+        locked ? 'opacity-70 grayscale-[0.35]' : 'hover:shadow-[var(--shadow-card-hover)]',
+        deleting && 'pointer-events-none opacity-40',
+      )}
+      style={{ border: '1px solid var(--border-soft)' }}
+      {...(locked
+        ? {
+            role: 'button',
+            tabIndex: 0,
+            onClick: handleLockedAction,
+            onKeyDown: (e: React.KeyboardEvent) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onReactivate?.(bot);
+              }
+            },
+          }
+        : {})}
+    >
+      {cardBody}
     </article>
     <AgentEmbedModal open={embedOpen} bot={bot} onClose={() => setEmbedOpen(false)} />
     </>

@@ -1,0 +1,87 @@
+export type BillingInvoiceCountryOption = {
+  code: string;
+  label: string;
+};
+
+/** ISO 3166-1 alpha-2 codes for common billing countries. */
+export const BILLING_INVOICE_COUNTRIES: BillingInvoiceCountryOption[] = [
+  { code: 'PK', label: 'Pakistan' },
+  { code: 'US', label: 'United States' },
+  { code: 'CA', label: 'Canada' },
+  { code: 'GB', label: 'United Kingdom' },
+  { code: 'AU', label: 'Australia' },
+  { code: 'DE', label: 'Germany' },
+  { code: 'FR', label: 'France' },
+  { code: 'IN', label: 'India' },
+  { code: 'AE', label: 'United Arab Emirates' },
+  { code: 'SA', label: 'Saudi Arabia' },
+  { code: 'SG', label: 'Singapore' },
+  { code: 'NL', label: 'Netherlands' },
+  { code: 'SE', label: 'Sweden' },
+  { code: 'NO', label: 'Norway' },
+  { code: 'DK', label: 'Denmark' },
+  { code: 'IE', label: 'Ireland' },
+  { code: 'NZ', label: 'New Zealand' },
+  { code: 'ZA', label: 'South Africa' },
+  { code: 'BR', label: 'Brazil' },
+  { code: 'MX', label: 'Mexico' },
+];
+
+export type BillingInvoiceUsStateOption = {
+  code: string;
+  label: string;
+};
+
+export const BILLING_INVOICE_US_STATES: BillingInvoiceUsStateOption[] = [
+  { code: 'AL', label: 'Alabama' },
+  { code: 'AK', label: 'Alaska' },
+  { code: 'AZ', label: 'Arizona' },
+  { code: 'AR', label: 'Arkansas' },
+  { code: 'CA', label: 'California' },
+  { code: 'CO', label: 'Colorado' },
+  { code: 'CT', label: 'Connecticut' },
+  { code: 'DE', label: 'Delaware' },
+  { code: 'FL', label: 'Florida' },
+  { code: 'GA', label: 'Georgia' },
+  { code: 'HI', label: 'Hawaii' },
+  { code: 'ID', label: 'Idaho' },
+  { code: 'IL', label: 'Illinois' },
+  { code: 'IN', label: 'Indiana' },
+  { code: 'IA', label: 'Iowa' },
+  { code: 'KS', label: 'Kansas' },
+  { code: 'KY', label: 'Kentucky' },
+  { code: 'LA', label: 'Louisiana' },
+  { code: 'ME', label: 'Maine' },
+  { code: 'MD', label: 'Maryland' },
+  { code: 'MA', label: 'Massachusetts' },
+  { code: 'MI', label: 'Michigan' },
+  { code: 'MN', label: 'Minnesota' },
+  { code: 'MS', label: 'Mississippi' },
+  { code: 'MO', label: 'Missouri' },
+  { code: 'MT', label: 'Montana' },
+  { code: 'NE', label: 'Nebraska' },
+  { code: 'NV', label: 'Nevada' },
+  { code: 'NH', label: 'New Hampshire' },
+  { code: 'NJ', label: 'New Jersey' },
+  { code: 'NM', label: 'New Mexico' },
+  { code: 'NY', label: 'New York' },
+  { code: 'NC', label: 'North Carolina' },
+  { code: 'ND', label: 'North Dakota' },
+  { code: 'OH', label: 'Ohio' },
+  { code: 'OK', label: 'Oklahoma' },
+  { code: 'OR', label: 'Oregon' },
+  { code: 'PA', label: 'Pennsylvania' },
+  { code: 'RI', label: 'Rhode Island' },
+  { code: 'SC', label: 'South Carolina' },
+  { code: 'SD', label: 'South Dakota' },
+  { code: 'TN', label: 'Tennessee' },
+  { code: 'TX', label: 'Texas' },
+  { code: 'UT', label: 'Utah' },
+  { code: 'VT', label: 'Vermont' },
+  { code: 'VA', label: 'Virginia' },
+  { code: 'WA', label: 'Washington' },
+  { code: 'WV', label: 'West Virginia' },
+  { code: 'WI', label: 'Wisconsin' },
+  { code: 'WY', label: 'Wyoming' },
+  { code: 'DC', label: 'District of Columbia' },
+];

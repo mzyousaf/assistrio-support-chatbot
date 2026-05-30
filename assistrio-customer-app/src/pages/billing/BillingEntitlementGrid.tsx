@@ -18,7 +18,10 @@ import {
   formatExportReportsLabel,
   formatPlanPriceMonthly,
 } from '@/pages/billing/billingSummaryDisplay';
-import { formatUsagePeriodDate } from '@/pages/usage/usagePageFormat';
+import {
+  formatBillingPeriodCompact,
+  formatCreditsIncludedLabel,
+} from '@/lib/planEntitlements';
 
 type EntitlementItem = {
   icon: LucideIcon;
@@ -34,7 +37,7 @@ export function buildBillingEntitlementItems(summary: WorkspaceBillingSummary): 
     {
       icon: Coins,
       label: 'AI credits',
-      value: `${entitlements.monthlyAiCredits.toLocaleString()} / month`,
+      value: formatCreditsIncludedLabel(summary),
     },
     {
       icon: Users,
@@ -69,8 +72,8 @@ export function buildBillingEntitlementItems(summary: WorkspaceBillingSummary): 
     },
     {
       icon: CreditCard,
-      label: 'Billing period',
-      value: `${formatUsagePeriodDate(plan.currentPeriodStart)} – ${formatUsagePeriodDate(plan.currentPeriodEnd)}`,
+      label: entitlements.isTrialPlan ? 'Trial period' : 'Billing period',
+      value: formatBillingPeriodCompact(summary),
     },
   ];
 }

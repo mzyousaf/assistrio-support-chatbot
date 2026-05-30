@@ -1,4 +1,5 @@
 import type { WorkspaceBillingSummary } from '@/api/types';
+import { formatPlanDisplayName } from '@/lib/planEntitlements';
 import { formatPlanChipLabel, formatSubscriptionStatusLabel } from '@/pages/usage/usagePageFormat';
 
 type Props = {
@@ -6,7 +7,9 @@ type Props = {
 };
 
 export function UsagePlanStatusChips({ summary }: Props) {
-  const planLabel = formatPlanChipLabel(summary.plan?.name);
+  const planLabel = formatPlanChipLabel(
+    formatPlanDisplayName(summary.plan?.name ?? '', summary.entitlements?.isTrialPlan),
+  );
   const statusLabel = formatSubscriptionStatusLabel(summary.plan?.status);
 
   return (

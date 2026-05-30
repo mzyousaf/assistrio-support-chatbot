@@ -1,12 +1,14 @@
 import { KnowledgeUsageMeterBar } from '@/components/knowledge/KnowledgeUsageMeterBar';
 import { SettingsStatCard } from '@/components/settings/SettingsStatCard';
 import { Card, CardBody } from '@/components/ui';
+import { cn } from '@/lib/utils';
 
 type Props = {
   seatsUsed: number;
   memberLimit: number | null;
   activeMembers: number;
   pendingInvites: number;
+  isOverMemberLimit?: boolean;
 };
 
 function SeatsUsedCard(props: {
@@ -14,26 +16,44 @@ function SeatsUsedCard(props: {
   memberLimit: number | null;
   usagePercent: number;
   hasLimit: boolean;
+  isOverMemberLimit: boolean;
 }) {
-  const { seatsUsed, memberLimit, usagePercent, hasLimit } = props;
+  const { seatsUsed, memberLimit, usagePercent, hasLimit, isOverMemberLimit } = props;
 
   return (
-    <Card className="h-full border-slate-200/90 shadow-[var(--shadow-card)]">
+    <Card
+      className={cn(
+        'h-full shadow-[var(--shadow-card)]',
+        isOverMemberLimit ? 'border-amber-200/90 bg-amber-50/40' : 'border-slate-200/90',
+      )}
+    >
       <CardBody className="flex h-full flex-col gap-3 p-4">
         <div className="flex items-center justify-between gap-2">
           <p className="m-0 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Seats used</p>
-          <span className="inline-flex shrink-0 rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-slate-700">
+          <span
+            className={cn(
+              'inline-flex shrink-0 rounded-md px-2 py-0.5 text-[11px] font-semibold tabular-nums',
+              isOverMemberLimit ? 'bg-amber-100 text-amber-900' : 'bg-slate-100 text-slate-700',
+            )}
+          >
             {hasLimit ? `${seatsUsed}/${memberLimit}` : seatsUsed}
           </span>
         </div>
         {hasLimit ? (
-          <KnowledgeUsageMeterBar
-            percent={usagePercent}
-            heightClass="h-1.5"
-            fillClassName="bg-teal-500/75"
-            aria-label="Workspace seat usage"
-            aria-valuenow={usagePercent}
-          />
+          <>
+            <KnowledgeUsageMeterBar
+              percent={Math.min(100, usagePercent)}
+              heightClass="h-1.5"
+              fillClassName={isOverMemberLimit ? 'bg-amber-500/80' : 'bg-teal-500/75'}
+              aria-label="Workspace seat usage"
+              aria-valuenow={usagePercent}
+            />
+            {isOverMemberLimit ? (
+              <p className="m-0 text-xs font-medium text-amber-900/90">
+                Over plan limit — remove members or upgrade.
+              </p>
+            ) : null}
+          </>
         ) : (
           <p className="m-0 text-xs text-slate-500">No seat limit on this plan.</p>
         )}
@@ -47,9 +67,10 @@ export function WorkspaceSeatUsageCards({
   memberLimit,
   activeMembers,
   pendingInvites,
+  isOverMemberLimit = false,
 }: Props) {
   const hasLimit = memberLimit != null && memberLimit > 0;
-  const usagePercent = hasLimit ? Math.min(100, Math.round((seatsUsed / memberLimit) * 100)) : 0;
+  const usagePercent = hasLimit ? Math.round((seatsUsed / memberLimit) * 100) : 0;
 
   return (
     <section id="members-seat-usage" aria-label="Workspace seat usage">
@@ -59,6 +80,7 @@ export function WorkspaceSeatUsageCards({
           memberLimit={memberLimit}
           usagePercent={usagePercent}
           hasLimit={hasLimit}
+          isOverMemberLimit={isOverMemberLimit}
         />
 
         <SettingsStatCard label="Active members" value={String(activeMembers)} />

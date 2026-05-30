@@ -1,4 +1,4 @@
-import type { WorkspaceEntitlements } from '../entitlements/workspace-entitlements.types';
+import { mockFreeWorkspaceEntitlements } from '../entitlements/test/workspace-entitlements.fixture';
 import { PLAN_LIMIT_BOT_KB_TOTAL_CODE } from '../knowledge/bot-knowledge-total-limit.service';
 import {
   assertOnboardingKbWithinLimit,
@@ -7,25 +7,10 @@ import {
 } from './workspace-onboarding-knowledge-limit.util';
 
 describe('workspace onboarding knowledge limit', () => {
-  const entitlements = {
+  const entitlements = mockFreeWorkspaceEntitlements({
     workspaceId: 'ws1',
-    planKey: 'free',
-    planName: 'Free',
-    subscriptionStatus: 'free' as const,
-    botLimit: 1,
-    memberLimit: 1,
     monthlyAiCredits: 100,
-    kbStorageMbPerBot: 5,
-    kbStorageBytesPerBot: 5 * 1024 * 1024,
-    maxKbStorageMbPerBot: 40,
-    maxKbStorageBytesPerBot: 40 * 1024 * 1024,
-    analyticsHistoryDays: 7,
-    canExportReports: false,
-    showPoweredByAssistrio: true,
-    canRemoveBranding: false,
-    activeAddons: [],
-    topUpCreditsRemaining: 0,
-  } as WorkspaceEntitlements;
+  });
 
   const draft = {
     profile: {

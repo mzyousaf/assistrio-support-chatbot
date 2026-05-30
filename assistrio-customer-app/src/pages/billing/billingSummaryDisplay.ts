@@ -31,9 +31,8 @@ export function formatAddonScopeLabel(scope: WorkspaceBillingAddonCatalogCard['s
 
 /** User-facing add-on titles aligned with Epic 6 trained-knowledge wording. */
 export function formatAddonDisplayName(addon: WorkspaceBillingAddonCatalogCard): string {
-  if (addon.key === 'kb_storage_5mb') return '+5 MB trained KB storage';
-  if (addon.key === 'kb_storage_10mb') return '+10 MB trained KB storage';
   if (addon.key === 'extra_bot') return 'Extra agent';
+  if (addon.key === 'ai_credits_1000') return '1,000 extra AI credits';
   return addon.name;
 }
 
@@ -70,19 +69,13 @@ export function formatAddonCardPriceLine(addon: WorkspaceBillingAddonCatalogCard
 /** Short description copy for add-on cards. Frontend display only. */
 export function formatAddonDescription(addon: WorkspaceBillingAddonCatalogCard): string {
   if (addon.key === 'ai_credits_1000') {
-    return 'Top up your workspace with extra AI credits when you need more capacity for chats, voice, and dictation.';
+    return 'Used after monthly credits.';
   }
   if (addon.key === 'extra_bot') {
-    return 'Add extra agents to your workspace.';
+    return 'Adds one extra agent to this workspace while the add-on subscription is active.';
   }
   if (addon.key === 'remove_branding') {
-    return 'Remove the Powered by Assistrio branding from your deployed agents.';
-  }
-  if (addon.key === 'kb_storage_5mb') {
-    return 'Add trained knowledge storage capacity to a single agent.';
-  }
-  if (addon.key === 'kb_storage_10mb') {
-    return 'Add more trained knowledge storage capacity to a single agent.';
+    return 'Lets you hide “Powered by Assistrio” from your widget while active.';
   }
   return addon.name;
 }
@@ -93,10 +86,15 @@ export function planCatalogFeatureLines(plan: WorkspaceBillingPlanCatalogCard): 
 
 /** Key limits shown on Plans pricing cards. */
 export function planPricingCardFeatureLines(plan: WorkspaceBillingPlanCatalogCard): string[] {
+  const creditsLine =
+    plan.key === 'free'
+      ? `${plan.monthlyAiCredits.toLocaleString()} trial credits total`
+      : `${plan.monthlyAiCredits.toLocaleString()} AI credits / month`;
+
   return [
     `${plan.botLimit} agent${plan.botLimit === 1 ? '' : 's'}`,
     `${plan.memberLimit} member${plan.memberLimit === 1 ? '' : 's'}`,
-    `${plan.monthlyAiCredits.toLocaleString()} AI credits/month`,
+    creditsLine,
     `${plan.kbStorageMbPerBot} MB trained knowledge / bot`,
     formatAnalyticsHistoryCardLabel(plan.analyticsHistoryDays),
     formatExportReportsLabel(plan.canExportReports),

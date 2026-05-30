@@ -19,7 +19,9 @@ import { UsageKnowledgeStorageTable } from '@/pages/usage/UsageKnowledgeStorageT
 import { UsageMetricCard } from '@/pages/usage/UsageMetricCard';
 import { UsagePageSkeleton } from '@/pages/usage/UsagePageSkeleton';
 import { UsagePlanStatusChips } from '@/pages/usage/UsagePlanStatusChips';
-import { formatAiCreditsPercent, formatLimitPercent } from '@/pages/usage/usagePageFormat';
+import { formatAiCreditsPercent, formatLimitPercent, formatUsagePeriodDate } from '@/pages/usage/usagePageFormat';
+import { AI_CREDITS_TOP_UP_COPY } from '@/lib/billingAddonCatalogDisplay';
+import { formatAiCreditsRingAriaLabel } from '@/lib/planEntitlements';
 
 type LoadState = 'idle' | 'loading' | 'ready' | 'error';
 
@@ -110,7 +112,9 @@ export function UsagePage() {
 
   const aiCreditsUsed = aiCredits?.monthlyCreditsUsed ?? 0;
   const aiCreditsTotal = aiCredits?.monthlyCredits ?? 0;
-  const aiCreditsRemaining = aiCredits?.totalCreditsRemaining ?? aiCredits?.monthlyCreditsRemaining ?? 0;
+  const monthlyRemaining = aiCredits?.monthlyCreditsRemaining ?? Math.max(0, aiCreditsTotal - aiCreditsUsed);
+  const topUpRemaining = aiCredits?.topUpCreditsRemaining ?? 0;
+  const aiCreditsRemaining = aiCredits?.totalCreditsRemaining ?? monthlyRemaining + topUpRemaining;
   const aiCreditsOverLimit = Boolean(aiCredits?.isOverLimit);
   const aiCreditsPercent = formatAiCreditsPercent(aiCreditsUsed, aiCreditsTotal);
   const aiCreditsRingTone = aiCreditsOverLimit || aiCreditsPercent >= 100 ? 'danger' : 'default';
@@ -164,12 +168,23 @@ export function UsagePage() {
               <UsageMetricCard
                 title="AI credits"
                 icon={Coins}
-                valueLabel={`${aiCreditsUsed.toLocaleString()} / ${aiCreditsTotal.toLocaleString()}`}
+                valueLabel={`${aiCreditsUsed.toLocaleString()} / ${aiCreditsTotal.toLocaleString()} monthly used`}
                 ringPercent={aiCreditsPercent}
-                ringAriaLabel="AI credits used this billing period"
+                ringAriaLabel={formatAiCreditsRingAriaLabel(summary)}
                 ringTone={aiCreditsRingTone}
-                supportText={`${aiCreditsRemaining.toLocaleString()} remaining`}
-                helper="AI credits reset each billing period."
+                supportText={[
+                  `${monthlyRemaining.toLocaleString()} monthly remaining`,
+                  `${topUpRemaining.toLocaleString()} top-up remaining`,
+                  `${aiCreditsRemaining.toLocaleString()} total remaining`,
+                  aiCredits?.periodEnd ? `Resets ${formatUsagePeriodDate(aiCredits.periodEnd)}` : null,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+                helper={
+                  summary?.entitlements.isTrialPlan
+                    ? 'Trial credits do not renew. Upgrade for monthly AI credits.'
+                    : AI_CREDITS_TOP_UP_COPY
+                }
                 tone={aiCreditsCardTone}
                 footer={
                   aiCreditsOverLimit ? (
@@ -227,7 +242,9 @@ export function UsagePage() {
                 <h2 id="usage-addons-heading" className="m-0 text-sm font-semibold text-slate-900">
                   Available add-ons
                 </h2>
-                <p className="m-0 mt-1 text-xs text-slate-500">Add-ons are not available yet.</p>
+                <p className="m-0 mt-1 text-xs text-slate-500">
+                  Purchase add-ons from Plans or manage active add-ons on Billing &amp; Invoices.
+                </p>
               </div>
               <div className="flex flex-col gap-3">
                 {addonCatalog.map((addon) => (

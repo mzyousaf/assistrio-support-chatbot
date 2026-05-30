@@ -6,50 +6,66 @@ import {
   megabytesToBytes,
   PLAN_CATALOG,
 } from './plan-catalog';
+import { FREE_TRIAL_DAYS } from './plan-trial-period.util';
 
 describe('plan-catalog', () => {
   it('defines Free, Starter, and Pro plans', () => {
     expect(PLAN_CATALOG.map((p) => p.key)).toEqual(['free', 'starter', 'pro']);
   });
 
-  it('Free plan matches Epic 6 product spec', () => {
+  it('Free plan is a 7-day trial with 50 non-renewing credits', () => {
     expect(FREE_PLAN).toMatchObject({
       key: 'free',
       name: 'Free',
       priceMonthlyUsd: 0,
       botLimit: 1,
-      memberLimit: 3,
+      memberLimit: 1,
       monthlyAiCredits: 50,
       kbStorageMbPerBot: 5,
       maxKbStorageMbPerBot: 40,
       analyticsHistoryDays: 7,
       canExportReports: false,
       showPoweredByAssistrio: true,
+      isTrialPlan: true,
+      trialDays: FREE_TRIAL_DAYS,
+      creditsRenewMonthly: false,
+      autoTrainAllowed: false,
+      addonsAllowed: false,
+      memberInvitesAllowed: false,
     });
   });
 
-  it('Starter plan enables export reports', () => {
+  it('Starter plan enables export reports and paid-plan features', () => {
     expect(STARTER_PLAN).toMatchObject({
       key: 'starter',
       name: 'Starter',
       priceMonthlyUsd: 49,
+      memberLimit: 5,
       monthlyAiCredits: 500,
       kbStorageMbPerBot: 15,
       canExportReports: true,
       showPoweredByAssistrio: true,
+      isTrialPlan: false,
+      creditsRenewMonthly: true,
+      autoTrainAllowed: true,
+      addonsAllowed: true,
+      memberInvitesAllowed: true,
     });
     expect(STARTER_PLAN.analyticsHistoryDays).toBeNull();
   });
 
-  it('Pro plan has higher member and credit limits', () => {
+  it('Pro plan has 10 members and 2000 monthly credits', () => {
     expect(PRO_PLAN).toMatchObject({
       key: 'pro',
       name: 'Pro',
       priceMonthlyUsd: 99,
-      memberLimit: 5,
-      monthlyAiCredits: 3000,
+      memberLimit: 10,
+      monthlyAiCredits: 2000,
       kbStorageMbPerBot: 30,
       canExportReports: true,
+      autoTrainAllowed: true,
+      addonsAllowed: true,
+      memberInvitesAllowed: true,
     });
     expect(PRO_PLAN.analyticsHistoryDays).toBeNull();
   });

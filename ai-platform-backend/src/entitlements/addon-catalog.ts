@@ -1,12 +1,19 @@
 /**
- * Static add-on catalog for future billing/enforcement. Not wired to purchases in Epic 2 Step 2.
+ * Static add-on catalog for billing/enforcement.
  */
+export const LEGACY_KB_ADDON_KEYS = ['kb_storage_5mb', 'kb_storage_10mb'] as const;
+
+export type LegacyKbAddonKey = (typeof LEGACY_KB_ADDON_KEYS)[number];
+
+export function isLegacyKbAddonKey(key: string | null | undefined): boolean {
+  const normalized = String(key ?? '').trim();
+  return LEGACY_KB_ADDON_KEYS.includes(normalized as LegacyKbAddonKey);
+}
+
 export const WORKSPACE_ADDON_KEYS = [
   'ai_credits_1000',
   'extra_bot',
   'remove_branding',
-  'kb_storage_5mb',
-  'kb_storage_10mb',
 ] as const;
 
 export type WorkspaceAddonKey = (typeof WORKSPACE_ADDON_KEYS)[number];
@@ -42,19 +49,5 @@ export const WORKSPACE_ADDON_CATALOG: readonly WorkspaceAddonDefinition[] = [
     billingInterval: 'monthly',
     priceUsd: 20,
     scope: 'workspace',
-  },
-  {
-    key: 'kb_storage_5mb',
-    name: '+5 MB KB storage',
-    billingInterval: 'monthly',
-    priceUsd: 10,
-    scope: 'bot',
-  },
-  {
-    key: 'kb_storage_10mb',
-    name: '+10 MB KB storage',
-    billingInterval: 'monthly',
-    priceUsd: 15,
-    scope: 'bot',
   },
 ];

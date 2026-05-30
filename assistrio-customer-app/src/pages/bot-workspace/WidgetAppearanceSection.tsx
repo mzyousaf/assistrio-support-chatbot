@@ -1,15 +1,14 @@
 import { useCallback, useEffect, useId, useRef, useState, type FormEvent } from 'react';
-import { Link } from 'react-router-dom';
 import { Loader2, Palette, Rocket, Save, SeparatorHorizontal, type LucideIcon } from 'lucide-react';
 import { patchCustomerBot } from '../../api/customerApi';
 import { useCustomerAuth } from '../../auth/CustomerAuthContext';
 import {
   applyBrandingEntitlementToLocalChatUi,
-  BRANDING_REMOVAL_LOCKED_HELPER,
   resolveBrandingSaveErrorMessage,
 } from '../../lib/brandingEntitlementCopy';
 import { resolveActiveCustomerWorkspace } from '../../lib/resolveActiveCustomerWorkspace';
 import { useWorkspaceBillingSummary } from '../../hooks/useWorkspaceBillingSummary';
+import { PaidPlanFeatureCalloutForReason } from '@/components/billing/PaidPlanFeatureCallout';
 import { Button, Card, CardBody, FieldRow, Input, Range, Select, Switch, Textarea } from '@/components/ui';
 import { BotSettingsFieldset } from '@/components/bot-workspace/BotSettingsFieldset';
 import { cn } from '@/lib/utils';
@@ -302,6 +301,7 @@ export function WidgetAppearanceSection() {
             </div>
           ) : null}
 
+          <BotSettingsFieldset canManage={canManageBot}>
           <div className={ws.workspaceEditorSubnavSection}>
             <div className={ws.workspaceEditorSubnavBar}>
               <div
@@ -341,7 +341,6 @@ export function WidgetAppearanceSection() {
             {activeMeta ? <p className={ws.workspaceEditorTabContext}>{activeMeta.hint}</p> : null}
           </div>
 
-          <BotSettingsFieldset canManage={canManageBot}>
           <div className={ws.workspaceEditorCardGap}>
             {activeTab === 'branding-theme' ? (
               <div
@@ -448,6 +447,43 @@ export function WidgetAppearanceSection() {
                               </Select>
                             </FieldRow>
                           </div>
+                        </div>
+                        <div className="mt-6 space-y-4 border-t border-slate-100 pt-6">
+                          <WorkspaceSectionHeader
+                            id="appearance-assistrio-branding-card"
+                            title="Assistrio branding"
+                            description="Logo and Powered by Assistrio link above the composer before the first visitor message."
+                            inlineEnd={
+                              <>
+                                <span
+                                  className={cn(
+                                    showAssistrioBrandingPaidEnabled
+                                      ? ws.workspaceEditorPreviewPillOn
+                                      : ws.workspaceEditorPreviewPillOff,
+                                  )}
+                                >
+                                  {showAssistrioBrandingPaidEnabled ? 'On' : 'Off'}
+                                </span>
+                                <Switch
+                                  id="appearance-show-assistrio-branding-paid"
+                                  checked={showAssistrioBrandingPaidEnabled}
+                                  onCheckedChange={(v) => patch('showAssistrioBrandingPaid', v)}
+                                  disabled={brandingLocked}
+                                  aria-label="Assistrio branding"
+                                />
+                              </>
+                            }
+                          />
+                          {brandingLocked ? (
+                            <div>
+                              <PaidPlanFeatureCalloutForReason reason="branding" compact />
+                              {storedAssistrioBrandingHidden ? (
+                                <p className="mt-2 text-sm text-amber-800">
+                                  Assistrio branding is required on your current plan and will stay visible in the live widget.
+                                </p>
+                              ) : null}
+                            </div>
+                          ) : null}
                         </div>
                       </div>
                     </section>
@@ -569,29 +605,6 @@ export function WidgetAppearanceSection() {
                           checked={showBrandingEnabled}
                           onChange={(v) => patch('showBranding', v)}
                         />
-                        <ToggleRow
-                          id="appearance-show-assistrio-branding-paid"
-                          label="Show Assistrio branding"
-                          description="Logo and Powered by Assistrio link above the composer before the first visitor message."
-                          checked={showAssistrioBrandingPaidEnabled}
-                          disabled={brandingLocked}
-                          onChange={(v) => patch('showAssistrioBrandingPaid', v)}
-                        />
-                        {brandingLocked ? (
-                          <div className="border-b border-slate-100 py-3.5">
-                            <p className={cn(ws.workspaceEditorControlHint, 'm-0')}>
-                              {BRANDING_REMOVAL_LOCKED_HELPER}{' '}
-                              <Link to="/settings/plans" className="font-medium text-teal-700 underline">
-                                View add-ons
-                              </Link>
-                            </p>
-                            {storedAssistrioBrandingHidden ? (
-                              <p className="mt-2 text-sm text-amber-800">
-                                Assistrio branding is required on your current plan and will stay visible in the live widget.
-                              </p>
-                            ) : null}
-                          </div>
-                        ) : null}
                         {showBrandingEnabled ? (
                           <div className="border-b border-slate-100 py-3.5">
                             <FieldRow

@@ -3,7 +3,16 @@ import { Crown } from 'lucide-react';
 import type { WorkspaceBillingSummary } from '@/api/types';
 import { BillingEntitlementGrid } from '@/pages/billing/BillingEntitlementGrid';
 import { formatPlanPriceMonthly } from '@/pages/billing/billingSummaryDisplay';
-import { formatSubscriptionStatusLabel, formatUsagePeriodDate } from '@/pages/usage/usagePageFormat';
+import {
+  formatBillingRenewsOrEndsLabel,
+  formatBillingSubscriptionStatusLabel,
+} from '@/pages/billing/billingSubscriptionDisplay';
+import {
+  formatBillingPeriodCompact,
+  formatBillingPeriodHeading,
+  formatCreditsIncludedLabel,
+  formatPlanDisplayName,
+} from '@/lib/planEntitlements';
 import { cn } from '@/lib/utils';
 
 type Props = {
@@ -46,17 +55,14 @@ export function BillingCurrentPlanHero({
                 id="billing-current-plan-heading"
                 className="m-0 mt-1 text-xl font-semibold tracking-tight text-slate-900"
               >
-                {plan.name}
+                {formatPlanDisplayName(plan.name, entitlements.isTrialPlan)}
               </h2>
               <p className="m-0 mt-1 text-sm text-slate-600">
                 {formatPlanPriceMonthly(plan.priceMonthly)} ·{' '}
-                {formatSubscriptionStatusLabel(plan.status)}
+                {formatBillingSubscriptionStatusLabel(summary)}
               </p>
               {!isCompact ? (
-                <p className="m-0 mt-1 text-sm text-slate-500">
-                  Billing period: {formatUsagePeriodDate(plan.currentPeriodStart)} –{' '}
-                  {formatUsagePeriodDate(plan.currentPeriodEnd)}
-                </p>
+                <p className="m-0 mt-1 text-sm text-slate-500">{formatBillingPeriodHeading(summary)}</p>
               ) : null}
             </div>
             {isCompact && showViewPlansLink ? (
@@ -71,14 +77,25 @@ export function BillingCurrentPlanHero({
 
           {isCompact ? (
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <CompactStat label="Status" value={formatSubscriptionStatusLabel(plan.status)} />
+              <CompactStat label="Status" value={formatBillingSubscriptionStatusLabel(summary)} />
               <CompactStat
-                label="Billing period"
-                value={`${formatUsagePeriodDate(plan.currentPeriodStart)} – ${formatUsagePeriodDate(plan.currentPeriodEnd)}`}
+                label={entitlements.isTrialPlan ? 'Trial period' : 'Billing period'}
+                value={formatBillingPeriodCompact(summary)}
+              />
+              <CompactStat
+                label={
+                  summary.subscription.cancelAtPeriodEnd &&
+                  summary.subscription.hasActivePaidSubscription
+                    ? 'Ends on'
+                    : entitlements.isTrialPlan
+                      ? 'Trial ends'
+                      : 'Renews on'
+                }
+                value={formatBillingRenewsOrEndsLabel(summary) ?? '—'}
               />
               <CompactStat
                 label="Credits included"
-                value={`${entitlements.monthlyAiCredits.toLocaleString()} / month`}
+                value={formatCreditsIncludedLabel(summary)}
               />
               <CompactStat label="Plan price" value={formatPlanPriceMonthly(plan.priceMonthly)} />
             </div>

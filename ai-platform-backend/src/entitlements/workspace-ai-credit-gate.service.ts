@@ -2,9 +2,16 @@ import { HttpException, HttpStatus, Injectable, ServiceUnavailableException } fr
 import { WorkspaceAiCreditsUsageService } from './workspace-ai-credits-usage.service';
 
 export const PLAN_LIMIT_AI_CREDITS_CODE = 'plan_limit_ai_credits' as const;
+export const FREE_TRIAL_EXPIRED_CODE = 'free_trial_expired' as const;
 
 export const PLAN_LIMIT_AI_CREDITS_MESSAGE =
   'Your workspace has used all AI credits for this billing period.';
+
+export const PLAN_LIMIT_AI_CREDITS_TRIAL_MESSAGE =
+  'Your workspace has used all trial AI credits. Please upgrade to continue using AI chat.';
+
+export const FREE_TRIAL_EXPIRED_MESSAGE =
+  'Your free trial has ended. Please upgrade to continue using AI chat.';
 
 export type PlanLimitAiCreditsUsage = {
   current: number;
@@ -23,11 +30,25 @@ export type PlanLimitAiCreditsPayload = {
   usage: PlanLimitAiCreditsUsage;
 };
 
+export type FreeTrialExpiredPayload = {
+  message: string;
+  errorCode: typeof FREE_TRIAL_EXPIRED_CODE;
+  usage: PlanLimitAiCreditsUsage;
+};
+
 export function isPlanLimitAiCreditsPayload(x: unknown): x is PlanLimitAiCreditsPayload {
   return (
     typeof x === 'object' &&
     x !== null &&
     (x as PlanLimitAiCreditsPayload).errorCode === PLAN_LIMIT_AI_CREDITS_CODE
+  );
+}
+
+export function isFreeTrialExpiredPayload(x: unknown): x is FreeTrialExpiredPayload {
+  return (
+    typeof x === 'object' &&
+    x !== null &&
+    (x as FreeTrialExpiredPayload).errorCode === FREE_TRIAL_EXPIRED_CODE
   );
 }
 
@@ -71,22 +92,43 @@ export class WorkspaceAiCreditGateService {
 
     const current = usageSummary.monthlyCreditsUsed;
     const limit = usageSummary.monthlyAiCredits;
-    const remaining = usageSummary.monthlyCreditsRemaining;
+    const monthlyRemaining = usageSummary.monthlyCreditsRemaining;
+    const topUpRemaining = usageSummary.topUpCreditsRemaining;
+    const totalRemaining = monthlyRemaining + topUpRemaining;
+
+    const usagePayload: PlanLimitAiCreditsUsage = {
+      current,
+      attempted: estimatedCredits,
+      limit,
+      remaining: totalRemaining,
+      planKey: usageSummary.planKey,
+      planName: usageSummary.planName,
+      periodStart: usageSummary.billingPeriod.start,
+      periodEnd: usageSummary.billingPeriod.end,
+    };
+
+    if (usageSummary.isTrialExpired) {
+      throw new HttpException(
+        {
+          message: FREE_TRIAL_EXPIRED_MESSAGE,
+          errorCode: FREE_TRIAL_EXPIRED_CODE,
+          usage: usagePayload,
+        } satisfies FreeTrialExpiredPayload,
+        HttpStatus.FORBIDDEN,
+      );
+    }
 
     if (current + estimatedCredits > limit) {
+      const spill = current + estimatedCredits - limit;
+      if (spill <= topUpRemaining) {
+        return;
+      }
       const payload: PlanLimitAiCreditsPayload = {
-        message: PLAN_LIMIT_AI_CREDITS_MESSAGE,
+        message: usageSummary.isTrialPlan
+          ? PLAN_LIMIT_AI_CREDITS_TRIAL_MESSAGE
+          : PLAN_LIMIT_AI_CREDITS_MESSAGE,
         errorCode: PLAN_LIMIT_AI_CREDITS_CODE,
-        usage: {
-          current,
-          attempted: estimatedCredits,
-          limit,
-          remaining,
-          planKey: usageSummary.planKey,
-          planName: usageSummary.planName,
-          periodStart: usageSummary.billingPeriod.start,
-          periodEnd: usageSummary.billingPeriod.end,
-        },
+        usage: usagePayload,
       };
       throw new HttpException(payload, HttpStatus.FORBIDDEN);
     }

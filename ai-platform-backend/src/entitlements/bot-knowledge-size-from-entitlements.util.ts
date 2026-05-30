@@ -9,7 +9,7 @@ export type EntitlementsKbSizeInput = Pick<
 
 /**
  * Builds `botConfig.knowledgeSize` for new customer bots from workspace plan entitlements.
- * Storage add-ons are not applied yet (base plan quota only).
+ * Per-bot KB storage add-ons are applied at resolve time via {@link resolveKbEntitlementsForBot}.
  *
  * TODO(epic-6): Reconcile existing bots that still carry legacy 50 MiB schema defaults when a safe migration path exists.
  */

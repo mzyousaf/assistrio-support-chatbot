@@ -2,6 +2,7 @@ import { createPortal } from 'react-dom';
 import { BrowserRouter, Navigate, Route, Routes, useParams } from 'react-router-dom';
 import { CustomerAuthProvider } from './auth/CustomerAuthContext';
 import { AppShell } from './layout/AppShell';
+import { UpgradePlanModalProvider } from './components/billing/UpgradePlanModalProvider';
 import { WorkspaceDiscardModalProvider } from './pages/bot-workspace/WorkspaceDiscardModal';
 import { ProtectedRoute } from './layout/ProtectedRoute';
 import { OnboardingCompleteRoute } from './layout/OnboardingCompleteRoute';
@@ -94,6 +95,7 @@ export function App() {
     <CustomerAuthProvider>
       <BrowserRouter>
         <>
+        <UpgradePlanModalProvider>
         <WorkspaceDiscardModalProvider>
         <Routes>
           <Route
@@ -224,6 +226,7 @@ export function App() {
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
         </WorkspaceDiscardModalProvider>
+        </UpgradePlanModalProvider>
         {/* Portaled to body so toasts paint above Modal overlays (z-[300]) on document.body */}
         {createPortal(<AppToaster />, document.body)}
         </>

@@ -17,6 +17,14 @@ type Props = {
   plan: WorkspaceBillingPlanCatalogCard;
   isCurrent: boolean;
   billingPeriod?: PlanBillingPeriod;
+  /** Overrides static plan-page recommendation for button emphasis. */
+  recommended?: boolean;
+  /** Shows a small Recommended badge when `recommended` is true. */
+  showRecommendedBadge?: boolean;
+  actionLabel?: string;
+  actionDisabled?: boolean;
+  actionLoading?: boolean;
+  onAction?: () => void;
 };
 
 function PlanCornerTag({ label, planKey }: { label: string; planKey: string }) {
@@ -71,15 +79,33 @@ function PlanWhySection({ planKey }: { planKey: string }) {
   );
 }
 
-export function BillingPlanCard({ plan, isCurrent, billingPeriod = 'monthly' }: Props) {
-  const recommended = isRecommendedPlan(plan.key);
+export function BillingPlanCard({
+  plan,
+  isCurrent,
+  billingPeriod = 'monthly',
+  recommended: recommendedOverride,
+  showRecommendedBadge = false,
+  actionLabel,
+  actionDisabled = true,
+  actionLoading = false,
+  onAction,
+}: Props) {
+  const recommended = recommendedOverride ?? isRecommendedPlan(plan.key);
   const trialNote = planPricingCardTrialNote(plan.key);
+  const buttonLabel =
+    actionLabel ?? (isCurrent ? 'Current plan' : 'Coming soon');
+  const buttonDisabled = actionDisabled || actionLoading;
 
   return (
     <article
       aria-current={isCurrent ? 'true' : undefined}
       className="relative flex h-full flex-col rounded-2xl border border-slate-200/90 bg-white p-6 shadow-[var(--shadow-card)]"
     >
+      {showRecommendedBadge && recommended ? (
+        <span className="absolute left-0 top-0 rounded-br-xl rounded-tl-2xl bg-teal-50 px-2.5 py-1 text-[10px] font-semibold leading-snug text-teal-800 ring-1 ring-teal-200/80">
+          Recommended
+        </span>
+      ) : null}
       <PlanCornerTag label={planPricingCardBestFor(plan.key)} planKey={plan.key} />
 
       <div className="pr-14 text-left">
@@ -102,12 +128,13 @@ export function BillingPlanCard({ plan, isCurrent, billingPeriod = 'monthly' }: 
       <div className="mt-4 w-full">
         <Button
           type="button"
-          variant={recommended ? 'primary' : 'secondary'}
+          variant={recommended && !buttonDisabled ? 'primary' : 'secondary'}
           size="md"
-          disabled
+          disabled={buttonDisabled}
           className="h-10 w-full min-w-full text-sm"
+          onClick={onAction}
         >
-          {isCurrent ? 'Current plan' : 'Coming soon'}
+          {actionLoading ? 'Starting checkout…' : buttonLabel}
         </Button>
       </div>
 

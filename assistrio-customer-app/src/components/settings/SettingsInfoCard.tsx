@@ -10,6 +10,7 @@ type Props = {
   action?: ReactNode;
   variant?: 'default' | 'hero' | 'muted';
   id?: string;
+  className?: string;
 };
 
 export function SettingsInfoCard({
@@ -20,6 +21,7 @@ export function SettingsInfoCard({
   action,
   variant = 'default',
   id,
+  className,
 }: Props) {
   return (
     <section
@@ -32,6 +34,7 @@ export function SettingsInfoCard({
           : variant === 'muted'
             ? 'border-slate-200/80 bg-slate-50/70'
             : 'border-slate-200/90 bg-white',
+        className,
       )}
     >
       <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-start sm:gap-5">

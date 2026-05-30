@@ -3,6 +3,10 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { Bot, BotSchema } from '../models/bot.schema';
 import { UsageLedger, UsageLedgerSchema } from '../models/usage-ledger.schema';
 import {
+  WorkspaceAddon,
+  WorkspaceAddonSchema,
+  WorkspaceCreditTopUp,
+  WorkspaceCreditTopUpSchema,
   WorkspaceInvite,
   WorkspaceInviteSchema,
   WorkspaceMembership,
@@ -10,6 +14,7 @@ import {
   WorkspaceSubscription,
   WorkspaceSubscriptionSchema,
 } from '../models';
+import { WorkspaceCreditTopUpService } from './workspace-credit-topup.service';
 import { WorkspaceAiCreditGateService } from './workspace-ai-credit-gate.service';
 import { WorkspaceAiCreditsUsageService } from './workspace-ai-credits-usage.service';
 import { WorkspaceAnalyticsEntitlementService } from './workspace-analytics-entitlement.service';
@@ -25,6 +30,8 @@ import { WorkspaceSubscriptionsService } from './workspace-subscriptions.service
   imports: [
     MongooseModule.forFeature([
       { name: WorkspaceSubscription.name, schema: WorkspaceSubscriptionSchema },
+      { name: WorkspaceAddon.name, schema: WorkspaceAddonSchema },
+      { name: WorkspaceCreditTopUp.name, schema: WorkspaceCreditTopUpSchema },
       { name: Bot.name, schema: BotSchema },
       { name: UsageLedger.name, schema: UsageLedgerSchema },
       { name: WorkspaceMembership.name, schema: WorkspaceMembershipSchema },
@@ -33,6 +40,7 @@ import { WorkspaceSubscriptionsService } from './workspace-subscriptions.service
   ],
   providers: [
     WorkspaceSubscriptionsService,
+    WorkspaceCreditTopUpService,
     WorkspaceEntitlementsService,
     WorkspaceBotLimitService,
     WorkspaceMemberLimitService,
@@ -45,6 +53,7 @@ import { WorkspaceSubscriptionsService } from './workspace-subscriptions.service
   ],
   exports: [
     WorkspaceSubscriptionsService,
+    WorkspaceCreditTopUpService,
     WorkspaceEntitlementsService,
     WorkspaceBotLimitService,
     WorkspaceMemberLimitService,

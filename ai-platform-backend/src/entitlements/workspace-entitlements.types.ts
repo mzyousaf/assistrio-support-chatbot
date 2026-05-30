@@ -17,10 +17,18 @@ export type WorkspaceEntitlements = {
   analyticsHistoryDays: number | null;
   canExportReports: boolean;
   showPoweredByAssistrio: boolean;
-  /** Deferred until remove_branding add-on is enforced. */
+  isTrialPlan: boolean;
+  trialDays: number | null;
+  trialStartedAt: string | null;
+  trialEndsAt: string | null;
+  isTrialExpired: boolean;
+  creditsRenewMonthly: boolean;
+  autoTrainAllowed: boolean;
+  addonsAllowed: boolean;
+  memberInvitesAllowed: boolean;
   canRemoveBranding: boolean;
-  /** Deferred until add-on purchases exist. */
   activeAddons: string[];
-  /** Deferred until credit top-ups exist. */
   topUpCreditsRemaining: number;
+  /** Extra trained-KB MB from active per-bot storage add-ons (botId -> MB). */
+  kbStorageBonusMbByBotId: Record<string, number>;
 };

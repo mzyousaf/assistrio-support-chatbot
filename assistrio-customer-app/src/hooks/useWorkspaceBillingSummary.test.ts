@@ -1,5 +1,7 @@
 import { renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { mockBillingSubscription } from '@/lib/billingSummaryFixtures';
+import { mockTrialBillingEntitlements } from '@/lib/planEntitlements';
 import {
   buildWorkspaceBillingSessionKey,
   useWorkspaceBillingSummary,
@@ -15,19 +17,8 @@ function buildSummary(workspaceId: string) {
   return {
     workspaceId,
     plan: { key: 'free', name: 'Free', priceMonthly: 0, status: 'free', currentPeriodStart: '', currentPeriodEnd: '' },
-    entitlements: {
-      botLimit: 1,
-      memberLimit: 3,
-      monthlyAiCredits: 50,
-      kbStorageMbPerBot: 5,
-      maxKbStorageMbPerBot: 40,
-      analyticsHistoryDays: 7,
-      canExportReports: false,
-      showPoweredByAssistrio: true,
-      canRemoveBranding: false,
-      activeAddons: [],
-      topUpCreditsRemaining: 0,
-    },
+    subscription: mockBillingSubscription(),
+    entitlements: mockTrialBillingEntitlements(),
     usage: {
       bots: { current: 0, limit: 1 },
       members: { current: 0, pendingInvites: 0, used: 0, limit: 3 },
@@ -47,6 +38,7 @@ function buildSummary(workspaceId: string) {
     },
     planCatalog: [],
     addonCatalog: [],
+    activeAddons: [],
   };
 }
 

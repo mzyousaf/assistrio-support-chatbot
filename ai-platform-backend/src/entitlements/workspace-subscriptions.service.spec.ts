@@ -1,4 +1,5 @@
 import { Types } from 'mongoose';
+import { computeFreeTrialPeriod, FREE_TRIAL_DAYS } from './plan-trial-period.util';
 import { WorkspaceSubscriptionsService } from './workspace-subscriptions.service';
 
 describe('WorkspaceSubscriptionsService', () => {
@@ -28,26 +29,31 @@ describe('WorkspaceSubscriptionsService', () => {
     };
   }
 
-  it('creates a Free subscription when none exists', async () => {
+  it('creates a Free trial subscription when none exists', async () => {
     const { service, subscriptionModel } = createService(null);
 
     const result = await service.ensureFreeSubscriptionForWorkspace(workspaceId);
 
     expect(subscriptionModel.create).toHaveBeenCalledTimes(1);
     expect(result.planKey).toBe('free');
-    expect(result.status).toBe('free');
+    expect(result.status).toBe('trialing');
     expect(result.workspaceId).toEqual(workspaceId);
     expect(result.currentPeriodStart).toBeInstanceOf(Date);
     expect(result.currentPeriodEnd).toBeInstanceOf(Date);
+    const expected = computeFreeTrialPeriod(result.currentPeriodStart);
+    expect(result.currentPeriodEnd.getTime()).toBe(expected.periodEnd.getTime());
+    expect(
+      result.currentPeriodEnd.getTime() - result.currentPeriodStart.getTime(),
+    ).toBe(FREE_TRIAL_DAYS * 24 * 60 * 60 * 1000);
   });
 
   it('is idempotent when subscription already exists', async () => {
     const existing = {
       workspaceId,
       planKey: 'free',
-      status: 'free',
+      status: 'trialing',
       currentPeriodStart: new Date('2026-05-01'),
-      currentPeriodEnd: new Date('2026-06-01'),
+      currentPeriodEnd: new Date('2026-05-08'),
     };
     const { service, subscriptionModel } = createService(existing);
 
@@ -61,9 +67,9 @@ describe('WorkspaceSubscriptionsService', () => {
     const raced = {
       workspaceId,
       planKey: 'free',
-      status: 'free',
+      status: 'trialing',
       currentPeriodStart: new Date('2026-05-01'),
-      currentPeriodEnd: new Date('2026-06-01'),
+      currentPeriodEnd: new Date('2026-05-08'),
     };
 
     const subscriptionModel = {

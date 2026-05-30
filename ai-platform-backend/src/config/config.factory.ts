@@ -26,6 +26,22 @@ export function configFactory() {
     googleOauthRedirectUri: process.env.GOOGLE_OAUTH_REDIRECT_URI?.trim() ?? '',
     /** Customer web app origin, no trailing slash (e.g. `https://app.assistrio.com`). Used for post-OAuth redirects. */
     customerAppBaseUrl: process.env.CUSTOMER_APP_BASE_URL?.trim().replace(/\/$/, '') ?? '',
+    adminAppBaseUrl: process.env.ADMIN_APP_BASE_URL?.trim().replace(/\/$/, '') ?? '',
+    billingAlertEmail: process.env.BILLING_ALERT_EMAIL?.trim() ?? '',
+    sendAssistrioPaymentReceiptEmail:
+      process.env.SEND_ASSISTRIO_PAYMENT_RECEIPT_EMAIL === 'true' ||
+      process.env.SEND_ASSISTRIO_PAYMENT_RECEIPT_EMAIL === '1',
+    /** Lemon Squeezy billing — optional at boot; required at runtime for checkout/webhooks. */
+    lemonSqueezyApiKey: process.env.LEMON_SQUEEZY_API_KEY?.trim() ?? '',
+    lemonSqueezyStoreId: process.env.LEMON_SQUEEZY_STORE_ID?.trim() ?? '',
+    lemonSqueezyWebhookSecret: process.env.LEMON_SQUEEZY_WEBHOOK_SECRET?.trim() ?? '',
+    lemonSqueezyStarterVariantId: process.env.LEMON_SQUEEZY_STARTER_VARIANT_ID?.trim() ?? '',
+    lemonSqueezyProVariantId: process.env.LEMON_SQUEEZY_PRO_VARIANT_ID?.trim() ?? '',
+    lemonSqueezyAddonExtraBotVariantId: process.env.LEMON_SQUEEZY_ADDON_EXTRA_BOT_VARIANT_ID?.trim() ?? '',
+    lemonSqueezyAddonRemoveBrandingVariantId:
+      process.env.LEMON_SQUEEZY_ADDON_REMOVE_BRANDING_VARIANT_ID?.trim() ?? '',
+    lemonSqueezyTopup1000CreditsVariantId:
+      process.env.LEMON_SQUEEZY_TOPUP_1000_CREDITS_VARIANT_ID?.trim() ?? '',
     /** Resend API key for transactional email (workspace invites, etc.). */
     resendApiKey: process.env.RESEND_API_KEY?.trim() ?? '',
     /** From address for transactional email (e.g. `Assistrio <noreply@assistrio.com>`). */

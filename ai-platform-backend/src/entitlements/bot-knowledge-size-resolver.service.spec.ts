@@ -12,12 +12,15 @@ import {
 describe('BotKnowledgeSizeResolverService', () => {
   const workspaceId = '507f1f77bcf86cd799439011';
 
-  function buildService(planKbMb: number) {
+  function buildService(planKbMb: number, kbBonusMbByBotId: Record<string, number> = {}) {
     const entitlementsService = {
       resolveForWorkspace: jest.fn().mockResolvedValue({
         planName: 'Free',
+        kbStorageMbPerBot: planKbMb,
         kbStorageBytesPerBot: megabytesToBytes(planKbMb),
+        maxKbStorageMbPerBot: 40,
         maxKbStorageBytesPerBot: megabytesToBytes(40),
+        kbStorageBonusMbByBotId: kbBonusMbByBotId,
       }),
     } as unknown as WorkspaceEntitlementsService;
     return {
@@ -67,13 +70,27 @@ describe('BotKnowledgeSizeResolverService', () => {
   });
 
   it('resolveFromEntitlements maps Pro plan to 30 MB', () => {
-    const { svc } = buildService(30);
+    const { svc } = buildService(25);
     const resolved = svc.resolveFromEntitlements({
       planName: 'Pro',
+      kbStorageMbPerBot: 30,
       kbStorageBytesPerBot: megabytesToBytes(30),
+      maxKbStorageMbPerBot: 40,
       maxKbStorageBytesPerBot: megabytesToBytes(40),
+      kbStorageBonusMbByBotId: {},
     });
     expect(resolved.maxBytes).toBe(30 * 1024 * 1024);
+  });
+
+  it('ignores legacy KB add-on bonus in entitlements', async () => {
+    const botId = '507f1f77bcf86cd799439012';
+    const { svc } = buildService(15, { [botId]: 10 });
+    const resolved = await svc.resolveForBotLean({
+      _id: new Types.ObjectId(botId),
+      workspaceId: new Types.ObjectId(workspaceId),
+      botConfig: {},
+    });
+    expect(resolved.maxBytes).toBe(megabytesToBytes(15));
   });
 
   it('workspace bot missing knowledgeSize resolves Free catalog quota (5 MB)', async () => {

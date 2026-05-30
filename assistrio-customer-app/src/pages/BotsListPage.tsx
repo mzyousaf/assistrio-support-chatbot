@@ -8,6 +8,8 @@ import { DataPageLayout } from '../layout/workspace-layout';
 import { AgentCard, DeleteAgentDialog } from '../components/AgentCard';
 import { AgentsPageSkeleton } from '../components/AgentsPageSkeleton';
 import { AgentShareAccessModal } from '../components/AgentShareAccessModal';
+import { useUpgradePlanModal } from '@/components/billing/UpgradePlanModalProvider';
+import { PLAN_LIMIT_WORKSPACE_BOTS_CODE } from '@/lib/planLimitError';
 import { resolveActiveCustomerWorkspace } from '../lib/resolveActiveCustomerWorkspace';
 import { canManageActiveWorkspace } from '../lib/canManageActiveWorkspace';
 import { isWorkspaceManagerRole, isWorkspaceOwnerRole } from '../lib/workspaceRoles';
@@ -60,6 +62,7 @@ export function BotsListPage() {
   const isOwner = isWorkspaceOwnerRole(role);
   const canShareAgentAccess = isOwner;
   const showViewAccessPreview = isWorkspaceManagerRole(role);
+  const { openUpgradeModal } = useUpgradePlanModal();
 
   const [bots, setBots] = useState<CustomerBotListItem[] | null>(null);
   const [loadState, setLoadState] = useState<LoadState>(() => (activeWorkspaceId ? 'loading' : 'idle'));
@@ -104,6 +107,9 @@ export function BotsListPage() {
     if (!res.ok) {
       if (isCreateDraftAdminDenied(res)) {
         appToast.error(BOTS_LIST_ADMIN_ONLY_CREATE_TOAST);
+      } else if (res.errorCode === PLAN_LIMIT_WORKSPACE_BOTS_CODE) {
+        setError(res.error);
+        openUpgradeModal({ reason: 'bots', recommendedPlanKey: 'pro' });
       } else {
         setError(res.error);
       }
@@ -239,6 +245,7 @@ export function BotsListPage() {
                   onDelete={setConfirmDelete}
                   canDelete={isAdmin}
                   onShare={canShareAgentAccess ? setShareBot : undefined}
+                  onReactivate={() => openUpgradeModal({ reason: 'bots', recommendedPlanKey: 'pro' })}
                   showViewAccessPreview={showViewAccessPreview}
                 />
               </li>
