@@ -1,3 +1,5 @@
+import { resolveContextualUpgradePlanKey as resolveContextualUpgradePlanKeyFromCatalog } from '@/lib/upgradePlanCatalog';
+
 export type UpgradePlanReason =
   | 'credits'
   | 'trial_expired'
@@ -15,7 +17,7 @@ export const PLAN_LIMIT_WORKSPACE_MEMBERS_CODE = 'plan_limit_workspace_members' 
 export const PLAN_LIMIT_WORKSPACE_BOTS_CODE = 'plan_limit_workspace_bots' as const;
 export const WORKSPACE_BOT_LIMIT_EXCEEDED_CODE = 'workspace_bot_limit_exceeded' as const;
 export const WORKSPACE_BOT_LIMIT_EXCEEDED_MESSAGE =
-  'This agent is inactive because your workspace is over its agent limit.';
+  'This AI Agent is inactive because your workspace is over its AI Agent limit.';
 export const PLAN_LIMIT_BOT_KB_TOTAL_CODE = 'plan_limit_bot_kb_total' as const;
 export const PLAN_LIMIT_AUTO_TRAIN_CODE = 'plan_limit_auto_train' as const;
 export const PLAN_LIMIT_EXPORT_REPORTS_CODE = 'plan_limit_export_reports' as const;
@@ -55,7 +57,7 @@ export function resolveUpgradePlanReasonSubtitle(reason: UpgradePlanReason): str
     case 'members':
       return 'Upgrade to invite teammates.';
     case 'bots':
-      return 'Upgrade or add an extra agent to create more agents.';
+      return 'Upgrade or add an extra AI Agent to create more AI Agents.';
     case 'trained_knowledge':
       return 'Upgrade for more trained knowledge storage.';
     case 'auto_train':
@@ -73,21 +75,42 @@ export function resolveUpgradePlanReasonSubtitle(reason: UpgradePlanReason): str
 
 export function defaultRecommendedPlanKeyForReason(
   reason: UpgradePlanReason,
+  currentPlanKey = 'free',
+  isTrialPlan = false,
 ): 'starter' | 'pro' {
+  const contextual = resolveContextualUpgradePlanKeyFromCatalog(currentPlanKey, isTrialPlan);
+  if (contextual) return contextual;
   switch (reason) {
     case 'credits':
     case 'bots':
     case 'trained_knowledge':
       return 'pro';
-    case 'members':
-    case 'trial_expired':
-    case 'auto_train':
-    case 'export':
-    case 'branding':
-    case 'addons':
     default:
       return 'starter';
   }
+}
+
+export { resolveContextualUpgradePlanKeyFromCatalog as resolveContextualUpgradePlanKey };
+
+export const PLAN_LIMIT_AI_CREDITS_MEMBER_MESSAGE =
+  'This workspace is out of AI credits. Ask a workspace owner or admin to buy more credits.';
+
+export function readAiCreditsExhaustionMetadata(body: unknown): {
+  canAutoTopUpPrompt: boolean;
+  topUpCheckoutAvailable: boolean;
+} {
+  const record = body && typeof body === 'object' ? (body as Record<string, unknown>) : null;
+  return {
+    canAutoTopUpPrompt: Boolean(record?.canAutoTopUpPrompt),
+    topUpCheckoutAvailable: Boolean(record?.topUpCheckoutAvailable),
+  };
+}
+
+export const AI_CREDITS_TOP_UP_PROMPT_EVENT = 'assistrio:open-ai-credits-top-up-prompt' as const;
+
+export function dispatchAiCreditsTopUpPromptModal(): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent(AI_CREDITS_TOP_UP_PROMPT_EVENT));
 }
 
 export const PLAN_LIMIT_UPGRADE_EVENT = 'assistrio:open-upgrade-plan-modal' as const;

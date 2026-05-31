@@ -14,11 +14,12 @@ describe('billing-invoice-item.util', () => {
     webhookSecret: 'secret',
     customerAppBaseUrl: 'https://app.example.com',
     variantIds: {
-      starter: '111',
-      pro: '222',
-      extra_bot: '333',
-      remove_branding: '444',
+      starter: { monthly: '111', yearly: '112' },
+      pro: { monthly: '222', yearly: '223' },
+      extra_bot: { monthly: '333', yearly: '334' },
+      remove_branding: { monthly: '444', yearly: '445' },
       ai_credits_1000: '777',
+      ai_credits_auto_topup: '888',
     },
   };
 
@@ -48,7 +49,7 @@ describe('billing-invoice-item.util', () => {
   });
 
   it('maps add-on, legacy KB, and top-up descriptions', () => {
-    expect(mapInvoiceItemDescription({ itemKey: 'extra_bot' })).toBe('Extra bot add-on');
+    expect(mapInvoiceItemDescription({ itemKey: 'extra_bot' })).toBe('Extra AI Agent add-on');
     expect(mapInvoiceItemDescription({ itemKey: 'remove_branding' })).toBe('Remove branding add-on');
     expect(mapInvoiceItemDescription({ itemKey: 'legacy_kb_storage' })).toBe(
       'Legacy trained knowledge add-on',
@@ -150,7 +151,7 @@ describe('billing-invoice-item.util', () => {
       lemonConfig,
       fetchHint: { kind: 'addon', addonKey: 'extra_bot', providerSubscriptionId: 'sub-addon-bot' },
     });
-    expect(extraBot.description).toBe('Extra bot add-on');
+    expect(extraBot.description).toBe('Extra AI Agent add-on');
 
     const branding = resolveInvoiceItemMatch({
       row: {

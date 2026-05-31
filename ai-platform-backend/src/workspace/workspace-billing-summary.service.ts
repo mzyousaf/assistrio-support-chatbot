@@ -18,6 +18,11 @@ import { WorkspaceEntitlementsService } from '../entitlements/workspace-entitlem
 import { WorkspaceMemberLimitService } from '../entitlements/workspace-member-limit.service';
 import { WorkspaceSubscriptionsService } from '../entitlements/workspace-subscriptions.service';
 import { BillingProviderService } from '../billing/billing-provider.service';
+import { BillingAiCreditsAutoTopUpService } from '../billing/billing-ai-credits-auto-topup.service';
+import {
+  readAiCreditsAutoTopUpPromptEnabled,
+  readAutoTopUpThresholdCredits,
+} from '../billing/billing-credit-auto-topup.util';
 import { KnowledgeUsageService } from '../knowledge/knowledge-usage.service';
 import type { BotForKnowledgeUsageLimit } from '../knowledge/knowledge-usage.util';
 import type { WorkspaceBillingSummary } from './workspace-billing-summary.types';
@@ -38,6 +43,7 @@ import {
 import {
   buildEnrichedAddonCatalog,
   mapAddonRowsForSummary,
+  mapExtraBotAddonsForSummary,
   type WorkspaceAddonDbRow,
 } from './workspace-billing-addon-summary.util';
 import { toCustomerSafePaymentMethod } from '../billing/billing-payment-method.util';
@@ -69,9 +75,12 @@ export class WorkspaceBillingSummaryService {
     @InjectModel(WorkspaceCreditTopUp.name) private readonly topUpModel: Model<WorkspaceCreditTopUp>,
     @InjectModel(WorkspaceBillingOrder.name) private readonly billingOrderModel: Model<WorkspaceBillingOrder>,
     private readonly webhookEventsService: BillingWebhookEventsService,
+    private readonly billingAiCreditsAutoTopUpService: BillingAiCreditsAutoTopUpService,
   ) {}
 
   async getSummary(workspaceId: string, now: Date = new Date()): Promise<WorkspaceBillingSummary> {
+    await this.subscriptionsService.applyPendingScheduledPlanChanges(workspaceId, now);
+
     const [
       entitlements,
       subscription,
@@ -142,6 +151,20 @@ export class WorkspaceBillingSummaryService {
               providerSubscriptionId: subscription.providerSubscriptionId,
               cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
               paymentMethod: toCustomerSafePaymentMethod(subscription.paymentMethod ?? null),
+              scheduledPlanChange: subscription.scheduledPlanChange
+                ? {
+                    fromPlanKey: subscription.scheduledPlanChange.fromPlanKey,
+                    toPlanKey: subscription.scheduledPlanChange.toPlanKey,
+                    fromBillingInterval: subscription.scheduledPlanChange.fromBillingInterval ?? null,
+                    toBillingInterval: subscription.scheduledPlanChange.toBillingInterval ?? null,
+                    effectiveAt:
+                      subscription.scheduledPlanChange.effectiveAt instanceof Date
+                        ? subscription.scheduledPlanChange.effectiveAt
+                        : new Date(subscription.scheduledPlanChange.effectiveAt),
+                    status: subscription.scheduledPlanChange.status,
+                  }
+                : null,
+              billingInterval: subscription.billingInterval ?? 'monthly',
             }
           : null,
         currentPeriodStart: period.currentPeriodStart,
@@ -153,29 +176,39 @@ export class WorkspaceBillingSummaryService {
         (row) => !isLegacyKbAddonKey(row.addonKey),
       ),
       topUps,
+      aiCreditsAutoTopUpPromptEnabled: readAiCreditsAutoTopUpPromptEnabled(subscription),
+      autoTopUpThresholdCredits: readAutoTopUpThresholdCredits(subscription),
+      topUpCheckoutAvailable: this.billingProviderService.isTopUpCheckoutAvailable('ai_credits_1000'),
+      autoTopUp: await this.billingAiCreditsAutoTopUpService.buildSummary(workspaceId, subscription, now),
       entitlements: mapEntitlementsToBillingSummary(entitlements),
       usage,
-      planCatalog: buildPublicPlanCatalogSnapshot((planKey) => {
-        if (planKey === 'starter') return this.billingProviderService.isPlanCheckoutAvailable('starter');
-        if (planKey === 'pro') return this.billingProviderService.isPlanCheckoutAvailable('pro');
+      planCatalog: buildPublicPlanCatalogSnapshot((planKey, billingInterval = 'monthly') => {
+        if (planKey === 'starter') {
+          return this.billingProviderService.isPlanCheckoutAvailable('starter', billingInterval);
+        }
+        if (planKey === 'pro') {
+          return this.billingProviderService.isPlanCheckoutAvailable('pro', billingInterval);
+        }
         return false;
       }),
       addonCatalog: buildEnrichedAddonCatalog({
-        checkoutAvailableForAddon: (addonKey) => {
+        checkoutAvailableForAddon: (addonKey, billingInterval = 'monthly') => {
           if (isLegacyKbAddonKey(addonKey)) return false;
           if (addonKey === 'ai_credits_1000') {
             return this.billingProviderService.isTopUpCheckoutAvailable('ai_credits_1000');
           }
           if (addonKey === 'extra_bot' || addonKey === 'remove_branding') {
-            return this.billingProviderService.isAddonCheckoutAvailable(addonKey);
+            return this.billingProviderService.isAddonCheckoutAvailable(addonKey, billingInterval);
           }
           return false;
         },
         addonRows: addonDbRows,
         usage,
         topUps,
+        creditAutoTopUpPromptEnabled: readAiCreditsAutoTopUpPromptEnabled(subscription),
         now,
       }),
+      extraBotAddons: mapExtraBotAddonsForSummary({ addonRows: addonDbRows, now }),
     };
   }
 
@@ -427,24 +460,47 @@ export class WorkspaceBillingSummaryService {
     );
 
     return (addons as Array<{
+      _id: Types.ObjectId;
       addonKey: string;
       targetBotId?: Types.ObjectId | null;
       status: string;
+      billingInterval?: string;
       providerSubscriptionId?: string | null;
       currentPeriodStart?: Date | null;
       currentPeriodEnd?: Date | null;
       cancelAtPeriodEnd?: boolean;
+      scheduledIntervalChange?: {
+        fromBillingInterval: string;
+        toBillingInterval: string;
+        effectiveAt: Date;
+        status: 'scheduled' | 'applied' | 'canceled';
+      } | null;
     }>).map((row) => {
       const targetBotId = row.targetBotId ? String(row.targetBotId) : null;
       return {
+        id: String(row._id),
         addonKey: String(row.addonKey),
         status: String(row.status),
+        billingInterval: row.billingInterval === 'yearly' ? 'yearly' : 'monthly',
         targetBotId,
         targetBotName: targetBotId ? botNameById.get(targetBotId) ?? null : null,
         providerSubscriptionId: row.providerSubscriptionId?.trim() || null,
         currentPeriodStart: row.currentPeriodStart?.toISOString() ?? null,
         currentPeriodEnd: row.currentPeriodEnd?.toISOString() ?? null,
         cancelAtPeriodEnd: Boolean(row.cancelAtPeriodEnd),
+        scheduledIntervalChange: row.scheduledIntervalChange
+          ? {
+              fromBillingInterval:
+                row.scheduledIntervalChange.fromBillingInterval === 'yearly' ? 'yearly' : 'monthly',
+              toBillingInterval:
+                row.scheduledIntervalChange.toBillingInterval === 'yearly' ? 'yearly' : 'monthly',
+              effectiveAt:
+                row.scheduledIntervalChange.effectiveAt instanceof Date
+                  ? row.scheduledIntervalChange.effectiveAt.toISOString()
+                  : String(row.scheduledIntervalChange.effectiveAt),
+              status: row.scheduledIntervalChange.status,
+            }
+          : null,
       };
     });
   }

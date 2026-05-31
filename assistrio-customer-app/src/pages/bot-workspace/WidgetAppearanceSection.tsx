@@ -726,7 +726,7 @@ export function WidgetAppearanceSection() {
                             label="Icon"
                             htmlFor="appearance-launcher-icon"
                             className="min-w-0 gap-1.5"
-                            helperText="Built-in icon, bot avatar, or a custom image URL below."
+                            helperText="Built-in icon, AI Agent avatar, or a custom image URL below."
                           >
                             <Select
                               id="appearance-launcher-icon"
@@ -735,7 +735,7 @@ export function WidgetAppearanceSection() {
                               onChange={(e) => patch('launcherIcon', e.target.value)}
                             >
                               <option value="default">Default</option>
-                              <option value="bot-avatar">Bot avatar</option>
+                              <option value="bot-avatar">AI Agent avatar</option>
                               <option value="custom">Custom image</option>
                             </Select>
                           </FieldRow>

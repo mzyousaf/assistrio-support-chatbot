@@ -180,6 +180,38 @@ export type CustomerWorkspaceAiCreditsUsage = {
   byBot: Array<{ botId: string; creditsUsed: number }>;
 };
 
+/** GET /api/customer/workspaces/:workspaceId/usage/analytics */
+export type WorkspaceUsageAnalyticsTrendDay = {
+  date: string;
+  totalCreditsUsed: number;
+  monthlyCreditsUsed: number;
+  topUpCreditsUsed: number;
+};
+
+export type WorkspaceUsageAnalyticsAiCreditsByAgent = {
+  botId: string;
+  botName: string;
+  totalCreditsUsed: number;
+  monthlyCreditsUsed: number;
+  topUpCreditsUsed: number;
+  messageCount: number;
+};
+
+export type WorkspaceUsageAnalyticsTrainedKnowledgeByAgent = {
+  botId: string;
+  botName: string;
+  usedMb: number;
+  maxMb: number;
+  percentUsed: number;
+};
+
+export type WorkspaceUsageAnalytics = {
+  dateRange: { startDate: string; endDate: string };
+  usageTrend: WorkspaceUsageAnalyticsTrendDay[];
+  aiCreditsByAgent: WorkspaceUsageAnalyticsAiCreditsByAgent[];
+  trainedKnowledgeByAgent: WorkspaceUsageAnalyticsTrainedKnowledgeByAgent[];
+};
+
 /** GET /api/customer/workspaces/:workspaceId/billing/summary */
 export type WorkspaceBillingPlanSummary = {
   key: string;
@@ -262,10 +294,21 @@ export type WorkspaceBillingUsageSummary = {
   trainedKnowledge: WorkspaceBillingTrainedKnowledgeUsageSummary;
 };
 
+/** Paid plan / recurring add-on checkout cadence (API uses `yearly`; UI toggle uses `annual`). */
+export type BillingInterval = 'monthly' | 'yearly';
+
+export type WorkspaceBillingScheduledIntervalChange = {
+  toInterval: BillingInterval;
+  effectiveDate?: string | null;
+};
+
 export type WorkspaceBillingPlanCatalogCard = {
   key: string;
   name: string;
   priceMonthly: number;
+  priceYearly?: number;
+  monthlyEquivalentYearly?: number;
+  yearlyDiscountPercent?: number;
   botLimit: number;
   memberLimit: number;
   monthlyAiCredits: number;
@@ -274,23 +317,36 @@ export type WorkspaceBillingPlanCatalogCard = {
   canExportReports: boolean;
   /** True when backend billing provider env is configured (UI may still gate on Step 2). */
   checkoutAvailable: boolean;
+  checkoutAvailableMonthly?: boolean;
+  checkoutAvailableYearly?: boolean;
 };
 
 export type WorkspaceBillingAddonCatalogCard = {
   key: string;
   name: string;
+  /** `one_time` for credit packs; `monthly` for recurring subscription add-ons. */
   billingInterval: 'one_time' | 'monthly';
+  /** Active subscription cadence when status is active (monthly or yearly). */
+  subscriptionBillingInterval?: BillingInterval;
   priceUsd: number;
+  priceYearly?: number;
+  monthlyEquivalentYearly?: number;
+  yearlyDiscountPercent?: number;
+  scheduledIntervalChange?: WorkspaceBillingScheduledIntervalChange | null;
   scope: 'workspace' | 'bot';
   checkoutAvailable: boolean;
+  checkoutAvailableMonthly?: boolean;
+  checkoutAvailableYearly?: boolean;
   description?: string;
   active?: boolean;
-  status?: 'active' | 'inactive' | 'cancel_at_period_end' | 'expired' | 'cancelled';
+  status?: 'active' | 'inactive' | 'cancel_at_period_end' | 'expired' | 'cancelled' | 'past_due' | 'payment_failed';
   targetBotId?: string | null;
   targetBotName?: string | null;
   currentPeriodEnd?: string | null;
   cancelAtPeriodEnd?: boolean;
   effectLabel?: string | null;
+  /** ai_credits_1000 only — workspace preference for auto-prompt top-up purchases. */
+  autoTopUpPromptEnabled?: boolean;
 };
 
 export type WorkspaceBillingTopUpRow = {
@@ -321,6 +377,7 @@ export type WorkspaceBillingActiveAddonRow = {
   targetBotId: string | null;
   targetBotName: string | null;
   billingInterval?: 'one_time' | 'monthly';
+  subscriptionBillingInterval?: BillingInterval;
   priceUsd?: number;
   currentPeriodStart: string | null;
   currentPeriodEnd: string | null;
@@ -339,6 +396,12 @@ export type WorkspaceBillingSubscriptionSummary = {
   paymentMethod: WorkspaceBillingPaymentMethodSummary | null;
   customerPortalAvailable: boolean;
   manageBillingAvailable: boolean;
+  scheduledPlanKey?: string;
+  scheduledPlanName?: string;
+  scheduledPlanEffectiveDate?: string;
+  billingInterval?: BillingInterval;
+  scheduledBillingInterval?: BillingInterval;
+  scheduledBillingIntervalEffectiveDate?: string;
 };
 
 export type WorkspaceBillingInvoiceRow = {
@@ -445,6 +508,37 @@ export type WorkspaceBillingSummary = {
   addonCatalog: WorkspaceBillingAddonCatalogCard[];
   activeAddons: WorkspaceBillingActiveAddonRow[];
   topUps?: WorkspaceBillingTopUpRow[];
+  extraBotAddons?: WorkspaceBillingExtraBotAddonInstance[];
+  aiCreditsAutoTopUpPromptEnabled?: boolean;
+  autoTopUpThresholdCredits?: number;
+  topUpCheckoutAvailable?: boolean;
+  autoTopUp?: WorkspaceBillingAutoTopUpSummary;
+};
+
+export type WorkspaceBillingAutoTopUpSummary = {
+  status: 'off' | 'pending' | 'active' | 'payment_issue' | 'scheduled_disable';
+  enabled: boolean;
+  checkoutAvailable: boolean;
+  cancelAtPeriodEnd: boolean;
+  currentPeriodEnd: string | null;
+  packsThisBillingPeriod: number;
+  maxPacksPerBillingPeriod: number;
+  packCredits: number;
+  packPriceUsd: number;
+};
+
+export type WorkspaceBillingExtraBotAddonInstance = {
+  id: string;
+  addonKey: 'extra_bot';
+  name: string;
+  status: 'active' | 'cancel_at_period_end' | 'expired' | 'cancelled' | 'past_due' | 'payment_failed';
+  cancelAtPeriodEnd: boolean;
+  currentPeriodStart?: string | null;
+  currentPeriodEnd?: string | null;
+  priceUsd: number;
+  billingInterval?: BillingInterval;
+  scheduledIntervalChange?: WorkspaceBillingScheduledIntervalChange | null;
+  effectLabel: '+1 agent';
 };
 
 export type CustomerProfileLinks = {
@@ -511,6 +605,8 @@ export type WorkspaceBotAccessSummary = {
   previewable: number;
 };
 
+export type WorkspaceMembershipStatus = 'active' | 'inactive_over_limit';
+
 export type WorkspaceMemberSummary = {
   userId: string;
   email: string;
@@ -521,6 +617,7 @@ export type WorkspaceMemberSummary = {
   avatarUrl?: string | null;
   role: WorkspaceMemberRole;
   joinedAt: string | null;
+  membershipStatus?: WorkspaceMembershipStatus;
   botAccessSummary?: WorkspaceBotAccessSummary;
 };
 

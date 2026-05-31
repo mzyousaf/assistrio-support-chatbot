@@ -8,7 +8,7 @@ describe('buildAgentDescriptionFromOnboardingInstructions', () => {
     const out = buildAgentDescriptionFromOnboardingInstructions(longInstructions);
     expect(out.length).toBeLessThanOrEqual(480);
     expect(out).not.toBe(longInstructions);
-    expect(out).toMatch(/This AI agent helps customers/i);
+    expect(out).toMatch(/This AI Agent helps customers/i);
   });
 
   it('avoids behavior headings and rule blocks', () => {

@@ -1,34 +1,38 @@
 import { SettingsMembersConfirmModal } from '@/components/settings/SettingsMembersConfirmModal';
+import { formatUsagePeriodDate } from '@/pages/usage/usagePageFormat';
 
 type Props = {
   open: boolean;
   onClose: () => void;
   onConfirm: () => void | Promise<void>;
   busy?: boolean;
+  effectiveDate?: string | null;
 };
 
-export function BillingDowngradePlanModal({ open, onClose, onConfirm, busy = false }: Props) {
+export function BillingDowngradePlanModal({
+  open,
+  onClose,
+  onConfirm,
+  busy = false,
+  effectiveDate,
+}: Props) {
+  const effectiveLabel = effectiveDate ? formatUsagePeriodDate(effectiveDate) : 'the end of your billing period';
+
   return (
     <SettingsMembersConfirmModal
       open={open}
       onClose={onClose}
       onConfirm={onConfirm}
       busy={busy}
-      busyLabel="Downgrading"
-      confirmLabel="Downgrade to Starter"
+      busyLabel="Scheduling"
+      confirmLabel="Schedule downgrade"
       tone="default"
       title="Downgrade to Starter?"
       description={
-        <div className="space-y-2 text-sm leading-relaxed text-slate-600">
-          <p className="m-0">
-            Your workspace limits will change to Starter after the downgrade is confirmed.
-          </p>
-          <ul className="m-0 list-disc space-y-1 pl-5">
-            <li>500 AI credits/month</li>
-            <li>5 members</li>
-            <li>15 MB trained knowledge / bot</li>
-          </ul>
-        </div>
+        <p className="m-0 text-sm leading-relaxed text-slate-600">
+          Your Pro features remain active until the end of the current billing period. Starter starts
+          on {effectiveLabel}.
+        </p>
       }
     />
   );

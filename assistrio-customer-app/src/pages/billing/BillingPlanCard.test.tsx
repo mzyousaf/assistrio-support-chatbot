@@ -49,4 +49,40 @@ describe('BillingPlanCard', () => {
 
     expect((screen.getByRole('button', { name: 'Coming soon' }) as HTMLButtonElement).disabled).toBe(true);
   });
+
+  it('shows current plan corner tag and days left button in modal', () => {
+    render(
+      <BillingPlanCard
+        plan={starterPlan}
+        isCurrent
+        variant="modal"
+        modalDaysLeftButtonLabel="12 Days Left"
+        actionLabel="Current plan"
+        actionDisabled
+      />,
+    );
+
+    expect(screen.getByText('Current plan')).toBeTruthy();
+    expect(
+      (screen.getByRole('button', { name: '12 Days Left' }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect(screen.queryByRole('button', { name: 'Current plan' })).toBeNull();
+  });
+
+  it('shows expires-on date button in modal for non-current trial free card', () => {
+    render(
+      <BillingPlanCard
+        plan={{ ...starterPlan, key: 'free', name: 'Free', priceMonthly: 0 }}
+        isCurrent={false}
+        variant="modal"
+        modalExpiresOnButtonLabel="Expires on Jun 1, 2026"
+        actionLabel="Coming soon"
+        actionDisabled
+      />,
+    );
+
+    expect(
+      (screen.getByRole('button', { name: 'Expires on Jun 1, 2026' }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+  });
 });

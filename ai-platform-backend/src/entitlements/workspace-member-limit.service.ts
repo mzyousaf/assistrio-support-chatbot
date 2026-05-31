@@ -2,7 +2,7 @@ import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { WorkspaceInvite } from '../models/workspace-invite.schema';
-import { WorkspaceMembership } from '../models/workspace-membership.schema';
+import { WorkspaceMembership, WORKSPACE_MEMBERSHIP_ACTIVE_STATUS_FILTER } from '../models/workspace-membership.schema';
 import { WorkspaceEntitlementsService } from './workspace-entitlements.service';
 import { isWorkspaceOverMemberLimit } from './workspace-member-over-limit.util';
 
@@ -72,7 +72,10 @@ export class WorkspaceMemberLimitService {
   async countWorkspaceMembers(workspaceId: string): Promise<number> {
     if (!Types.ObjectId.isValid(workspaceId)) return 0;
     return this.membershipModel
-      .countDocuments({ workspaceId: new Types.ObjectId(workspaceId) })
+      .countDocuments({
+        workspaceId: new Types.ObjectId(workspaceId),
+        ...WORKSPACE_MEMBERSHIP_ACTIVE_STATUS_FILTER,
+      })
       .exec();
   }
 
@@ -118,7 +121,7 @@ export class WorkspaceMemberLimitService {
       throw new HttpException(payload, HttpStatus.FORBIDDEN);
     }
 
-    // MVP policy: existing members keep access when over limit; only new invites are blocked.
+    // Existing active members over limit cannot invite; reconcile cron deactivates excess members.
     if (usage.isOverMemberLimit) {
       const payload: PlanLimitWorkspaceMembersPayload = {
         message: WORKSPACE_MEMBER_LIMIT_EXCEEDED_MESSAGE,

@@ -13,7 +13,6 @@ import { TOPICS_ANALYTICS_SECTION_CARD_CLASS } from '../topics/topicsAnalyticsSe
 import { SentimentChartStyleTabs } from './SentimentChartStyleTabs';
 import { SentimentDonutChart } from './SentimentDonutChart';
 import { SentimentLabelRankingCard } from './SentimentLabelRankingCard';
-import { SentimentOverTimeChart } from './SentimentOverTimeChart';
 import { SentimentOverTimeRechartsChart } from './SentimentOverTimeRechartsChart';
 import {
   buildSentimentRankingRows,
@@ -89,10 +88,13 @@ export function SentimentTrendsSection({
     ) : chartStyle === 'distribution' ? (
       <SentimentDonutChart rankingRows={visibleRankingRows} countUnit={countUnit} />
     ) : (
-      <SentimentOverTimeChart
+      <SentimentOverTimeRechartsChart
         points={chartPoints}
         granularity={data.range.granularity}
-        hiddenSeriesIds={hiddenSeriesIds}
+        colorSeriesOrder={seriesOrder}
+        chartSeriesOrder={visibleSeriesOrder as string[]}
+        labelById={labelById}
+        chartVariant="bar"
         countUnit={countUnit}
       />
     );

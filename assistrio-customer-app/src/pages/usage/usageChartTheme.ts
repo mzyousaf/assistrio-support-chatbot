@@ -8,6 +8,10 @@ export const USAGE_CHART = CHART;
 export const USAGE_CHART_TOOLTIP_CLASS =
   'rounded-lg border border-slate-200/90 bg-white px-3 py-2 text-xs shadow-[0_8px_24px_-8px_rgba(15,23,42,0.08)]';
 
+/** Matches {@link Tooltip} panel styling for chart hover labels. */
+export const USAGE_CHART_UI_TOOLTIP_PANEL =
+  'rounded-[var(--ui-radius)] border border-white/10 bg-slate-900 px-2 py-1.5 text-left text-[0.6875rem] font-medium leading-snug tracking-[-0.01em] text-slate-50 shadow-[0_4px_20px_rgba(15,23,42,0.2)]';
+
 export function usageSliceColor(index: number): string {
   return USAGE_SLICE_COLORS[index % USAGE_SLICE_COLORS.length] ?? USAGE_SLICE_COLORS[0];
 }

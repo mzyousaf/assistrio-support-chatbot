@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   Get,
   Param,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -11,6 +12,7 @@ import { CustomerSessionAuthGuard } from '../auth/customer/customer-session.guar
 import type { RequestUser } from '../auth/shared/request-user.types';
 import { WorkspaceEntitlementsService } from '../entitlements/workspace-entitlements.service';
 import { WorkspaceAiCreditsUsageService } from '../entitlements/workspace-ai-credits-usage.service';
+import { WorkspaceUsageAnalyticsService } from './workspace-usage-analytics.service';
 import { WorkspacesService } from '../workspaces/workspaces.service';
 
 type RequestWithUser = FastifyRequest & { user?: RequestUser };
@@ -21,6 +23,7 @@ export class CustomerWorkspaceEntitlementsController {
   constructor(
     private readonly entitlementsService: WorkspaceEntitlementsService,
     private readonly aiCreditsUsageService: WorkspaceAiCreditsUsageService,
+    private readonly usageAnalyticsService: WorkspaceUsageAnalyticsService,
     private readonly workspacesService: WorkspacesService,
   ) {}
 
@@ -48,5 +51,17 @@ export class CustomerWorkspaceEntitlementsController {
   async getAiCreditsUsage(@Req() req: RequestWithUser, @Param('workspaceId') workspaceId: string) {
     await this.assertWorkspaceMember(req, workspaceId);
     return this.aiCreditsUsageService.getWorkspaceAiCreditsUsage(workspaceId);
+  }
+
+  @Get(':workspaceId/usage/analytics')
+  async getUsageAnalytics(
+    @Req() req: RequestWithUser,
+    @Param('workspaceId') workspaceId: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('botIds') botIds?: string,
+  ) {
+    await this.assertWorkspaceMember(req, workspaceId);
+    return this.usageAnalyticsService.getAnalytics(workspaceId, { startDate, endDate, botIds });
   }
 }

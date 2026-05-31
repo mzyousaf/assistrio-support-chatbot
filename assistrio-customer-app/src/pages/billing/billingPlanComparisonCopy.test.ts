@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { WorkspaceBillingPlanCatalogCard } from '@/api/types';
 import {
   buildMainPlanComparisonRows,
+  buildPlanCardIncludedGroups,
   buildPlanComparisonTableGroups,
   MESSAGING_CREDITS_NOTE,
   TRAINED_KNOWLEDGE_UPLOAD_HELPER,
@@ -56,9 +57,18 @@ describe('billingPlanComparisonCopy', () => {
   it('uses trained knowledge storage labels and helpers', () => {
     const groups = buildPlanComparisonTableGroups(catalog);
     const coreLimits = groups.find((group) => group.id === 'core-limits');
-    expect(coreLimits?.rows.some((row) => row.feature === 'Trained knowledge storage / bot')).toBe(true);
+    expect(coreLimits?.rows.some((row) => row.feature === 'Trained knowledge storage / AI Agent')).toBe(true);
     expect(coreLimits?.note).toBe(TRAINED_KNOWLEDGE_UPLOAD_HELPER);
     expect(groups.find((group) => group.id === 'messaging')?.note).toBe(MESSAGING_CREDITS_NOTE);
+  });
+
+  it('builds per-plan included groups from comparison table', () => {
+    const starterGroups = buildPlanCardIncludedGroups('starter', catalog);
+    expect(starterGroups.some((group) => group.id === 'core-limits')).toBe(true);
+    const credits = starterGroups
+      .find((group) => group.id === 'core-limits')
+      ?.items.find((item) => item.feature === 'AI credits');
+    expect(credits?.value).toBe('500 AI credits / month');
   });
 
   it('shows owner-only access and paid-plan add-on copy on free', () => {

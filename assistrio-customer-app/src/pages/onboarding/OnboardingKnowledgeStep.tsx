@@ -345,7 +345,7 @@ export function OnboardingKnowledgeStep() {
       headerClassName="onboarding-knowledge-header"
       eyebrow="Knowledge base"
       title="Setup Knowledge for Your AI Agent"
-      description="Add documents, snippets, Q&A pairs, or datasheets so your AI agent can answer with your own content."
+      description="Add documents, snippets, Q&A pairs, or datasheets so your AI Agent can answer with your own content."
       helperLine="You only need one source to continue. Changes save automatically."
       formProps={{ onSubmit: onContinue, className: 'onboarding-knowledge-stack' }}
     >

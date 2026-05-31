@@ -1,21 +1,18 @@
 import { useMemo } from 'react';
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
-import type { WorkspaceBillingAiCreditsUsageSummary, WorkspaceBillingSummary } from '@/api/types';
+import type { WorkspaceUsageAnalyticsAiCreditsByAgent } from '@/api/types';
 import { UsageSectionCard } from '@/pages/usage/UsageSectionCard';
 import {
   USAGE_CHART_TOOLTIP_CLASS,
   usageSliceColor,
 } from '@/pages/usage/usageChartTheme';
-import {
-  buildBotNameLookup,
-  formatCreditsSharePercent,
-} from '@/pages/usage/usagePageFormat';
-import { matchesUsageAgentFilter } from '@/pages/usage/UsageFilterBar';
+import { formatCreditsSharePercent } from '@/pages/usage/usagePageFormat';
 
 type Props = {
-  summary: WorkspaceBillingSummary;
-  aiCredits: WorkspaceBillingAiCreditsUsageSummary | undefined;
-  agentIds?: string[];
+  rows: WorkspaceUsageAnalyticsAiCreditsByAgent[] | null | undefined;
+  loading?: boolean;
+  errorMessage?: string | null;
+  agentFilterActive?: boolean;
   className?: string;
 };
 
@@ -25,6 +22,9 @@ type AgentSlice = {
   value: number;
   color: string;
   share: number;
+  monthlyCreditsUsed: number;
+  topUpCreditsUsed: number;
+  messageCount: number;
 };
 
 function formatCreditsUsedLabel(credits: number): string {
@@ -32,41 +32,72 @@ function formatCreditsUsedLabel(credits: number): string {
   return `${value.toLocaleString()} credit${value === 1 ? '' : 's'}`;
 }
 
+function formatMessageCountLabel(count: number): string {
+  const value = Math.max(0, count);
+  return `${value.toLocaleString()} message${value === 1 ? '' : 's'}`;
+}
+
+function UsageAgentCreditsLegendRow({ slice }: { slice: AgentSlice }) {
+  return (
+    <li className="list-none">
+      <div className="flex items-start gap-2 rounded-lg border border-slate-100/90 bg-slate-50/60 px-2 py-2">
+        <span
+          className="mt-1 h-2 w-2 shrink-0 rounded-full"
+          style={{ backgroundColor: slice.color }}
+          aria-hidden
+        />
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 items-start justify-between gap-1.5">
+            <p
+              className="m-0 min-w-0 flex-1 truncate text-xs font-medium leading-snug text-slate-800"
+              title={slice.name}
+            >
+              {slice.name}
+            </p>
+            <span className="shrink-0 rounded-md bg-white px-1.5 py-0.5 text-[10px] font-semibold tabular-nums leading-none text-slate-700 ring-1 ring-slate-200/80">
+              {slice.share}%
+            </span>
+          </div>
+          <p className="m-0 mt-1 truncate text-[11px] leading-snug tabular-nums text-slate-500">
+            {formatCreditsUsedLabel(slice.value)} · {formatMessageCountLabel(slice.messageCount)}
+          </p>
+        </div>
+      </div>
+    </li>
+  );
+}
+
 export function UsageAgentCreditsTable({
-  summary,
-  aiCredits,
-  agentIds = [],
+  rows,
+  loading = false,
+  errorMessage = null,
+  agentFilterActive = false,
   className,
 }: Props) {
-  const botNameLookup = buildBotNameLookup(summary);
-
-  const rows = useMemo(() => {
-    const source = aiCredits?.byBot ?? [];
-    return [...source]
-      .filter((row) => (row.creditsUsed ?? 0) > 0)
-      .filter((row) => matchesUsageAgentFilter(row.botId, agentIds))
-      .sort((a, b) => (b.creditsUsed ?? 0) - (a.creditsUsed ?? 0));
-  }, [aiCredits?.byBot, agentIds]);
-
-  const totalUsed = useMemo(
-    () => rows.reduce((sum, row) => sum + (row.creditsUsed ?? 0), 0),
+  const filteredRows = useMemo(
+    () => [...(rows ?? [])].filter((row) => row.totalCreditsUsed > 0),
     [rows],
   );
-  const isEmpty = rows.length === 0;
+
+  const totalUsed = useMemo(
+    () => filteredRows.reduce((sum, row) => sum + row.totalCreditsUsed, 0),
+    [filteredRows],
+  );
+  const isEmpty = !loading && !errorMessage && filteredRows.length === 0;
 
   const pieData: AgentSlice[] = useMemo(
     () =>
-      rows.map((row, index) => {
-        const name = botNameLookup.get(row.botId) ?? 'Agent';
-        return {
-          id: row.botId,
-          name,
-          value: row.creditsUsed,
-          color: usageSliceColor(index),
-          share: formatCreditsSharePercent(row.creditsUsed, totalUsed),
-        };
-      }),
-    [rows, botNameLookup, totalUsed],
+      filteredRows.map((row, index) => ({
+        id: row.botId,
+        name: row.botName,
+        value: row.totalCreditsUsed,
+        color: usageSliceColor(index),
+        share: formatCreditsSharePercent(row.totalCreditsUsed, totalUsed),
+        monthlyCreditsUsed: row.monthlyCreditsUsed,
+        topUpCreditsUsed: row.topUpCreditsUsed,
+        messageCount: row.messageCount,
+      })),
+    [filteredRows, totalUsed],
   );
 
   return (
@@ -74,47 +105,31 @@ export function UsageAgentCreditsTable({
       id="usage-agent-credits"
       className={className}
       title="AI credits by agent"
-      description="Credits used in the current billing period."
+      description={
+        errorMessage
+          ? 'Could not load agent credit usage.'
+          : loading
+            ? 'Loading agent credit usage…'
+            : 'Credits used in the selected date range.'
+      }
       bodyClassName="flex flex-1 flex-col"
     >
-      {isEmpty ? (
+      {loading ? (
+        <div className="min-h-[280px] flex-1 animate-pulse rounded-lg bg-slate-100/80 sm:min-h-[300px]" aria-hidden />
+      ) : errorMessage ? (
+        <p className="m-0 flex flex-1 items-center justify-center rounded-lg border border-dashed border-amber-200 bg-amber-50/60 px-4 py-8 text-center text-sm text-amber-900">
+          {errorMessage}
+        </p>
+      ) : isEmpty ? (
         <p className="m-0 flex flex-1 items-center justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50/60 px-4 py-8 text-center text-sm text-slate-500">
-          {agentIds.length > 0 ? 'No AI credit usage for the selected agents.' : 'No AI credit usage yet.'}
+          {agentFilterActive
+            ? 'No AI credit usage for the selected agents.'
+            : 'No AI credit usage in this date range.'}
         </p>
       ) : (
-        <div className="relative flex min-h-[280px] flex-1 items-center justify-center sm:min-h-[300px]">
-          <ul
-            className="absolute right-0 top-0 z-[1] m-0 max-w-[46%] list-none space-y-1.5 p-0 sm:max-w-[42%]"
-            aria-label="AI credits by agent breakdown"
-          >
-            {pieData.map((slice) => (
-              <li key={slice.id} className="list-none">
-                <div className="flex items-start gap-1.5">
-                  <span
-                    className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full"
-                    style={{ backgroundColor: slice.color }}
-                    aria-hidden
-                  />
-                  <div className="min-w-0 flex-1 leading-tight">
-                    <div className="flex items-baseline justify-between gap-2">
-                      <p className="m-0 min-w-0 truncate text-[11px] font-medium text-slate-800">
-                        {slice.name}
-                      </p>
-                      <p className="m-0 shrink-0 text-[10px] font-semibold tabular-nums text-slate-700">
-                        {slice.share}%
-                      </p>
-                    </div>
-                    <p className="m-0 text-[10px] tabular-nums text-slate-500">
-                      {formatCreditsUsedLabel(slice.value)}
-                    </p>
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ul>
-
+        <div className="flex min-h-[280px] flex-1 flex-col items-stretch gap-4 sm:min-h-[300px] sm:flex-row sm:items-center sm:gap-4">
           <div
-            className="relative flex h-[240px] w-[240px] shrink-0 items-center justify-center sm:h-[260px] sm:w-[260px]"
+            className="relative mx-auto flex h-[200px] w-[200px] shrink-0 items-center justify-center sm:mx-0 sm:h-[210px] sm:w-[210px]"
             data-testid="usage-agent-credits-donut"
           >
             <ResponsiveContainer width="100%" height="100%">
@@ -144,7 +159,16 @@ export function UsageAgentCreditsTable({
                       <div className={USAGE_CHART_TOOLTIP_CLASS}>
                         <p className="m-0 font-medium text-slate-800">{slice.name}</p>
                         <p className="m-0 mt-0.5 tabular-nums text-slate-600">
-                          {formatCreditsUsedLabel(slice.value)} · {slice.share}%
+                          Total: {formatCreditsUsedLabel(slice.value)} · {slice.share}%
+                        </p>
+                        <p className="m-0 tabular-nums text-slate-600">
+                          Monthly: {slice.monthlyCreditsUsed.toLocaleString()}
+                        </p>
+                        <p className="m-0 tabular-nums text-slate-600">
+                          Top-up: {slice.topUpCreditsUsed.toLocaleString()}
+                        </p>
+                        <p className="m-0 tabular-nums text-slate-600">
+                          Messages: {slice.messageCount.toLocaleString()}
                         </p>
                       </div>
                     );
@@ -159,6 +183,15 @@ export function UsageAgentCreditsTable({
               <span className="mt-1 text-[0.6875rem] font-medium text-slate-500">AI Credits</span>
             </div>
           </div>
+
+          <ul
+            className="m-0 min-w-0 flex-1 list-none space-y-1.5 p-0 sm:max-h-[260px] sm:overflow-y-auto"
+            aria-label="AI credits by agent breakdown"
+          >
+            {pieData.map((slice) => (
+              <UsageAgentCreditsLegendRow key={slice.id} slice={slice} />
+            ))}
+          </ul>
         </div>
       )}
     </UsageSectionCard>

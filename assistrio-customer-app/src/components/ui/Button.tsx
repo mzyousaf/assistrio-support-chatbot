@@ -1,7 +1,7 @@
 import { forwardRef, type ButtonHTMLAttributes } from 'react';
 import { cn } from '@/lib/utils';
 
-type Variant = 'primary' | 'secondary' | 'outlinePrimary' | 'ghost' | 'danger';
+type Variant = 'primary' | 'secondary' | 'outlinePrimary' | 'secondaryDanger' | 'ghost' | 'danger';
 type Size = 'sm' | 'md' | 'lg';
 
 export type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -36,6 +36,12 @@ const variants: Record<Variant, string> = {
     'hover:enabled:[&_svg]:text-[var(--color-teal-700)]',
     'active:enabled:bg-[color-mix(in_srgb,var(--teal-50)_92%,var(--color-teal-600)_8%)]',
     'focus-visible:ring-teal-600/25',
+  ),
+  secondaryDanger: cn(
+    'border border-[var(--ui-border)] bg-[var(--ui-surface)] text-slate-600 shadow-none',
+    'hover:enabled:border-red-200 hover:enabled:bg-red-50 hover:enabled:text-[var(--color-danger-text-emphasis)]',
+    'active:enabled:border-red-300 active:enabled:bg-red-100/80',
+    'focus-visible:ring-red-600/20',
   ),
   ghost: cn(
     'border border-transparent bg-transparent text-slate-600 shadow-none',

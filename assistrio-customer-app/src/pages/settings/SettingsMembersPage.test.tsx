@@ -199,8 +199,10 @@ describe('SettingsMembersPage', () => {
     expect(inviteTrigger).toBeTruthy();
     fireEvent.click(inviteTrigger!);
     expect(await screen.findByRole('dialog')).toBeTruthy();
-    expect(screen.getByText('Upgrade to continue')).toBeTruthy();
-    expect(screen.getByText('Upgrade to invite teammates.')).toBeTruthy();
+    expect(screen.getByText('Upgrade plan')).toBeTruthy();
+    expect(
+      screen.getByText('Upgrade to Starter to unlock paid plan features and add-ons.'),
+    ).toBeTruthy();
   });
 
   it('shows invite button and opens invite modal from header', async () => {

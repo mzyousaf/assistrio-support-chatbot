@@ -16,6 +16,11 @@ import {
   workspaceRolePillClassName,
 } from '@/lib/workspaceRoles';
 import { cn } from '@/lib/utils';
+import { WORKSPACE_MEMBER_INACTIVE_OVER_LIMIT_ROW_MESSAGE } from '@/lib/workspaceMemberOverLimit';
+
+function isInactiveOverLimitRow(row: WorkspacePersonRow): boolean {
+  return row.kind === 'member' && row.status === 'Inactive — over seat limit';
+}
 
 function PersonCell({ row }: { row: WorkspacePersonRow }) {
   const profile =
@@ -35,13 +40,15 @@ function PersonCell({ row }: { row: WorkspacePersonRow }) {
 function StatusBadge({ status }: { status: WorkspacePersonRow['status'] }) {
   const isActive = status === 'Active';
   const isPending = status === 'Pending invite';
+  const isInactiveOverLimit = status === 'Inactive — over seat limit';
   return (
     <span
       className={cn(
         'inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium',
         isActive && 'bg-emerald-50 text-emerald-700',
         isPending && 'bg-amber-50 text-amber-800',
-        !isActive && !isPending && 'bg-slate-100 text-slate-600',
+        isInactiveOverLimit && 'bg-slate-100 text-slate-600',
+        !isActive && !isPending && !isInactiveOverLimit && 'bg-slate-100 text-slate-600',
       )}
     >
       {status}
@@ -140,9 +147,11 @@ function RowActions(props: {
 }) {
   const { row, resending, onRemoveMember, onCancelInvite, onResendInvite, canEditBotAccess, onEditAccess } = props;
   const isOwner = row.kind === 'member' && isWorkspaceOwnerRole(row.role);
+  const isInactive = isInactiveOverLimitRow(row);
   const showViewAccess =
     canEditBotAccess &&
     !isOwner &&
+    !isInactive &&
     (row.kind === 'member' ||
       (row.kind === 'invite' && (row.status === 'Pending invite' || row.status === 'Expired')));
 
@@ -244,7 +253,8 @@ function RoleCell(props: {
 }) {
   const { row, canManageRoles, onRoleChange } = props;
   const isOwner = row.kind === 'member' && isWorkspaceOwnerRole(row.role);
-  if (canManageRoles && !isOwner) {
+  const isInactive = isInactiveOverLimitRow(row);
+  if (canManageRoles && !isOwner && !isInactive) {
     return <RoleSelect row={row} onRoleChange={onRoleChange} />;
   }
   return <RoleBadge role={row.role} />;
@@ -262,8 +272,9 @@ function MobilePersonCard(props: {
   onEditAccess: (row: WorkspacePersonRow) => void;
 }) {
   const { row } = props;
+  const inactive = isInactiveOverLimitRow(row);
   return (
-    <div className="rounded-lg border border-slate-200/90 bg-white p-3 shadow-[var(--shadow-xs)]">
+    <div className={cn('rounded-lg border border-slate-200/90 bg-white p-3 shadow-[var(--shadow-xs)]', inactive && 'bg-slate-50/80 opacity-80')}>
       <div className="flex items-start justify-between gap-3">
         <PersonCell row={row} />
         <RowActions
@@ -303,6 +314,11 @@ function MobilePersonCard(props: {
           <dt className="text-slate-500">Joined / invited</dt>
           <dd className="mt-0.5 tabular-nums text-slate-700">{row.dateLabel}</dd>
         </div>
+        {inactive ? (
+          <div className="col-span-2">
+            <p className="m-0 text-xs leading-relaxed text-slate-500">{WORKSPACE_MEMBER_INACTIVE_OVER_LIMIT_ROW_MESSAGE}</p>
+          </div>
+        ) : null}
       </dl>
     </div>
   );
@@ -387,13 +403,22 @@ export function WorkspacePeopleTable({
                 <tbody>
                   {rows.map((row) => {
                     const resending = row.kind === 'invite' && resendBusyId === row.id;
+                    const inactive = isInactiveOverLimitRow(row);
                     return (
                       <tr
                         key={`${row.kind}:${row.id}`}
-                        className="border-b border-slate-100 last:border-b-0 hover:bg-slate-50/50"
+                        className={cn(
+                          'border-b border-slate-100 last:border-b-0 hover:bg-slate-50/50',
+                          inactive && 'bg-slate-50/70 text-slate-500',
+                        )}
                       >
                         <td className="py-2.5 pr-3 align-middle">
                           <PersonCell row={row} />
+                          {inactive ? (
+                            <p className="m-0 mt-1 max-w-md text-xs leading-relaxed text-slate-500">
+                              {WORKSPACE_MEMBER_INACTIVE_OVER_LIMIT_ROW_MESSAGE}
+                            </p>
+                          ) : null}
                         </td>
                         <td className="py-2.5 pr-3 align-middle">
                           <StatusBadge status={row.status} />

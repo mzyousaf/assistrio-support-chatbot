@@ -23,4 +23,17 @@ describe('billingAddonCatalogDisplay', () => {
       }),
     ).toBe('Buy credits');
   });
+
+  it('uses Remove Powered by Assistrio for branding add-on', () => {
+    expect(
+      resolveAddonPurchaseLabel({
+        key: 'remove_branding',
+        name: 'Remove Powered by Assistrio',
+        billingInterval: 'monthly',
+        priceUsd: 20,
+        scope: 'workspace',
+        checkoutAvailable: true,
+      }),
+    ).toBe('Remove Powered by Assistrio');
+  });
 });

@@ -45,7 +45,9 @@ import {
   workspaceMemberInvitesAllowed,
 } from '@/lib/planEntitlements';
 import {
+  countActiveWorkspaceMembers,
   isWorkspaceOverMemberLimit,
+  WORKSPACE_MEMBER_INACTIVE_OVER_LIMIT_ROW_MESSAGE,
   WORKSPACE_MEMBER_LIMIT_EXCEEDED_MESSAGE,
 } from '@/lib/workspaceMemberOverLimit';
 
@@ -98,12 +100,17 @@ export function SettingsMembersPage() {
     () => buildWorkspacePersonRows(members, invites),
     [members, invites],
   );
-  const seatsUsed = useMemo(() => countWorkspaceSeatsUsed(members.length, invites), [members.length, invites]);
+  const activeMemberCount = useMemo(() => countActiveWorkspaceMembers(members), [members]);
+  const inactiveMemberCount = members.length - activeMemberCount;
+  const seatsUsed = useMemo(
+    () => countWorkspaceSeatsUsed(activeMemberCount, invites),
+    [activeMemberCount, invites],
+  );
   const memberLimit = workspace?.memberLimit ?? null;
   const inviteAllowed = workspaceMemberInvitesAllowed(workspace);
   const isOverMemberLimit = useMemo(
-    () => isWorkspaceOverMemberLimit(members.length, memberLimit),
-    [members.length, memberLimit],
+    () => isWorkspaceOverMemberLimit(activeMemberCount, memberLimit),
+    [activeMemberCount, memberLimit],
   );
   const canInviteNewMember = inviteAllowed && !isOverMemberLimit;
 
@@ -340,6 +347,31 @@ export function SettingsMembersPage() {
               {!inviteAllowed ? (
                 <PaidPlanFeatureCalloutForReason reason="members" />
               ) : null}
+              {inactiveMemberCount > 0 ? (
+                <Card className="border-slate-200 bg-slate-50/80 shadow-[var(--shadow-card)]">
+                  <CardBody className="flex items-start gap-3">
+                    <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-slate-600" aria-hidden />
+                    <div className="min-w-0">
+                      <p className="m-0 font-semibold text-slate-900">Inactive members over seat limit</p>
+                      <p className="m-0 mt-1 text-sm leading-relaxed text-slate-600">
+                        {inactiveMemberCount}{' '}
+                        {inactiveMemberCount === 1 ? 'member is' : 'members are'} inactive because this workspace
+                        exceeds its seat limit. {WORKSPACE_MEMBER_INACTIVE_OVER_LIMIT_ROW_MESSAGE} Upgrade your plan
+                        to reactivate seats, or remove inactive members.
+                      </p>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        className="mt-3"
+                        onClick={openMembersUpgradeModal}
+                      >
+                        View plans
+                      </Button>
+                    </div>
+                  </CardBody>
+                </Card>
+              ) : null}
               {isOverMemberLimit ? (
                 <Card className="border-amber-200/90 bg-amber-50/70 shadow-[var(--shadow-card)]">
                   <CardBody className="flex items-start gap-3">
@@ -365,7 +397,7 @@ export function SettingsMembersPage() {
               <WorkspaceSeatUsageCards
                 seatsUsed={seatsUsed}
                 memberLimit={memberLimit}
-                activeMembers={members.length}
+                activeMembers={activeMemberCount}
                 pendingInvites={pendingInvites.length}
                 isOverMemberLimit={isOverMemberLimit}
               />

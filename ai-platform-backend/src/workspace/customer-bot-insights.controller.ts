@@ -32,7 +32,7 @@ export class CustomerBotInsightsController {
   async insights(@Req() req: RequestWithUser, @Param('id') id: string) {
     const bot = await this.botsService.findOne(id);
     if (!bot) {
-      throw new NotFoundException('Bot not found');
+      throw new NotFoundException('AI Agent not found');
     }
     const uid = req.user?._id != null ? String(req.user._id) : '';
     const ok = await this.workspacesService.canUserAccessWorkspaceBot(

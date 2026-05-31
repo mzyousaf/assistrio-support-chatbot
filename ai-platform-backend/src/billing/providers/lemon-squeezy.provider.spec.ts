@@ -12,10 +12,14 @@ describe('LemonSqueezyProvider', () => {
     lemonSqueezyStoreId: '12345',
     lemonSqueezyWebhookSecret: 'whsec_test',
     customerAppBaseUrl: 'https://app.assistrio.com',
-    lemonSqueezyStarterVariantId: '111',
-    lemonSqueezyProVariantId: '222',
-    lemonSqueezyAddonExtraBotVariantId: '333',
-    lemonSqueezyAddonRemoveBrandingVariantId: '444',
+    lemonSqueezyStarterMonthlyVariantId: '111',
+    lemonSqueezyStarterYearlyVariantId: '112',
+    lemonSqueezyProMonthlyVariantId: '222',
+    lemonSqueezyProYearlyVariantId: '223',
+    lemonSqueezyAddonExtraBotMonthlyVariantId: '333',
+    lemonSqueezyAddonExtraBotYearlyVariantId: '334',
+    lemonSqueezyAddonRemoveBrandingMonthlyVariantId: '444',
+    lemonSqueezyAddonRemoveBrandingYearlyVariantId: '445',
     lemonSqueezyTopup1000CreditsVariantId: '777',
   };
 
@@ -229,16 +233,21 @@ describe('LemonSqueezyProvider', () => {
     );
     const event = provider.parseWebhook(rawBody, { 'x-event-name': 'subscription_created' });
     const action = await provider.mapWebhookEvent(event);
-    expect(action).toEqual({
-      kind: 'addon_sync',
-      workspaceId: '507f1f77bcf86cd799439011',
-      addonKey: 'extra_bot',
-      status: 'active',
-      providerSubscriptionId: 'sub-addon-bot',
-      currentPeriodStart: expect.any(Date),
-      currentPeriodEnd: expect.any(Date),
-      cancelAtPeriodEnd: false,
-    });
+    expect(action).toEqual(
+      expect.objectContaining({
+        kind: 'addon_sync',
+        workspaceId: '507f1f77bcf86cd799439011',
+        addonKey: 'extra_bot',
+        status: 'active',
+        providerSubscriptionId: 'sub-addon-bot',
+        providerVariantId: '333',
+        providerCustomerId: '42',
+        billingInterval: 'monthly',
+        currentPeriodStart: expect.any(Date),
+        currentPeriodEnd: expect.any(Date),
+        cancelAtPeriodEnd: false,
+      }),
+    );
   });
 
   it('maps subscription_payment_success invoice to subscription sync via provider fetch', async () => {

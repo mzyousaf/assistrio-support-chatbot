@@ -148,7 +148,7 @@ export class WorkspaceBotAccessGrantService {
   async listGrantRowsForBot(params: { workspaceId: string; botId: string }): Promise<BotAccessGrantRow[]> {
     const { workspaceId, botId } = params;
     if (!Types.ObjectId.isValid(workspaceId) || !Types.ObjectId.isValid(botId)) {
-      throw new BadRequestException({ message: 'Invalid workspace or bot id.' });
+      throw new BadRequestException({ message: 'Invalid workspace or AI Agent id.' });
     }
 
     const wsOid = new Types.ObjectId(workspaceId);

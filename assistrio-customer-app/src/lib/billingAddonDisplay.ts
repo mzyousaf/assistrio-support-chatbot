@@ -1,13 +1,17 @@
 import type { WorkspaceBillingSummary } from '@/api/types';
+import {
+  CUSTOMER_EXTRA_AI_AGENT,
+  formatCustomerFacingAgentText,
+} from '@/lib/customerAgentTerminology';
 
 const ADDON_CHIP_LABELS: Record<string, string> = {
-  extra_bot: 'Extra bot',
+  extra_bot: CUSTOMER_EXTRA_AI_AGENT,
   remove_branding: 'Remove branding',
   ai_credits_1000: 'AI top-up',
 };
 
 export function formatActiveAddonChipLabel(addonKey: string, name: string): string {
-  return ADDON_CHIP_LABELS[addonKey] ?? name;
+  return ADDON_CHIP_LABELS[addonKey] ?? formatCustomerFacingAgentText(name);
 }
 
 export type BillingAddonChip = {

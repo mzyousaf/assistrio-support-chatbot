@@ -36,11 +36,24 @@ export function resolveProviderDirectPdfUrl(
   return url;
 }
 
+/** Lemon order invoice PDF — never use receipt HTML pages. */
+export function resolveOrderDirectPdfUrl(
+  row: Pick<ProviderInvoiceRow, 'invoiceUrl' | 'receiptUrl'>,
+): string | null {
+  const invoiceUrl = String(row.invoiceUrl ?? '').trim();
+  if (invoiceUrl && isLikelyOrderInvoicePdfUrl(invoiceUrl)) return invoiceUrl;
+  return null;
+}
+
 export type BillingInvoiceDeliveryMode = 'provider_url' | 'direct_pdf' | 'local_pdf';
 
 export function resolveBillingInvoiceDeliveryMode(
-  row: Pick<ProviderInvoiceRow, 'invoiceUrl' | 'receiptUrl' | 'source'>,
+  row: Pick<ProviderInvoiceRow, 'invoiceUrl' | 'receiptUrl' | 'source' | 'billingKind'>,
 ): BillingInvoiceDeliveryMode {
+  if (row.billingKind === 'order') {
+    if (resolveOrderDirectPdfUrl(row)) return 'direct_pdf';
+    return 'local_pdf';
+  }
   if (resolveProviderHostedInvoiceUrl(row)) return 'provider_url';
   if (resolveProviderDirectPdfUrl(row)) return 'direct_pdf';
   return 'local_pdf';

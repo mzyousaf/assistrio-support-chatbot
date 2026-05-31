@@ -22,9 +22,14 @@ describe('WorkspaceSubscriptionsService', () => {
       }),
     };
 
+    const trialEmailService = {
+      notifyTrialStarted: jest.fn().mockResolvedValue(undefined),
+    };
+
     return {
-      service: new WorkspaceSubscriptionsService(subscriptionModel as never),
+      service: new WorkspaceSubscriptionsService(subscriptionModel as never, trialEmailService as never),
       subscriptionModel,
+      trialEmailService,
       getStored: () => stored,
     };
   }
@@ -45,6 +50,14 @@ describe('WorkspaceSubscriptionsService', () => {
     expect(
       result.currentPeriodEnd.getTime() - result.currentPeriodStart.getTime(),
     ).toBe(FREE_TRIAL_DAYS * 24 * 60 * 60 * 1000);
+  });
+
+  it('sends trial started email when a new free trial subscription is created', async () => {
+    const { service, trialEmailService } = createService(null);
+
+    await service.ensureFreeSubscriptionForWorkspace(workspaceId);
+
+    expect(trialEmailService.notifyTrialStarted).toHaveBeenCalledWith(String(workspaceId));
   });
 
   it('is idempotent when subscription already exists', async () => {
@@ -84,7 +97,11 @@ describe('WorkspaceSubscriptionsService', () => {
       }),
     };
 
-    const service = new WorkspaceSubscriptionsService(subscriptionModel as never);
+    const trialEmailService = {
+      notifyTrialStarted: jest.fn().mockResolvedValue(undefined),
+    };
+
+    const service = new WorkspaceSubscriptionsService(subscriptionModel as never, trialEmailService as never);
     const result = await service.ensureFreeSubscriptionForWorkspace(workspaceId);
 
     expect(result).toEqual(raced);

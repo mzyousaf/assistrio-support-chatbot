@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ConfigModule as AppConfigModule } from './config/config.module';
-import { shouldRegisterKbInProcessCronsForAppModule } from './config/app-mode.util';
+import { shouldRegisterInProcessScheduleForAppModule, shouldRegisterKbInProcessCronsForAppModule } from './config/app-mode.util';
 import { MongooseDbModule } from './db/mongoose.module';
 import { HealthController } from './health.controller';
 import { WorkspaceModule } from './workspace/workspace.module';
@@ -22,10 +22,11 @@ import { AdminPlatformBotsModule } from './admin-platform-bots/admin-platform-bo
 import { BillingModule } from './billing/billing.module';
 
 const registerKbCrons = shouldRegisterKbInProcessCronsForAppModule();
+const registerSchedule = shouldRegisterInProcessScheduleForAppModule();
 
 @Module({
   imports: [
-    ...(registerKbCrons ? [ScheduleModule.forRoot()] : []),
+    ...(registerSchedule ? [ScheduleModule.forRoot()] : []),
     AppConfigModule,
     MongooseDbModule,
     InternalModule,

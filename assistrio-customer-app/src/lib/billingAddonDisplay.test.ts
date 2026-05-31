@@ -62,7 +62,7 @@ describe('buildBillingAddonChips', () => {
       activeAddons: [
         {
           addonKey: 'extra_bot',
-          name: 'Extra bot',
+          name: 'Extra AI Agent',
           status: 'active',
           targetBotId: null,
           targetBotName: null,
@@ -71,7 +71,7 @@ describe('buildBillingAddonChips', () => {
         },
       ],
     });
-    expect(chips.some((c) => c.label === 'Extra bot')).toBe(true);
+    expect(chips.some((c) => c.label === 'Extra AI Agent')).toBe(true);
     expect(chips.some((c) => c.label.includes('AI top-up'))).toBe(true);
   });
 });

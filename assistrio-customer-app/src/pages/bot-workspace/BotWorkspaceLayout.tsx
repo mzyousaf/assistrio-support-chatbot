@@ -39,8 +39,8 @@ function BotWorkspaceShell() {
           <WorkspaceLoadFailureCard
             icon="forbidden"
             title="This agent is inactive"
-            description={`${description} Reactivate the Extra bot add-on or remove another agent.`}
-            onPrimary={() => openUpgradeModal({ reason: 'bots', recommendedPlanKey: 'pro' })}
+            description={`${description} Reactivate the Extra AI Agent add-on or remove another AI Agent.`}
+            onPrimary={() => openUpgradeModal({ reason: 'bots' })}
             primaryLabel="View add-ons"
           />
         </div>

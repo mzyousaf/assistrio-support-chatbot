@@ -14,9 +14,18 @@ describe('settingsNavigation', () => {
     expect(SETTINGS_NAV_ITEMS.map((item) => item.label)).toEqual([
       'General',
       'Members',
-      'Plans',
-      'Billing & Invoices',
+      'Billing & Plans',
     ]);
+  });
+
+  it('maps legacy plans routes to billing pathname', () => {
+    expect(normalizeSettingsPathname('/settings/plans')).toBe('/settings/billing');
+    expect(normalizeSettingsPathname('/plans')).toBe('/settings/billing');
+  });
+
+  it('resolves billing nav index for legacy plans routes', () => {
+    expect(resolveSettingsNavActiveIndex('/settings/plans')).toBe(2);
+    expect(resolveSettingsNavActiveIndex('/settings/billing')).toBe(2);
   });
 
   it('maps legacy account routes to Workspace active index', () => {

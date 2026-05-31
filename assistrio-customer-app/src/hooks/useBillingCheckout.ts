@@ -6,8 +6,10 @@ import {
 } from '@/api/customerApi';
 import type { ApiResult, BillingCheckoutSessionResponse } from '@/api/types';
 import { appToast } from '@/lib/app-toast';
+import { planBillingPeriodToInterval } from '@/lib/billingInterval.util';
 import { isTopUpAddonKey, mapBillingCheckoutError } from '@/lib/billingCheckout';
 import type { PaidPlanCheckoutKey } from '@/lib/billingCheckout';
+import type { PlanBillingPeriod } from '@/pages/billing/planPricingCardDisplay';
 
 export function useBillingCheckout(workspaceId: string | null) {
   const [loadingKey, setLoadingKey] = useState<string | null>(null);
@@ -40,18 +42,31 @@ export function useBillingCheckout(workspaceId: string | null) {
   );
 
   const startPlanCheckout = useCallback(
-    (planKey: PaidPlanCheckoutKey) =>
-      runCheckout(`plan:${planKey}`, () =>
-        createPlanCheckoutSession(workspaceId!, planKey),
-      ),
+    (planKey: PaidPlanCheckoutKey, billingPeriod?: PlanBillingPeriod) => {
+      const intervalKey = billingPeriod ? planBillingPeriodToInterval(billingPeriod) : 'monthly';
+      return runCheckout(`plan:${planKey}:${intervalKey}`, () =>
+        createPlanCheckoutSession(
+          workspaceId!,
+          planKey,
+          billingPeriod ? planBillingPeriodToInterval(billingPeriod) : undefined,
+        ),
+      );
+    },
     [runCheckout, workspaceId],
   );
 
   const startAddonCheckout = useCallback(
-    (addonKey: string, targetBotId?: string) =>
-      runCheckout(`addon:${addonKey}:${targetBotId ?? ''}`, () =>
-        createAddonCheckoutSession(workspaceId!, addonKey, targetBotId),
-      ),
+    (addonKey: string, targetBotId?: string, billingPeriod?: PlanBillingPeriod) => {
+      const intervalKey = billingPeriod ? planBillingPeriodToInterval(billingPeriod) : 'monthly';
+      return runCheckout(`addon:${addonKey}:${targetBotId ?? ''}:${intervalKey}`, () =>
+        createAddonCheckoutSession(
+          workspaceId!,
+          addonKey,
+          targetBotId,
+          billingPeriod ? planBillingPeriodToInterval(billingPeriod) : undefined,
+        ),
+      );
+    },
     [runCheckout, workspaceId],
   );
 
@@ -66,7 +81,12 @@ export function useBillingCheckout(workspaceId: string | null) {
   const isLoading = useCallback((key: string) => loadingKey === key, [loadingKey]);
 
   const isPlanLoading = useCallback(
-    (planKey: string) => loadingKey === `plan:${planKey}`,
+    (planKey: string, billingPeriod?: PlanBillingPeriod) => {
+      if (!billingPeriod) {
+        return Boolean(loadingKey?.startsWith(`plan:${planKey}:`));
+      }
+      return loadingKey === `plan:${planKey}:${planBillingPeriodToInterval(billingPeriod)}`;
+    },
     [loadingKey],
   );
 

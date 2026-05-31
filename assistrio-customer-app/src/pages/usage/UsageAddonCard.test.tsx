@@ -1,25 +1,14 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { UsageAddonCard } from './UsageAddonCard';
-import { resolvePaidPlanFeatureCalloutPreset } from '@/lib/paidPlanFeatureCalloutCopy';
-
-const mockOpenUpgradeModal = vi.fn();
-
-vi.mock('@/components/billing/UpgradePlanModalProvider', () => ({
-  useUpgradePlanModal: () => ({
-    openUpgradeModal: mockOpenUpgradeModal,
-    closeUpgradeModal: vi.fn(),
-  }),
-}));
 
 describe('UsageAddonCard', () => {
   afterEach(() => {
     cleanup();
-    mockOpenUpgradeModal.mockReset();
   });
 
-  it('shows paid-plan callout for locked add-ons', () => {
-    const preset = resolvePaidPlanFeatureCalloutPreset('addons');
+  it('calls onPurchase for paid-plan add-on when checkout is available', () => {
+    const onPurchase = vi.fn();
     render(
       <UsageAddonCard
         addon={{
@@ -28,13 +17,37 @@ describe('UsageAddonCard', () => {
           billingInterval: 'monthly',
           priceUsd: 49,
           scope: 'workspace',
-          checkoutAvailable: false,
+          checkoutAvailable: true,
         }}
+        currentPlanKey="starter"
+        isOwner
+        addonsAllowed
+        onPurchase={onPurchase}
       />,
     );
 
-    expect(screen.getByText(preset.title)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'View plans' }));
-    expect(mockOpenUpgradeModal).toHaveBeenCalledWith({ reason: 'addons' });
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }));
+    expect(onPurchase).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows paid-plan copy on free trial without purchase button', () => {
+    render(
+      <UsageAddonCard
+        addon={{
+          key: 'extra_bot',
+          name: 'Extra bot',
+          billingInterval: 'monthly',
+          priceUsd: 49,
+          scope: 'workspace',
+          checkoutAvailable: true,
+        }}
+        currentPlanKey="free"
+        isOwner
+        addonsAllowed={false}
+      />,
+    );
+
+    expect(screen.getByText('Available on paid plans.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Add' })).toBeNull();
   });
 });

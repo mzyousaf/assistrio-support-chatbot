@@ -255,7 +255,7 @@ export function InviteMemberModal({ open, onClose, workspaceId, canAssignBotAcce
           </div>
           <p className="m-0 text-[11px] text-slate-500">
             Need more seats?{' '}
-            <Link to="/settings/plans" className="font-medium text-teal-700 underline-offset-2 hover:underline">
+            <Link to="/settings/billing" className="font-medium text-teal-700 underline-offset-2 hover:underline">
               View plans
             </Link>
           </p>

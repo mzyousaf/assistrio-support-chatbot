@@ -104,7 +104,7 @@ describe('BillingInvoiceHistorySection', () => {
 
     render(<BillingInvoiceHistorySection workspaceId="ws-1" canView />);
 
-    fireEvent.click(await screen.findByRole('button', { name: /Download billing history/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /Export/i }));
 
     await waitFor(() => {
       expect(mockFetchWorkspaceBillingHistoryCsv).toHaveBeenCalledWith('ws-1');
@@ -115,7 +115,7 @@ describe('BillingInvoiceHistorySection', () => {
     });
   });
 
-  it('shows Download PDF for subscription invoice without invoice URL', async () => {
+  it('shows View Invoice for subscription invoice without invoice URL', async () => {
     mockGetWorkspaceBillingInvoices.mockResolvedValue({
       ok: true,
       data: [
@@ -128,11 +128,11 @@ describe('BillingInvoiceHistorySection', () => {
 
     render(<BillingInvoiceHistorySection workspaceId="ws-1" canView />);
 
-    expect(await screen.findByRole('button', { name: /Download PDF/i })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: /View Invoice/i })).toBeTruthy();
     expect(screen.queryByText('Receipt/PDF unavailable')).toBeNull();
   });
 
-  it('shows Download PDF for top-up order rows', async () => {
+  it('shows View Invoice for top-up order rows', async () => {
     mockGetWorkspaceBillingInvoices.mockResolvedValue({
       ok: true,
       data: [
@@ -152,14 +152,14 @@ describe('BillingInvoiceHistorySection', () => {
 
     render(<BillingInvoiceHistorySection workspaceId="ws-1" canView />);
 
-    expect(await screen.findByRole('button', { name: /Download PDF/i })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: /View Invoice/i })).toBeTruthy();
     expect(screen.queryByText('Receipt/PDF unavailable')).toBeNull();
   });
 
   it('does not render for members without billing document access', () => {
     mockGetWorkspaceBillingInvoices.mockResolvedValue({ ok: true, data: [] });
     render(<BillingInvoiceHistorySection workspaceId="ws-1" canView={false} />);
-    expect(screen.queryByRole('button', { name: /Download billing history/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Export/i })).toBeNull();
   });
 
   it('downloads subscription invoice PDF via backend proxy', async () => {
@@ -176,7 +176,7 @@ describe('BillingInvoiceHistorySection', () => {
 
     render(<BillingInvoiceHistorySection workspaceId="ws-1" canView />);
 
-    fireEvent.click(await screen.findByRole('button', { name: /Download PDF/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /View Invoice/i }));
 
     await waitFor(() => {
       expect(mockFetchWorkspaceBillingInvoicePdf).toHaveBeenCalledWith('ws-1', 'inv-1', undefined);
@@ -212,7 +212,7 @@ describe('BillingInvoiceHistorySection', () => {
     });
 
     render(<BillingInvoiceHistorySection workspaceId="ws-1" canView />);
-    fireEvent.click(await screen.findByRole('button', { name: /Download PDF/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /View Invoice/i }));
 
     await waitFor(() => {
       expect(mockFetchWorkspaceBillingInvoicePdf).toHaveBeenCalledWith(
@@ -251,7 +251,7 @@ describe('BillingInvoiceHistorySection', () => {
     });
 
     render(<BillingInvoiceHistorySection workspaceId="ws-1" canView />);
-    fireEvent.click(await screen.findByRole('button', { name: /Open invoice/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /View Invoice/i }));
 
     await waitFor(() => {
       expect(openSpy).toHaveBeenCalledWith(
@@ -263,14 +263,14 @@ describe('BillingInvoiceHistorySection', () => {
     expect(mockTriggerBlobDownload).not.toHaveBeenCalled();
   });
 
-  it('shows Open invoice label for provider hosted rows', async () => {
+  it('shows View Invoice label for provider hosted rows', async () => {
     mockGetWorkspaceBillingInvoices.mockResolvedValue({
       ok: true,
       data: [buildInvoice({ invoiceDeliveryMode: 'provider_url' })],
     });
 
     render(<BillingInvoiceHistorySection workspaceId="ws-1" canView />);
-    expect(await screen.findByRole('button', { name: /Open invoice/i })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: /View Invoice/i })).toBeTruthy();
   });
 
   it('downloads local subscription PDF without unavailable toast', async () => {
@@ -290,7 +290,7 @@ describe('BillingInvoiceHistorySection', () => {
     });
 
     render(<BillingInvoiceHistorySection workspaceId="ws-1" canView />);
-    fireEvent.click(await screen.findByRole('button', { name: /Download PDF/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /View Invoice/i }));
 
     await waitFor(() => {
       expect(mockTriggerBlobDownload).toHaveBeenCalledWith(pdfBlob, 'assistrio-billing-inv-1.pdf');
@@ -318,7 +318,7 @@ describe('BillingInvoiceHistorySection', () => {
     });
 
     render(<BillingInvoiceHistorySection workspaceId="ws-1" canView />);
-    fireEvent.click(await screen.findByRole('button', { name: /Download PDF/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /View Invoice/i }));
 
     expect(
       await screen.findByRole('heading', { name: 'Billing details' }),
@@ -348,7 +348,7 @@ describe('BillingInvoiceHistorySection', () => {
       });
 
     render(<BillingInvoiceHistorySection workspaceId="ws-1" canView />);
-    fireEvent.click(await screen.findByRole('button', { name: /Download PDF/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /View Invoice/i }));
 
     fireEvent.change(await screen.findByLabelText(/Company \/ Name/i), {
       target: { value: 'Jane Doe' },
@@ -400,7 +400,7 @@ describe('BillingInvoiceHistorySection', () => {
     });
 
     render(<BillingInvoiceHistorySection workspaceId="ws-1" canView />);
-    fireEvent.click(await screen.findByRole('button', { name: /Download PDF/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /View Invoice/i }));
 
     await waitFor(() => {
       expect(mockFetchWorkspaceBillingInvoicePdf).toHaveBeenCalledWith(
@@ -425,7 +425,7 @@ describe('BillingInvoiceHistorySection', () => {
 
     render(<BillingInvoiceHistorySection workspaceId="ws-1" canView />);
 
-    fireEvent.click(await screen.findByRole('button', { name: /Download PDF/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /View Invoice/i }));
 
     await waitFor(() => {
       expect(mockAppToastError).toHaveBeenCalledWith('Invoice PDF is not available right now.');
@@ -439,7 +439,7 @@ describe('BillingInvoiceHistorySection', () => {
     render(<BillingInvoiceHistorySection workspaceId="ws-1" canView />);
 
     expect(await screen.findByText('No invoices yet.')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /Download PDF/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /View Invoice/i })).toBeNull();
   });
 
   it('shows Starter plan and extra bot add-on invoice rows with correct labels', async () => {
@@ -470,7 +470,7 @@ describe('BillingInvoiceHistorySection', () => {
     render(<BillingInvoiceHistorySection workspaceId="ws-1" canView />);
 
     expect(await screen.findByText('Starter')).toBeTruthy();
-    expect(screen.getByText('Extra bot')).toBeTruthy();
+    expect(screen.getByText('Extra AI Agent')).toBeTruthy();
     expect(screen.getAllByText('$49.00').length).toBeGreaterThanOrEqual(2);
   });
 });

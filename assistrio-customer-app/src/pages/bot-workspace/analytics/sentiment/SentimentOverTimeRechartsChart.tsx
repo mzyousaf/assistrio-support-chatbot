@@ -2,6 +2,8 @@ import { useMemo } from 'react';
 import {
   Area,
   AreaChart,
+  Bar,
+  BarChart,
   CartesianGrid,
   Line,
   LineChart,
@@ -16,8 +18,10 @@ import type {
 } from '@/api/types';
 import { formatAnalyticsDateLabel, formatAnalyticsInteger } from '@/lib/analyticsFormat';
 import { AnalyticsChartEmpty } from '../shared/AnalyticsChartEmpty';
-import { formatSentimentOverTimeTooltipCount } from './SentimentOverTimeChart';
-import { colorForSentimentSeries } from './sentimentTrendsChartHelpers';
+import {
+  colorForSentimentSeries,
+  formatSentimentOverTimeTooltipCount,
+} from './sentimentTrendsChartHelpers';
 
 const CHART_ANIM_MS = 520;
 
@@ -93,7 +97,7 @@ type Props = {
   colorSeriesOrder: readonly string[];
   chartSeriesOrder: string[];
   labelById: Map<string, string>;
-  chartVariant: 'line' | 'area';
+  chartVariant: 'line' | 'area' | 'bar';
   countUnit?: 'messages' | 'chats';
 };
 
@@ -121,7 +125,7 @@ export function SentimentOverTimeRechartsChart({
   const maxY = useMemo(() => {
     let m = 0;
     for (const row of chartData) {
-      if (chartVariant === 'area') {
+      if (chartVariant === 'area' || chartVariant === 'bar') {
         let sum = 0;
         for (const id of chartSeriesOrder) {
           sum += Number(row[id] ?? 0);
@@ -138,6 +142,11 @@ export function SentimentOverTimeRechartsChart({
   }, [chartData, chartSeriesOrder, chartVariant]);
 
   const yMax = maxY <= 0 ? 1 : Math.ceil(maxY * 1.08);
+
+  const tooltipCursor =
+    chartVariant === 'bar'
+      ? { fill: 'rgba(13, 148, 136, 0.06)' }
+      : { stroke: '#94a3b8', strokeWidth: 1, strokeDasharray: '4 4' };
 
   const commonAxes = (
     <>
@@ -158,7 +167,7 @@ export function SentimentOverTimeRechartsChart({
         tickLine={false}
       />
       <Tooltip
-        cursor={{ stroke: '#94a3b8', strokeWidth: 1, strokeDasharray: '4 4' }}
+        cursor={tooltipCursor}
         content={({ active, label, payload }) => {
           if (!active || !payload?.length) return null;
           return (
@@ -174,9 +183,26 @@ export function SentimentOverTimeRechartsChart({
     </>
   );
 
-  const seriesElements = chartSeriesOrder.map((id) => {
+  const seriesElements = chartSeriesOrder.map((id, index) => {
     const color = colorForSentimentSeries(id);
     const name = labelById.get(id) ?? id;
+    if (chartVariant === 'bar') {
+      const isStackTop = index === chartSeriesOrder.length - 1;
+      return (
+        <Bar
+          key={id}
+          dataKey={id}
+          name={name}
+          stackId="sentimentStack"
+          fill={color}
+          radius={isStackTop ? [4, 4, 0, 0] : [0, 0, 0, 0]}
+          maxBarSize={56}
+          isAnimationActive
+          animationDuration={CHART_ANIM_MS}
+          animationEasing="ease-out"
+        />
+      );
+    }
     if (chartVariant === 'area') {
       return (
         <Area
@@ -216,13 +242,25 @@ export function SentimentOverTimeRechartsChart({
     );
   });
 
-  if (!points.length || chartSeriesOrder.length === 0) {
+  if (!points.length) {
     return (
-      <AnalyticsChartEmpty message="No sentiment activity for this range." className="h-full min-h-[12rem] w-full flex-1" />
+      <AnalyticsChartEmpty
+        message="No time-series data for this range."
+        className="h-full min-h-[12rem] w-full flex-1"
+      />
     );
   }
 
-  if (chartVariant === 'area' && maxY <= 0) {
+  if (chartSeriesOrder.length === 0) {
+    return (
+      <AnalyticsChartEmpty
+        message="Select at least one series to display."
+        className="h-full min-h-[12rem] w-full flex-1"
+      />
+    );
+  }
+
+  if ((chartVariant === 'area' || chartVariant === 'bar') && maxY <= 0) {
     return (
       <AnalyticsChartEmpty message="No sentiment activity in this range." className="h-full min-h-[12rem] w-full flex-1" />
     );
@@ -234,6 +272,11 @@ export function SentimentOverTimeRechartsChart({
         {commonAxes}
         {seriesElements}
       </AreaChart>
+    ) : chartVariant === 'bar' ? (
+      <BarChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 4 }}>
+        {commonAxes}
+        {seriesElements}
+      </BarChart>
     ) : (
       <LineChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 4 }}>
         {commonAxes}

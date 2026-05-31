@@ -9,7 +9,10 @@ describe('BillingWebhookProcessingService', () => {
       findOne: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue(null) }),
       findOneAndUpdate: jest.fn().mockResolvedValue({}),
     };
-    const addonModel = { findOneAndUpdate: jest.fn() };
+    const addonModel = {
+      findOne: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue(null) }),
+      findOneAndUpdate: jest.fn(),
+    };
     const topUpModel = { create: jest.fn() };
 
     const billingOrderModel = { findOneAndUpdate: jest.fn().mockResolvedValue({}) };
@@ -19,6 +22,7 @@ describe('BillingWebhookProcessingService', () => {
       addonModel as never,
       topUpModel as never,
       billingOrderModel as never,
+      { syncFromWebhook: jest.fn() } as never,
     );
 
     await service.applyAction({
@@ -52,7 +56,10 @@ describe('BillingWebhookProcessingService', () => {
       findOne: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue({ planKey: 'starter' }) }),
       findOneAndUpdate: jest.fn().mockResolvedValue({}),
     };
-    const addonModel = { findOneAndUpdate: jest.fn() };
+    const addonModel = {
+      findOne: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue(null) }),
+      findOneAndUpdate: jest.fn(),
+    };
     const topUpModel = { create: jest.fn() };
 
     const billingOrderModel = { findOneAndUpdate: jest.fn().mockResolvedValue({}) };
@@ -62,6 +69,7 @@ describe('BillingWebhookProcessingService', () => {
       addonModel as never,
       topUpModel as never,
       billingOrderModel as never,
+      { syncFromWebhook: jest.fn() } as never,
     );
 
     const failedAt = new Date('2026-05-20T00:00:00.000Z');
@@ -114,7 +122,10 @@ describe('BillingWebhookProcessingService', () => {
       }),
       findOneAndUpdate: jest.fn().mockResolvedValue({}),
     };
-    const addonModel = { findOneAndUpdate: jest.fn() };
+    const addonModel = {
+      findOne: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue(null) }),
+      findOneAndUpdate: jest.fn(),
+    };
     const topUpModel = { create: jest.fn() };
 
     const billingOrderModel = { findOneAndUpdate: jest.fn().mockResolvedValue({}) };
@@ -124,6 +135,7 @@ describe('BillingWebhookProcessingService', () => {
       addonModel as never,
       topUpModel as never,
       billingOrderModel as never,
+      { syncFromWebhook: jest.fn() } as never,
     );
 
     await service.applyAction({
@@ -159,7 +171,10 @@ describe('BillingWebhookProcessingService', () => {
       }),
       findOneAndUpdate: jest.fn().mockResolvedValue({}),
     };
-    const addonModel = { findOneAndUpdate: jest.fn() };
+    const addonModel = {
+      findOne: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue(null) }),
+      findOneAndUpdate: jest.fn(),
+    };
     const topUpModel = { create: jest.fn() };
 
     const billingOrderModel = { findOneAndUpdate: jest.fn().mockResolvedValue({}) };
@@ -169,6 +184,7 @@ describe('BillingWebhookProcessingService', () => {
       addonModel as never,
       topUpModel as never,
       billingOrderModel as never,
+      { syncFromWebhook: jest.fn() } as never,
     );
 
     await service.applyAction(
@@ -195,7 +211,10 @@ describe('BillingWebhookProcessingService', () => {
 
   it('order_created top-up creates credit top-up idempotently', async () => {
     const subscriptionModel = { findOneAndUpdate: jest.fn() };
-    const addonModel = { findOneAndUpdate: jest.fn() };
+    const addonModel = {
+      findOne: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue(null) }),
+      findOneAndUpdate: jest.fn(),
+    };
     const topUpModel = {
       create: jest
         .fn()
@@ -210,6 +229,7 @@ describe('BillingWebhookProcessingService', () => {
       addonModel as never,
       topUpModel as never,
       billingOrderModel as never,
+      { syncFromWebhook: jest.fn() } as never,
     );
 
     const action = {
@@ -235,7 +255,10 @@ describe('BillingWebhookProcessingService', () => {
 
   it('order_created stores billing order record idempotently', async () => {
     const subscriptionModel = { findOneAndUpdate: jest.fn() };
-    const addonModel = { findOneAndUpdate: jest.fn() };
+    const addonModel = {
+      findOne: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue(null) }),
+      findOneAndUpdate: jest.fn(),
+    };
     const topUpModel = { create: jest.fn() };
     const billingOrderModel = {
       findOneAndUpdate: jest
@@ -249,6 +272,7 @@ describe('BillingWebhookProcessingService', () => {
       addonModel as never,
       topUpModel as never,
       billingOrderModel as never,
+      { syncFromWebhook: jest.fn() } as never,
     );
 
     const action = {
@@ -275,7 +299,10 @@ describe('BillingWebhookProcessingService', () => {
 
   it('add-on webhook creates or updates workspace add-on', async () => {
     const subscriptionModel = { findOneAndUpdate: jest.fn() };
-    const addonModel = { findOneAndUpdate: jest.fn().mockResolvedValue({}) };
+    const addonModel = {
+      findOne: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue(null) }),
+      findOneAndUpdate: jest.fn().mockResolvedValue({}),
+    };
     const topUpModel = { create: jest.fn() };
 
     const billingOrderModel = { findOneAndUpdate: jest.fn().mockResolvedValue({}) };
@@ -285,6 +312,7 @@ describe('BillingWebhookProcessingService', () => {
       addonModel as never,
       topUpModel as never,
       billingOrderModel as never,
+      { syncFromWebhook: jest.fn() } as never,
     );
 
     await service.applyAction({
@@ -298,19 +326,225 @@ describe('BillingWebhookProcessingService', () => {
     });
 
     expect(addonModel.findOneAndUpdate).toHaveBeenCalledWith(
-      {
-        workspaceId: new Types.ObjectId(workspaceId),
-        addonKey: 'remove_branding',
-        targetBotId: null,
-      },
+      { provider: 'lemon_squeezy', providerSubscriptionId: 'sub-addon-1' },
       expect.objectContaining({
         $set: expect.objectContaining({
           status: 'active',
           provider: 'lemon_squeezy',
           providerSubscriptionId: 'sub-addon-1',
+          addonKey: 'remove_branding',
         }),
       }),
       { upsert: true, new: true },
+    );
+  });
+
+  it('throws when addon sync lacks providerSubscriptionId', async () => {
+    const service = new BillingWebhookProcessingService(
+      { findOneAndUpdate: jest.fn() } as never,
+      { findOneAndUpdate: jest.fn() } as never,
+      { create: jest.fn() } as never,
+      { findOneAndUpdate: jest.fn() } as never,
+      { syncFromWebhook: jest.fn() } as never,
+    );
+
+    await expect(
+      service.applyAction({
+        kind: 'addon_sync',
+        workspaceId,
+        addonKey: 'extra_bot',
+        status: 'active',
+      }),
+    ).rejects.toMatchObject({ errorCode: 'billing_addon_provider_subscription_missing' });
+  });
+
+  it('treats duplicate providerSubscriptionId upsert as idempotent', async () => {
+    const duplicateError = Object.assign(new Error('duplicate'), { code: 11000 });
+    const addonModel = {
+      findOne: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue(null) }),
+      findOneAndUpdate: jest.fn().mockRejectedValue(duplicateError),
+    };
+
+    const service = new BillingWebhookProcessingService(
+      { findOneAndUpdate: jest.fn() } as never,
+      addonModel as never,
+      { create: jest.fn() } as never,
+      { findOneAndUpdate: jest.fn() } as never,
+      { syncFromWebhook: jest.fn() } as never,
+    );
+
+    await expect(
+      service.applyAction({
+        kind: 'addon_sync',
+        workspaceId,
+        addonKey: 'extra_bot',
+        status: 'active',
+        providerSubscriptionId: 'sub-extra-dup',
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  it('creates separate extra_bot rows per provider subscription id', async () => {
+    const subscriptionModel = { findOneAndUpdate: jest.fn() };
+    const addonModel = {
+      findOne: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue(null) }),
+      findOneAndUpdate: jest.fn().mockResolvedValue({}),
+    };
+    const topUpModel = { create: jest.fn() };
+    const billingOrderModel = { findOneAndUpdate: jest.fn().mockResolvedValue({}) };
+
+    const service = new BillingWebhookProcessingService(
+      subscriptionModel as never,
+      addonModel as never,
+      topUpModel as never,
+      billingOrderModel as never,
+      { syncFromWebhook: jest.fn() } as never,
+    );
+
+    await service.applyAction({
+      kind: 'addon_sync',
+      workspaceId,
+      addonKey: 'extra_bot',
+      status: 'active',
+      providerSubscriptionId: 'sub-extra-1',
+    });
+    await service.applyAction({
+      kind: 'addon_sync',
+      workspaceId,
+      addonKey: 'extra_bot',
+      status: 'active',
+      providerSubscriptionId: 'sub-extra-2',
+    });
+
+    expect(addonModel.findOneAndUpdate).toHaveBeenCalledTimes(2);
+    expect(addonModel.findOneAndUpdate.mock.calls[0][0]).toEqual({
+      provider: 'lemon_squeezy',
+      providerSubscriptionId: 'sub-extra-1',
+    });
+    expect(addonModel.findOneAndUpdate.mock.calls[1][0]).toEqual({
+      provider: 'lemon_squeezy',
+      providerSubscriptionId: 'sub-extra-2',
+    });
+  });
+
+  it('defers early yearly interval while scheduled plan interval change is pending', async () => {
+    const subscriptionModel = {
+      findOne: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue({
+          planKey: 'starter',
+          billingInterval: 'monthly',
+          scheduledPlanChange: {
+            fromPlanKey: 'starter',
+            toPlanKey: 'starter',
+            fromBillingInterval: 'monthly',
+            toBillingInterval: 'yearly',
+            effectiveAt: new Date('2026-07-01T00:00:00.000Z'),
+            status: 'scheduled',
+          },
+        }),
+      }),
+      findOneAndUpdate: jest.fn().mockResolvedValue({}),
+    };
+    const addonModel = {
+      findOne: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue(null) }),
+      findOneAndUpdate: jest.fn(),
+    };
+    const topUpModel = { create: jest.fn() };
+    const billingOrderModel = { findOneAndUpdate: jest.fn().mockResolvedValue({}) };
+
+    const service = new BillingWebhookProcessingService(
+      subscriptionModel as never,
+      addonModel as never,
+      topUpModel as never,
+      billingOrderModel as never,
+      { syncFromWebhook: jest.fn() } as never,
+    );
+
+    await service.applyAction(
+      {
+        kind: 'subscription_sync',
+        workspaceId,
+        planKey: 'starter',
+        billingInterval: 'yearly',
+        providerSubscriptionId: 'sub-1',
+        providerVariantId: 'yearly-variant',
+        status: 'active',
+        currentPeriodStart: new Date('2026-05-01T00:00:00.000Z'),
+        currentPeriodEnd: new Date('2026-06-01T00:00:00.000Z'),
+        cancelAtPeriodEnd: false,
+      },
+      new Date('2026-05-15T00:00:00.000Z'),
+    );
+
+    expect(subscriptionModel.findOneAndUpdate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        $set: expect.objectContaining({
+          planKey: 'starter',
+          billingInterval: 'monthly',
+        }),
+      }),
+      expect.anything(),
+    );
+  });
+
+  it('defers early Starter plan while scheduled Pro to Starter downgrade is pending', async () => {
+    const subscriptionModel = {
+      findOne: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue({
+          planKey: 'pro',
+          billingInterval: 'monthly',
+          scheduledPlanChange: {
+            fromPlanKey: 'pro',
+            toPlanKey: 'starter',
+            fromBillingInterval: 'monthly',
+            toBillingInterval: 'monthly',
+            effectiveAt: new Date('2026-07-01T00:00:00.000Z'),
+            status: 'scheduled',
+          },
+        }),
+      }),
+      findOneAndUpdate: jest.fn().mockResolvedValue({}),
+    };
+    const addonModel = {
+      findOne: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue(null) }),
+      findOneAndUpdate: jest.fn(),
+    };
+    const topUpModel = { create: jest.fn() };
+    const billingOrderModel = { findOneAndUpdate: jest.fn().mockResolvedValue({}) };
+
+    const service = new BillingWebhookProcessingService(
+      subscriptionModel as never,
+      addonModel as never,
+      topUpModel as never,
+      billingOrderModel as never,
+      { syncFromWebhook: jest.fn() } as never,
+    );
+
+    await service.applyAction(
+      {
+        kind: 'subscription_sync',
+        workspaceId,
+        planKey: 'starter',
+        billingInterval: 'monthly',
+        providerSubscriptionId: 'sub-1',
+        providerVariantId: 'starter-variant',
+        status: 'active',
+        currentPeriodStart: new Date('2026-05-01T00:00:00.000Z'),
+        currentPeriodEnd: new Date('2026-06-01T00:00:00.000Z'),
+        cancelAtPeriodEnd: false,
+      },
+      new Date('2026-05-15T00:00:00.000Z'),
+    );
+
+    expect(subscriptionModel.findOneAndUpdate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        $set: expect.objectContaining({
+          planKey: 'pro',
+        }),
+      }),
+      expect.anything(),
     );
   });
 
@@ -325,7 +559,10 @@ describe('BillingWebhookProcessingService', () => {
       }),
       findOneAndUpdate: jest.fn().mockResolvedValue({}),
     };
-    const addonModel = { findOneAndUpdate: jest.fn() };
+    const addonModel = {
+      findOne: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue(null) }),
+      findOneAndUpdate: jest.fn(),
+    };
     const topUpModel = { create: jest.fn() };
     const billingOrderModel = { findOneAndUpdate: jest.fn().mockResolvedValue({}) };
 
@@ -334,6 +571,7 @@ describe('BillingWebhookProcessingService', () => {
       addonModel as never,
       topUpModel as never,
       billingOrderModel as never,
+      { syncFromWebhook: jest.fn() } as never,
     );
 
     await service.applyAction({

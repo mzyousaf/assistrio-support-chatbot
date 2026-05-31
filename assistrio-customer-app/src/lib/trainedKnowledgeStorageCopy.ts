@@ -21,6 +21,21 @@ export const TRAINED_KNOWLEDGE_STORAGE_LOW_TITLE = 'Low trained knowledge storag
 /** Document upload file-size cap (separate from trained knowledge quota). */
 export const MAX_KB_UPLOAD_FILE_SIZE_LABEL = 'Maximum file size: 20 MB';
 
+/** Plans modal core-limit tooltip — what counts toward trained knowledge storage. */
+export const TRAINED_KNOWLEDGE_MODAL_LIMIT_TOOLTIP_LEAD =
+  'Trained knowledge storage counts extracted text, not original file size.';
+
+/** Knowledge source types counted toward trained knowledge storage (Plans modal tooltip). */
+export const TRAINED_KNOWLEDGE_MODAL_LIMIT_SOURCE_TYPES = [
+  'Documents (.pdf, .doc, .docx, .txt, .md)',
+  'Snippets',
+  'Q&A',
+  'Spreadsheets (.csv, .xlsx, .xls)',
+  'Suggestions',
+] as const;
+
+export const TRAINED_KNOWLEDGE_MODAL_LIMIT_UPLOAD_NOTE = 'Upload files up to 20 MB each.';
+
 /** Detail-page actions when plan cap blocks an item. */
 export const TRAINED_KNOWLEDGE_STORAGE_VIEW_ACTION = 'View trained knowledge storage';
 

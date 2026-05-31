@@ -146,29 +146,38 @@ export function mapBotUsageToBillingSummary(
 
 export function mapPlanDefinitionToCatalogCard(
   plan: PlanDefinition,
-  checkoutAvailable: boolean,
+  checkoutAvailableForInterval: (interval: 'monthly' | 'yearly') => boolean = () => false,
 ): WorkspaceBillingPlanCatalogCard {
+  const checkoutAvailableMonthly = plan.key === 'free' ? false : checkoutAvailableForInterval('monthly');
+  const checkoutAvailableYearly = plan.key === 'free' ? false : checkoutAvailableForInterval('yearly');
   return {
     key: plan.key,
     name: plan.name,
     priceMonthly: plan.priceMonthlyUsd,
+    priceYearly: plan.priceYearlyUsd,
+    monthlyEquivalentYearly: plan.monthlyEquivalentYearlyUsd,
+    yearlyDiscountPercent: plan.yearlyDiscountPercent,
     botLimit: plan.botLimit,
     memberLimit: plan.memberLimit,
     monthlyAiCredits: plan.monthlyAiCredits,
     kbStorageMbPerBot: plan.kbStorageMbPerBot,
     analyticsHistoryDays: plan.analyticsHistoryDays,
     canExportReports: plan.canExportReports,
-    checkoutAvailable: checkoutAvailable && plan.key !== 'free',
+    checkoutAvailable: checkoutAvailableMonthly || checkoutAvailableYearly,
+    checkoutAvailableMonthly,
+    checkoutAvailableYearly,
   };
 }
 
 export function buildPublicPlanCatalogSnapshot(
-  checkoutAvailableForPlan: (planKey: PlanKey) => boolean = () => false,
+  checkoutAvailableForPlan: (
+    planKey: PlanKey,
+    billingInterval?: 'monthly' | 'yearly',
+  ) => boolean = () => false,
 ): WorkspaceBillingPlanCatalogCard[] {
   return PLAN_CATALOG.map((plan) =>
-    mapPlanDefinitionToCatalogCard(
-      plan,
-      plan.key === 'free' ? false : checkoutAvailableForPlan(plan.key),
+    mapPlanDefinitionToCatalogCard(plan, (interval) =>
+      plan.key === 'free' ? false : checkoutAvailableForPlan(plan.key, interval),
     ),
   );
 }

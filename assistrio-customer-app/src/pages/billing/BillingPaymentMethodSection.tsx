@@ -1,7 +1,5 @@
-import { CreditCard } from 'lucide-react';
 import type { WorkspaceBillingSummary } from '@/api/types';
 import { Button } from '@/components/ui';
-import { SettingsInfoCard } from '@/components/settings/SettingsInfoCard';
 import { useBillingPortal } from '@/hooks/useBillingPortal';
 import { isWorkspaceOwnerRole } from '@/lib/workspaceRoles';
 
@@ -14,12 +12,6 @@ type Props = {
 
 export function BillingPaymentMethodSection({ workspaceId, role, summary, checkoutEnabled }: Props) {
   const portal = useBillingPortal(workspaceId);
-  const method = summary.subscription.paymentMethod;
-  const label =
-    method?.label?.trim() ||
-    (method?.brand && method?.last4
-      ? `${method.brand} ending in ${method.last4}`
-      : null);
 
   const portalAvailable =
     checkoutEnabled &&
@@ -27,35 +19,39 @@ export function BillingPaymentMethodSection({ workspaceId, role, summary, checko
     (summary.subscription.customerPortalAvailable || summary.subscription.manageBillingAvailable);
 
   return (
-    <SettingsInfoCard
+    <section
       id="billing-manage-payments"
-      icon={CreditCard}
-      title="Manage payments"
-      description="Update payment method and payment details securely in Lemon Squeezy."
-      action={
-        portalAvailable ? (
+      aria-labelledby="billing-manage-payments-heading"
+      className="rounded-2xl border border-slate-200/90 bg-white shadow-[var(--shadow-card)]"
+    >
+      <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0 flex-1 space-y-3">
+          <div>
+            <h2
+              id="billing-manage-payments-heading"
+              className="m-0 text-base font-semibold tracking-tight text-slate-900"
+            >
+              Payment method
+            </h2>
+            <p className="m-0 mt-1 text-sm text-slate-500">
+              Manage your saved payment method through Lemon Squeezy.
+            </p>
+          </div>
+        </div>
+
+        {portalAvailable ? (
           <Button
             type="button"
             variant="secondary"
             size="sm"
             disabled={portal.loading}
+            className="shrink-0 self-start sm:self-center"
             onClick={() => void portal.openPortal()}
           >
             {portal.loading ? 'Opening…' : 'Manage in Lemon Squeezy'}
           </Button>
-        ) : undefined
-      }
-    >
-      {label ? (
-        <div className="space-y-1 text-sm text-slate-700">
-          <p className="m-0 font-medium text-slate-900">{label}</p>
-          <p className="m-0 text-slate-500">Stored securely by Lemon Squeezy</p>
-        </div>
-      ) : (
-        <p className="m-0 text-sm text-slate-600">
-          Payment method details will appear after your first paid invoice.
-        </p>
-      )}
-    </SettingsInfoCard>
+        ) : null}
+      </div>
+    </section>
   );
 }

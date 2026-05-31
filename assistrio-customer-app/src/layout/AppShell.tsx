@@ -51,7 +51,7 @@ import {
 import { AppShellCreditsWidget } from '@/layout/AppShellCreditsWidget';
 import { AccountSettingsModal } from '@/components/account/AccountSettingsModal';
 
-import { resolveSettingsNavActiveIndex } from '@/lib/settingsNavigation';
+import { resolveSettingsNavActiveIndex, SETTINGS_NAV_ITEMS } from '@/lib/settingsNavigation';
 
 import { cn } from '@/lib/utils';
 
@@ -370,7 +370,9 @@ export function AppShell() {
     activeWorkspaceId,
     billingSessionKey,
   );
-  const sidebarAiCredits = billingSummary?.usage?.aiCredits;
+  const activeBillingSummary =
+    billingSummary?.workspaceId === activeWorkspaceId ? billingSummary : null;
+  const sidebarAiCredits = activeBillingSummary?.usage?.aiCredits;
   const { signOut, logoutInFlight, logoutError, clearLogoutError } = useCustomerLogout();
 
   const initials = customer ? customerInitials(customer) : '?';
@@ -515,16 +517,12 @@ export function AppShell() {
   const hideAgentWorkspaceChrome = /\/playground\/knowledgebase\/datasheets\/[^/]+\/fullscreen\/?$/.test(
     location.pathname,
   );
+  const showCreditsInPrimarySidebar = !isAgentWorkspace || hideAgentWorkspaceChrome;
   /** Playground uses `WidgetPreviewContainer` with its own scroll lane — avoid nested page scrollbars. */
   const playgroundScrollContained = Boolean(agentId && /\/playground\//.test(location.pathname));
   const workspaceScrollContained = playgroundScrollContained || hideAgentWorkspaceChrome;
 
-  const settingsSubNav: [string, string][] = [
-    ['/settings/workspace', 'General'],
-    ['/settings/members', 'Members'],
-    ['/settings/plans', 'Plans'],
-    ['/settings/billing', 'Billing & Invoices'],
-  ];
+  const settingsSubNav: [string, string][] = SETTINGS_NAV_ITEMS.map((item) => [item.to, item.label]);
   const settingsSubNavRefs = useRef<(HTMLAnchorElement | null)[]>([]);
   const settingsTrackRef = useRef<HTMLDivElement>(null);
   const [indicator, setIndicator] = useState<{ top: number; height: number } | null>(null);
@@ -1329,13 +1327,17 @@ export function AppShell() {
                   })}
                 </div>
 
-                <AppShellCreditsWidget
-                  variant="peek"
-                  activeWorkspaceId={activeWorkspaceId}
-                  loadState={billingLoadState}
-                  aiCredits={sidebarAiCredits}
-                  onNavigatePlans={(e) => workspaceLeaveGuard(e, '/settings/plans')}
-                />
+                {showCreditsInPrimarySidebar ? (
+                  <AppShellCreditsWidget
+                    variant="peek"
+                    activeWorkspaceId={activeWorkspaceId}
+                    loadState={billingLoadState}
+                    aiCredits={sidebarAiCredits}
+                    topUps={activeBillingSummary?.topUps}
+                    billingSummary={activeBillingSummary}
+                    onNavigatePlans={(e) => workspaceLeaveGuard(e, '/settings/billing')}
+                  />
+                ) : null}
               </nav>
             </>
           )}
@@ -1449,17 +1451,20 @@ export function AppShell() {
 
           {/* ── Sidebar bottom ── */}
           <div className="shrink-0 max-[900px]:hidden">
-            {!sidebarCollapsed && (
+            {!sidebarCollapsed && showCreditsInPrimarySidebar ? (
               <div className="px-3 pb-2">
                 <AppShellCreditsWidget
                   variant="card"
+                  collapseContext="primary"
                   activeWorkspaceId={activeWorkspaceId}
                   loadState={billingLoadState}
                   aiCredits={sidebarAiCredits}
-                  onNavigatePlans={(e) => workspaceLeaveGuard(e, '/settings/plans')}
+                  topUps={activeBillingSummary?.topUps}
+                  billingSummary={activeBillingSummary}
+                  onNavigatePlans={(e) => workspaceLeaveGuard(e, '/settings/billing')}
                 />
               </div>
-            )}
+            ) : null}
 
           </div>
         </aside>
@@ -1485,7 +1490,24 @@ export function AppShell() {
         {agentId ? (
           <KbWorkspacePollingProvider botId={agentId}>
             <div className="relative z-0 flex h-full min-h-0 min-w-0 flex-1 flex-row overflow-hidden max-[900px]:flex-col">
-              {!hideAgentWorkspaceChrome && <AgentWorkspaceSidebar bot={agentBot} health={agentHealth} />}
+              {!hideAgentWorkspaceChrome && (
+                <AgentWorkspaceSidebar
+                  bot={agentBot}
+                  health={agentHealth}
+                  creditsWidget={
+                    <AppShellCreditsWidget
+                      variant="card"
+                      collapseContext="agent"
+                      activeWorkspaceId={activeWorkspaceId}
+                      loadState={billingLoadState}
+                      aiCredits={sidebarAiCredits}
+                      topUps={activeBillingSummary?.topUps}
+                      billingSummary={activeBillingSummary}
+                      onNavigatePlans={(e) => workspaceLeaveGuard(e, '/settings/billing')}
+                    />
+                  }
+                />
+              )}
               <div
                 className={cn(
                   'relative flex min-h-0 min-w-0 flex-1 flex-col',

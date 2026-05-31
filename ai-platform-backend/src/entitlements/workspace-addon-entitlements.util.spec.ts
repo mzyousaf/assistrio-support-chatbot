@@ -1,5 +1,10 @@
 import { megabytesToBytes } from './plan-catalog';
-import { applyWorkspaceAddonEntitlements, resolveKbEntitlementsForBot } from './workspace-addon-entitlements.util';
+import {
+  applyWorkspaceAddonEntitlements,
+  countActiveExtraBotAddons,
+  isWorkspaceAddonEntitlementActive,
+  resolveKbEntitlementsForBot,
+} from './workspace-addon-entitlements.util';
 
 const base = {
   botLimit: 1,
@@ -13,13 +18,51 @@ const base = {
 };
 
 describe('workspace-addon-entitlements.util', () => {
-  it('extra_bot increases botLimit by 1 (MVP)', () => {
+  it('each active extra_bot increases botLimit by 1', () => {
     const applied = applyWorkspaceAddonEntitlements(base, [
       { addonKey: 'extra_bot', status: 'active' },
       { addonKey: 'extra_bot', status: 'active' },
     ]);
+    expect(applied.botLimit).toBe(3);
+    expect(countActiveExtraBotAddons([
+      { addonKey: 'extra_bot', status: 'active' },
+      { addonKey: 'extra_bot', status: 'active' },
+    ])).toBe(2);
+  });
+
+  it('cancel-at-period-end extra_bot still counts until period end', () => {
+    const future = new Date('2026-12-01T00:00:00.000Z');
+    const applied = applyWorkspaceAddonEntitlements(
+      base,
+      [
+        {
+          addonKey: 'extra_bot',
+          status: 'active',
+          cancelAtPeriodEnd: true,
+          currentPeriodEnd: future.toISOString(),
+        },
+      ],
+      new Date('2026-06-01T00:00:00.000Z'),
+    );
     expect(applied.botLimit).toBe(2);
-    expect(applied.activeAddons).toContain('extra_bot');
+    expect(
+      isWorkspaceAddonEntitlementActive(
+        {
+          addonKey: 'extra_bot',
+          status: 'active',
+          cancelAtPeriodEnd: true,
+          currentPeriodEnd: future.toISOString(),
+        },
+        new Date('2026-06-01T00:00:00.000Z'),
+      ),
+    ).toBe(true);
+  });
+
+  it('expired extra_bot does not count', () => {
+    const applied = applyWorkspaceAddonEntitlements(base, [
+      { addonKey: 'extra_bot', status: 'expired' },
+    ]);
+    expect(applied.botLimit).toBe(1);
   });
 
   it('remove_branding enables canRemoveBranding', () => {
@@ -45,10 +88,18 @@ describe('workspace-addon-entitlements.util', () => {
     expect(kb.maxKbStorageBytesPerBot).toBe(megabytesToBytes(40));
   });
 
-  it('ignores cancelled add-ons', () => {
-    const applied = applyWorkspaceAddonEntitlements(base, [
-      { addonKey: 'extra_bot', status: 'cancelled' },
-    ]);
+  it('ignores cancelled add-ons after period end', () => {
+    const applied = applyWorkspaceAddonEntitlements(
+      base,
+      [
+        {
+          addonKey: 'extra_bot',
+          status: 'cancelled',
+          currentPeriodEnd: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+      new Date('2026-06-01T00:00:00.000Z'),
+    );
     expect(applied.botLimit).toBe(1);
     expect(applied.activeAddons).toHaveLength(0);
   });

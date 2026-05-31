@@ -109,7 +109,7 @@ export function BotsListPage() {
         appToast.error(BOTS_LIST_ADMIN_ONLY_CREATE_TOAST);
       } else if (res.errorCode === PLAN_LIMIT_WORKSPACE_BOTS_CODE) {
         setError(res.error);
-        openUpgradeModal({ reason: 'bots', recommendedPlanKey: 'pro' });
+        openUpgradeModal({ reason: 'bots' });
       } else {
         setError(res.error);
       }
@@ -137,7 +137,7 @@ export function BotsListPage() {
     return (
       <DataPageLayout
         title="AI Agents"
-        description="Build, train, and deploy intelligent AI agents for your workspace."
+        description="Build, train, and deploy intelligent AI Agents for your workspace."
         containerSize="editor"
       >
         <div className="rounded-2xl bg-white px-6 py-10 text-center text-[0.9375rem] text-slate-500 shadow-[var(--shadow-card)]">
@@ -166,7 +166,7 @@ export function BotsListPage() {
       description={
         <>
           <p>
-            Build, train, and deploy intelligent AI agents that handle customer conversations on your website — 24/7.
+            Build, train, and deploy intelligent AI Agents that handle customer conversations on your website — 24/7.
           </p>
           {needsOnboarding && isAdmin ? (
             <p>
@@ -245,7 +245,7 @@ export function BotsListPage() {
                   onDelete={setConfirmDelete}
                   canDelete={isAdmin}
                   onShare={canShareAgentAccess ? setShareBot : undefined}
-                  onReactivate={() => openUpgradeModal({ reason: 'bots', recommendedPlanKey: 'pro' })}
+                  onReactivate={() => openUpgradeModal({ reason: 'bots' })}
                   showViewAccessPreview={showViewAccessPreview}
                 />
               </li>

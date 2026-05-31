@@ -9,7 +9,7 @@ export const FALLBACK_UPGRADE_PLAN_CATALOG: WorkspaceBillingPlanCatalogCard[] = 
   {
     key: 'starter',
     name: 'Starter',
-    priceMonthly: 49,
+    priceMonthly: 59,
     botLimit: 3,
     memberLimit: 5,
     monthlyAiCredits: 500,
@@ -21,7 +21,7 @@ export const FALLBACK_UPGRADE_PLAN_CATALOG: WorkspaceBillingPlanCatalogCard[] = 
   {
     key: 'pro',
     name: 'Pro',
-    priceMonthly: 99,
+    priceMonthly: 119,
     botLimit: 10,
     memberLimit: 10,
     monthlyAiCredits: 2000,
@@ -45,4 +45,32 @@ export function resolveUpgradeModalPaidPlans(
   }
 
   return FALLBACK_UPGRADE_PLAN_CATALOG;
+}
+
+/** Next paid plan to offer for upgrade, or null when already on Pro. */
+export function resolveContextualUpgradePlanKey(
+  currentPlanKey: string,
+  isTrialPlan?: boolean,
+): UpgradeModalPaidPlanKey | null {
+  if (currentPlanKey === 'pro') return null;
+  if (currentPlanKey === 'starter') return 'pro';
+  if (currentPlanKey === 'free' || isTrialPlan) return 'starter';
+  return 'starter';
+}
+
+/** Single contextual upgrade card for the upgrade modal (Free → Starter, Starter → Pro). */
+export function resolveContextualUpgradePlans(
+  planCatalog: WorkspaceBillingPlanCatalogCard[] | null | undefined,
+  currentPlanKey: string,
+  isTrialPlan?: boolean,
+): WorkspaceBillingPlanCatalogCard[] {
+  const targetKey = resolveContextualUpgradePlanKey(currentPlanKey, isTrialPlan);
+  if (!targetKey) return [];
+
+  const source = planCatalog ?? [];
+  const fromCatalog = source.find((plan) => plan.key === targetKey);
+  if (fromCatalog) return [fromCatalog];
+
+  const fallback = FALLBACK_UPGRADE_PLAN_CATALOG.find((plan) => plan.key === targetKey);
+  return fallback ? [fallback] : [];
 }

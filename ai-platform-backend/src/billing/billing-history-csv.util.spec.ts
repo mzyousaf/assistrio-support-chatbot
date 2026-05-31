@@ -32,10 +32,10 @@ describe('billing-history-csv.util', () => {
         status: 'paid',
         invoiceUrl: 'https://invoice.example/addon',
         receiptUrl: null,
-        description: 'Extra bot add-on',
+        description: 'Extra AI Agent add-on',
         itemType: 'addon',
         itemKey: 'extra_bot',
-        itemName: 'Extra bot add-on',
+        itemName: 'Extra AI Agent add-on',
         billingKind: 'subscription_invoice',
       },
       {
@@ -63,7 +63,7 @@ describe('billing-history-csv.util', () => {
     expect(csv).toContain('$15.00');
     expect(csv).toContain('$30.00');
     expect(csv).toContain('Starter');
-    expect(csv).toContain('Extra bot add-on');
+    expect(csv).toContain('Extra AI Agent add-on');
     expect(csv).toContain('https://invoice.example/plan');
     expect(csv).toContain('https://receipt.example/top-up');
     expect(csv.split('\r\n').length).toBe(4);

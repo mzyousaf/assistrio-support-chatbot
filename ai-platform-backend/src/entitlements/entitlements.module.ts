@@ -1,7 +1,12 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
+import { BillingModule } from '../billing/billing.module';
+import { EmailModule } from '../email/email.module';
 import { Bot, BotSchema } from '../models/bot.schema';
 import { UsageLedger, UsageLedgerSchema } from '../models/usage-ledger.schema';
+import { User, UserSchema } from '../models/user.schema';
+import { Workspace, WorkspaceSchema } from '../models/workspace.schema';
 import {
   WorkspaceAddon,
   WorkspaceAddonSchema,
@@ -24,10 +29,17 @@ import { WorkspaceBotLimitService } from './workspace-bot-limit.service';
 import { BotKnowledgeSizeResolverService } from './bot-knowledge-size-resolver.service';
 import { WorkspaceEntitlementsService } from './workspace-entitlements.service';
 import { WorkspaceMemberLimitService } from './workspace-member-limit.service';
+import { WorkspaceMemberOverLimitReconcileService } from './workspace-member-over-limit-reconcile.service';
 import { WorkspaceSubscriptionsService } from './workspace-subscriptions.service';
+import { TrialEmailService } from './trial-email.service';
+import { TrialReminderCron } from './trial-reminder.cron';
+import { TrialReminderService } from './trial-reminder.service';
 
 @Module({
   imports: [
+    ConfigModule,
+    EmailModule,
+    forwardRef(() => BillingModule),
     MongooseModule.forFeature([
       { name: WorkspaceSubscription.name, schema: WorkspaceSubscriptionSchema },
       { name: WorkspaceAddon.name, schema: WorkspaceAddonSchema },
@@ -36,14 +48,20 @@ import { WorkspaceSubscriptionsService } from './workspace-subscriptions.service
       { name: UsageLedger.name, schema: UsageLedgerSchema },
       { name: WorkspaceMembership.name, schema: WorkspaceMembershipSchema },
       { name: WorkspaceInvite.name, schema: WorkspaceInviteSchema },
+      { name: User.name, schema: UserSchema },
+      { name: Workspace.name, schema: WorkspaceSchema },
     ]),
   ],
   providers: [
     WorkspaceSubscriptionsService,
+    TrialEmailService,
+    TrialReminderService,
+    TrialReminderCron,
     WorkspaceCreditTopUpService,
     WorkspaceEntitlementsService,
     WorkspaceBotLimitService,
     WorkspaceMemberLimitService,
+    WorkspaceMemberOverLimitReconcileService,
     WorkspaceAiCreditsUsageService,
     WorkspaceAiCreditGateService,
     WorkspaceBrandingEntitlementService,
@@ -57,6 +75,7 @@ import { WorkspaceSubscriptionsService } from './workspace-subscriptions.service
     WorkspaceEntitlementsService,
     WorkspaceBotLimitService,
     WorkspaceMemberLimitService,
+    WorkspaceMemberOverLimitReconcileService,
     WorkspaceAiCreditsUsageService,
     WorkspaceAiCreditGateService,
     WorkspaceBrandingEntitlementService,

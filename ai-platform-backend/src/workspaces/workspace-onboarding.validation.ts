@@ -74,7 +74,7 @@ export function parseWorkspaceOnboardingInstructionsPatch(
   const description = parseRequiredString(o, 'description', 'Instructions');
   if (description.length < MIN_AGENT_INSTRUCTIONS_LENGTH) {
     throw new BadRequestException({
-      error: 'Describe your AI agent in at least 80 characters.',
+      error: 'Describe your AI Agent in at least 80 characters.',
     });
   }
   const systemPrompt = optionalTrimmedString(o.systemPrompt) ?? description;

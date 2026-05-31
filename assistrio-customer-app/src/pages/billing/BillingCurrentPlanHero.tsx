@@ -67,7 +67,7 @@ export function BillingCurrentPlanHero({
             </div>
             {isCompact && showViewPlansLink ? (
               <Link
-                to="/settings/plans"
+                to="/settings/billing"
                 className="inline-flex h-7 shrink-0 cursor-pointer items-center justify-center self-start rounded-[var(--ui-radius)] border border-[var(--ui-border)] bg-[var(--ui-surface)] px-2.5 text-xs font-medium leading-none text-slate-800 no-underline shadow-none transition-[background-color,border-color,color,box-shadow] duration-150 ease-out hover:border-[var(--ui-border-hover)] hover:bg-[var(--ui-surface-muted)]"
               >
                 View plans

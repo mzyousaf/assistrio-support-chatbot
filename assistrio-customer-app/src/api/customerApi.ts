@@ -56,6 +56,7 @@ import type {
   WorkspaceOnboardingGoLiveResponse,
   WorkspaceOnboardingResponse,
   WorkspaceBillingSummary,
+  WorkspaceUsageAnalytics,
   WorkspaceBillingInvoiceRow,
   BillingInvoiceDownloadDetails,
   BillingInvoiceDownloadResponse,
@@ -64,6 +65,7 @@ import type {
   BillingManageSessionResponse,
   BillingSubscriptionActionResponse,
   BillingCheckoutSessionResponse,
+  BillingInterval,
   SharedBotInitPayload,
   WidgetIframeInitPayload,
   ApiResult,
@@ -119,6 +121,23 @@ export function getWorkspaceBillingSummary(workspaceId: string) {
   return customerFetch<WorkspaceBillingSummary>(`${workspacePath(workspaceId)}/billing/summary`);
 }
 
+/** GET /api/customer/workspaces/:workspaceId/usage/analytics */
+export function getWorkspaceUsageAnalytics(
+  workspaceId: string,
+  params: { startDate: string; endDate: string; botIds?: string },
+) {
+  const search = new URLSearchParams({
+    startDate: params.startDate,
+    endDate: params.endDate,
+  });
+  if (params.botIds?.trim()) {
+    search.set('botIds', params.botIds.trim());
+  }
+  return customerFetch<WorkspaceUsageAnalytics>(
+    `${workspacePath(workspaceId)}/usage/analytics?${search.toString()}`,
+  );
+}
+
 /** POST /api/customer/workspaces/:workspaceId/billing/manage */
 export function createBillingManageSession(workspaceId: string) {
   return customerFetch<BillingManageSessionResponse>(`${workspacePath(workspaceId)}/billing/manage`, {
@@ -149,7 +168,7 @@ export function cancelWorkspaceSubscription(workspaceId: string, body: { confirm
 /** POST /api/customer/workspaces/:workspaceId/billing/subscription/change-plan */
 export function changeWorkspaceSubscriptionPlan(
   workspaceId: string,
-  body: { planKey: 'starter' | 'pro' },
+  body: { planKey: 'starter' | 'pro'; billingInterval?: BillingInterval },
 ) {
   return customerFetch<BillingSubscriptionActionResponse>(
     `${workspacePath(workspaceId)}/billing/subscription/change-plan`,
@@ -161,11 +180,26 @@ export function changeWorkspaceSubscriptionPlan(
   );
 }
 
+/** POST /api/customer/workspaces/:workspaceId/billing/subscription/cancel-scheduled-downgrade */
+export function cancelScheduledWorkspaceDowngrade(workspaceId: string) {
+  return customerFetch<BillingSubscriptionActionResponse>(
+    `${workspacePath(workspaceId)}/billing/subscription/cancel-scheduled-downgrade`,
+    { method: 'POST' },
+  );
+}
+
 /** POST /api/customer/workspaces/:workspaceId/billing/addons/cancel */
 export function cancelWorkspaceAddon(
   workspaceId: string,
-  body: { addonKey: string; targetBotId?: string },
+  body: { addonKey?: string; targetBotId?: string; addonInstanceId?: string },
 ) {
+  if (body.addonInstanceId?.trim()) {
+    return customerFetch<{ summary: WorkspaceBillingSummary; message: string }>(
+      `${workspacePath(workspaceId)}/billing/addons/${encodeURIComponent(body.addonInstanceId)}/cancel`,
+      { method: 'POST' },
+    );
+  }
+
   return customerFetch<{ summary: WorkspaceBillingSummary; message: string }>(
     `${workspacePath(workspaceId)}/billing/addons/cancel`,
     {
@@ -173,6 +207,34 @@ export function cancelWorkspaceAddon(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     },
+  );
+}
+
+/** PATCH /api/customer/workspaces/:workspaceId/billing/credit-auto-topup */
+export function patchWorkspaceCreditAutoTopUp(workspaceId: string, enabled: boolean) {
+  return customerFetch<{ ok: true; autoTopUpPromptEnabled: boolean; summary: WorkspaceBillingSummary }>(
+    `${workspacePath(workspaceId)}/billing/credit-auto-topup`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled }),
+    },
+  );
+}
+
+/** POST /api/customer/workspaces/:workspaceId/billing/checkout/auto-topup */
+export function createAutoTopUpCheckoutSession(workspaceId: string) {
+  return customerFetch<BillingCheckoutSessionResponse>(
+    `${workspacePath(workspaceId)}/billing/checkout/auto-topup`,
+    { method: 'POST' },
+  );
+}
+
+/** POST /api/customer/workspaces/:workspaceId/billing/auto-topup/disable */
+export function disableWorkspaceAutoTopUp(workspaceId: string) {
+  return customerFetch<{ ok: true; summary: WorkspaceBillingSummary }>(
+    `${workspacePath(workspaceId)}/billing/auto-topup/disable`,
+    { method: 'POST' },
   );
 }
 
@@ -258,13 +320,20 @@ export function fetchWorkspaceBillingInvoicePdf(
 }
 
 /** POST /api/customer/workspaces/:workspaceId/billing/checkout/plan */
-export function createPlanCheckoutSession(workspaceId: string, planKey: 'starter' | 'pro') {
+export function createPlanCheckoutSession(
+  workspaceId: string,
+  planKey: 'starter' | 'pro',
+  billingInterval?: BillingInterval,
+) {
   return customerFetch<BillingCheckoutSessionResponse>(
     `${workspacePath(workspaceId)}/billing/checkout/plan`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ planKey }),
+      body: JSON.stringify({
+        planKey,
+        ...(billingInterval ? { billingInterval } : {}),
+      }),
     },
   );
 }
@@ -274,6 +343,7 @@ export function createAddonCheckoutSession(
   workspaceId: string,
   addonKey: string,
   targetBotId?: string,
+  billingInterval?: BillingInterval,
 ) {
   return customerFetch<BillingCheckoutSessionResponse>(
     `${workspacePath(workspaceId)}/billing/checkout/addon`,
@@ -283,8 +353,65 @@ export function createAddonCheckoutSession(
       body: JSON.stringify({
         addonKey,
         ...(targetBotId?.trim() ? { targetBotId: targetBotId.trim() } : {}),
+        ...(billingInterval ? { billingInterval } : {}),
       }),
     },
+  );
+}
+
+/** POST /api/customer/workspaces/:workspaceId/billing/subscription/schedule-interval */
+export function scheduleSubscriptionBillingInterval(
+  workspaceId: string,
+  body: { billingInterval: BillingInterval },
+) {
+  return customerFetch<BillingSubscriptionActionResponse>(
+    `${workspacePath(workspaceId)}/billing/subscription/schedule-interval`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    },
+  );
+}
+
+/** POST /api/customer/workspaces/:workspaceId/billing/subscription/cancel-scheduled-downgrade */
+export function cancelScheduledSubscriptionBillingChange(workspaceId: string) {
+  return cancelScheduledWorkspaceDowngrade(workspaceId);
+}
+
+/** POST /api/customer/workspaces/:workspaceId/billing/addons/:addonInstanceId/schedule-interval */
+export function scheduleAddonBillingInterval(
+  workspaceId: string,
+  body: {
+    addonKey: string;
+    billingInterval: BillingInterval;
+    targetBotId?: string;
+    addonInstanceId: string;
+  },
+) {
+  const addonInstanceId = body.addonInstanceId.trim();
+  return customerFetch<{ summary: WorkspaceBillingSummary; message: string }>(
+    `${workspacePath(workspaceId)}/billing/addons/${encodeURIComponent(addonInstanceId)}/schedule-interval`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ billingInterval: body.billingInterval }),
+    },
+  );
+}
+
+/** POST /api/customer/workspaces/:workspaceId/billing/addons/:addonInstanceId/cancel-scheduled-interval */
+export function cancelScheduledAddonBillingChange(
+  workspaceId: string,
+  body: { addonKey: string; addonInstanceId: string; targetBotId?: string },
+) {
+  const addonInstanceId = body.addonInstanceId.trim();
+  if (!addonInstanceId) {
+    throw new Error('addonInstanceId is required to cancel a scheduled add-on interval change.');
+  }
+  return customerFetch<{ summary: WorkspaceBillingSummary; message: string }>(
+    `${workspacePath(workspaceId)}/billing/addons/${encodeURIComponent(addonInstanceId)}/cancel-scheduled-interval`,
+    { method: 'POST' },
   );
 }
 

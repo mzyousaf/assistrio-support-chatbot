@@ -1,6 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Types } from 'mongoose';
 import { BILLING_PROVIDERS, type BillingProvider } from '../billing/billing-provider.types';
+import { BILLING_INTERVALS, type BillingInterval } from '../billing/billing-interval.types';
 import { PLAN_KEYS, type PlanKey } from '../entitlements/plan-catalog';
 
 export const WORKSPACE_SUBSCRIPTION_STATUSES = [
@@ -21,6 +22,9 @@ export class WorkspaceSubscription {
 
   @Prop({ required: true, enum: PLAN_KEYS, default: 'free' })
   planKey: PlanKey;
+
+  @Prop({ required: true, enum: BILLING_INTERVALS, default: 'monthly' })
+  billingInterval: BillingInterval;
 
   @Prop({ required: true, enum: WORKSPACE_SUBSCRIPTION_STATUSES, default: 'free' })
   status: WorkspaceSubscriptionStatus;
@@ -45,6 +49,29 @@ export class WorkspaceSubscription {
 
   @Prop({ type: Boolean, default: false })
   cancelAtPeriodEnd: boolean;
+
+  @Prop({
+    type: {
+      fromPlanKey: { type: String, enum: PLAN_KEYS, required: true },
+      toPlanKey: { type: String, enum: PLAN_KEYS, required: true },
+      fromBillingInterval: { type: String, enum: BILLING_INTERVALS, default: null },
+      toBillingInterval: { type: String, enum: BILLING_INTERVALS, default: null },
+      effectiveAt: { type: Date, required: true },
+      status: { type: String, enum: ['scheduled', 'applied', 'canceled'], required: true },
+      appliedAt: { type: Date, default: null },
+    },
+    default: null,
+    _id: false,
+  })
+  scheduledPlanChange: {
+    fromPlanKey: PlanKey;
+    toPlanKey: PlanKey;
+    fromBillingInterval?: BillingInterval | null;
+    toBillingInterval?: BillingInterval | null;
+    effectiveAt: Date;
+    status: 'scheduled' | 'applied' | 'canceled';
+    appliedAt?: Date | null;
+  } | null;
 
   @Prop({
     type: {
@@ -97,8 +124,40 @@ export class WorkspaceSubscription {
   @Prop({ type: Date, default: null })
   subscriptionRestoredEmailSentAt: Date | null;
 
+  @Prop({ type: Date, default: null })
+  trialStartedEmailSentAt: Date | null;
+
+  @Prop({ type: Date, default: null })
+  trialEndingSoonEmailSentAt: Date | null;
+
+  @Prop({ type: Date, default: null })
+  trialExpiredEmailSentAt: Date | null;
+
+  @Prop({ type: Date, default: null })
+  trialCreditsUsedEmailSentAt: Date | null;
+
   @Prop({ type: String, default: null })
   lastPaymentReceiptEmailWebhookEventId: string | null;
+
+  /** When true, automatically purchase 1,000-credit packs via Lemon when monthly and manual top-ups are exhausted. */
+  @Prop({ type: Boolean, default: false })
+  aiCreditsAutoTopUpEnabled: boolean;
+
+  /** Max automatic 1,000-credit packs per workspace billing period. */
+  @Prop({ type: Number, default: 5 })
+  maxAutoTopUpsPerBillingPeriod: number;
+
+  /** When true, prompt workspace owners to buy 1,000 credits when balances run out (checkout required). */
+  @Prop({ type: Boolean, default: false })
+  aiCreditsAutoTopUpPromptEnabled: boolean;
+
+  /** @deprecated Use aiCreditsAutoTopUpPromptEnabled. Kept for legacy documents. */
+  @Prop({ type: Boolean, default: false })
+  creditAutoTopUpEnabled: boolean;
+
+  /** Optional remaining-credit threshold for auto-prompt (0 = when fully exhausted). */
+  @Prop({ type: Number, default: 0 })
+  autoTopUpThresholdCredits: number;
 }
 
 export type WorkspaceSubscriptionDocument = HydratedDocument<WorkspaceSubscription>;

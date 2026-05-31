@@ -14,6 +14,7 @@ import {
   type BillingWebhookHeaders,
   type CreateAddonCheckoutInput,
   type CreateSubscriptionCheckoutInput,
+  type CreateAutoTopUpCheckoutInput,
   type CreateTopUpCheckoutInput,
   type GetCustomerPortalInput,
   type ProviderSubscriptionSnapshot,
@@ -39,11 +40,19 @@ import {
   mapAddonKeyToVariantId,
   mapPlanKeyToVariantId,
   mapTopUpKeyToVariantId,
+  mapAutoTopUpVariantId,
+  isAutoTopUpVariantId,
+  readMergedBillingAppConfig,
   resolveLemonSqueezyBillingConfig,
   variantIdToAddonCheckoutKey,
+  variantIdToAddonKeyAndInterval,
+  variantIdToPlanKeyAndInterval,
   type LemonSqueezyBillingConfig,
 } from '../billing-config.util';
-import { configFactory } from '../../config/config.factory';
+import { parseBillingInterval, type BillingInterval } from '../billing-interval.types';
+import type {
+  ChangeProviderAddonBillingIntervalInput,
+} from '../billing-provider.types';
 
 const LEMON_API_BASE = 'https://api.lemonsqueezy.com/v1';
 
@@ -99,12 +108,13 @@ function stringifyCustomValue(value: unknown): string {
 function buildCustomData(input: {
   workspaceId: string;
   userId: string;
-  checkoutType: 'plan' | 'addon' | 'top_up';
+  checkoutType: 'plan' | 'addon' | 'top_up' | 'auto_top_up';
   internalRequestId: string;
   planKey?: string;
   addonKey?: string;
   topUpKey?: string;
   targetBotId?: string;
+  billingInterval?: BillingInterval;
 }): Record<string, string> {
   const custom: Record<string, string> = {
     workspaceId: input.workspaceId,
@@ -116,6 +126,7 @@ function buildCustomData(input: {
   if (input.addonKey) custom.addonKey = input.addonKey;
   if (input.topUpKey) custom.topUpKey = input.topUpKey;
   if (input.targetBotId) custom.targetBotId = input.targetBotId;
+  if (input.billingInterval) custom.billingInterval = input.billingInterval;
   return custom;
 }
 
@@ -186,17 +197,43 @@ function mapLemonSubscriptionStatus(raw: unknown): string {
   }
 }
 
+function planAndIntervalFromCustomOrVariant(
+  customData: Record<string, string>,
+  variantId: string | undefined,
+  lemonConfig?: LemonSqueezyBillingConfig,
+): { planKey: PlanKey; billingInterval: BillingInterval } | undefined {
+  const fromCustom = customData.planKey?.trim();
+  const customInterval = customData.billingInterval?.trim();
+  if (fromCustom === 'starter' || fromCustom === 'pro') {
+    return {
+      planKey: fromCustom,
+      billingInterval: parseBillingInterval(customInterval),
+    };
+  }
+  const fromVariant = variantIdToPlanKeyAndInterval(variantId, lemonConfig ?? null);
+  if (!fromVariant) return undefined;
+  return {
+    planKey: fromVariant.planKey,
+    billingInterval: fromVariant.billingInterval,
+  };
+}
+
 function planKeyFromCustomOrVariant(
   customData: Record<string, string>,
   variantId: string | undefined,
   lemonConfig?: LemonSqueezyBillingConfig,
 ): PlanKey | undefined {
-  const fromCustom = customData.planKey?.trim();
-  if (fromCustom === 'starter' || fromCustom === 'pro') return fromCustom;
-  if (!variantId || !lemonConfig) return undefined;
-  if (variantId === lemonConfig.variantIds.starter) return 'starter';
-  if (variantId === lemonConfig.variantIds.pro) return 'pro';
-  return undefined;
+  return planAndIntervalFromCustomOrVariant(customData, variantId, lemonConfig)?.planKey;
+}
+
+function addonIntervalFromCustomOrVariant(
+  customData: Record<string, string>,
+  variantId: string | undefined,
+  lemonConfig?: LemonSqueezyBillingConfig,
+): BillingInterval | undefined {
+  const customInterval = customData.billingInterval?.trim();
+  if (customInterval) return parseBillingInterval(customInterval);
+  return variantIdToAddonKeyAndInterval(variantId, lemonConfig ?? null)?.billingInterval;
 }
 
 function resolveAddonKeyFromWebhook(
@@ -218,14 +255,28 @@ function buildAddonWebhookAction(input: {
   custom: Record<string, string>;
   attrs: Record<string, unknown>;
   normalizedEvent: string;
+  providerVariantId?: string;
+  providerCustomerId?: string;
+  billingInterval?: BillingInterval;
 }): BillingWebhookAction {
-  let addonStatus: 'active' | 'cancelled' | 'expired' = 'active';
-  if (input.normalizedEvent === 'subscription_expired') addonStatus = 'expired';
-  if (
+  let addonStatus: 'active' | 'past_due' | 'cancelled' | 'expired' = 'active';
+  if (input.normalizedEvent === 'subscription_expired') {
+    addonStatus = 'expired';
+  } else if (input.normalizedEvent === 'subscription_payment_failed') {
+    addonStatus = 'past_due';
+  } else if (
+    input.normalizedEvent === 'subscription_payment_success' ||
+    input.normalizedEvent === 'subscription_payment_recovered' ||
+    input.normalizedEvent === 'subscription_resumed'
+  ) {
+    addonStatus = 'active';
+  } else if (
     input.normalizedEvent === 'subscription_cancelled' ||
     input.normalizedEvent === 'subscription_canceled'
   ) {
     addonStatus = 'active';
+  } else if (mapLemonSubscriptionStatus(input.attrs.status) === 'past_due') {
+    addonStatus = 'past_due';
   }
 
   return {
@@ -235,6 +286,9 @@ function buildAddonWebhookAction(input: {
     targetBotId: input.custom.targetBotId?.trim() || undefined,
     status: addonStatus,
     providerSubscriptionId: input.subscriptionId,
+    providerVariantId: input.providerVariantId,
+    providerCustomerId: input.providerCustomerId,
+    billingInterval: input.billingInterval,
     currentPeriodStart: parseDate(input.attrs.created_at),
     currentPeriodEnd: parseDate(input.attrs.renews_at ?? input.attrs.ends_at),
     cancelAtPeriodEnd:
@@ -256,28 +310,7 @@ export class LemonSqueezyProvider implements BillingProviderAdapter {
   constructor(private readonly configService: ConfigService) {}
 
   private getConfig(): LemonSqueezyBillingConfig {
-    const config = configFactory();
-    const lemon = resolveLemonSqueezyBillingConfig({
-      ...config,
-      lemonSqueezyApiKey: this.configService.get<string>('lemonSqueezyApiKey') ?? config.lemonSqueezyApiKey,
-      lemonSqueezyStoreId: this.configService.get<string>('lemonSqueezyStoreId') ?? config.lemonSqueezyStoreId,
-      lemonSqueezyWebhookSecret:
-        this.configService.get<string>('lemonSqueezyWebhookSecret') ?? config.lemonSqueezyWebhookSecret,
-      customerAppBaseUrl: this.configService.get<string>('customerAppBaseUrl') ?? config.customerAppBaseUrl,
-      lemonSqueezyStarterVariantId:
-        this.configService.get<string>('lemonSqueezyStarterVariantId') ?? config.lemonSqueezyStarterVariantId,
-      lemonSqueezyProVariantId:
-        this.configService.get<string>('lemonSqueezyProVariantId') ?? config.lemonSqueezyProVariantId,
-      lemonSqueezyAddonExtraBotVariantId:
-        this.configService.get<string>('lemonSqueezyAddonExtraBotVariantId') ??
-        config.lemonSqueezyAddonExtraBotVariantId,
-      lemonSqueezyAddonRemoveBrandingVariantId:
-        this.configService.get<string>('lemonSqueezyAddonRemoveBrandingVariantId') ??
-        config.lemonSqueezyAddonRemoveBrandingVariantId,
-      lemonSqueezyTopup1000CreditsVariantId:
-        this.configService.get<string>('lemonSqueezyTopup1000CreditsVariantId') ??
-        config.lemonSqueezyTopup1000CreditsVariantId,
-    });
+    const lemon = resolveLemonSqueezyBillingConfig(readMergedBillingAppConfig(this.configService));
     if (!lemon) {
       throw new Error('lemon_squeezy_not_configured');
     }
@@ -299,7 +332,8 @@ export class LemonSqueezyProvider implements BillingProviderAdapter {
     const attrs = json.data?.attributes ?? {};
     const firstItem = attrs.first_subscription_item as { variant_id?: unknown } | undefined;
     const variantId = stringifyCustomValue(attrs.variant_id ?? firstItem?.variant_id);
-    const planKey = planKeyFromCustomOrVariant({}, variantId || undefined, lemon);
+    const planMatch = planAndIntervalFromCustomOrVariant({}, variantId || undefined, lemon);
+    const planKey = planMatch?.planKey;
 
     return {
       providerCustomerId: stringifyCustomValue(attrs.customer_id) || undefined,
@@ -309,6 +343,7 @@ export class LemonSqueezyProvider implements BillingProviderAdapter {
       currentPeriodEnd: parseDate(attrs.renews_at ?? attrs.ends_at),
       cancelAtPeriodEnd: Boolean(attrs.cancelled),
       planKey,
+      billingInterval: planMatch?.billingInterval,
     };
   }
 
@@ -379,13 +414,15 @@ export class LemonSqueezyProvider implements BillingProviderAdapter {
 
   async createSubscriptionCheckout(input: CreateSubscriptionCheckoutInput) {
     const lemon = this.getConfig();
-    const variantId = mapPlanKeyToVariantId(lemon, input.planKey);
+    const billingInterval = input.billingInterval ?? 'monthly';
+    const variantId = mapPlanKeyToVariantId(lemon, input.planKey, billingInterval);
     const custom = buildCustomData({
       workspaceId: input.workspaceId,
       userId: input.userId,
       checkoutType: 'plan',
       internalRequestId: input.internalRequestId,
       planKey: input.planKey,
+      billingInterval,
     });
     const checkoutUrl = await this.createCheckout(lemon, variantId, custom);
     return { checkoutUrl, provider: this.provider };
@@ -393,7 +430,8 @@ export class LemonSqueezyProvider implements BillingProviderAdapter {
 
   async createAddonCheckout(input: CreateAddonCheckoutInput) {
     const lemon = this.getConfig();
-    const variantId = mapAddonKeyToVariantId(lemon, input.addonKey);
+    const billingInterval = input.billingInterval ?? 'monthly';
+    const variantId = mapAddonKeyToVariantId(lemon, input.addonKey, billingInterval);
     const custom = buildCustomData({
       workspaceId: input.workspaceId,
       userId: input.userId,
@@ -401,6 +439,7 @@ export class LemonSqueezyProvider implements BillingProviderAdapter {
       internalRequestId: input.internalRequestId,
       addonKey: input.addonKey,
       targetBotId: input.targetBotId,
+      billingInterval,
     });
     const checkoutUrl = await this.createCheckout(lemon, variantId, custom);
     return { checkoutUrl, provider: this.provider };
@@ -418,6 +457,50 @@ export class LemonSqueezyProvider implements BillingProviderAdapter {
     });
     const checkoutUrl = await this.createCheckout(lemon, variantId, custom);
     return { checkoutUrl, provider: this.provider };
+  }
+
+  async createAutoTopUpCheckout(input: CreateAutoTopUpCheckoutInput) {
+    const lemon = this.getConfig();
+    const variantId = mapAutoTopUpVariantId(lemon);
+    const custom = buildCustomData({
+      workspaceId: input.workspaceId,
+      userId: input.userId,
+      checkoutType: 'auto_top_up',
+      internalRequestId: input.internalRequestId,
+    });
+    const checkoutUrl = await this.createCheckout(lemon, variantId, custom);
+    return { checkoutUrl, provider: this.provider };
+  }
+
+  async recordAutoTopUpUsage(input: { providerSubscriptionItemId: string; quantity: number }) {
+    const lemon = this.getConfig();
+    const itemId = String(input.providerSubscriptionItemId ?? '').trim();
+    if (!itemId) return;
+
+    const res = await fetch(`${LEMON_API_BASE}/subscription-items/${encodeURIComponent(itemId)}/usage-records`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/vnd.api+json',
+        'Content-Type': 'application/vnd.api+json',
+        Authorization: `Bearer ${lemon.apiKey}`,
+      },
+      body: JSON.stringify({
+        data: {
+          type: 'usage-records',
+          attributes: {
+            quantity: Math.max(1, Math.floor(input.quantity)),
+          },
+          relationships: {
+            'subscription-item': { data: { type: 'subscription-items', id: itemId } },
+          },
+        },
+      }),
+    });
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      this.logger.warn(`lemon_auto_topup_usage_failed:${res.status}:${text.slice(0, 200)}`);
+    }
   }
 
   parseWebhook(rawBody: Buffer, headers: BillingWebhookHeaders): BillingWebhookEvent {
@@ -592,9 +675,17 @@ export class LemonSqueezyProvider implements BillingProviderAdapter {
           return { kind: 'ignored', reason: 'subscription_fetch_failed' };
         }
         const customPlanKey = custom.planKey?.trim() ?? '';
+        const planMatch = planAndIntervalFromCustomOrVariant(
+          custom,
+          snapshot.providerVariantId,
+          lemon ?? undefined,
+        );
         const planKey =
-          planKeyFromCustomOrVariant(custom, snapshot.providerVariantId, lemon ?? undefined) ??
-          (isBillingPlanCheckoutKey(customPlanKey) ? customPlanKey : undefined);
+          planMatch?.planKey ??
+          (isBillingPlanCheckoutKey(customPlanKey) ? (customPlanKey as PlanKey) : undefined);
+        const billingInterval =
+          planMatch?.billingInterval ??
+          addonIntervalFromCustomOrVariant(custom, snapshot.providerVariantId, lemon ?? undefined);
 
         const invoiceFields =
           dataType === 'subscription-invoices' ? extractLemonInvoiceFields(attrs) : null;
@@ -612,6 +703,11 @@ export class LemonSqueezyProvider implements BillingProviderAdapter {
             custom,
             attrs,
             normalizedEvent,
+            providerVariantId: snapshot.providerVariantId,
+            providerCustomerId: snapshot.providerCustomerId,
+            billingInterval:
+              addonIntervalFromCustomOrVariant(custom, snapshot.providerVariantId, lemon ?? undefined) ??
+              billingInterval,
           });
         }
 
@@ -619,6 +715,7 @@ export class LemonSqueezyProvider implements BillingProviderAdapter {
           kind: 'subscription_sync',
           workspaceId,
           planKey,
+          billingInterval: planMatch?.billingInterval,
           providerCustomerId: snapshot.providerCustomerId,
           providerSubscriptionId: subscriptionId,
           providerVariantId: snapshot.providerVariantId,
@@ -633,7 +730,9 @@ export class LemonSqueezyProvider implements BillingProviderAdapter {
 
       const firstItem = attrs.first_subscription_item as { variant_id?: unknown } | undefined;
       const variantId = stringifyCustomValue(attrs.variant_id ?? firstItem?.variant_id);
-      const planKey = planKeyFromCustomOrVariant(custom, variantId || undefined, lemon ?? undefined);
+      const planMatch = planAndIntervalFromCustomOrVariant(custom, variantId || undefined, lemon ?? undefined);
+      const planKey = planMatch?.planKey;
+      const billingInterval = planMatch?.billingInterval;
 
       let status = mapLemonSubscriptionStatus(attrs.status);
       if (normalizedEvent === 'subscription_expired' || normalizedEvent === 'subscription_cancelled' || normalizedEvent === 'subscription_canceled') {
@@ -656,6 +755,41 @@ export class LemonSqueezyProvider implements BillingProviderAdapter {
         normalizedEvent === 'subscription_cancelled' ||
         normalizedEvent === 'subscription_canceled';
 
+      const isAutoTopUpCheckout =
+        custom.checkoutType?.trim() === 'auto_top_up' ||
+        isAutoTopUpVariantId(lemon ?? undefined, variantId || undefined);
+      if (isAutoTopUpCheckout) {
+        const subscriptionItemId = stringifyCustomValue(
+          (attrs.first_subscription_item as { id?: unknown } | undefined)?.id,
+        );
+        let autoStatus: 'pending' | 'active' | 'past_due' | 'scheduled_disable' | 'canceled' = 'pending';
+        if (status === 'past_due') autoStatus = 'past_due';
+        else if (status === 'canceled' || normalizedEvent === 'subscription_expired') autoStatus = 'canceled';
+        else if (cancelAtPeriodEnd) autoStatus = 'scheduled_disable';
+        else if (status === 'active') autoStatus = 'active';
+
+        return {
+          kind: 'auto_top_up_subscription_sync',
+          workspaceId,
+          status: autoStatus,
+          providerSubscriptionId: subscriptionId,
+          providerSubscriptionItemId: subscriptionItemId || undefined,
+          providerCustomerId: stringifyCustomValue(attrs.customer_id) || undefined,
+          providerVariantId: variantId || undefined,
+          currentPeriodStart: parseDate(attrs.created_at ?? attrs.billing_anchor),
+          currentPeriodEnd: parseDate(attrs.renews_at ?? attrs.ends_at),
+          cancelAtPeriodEnd,
+          enableAutoTopUp:
+            autoStatus === 'active' &&
+            (normalizedEvent === 'subscription_created' ||
+              normalizedEvent === 'subscription_payment_success' ||
+              normalizedEvent === 'subscription_payment_recovered' ||
+              normalizedEvent === 'subscription_resumed' ||
+              normalizedEvent === 'subscription_updated'),
+          disableAutoTopUp: autoStatus === 'canceled',
+        };
+      }
+
       const invoiceIdFromPayload = String(payload.data?.id ?? '').trim();
       const invoiceFields =
         dataType === 'subscription-invoices'
@@ -669,6 +803,7 @@ export class LemonSqueezyProvider implements BillingProviderAdapter {
         kind: 'subscription_sync',
         workspaceId,
         planKey,
+        billingInterval,
         providerCustomerId: stringifyCustomValue(attrs.customer_id) || undefined,
         providerSubscriptionId: subscriptionId,
         providerVariantId: variantId || undefined,
@@ -710,6 +845,11 @@ export class LemonSqueezyProvider implements BillingProviderAdapter {
           custom,
           attrs,
           normalizedEvent,
+          providerVariantId: variantId || undefined,
+          providerCustomerId: stringifyCustomValue(attrs.customer_id) || undefined,
+          billingInterval:
+            addonIntervalFromCustomOrVariant(custom, variantId || undefined, lemon ?? undefined) ??
+            billingInterval,
         });
       }
 
@@ -884,15 +1024,18 @@ export class LemonSqueezyProvider implements BillingProviderAdapter {
       );
     }
 
-    const variantId = mapPlanKeyToVariantId(lemon, input.planKey);
+    const variantId = mapPlanKeyToVariantId(lemon, input.planKey, input.billingInterval ?? 'monthly');
+    const attributes: Record<string, unknown> = {
+      variant_id: Number(variantId) || variantId,
+    };
+    if (input.disableProrations) {
+      attributes.disable_prorations = true;
+    }
     const body = {
       data: {
         type: 'subscriptions',
         id: subscriptionId,
-        attributes: {
-          variant_id: Number(variantId) || variantId,
-          disable_prorations: Boolean(input.disableProrations),
-        },
+        attributes,
       },
     };
 
@@ -911,6 +1054,54 @@ export class LemonSqueezyProvider implements BillingProviderAdapter {
     if (!snapshot) {
       throw new BillingProviderActionError(
         'Could not read subscription after plan change.',
+        'billing_provider_action_failed',
+      );
+    }
+    return snapshot;
+  }
+
+  async changeAddonBillingInterval(
+    input: ChangeProviderAddonBillingIntervalInput,
+  ): Promise<ProviderSubscriptionSnapshot> {
+    const lemon = this.getConfig();
+    const subscriptionId = String(input.providerSubscriptionId ?? '').trim();
+    if (!subscriptionId) {
+      throw new BillingProviderActionError(
+        'Provider subscription id is required.',
+        'billing_provider_action_failed',
+      );
+    }
+
+    const variantId = mapAddonKeyToVariantId(lemon, input.addonKey, input.billingInterval);
+    const attributes: Record<string, unknown> = {
+      variant_id: Number(variantId) || variantId,
+    };
+    if (input.disableProrations) {
+      attributes.disable_prorations = true;
+    }
+    const body = {
+      data: {
+        type: 'subscriptions',
+        id: subscriptionId,
+        attributes,
+      },
+    };
+
+    const res = await fetch(`${LEMON_API_BASE}/subscriptions/${encodeURIComponent(subscriptionId)}`, {
+      method: 'PATCH',
+      headers: this.lemonAuthHeaders(lemon, true),
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      await this.throwProviderActionError(res);
+    }
+
+    const json = (await res.json()) as LemonSubscriptionApiResponse;
+    const snapshot = this.mapSubscriptionSnapshot(json, lemon);
+    if (!snapshot) {
+      throw new BillingProviderActionError(
+        'Could not read subscription after add-on interval change.',
         'billing_provider_action_failed',
       );
     }

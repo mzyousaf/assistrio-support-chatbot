@@ -9,6 +9,7 @@ describe('BillingAddonActionsService', () => {
 
   function createService(options?: {
     addon?: {
+      _id?: string;
       addonKey: string;
       targetBotId?: string | null;
       status: string;
@@ -18,6 +19,7 @@ describe('BillingAddonActionsService', () => {
     } | null;
   }) {
     const addon = options?.addon ?? {
+      _id: '507f1f77bcf86cd799439011',
       addonKey: 'extra_bot',
       targetBotId: null,
       status: 'active',
@@ -32,6 +34,8 @@ describe('BillingAddonActionsService', () => {
           exec: jest.fn().mockResolvedValue(addon),
         }),
       }),
+      findById: jest.fn().mockResolvedValue(addon),
+      updateOne: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
     };
 
     const billingProviderService = {
@@ -57,6 +61,41 @@ describe('BillingAddonActionsService', () => {
     return { service, billingProviderService, webhookProcessingService, addonModel };
   }
 
+  it('cancels active recurring add-on by instance id', async () => {
+    const addonId = '507f1f77bcf86cd799439099';
+    const { service, billingProviderService, webhookProcessingService, addonModel } = createService({
+      addon: {
+        _id: addonId,
+        addonKey: 'extra_bot',
+        targetBotId: null,
+        status: 'active',
+        providerSubscriptionId: 'addon-sub-2',
+        cancelAtPeriodEnd: false,
+        currentPeriodEnd: periodEnd,
+      },
+    });
+    addonModel.findById = jest.fn().mockResolvedValue({
+      _id: addonId,
+      currentPeriodEnd: periodEnd,
+    });
+
+    const result = await service.cancelAddonByInstanceId(workspaceId, addonId);
+
+    expect(billingProviderService.cancelSubscription).toHaveBeenCalledWith({
+      providerSubscriptionId: 'addon-sub-2',
+    });
+    expect(webhookProcessingService.applyAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'addon_sync',
+        addonKey: 'extra_bot',
+        cancelAtPeriodEnd: true,
+      }),
+      expect.any(Date),
+    );
+    expect(result.addonInstanceId).toBe(addonId);
+    expect(result.cancelAtPeriodEnd).toBe(true);
+  });
+
   it('cancels active recurring add-on via provider', async () => {
     const { service, billingProviderService, webhookProcessingService } = createService();
     const result = await service.cancelAddon(workspaceId, 'extra_bot');
@@ -74,6 +113,38 @@ describe('BillingAddonActionsService', () => {
       expect.any(Date),
     );
     expect(result.cancelAtPeriodEnd).toBe(true);
+  });
+
+  it('clears pending scheduled interval change when canceling add-on', async () => {
+    const addonId = '507f1f77bcf86cd799439099';
+    const { service, addonModel } = createService({
+      addon: {
+        _id: addonId,
+        addonKey: 'extra_bot',
+        targetBotId: null,
+        status: 'active',
+        providerSubscriptionId: 'addon-sub-2',
+        cancelAtPeriodEnd: false,
+        currentPeriodEnd: periodEnd,
+        scheduledIntervalChange: {
+          fromBillingInterval: 'monthly',
+          toBillingInterval: 'yearly',
+          effectiveAt: periodEnd,
+          status: 'scheduled',
+        },
+      } as never,
+    });
+
+    await service.cancelAddonByInstanceId(workspaceId, addonId);
+
+    expect(addonModel.updateOne).toHaveBeenCalledWith(
+      { _id: addonId },
+      expect.objectContaining({
+        $set: expect.objectContaining({
+          scheduledIntervalChange: expect.objectContaining({ status: 'canceled' }),
+        }),
+      }),
+    );
   });
 
   it('blocks cancelling one-time top-up add-on key', async () => {

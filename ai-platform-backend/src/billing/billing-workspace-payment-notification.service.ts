@@ -89,15 +89,15 @@ export class BillingWorkspacePaymentNotificationService {
     const text = [
       `Your ${planName} subscription for ${workspaceName} is scheduled to cancel.`,
       `Your plan remains active until ${periodEndLabel}.`,
-      'You can restore before that date from Billing & Invoices.',
+      'You can restore before that date from Billing & Plans.',
       '',
-      `Billing & Invoices: ${billingLink}`,
+      `Billing & Plans: ${billingLink}`,
     ].join('\n');
     const html = [
       `<p>Your ${planName} subscription for <strong>${workspaceName}</strong> is scheduled to cancel.</p>`,
       `<p>Your plan remains active until <strong>${periodEndLabel}</strong>.</p>`,
-      '<p>You can restore before that date from Billing &amp; Invoices.</p>',
-      `<p><a href="${billingLink}">Billing &amp; Invoices</a></p>`,
+      '<p>You can restore before that date from Billing &amp; Plans.</p>',
+      `<p><a href="${billingLink}">Billing &amp; Plans</a></p>`,
     ].join('');
 
     const sendResult = await this.emailService.send({ to: ownerEmail, subject, html, text });
@@ -135,11 +135,11 @@ export class BillingWorkspacePaymentNotificationService {
     const text = [
       `Your subscription for ${workspaceName} is active again.`,
       '',
-      `Billing & Invoices: ${billingLink}`,
+      `Billing & Plans: ${billingLink}`,
     ].join('\n');
     const html = [
       `<p>Your subscription for <strong>${workspaceName}</strong> is active again.</p>`,
-      `<p><a href="${billingLink}">Billing &amp; Invoices</a></p>`,
+      `<p><a href="${billingLink}">Billing &amp; Plans</a></p>`,
     ].join('');
 
     const sendResult = await this.emailService.send({ to: ownerEmail, subject, html, text });
@@ -260,22 +260,22 @@ export class BillingWorkspacePaymentNotificationService {
     const subject = 'Payment failed for your Assistrio workspace';
     const textLines = [
       'Your recent payment could not be completed.',
-      'Please update your payment method in Billing & Invoices.',
+      'Please update your payment method in Billing & Plans.',
       '',
       `Workspace: ${workspaceName}`,
       `Plan: ${planName}`,
     ];
     if (failedAmount) textLines.push(`Amount: ${failedAmount}`);
-    textLines.push('', `Billing & Invoices: ${billingLink}`);
+    textLines.push('', `Billing & Plans: ${billingLink}`);
 
     const htmlParts = [
       '<p>Your recent payment could not be completed.</p>',
-      '<p>Please update your payment method in Billing &amp; Invoices.</p>',
+      '<p>Please update your payment method in Billing &amp; Plans.</p>',
       `<p><strong>Workspace:</strong> ${workspaceName}<br />`,
       `<strong>Plan:</strong> ${planName}`,
     ];
     if (failedAmount) htmlParts.push(`<br /><strong>Amount:</strong> ${failedAmount}`);
-    htmlParts.push('</p>', `<p><a href="${billingLink}">Billing &amp; Invoices</a></p>`);
+    htmlParts.push('</p>', `<p><a href="${billingLink}">Billing &amp; Plans</a></p>`);
 
     const sendResult = await this.emailService.send({
       to: ownerEmail,
@@ -376,11 +376,11 @@ export class BillingWorkspacePaymentNotificationService {
     const text = [
       `We received your payment for ${workspaceName}.`,
       '',
-      `Billing & Invoices: ${billingLink}`,
+      `Billing & Plans: ${billingLink}`,
     ].join('\n');
     const html = [
       `<p>We received your payment for <strong>${workspaceName}</strong>.</p>`,
-      `<p><a href="${billingLink}">Billing &amp; Invoices</a></p>`,
+      `<p><a href="${billingLink}">Billing &amp; Plans</a></p>`,
     ].join('');
 
     const sendResult = await this.emailService.send({ to: ownerEmail, subject, html, text });

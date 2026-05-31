@@ -42,7 +42,7 @@ export function BillingUsageSnapshot({ summary }: Props) {
         <SettingsStatCard
           label={TRAINED_KNOWLEDGE_STORAGE_LABEL}
           value={formatKnowledgeBytes(trainedKnowledge?.totalUsedBytes ?? 0)}
-          hint={`${entitlements.kbStorageMbPerBot} MB limit per bot`}
+          hint={`${entitlements.kbStorageMbPerBot} MB limit per AI Agent`}
         />
       </div>
     </SettingsInfoCard>

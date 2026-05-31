@@ -86,4 +86,97 @@ describe('buildWorkspaceBillingSubscriptionSummary', () => {
     });
     expect(JSON.stringify(summary)).not.toMatch(/4242{2,}/);
   });
+
+  it('hides scheduled interval when cancellation is scheduled', () => {
+    const periodStart = new Date('2026-06-01T00:00:00.000Z');
+    const summary = buildWorkspaceBillingSubscriptionSummary({
+      subscription: {
+        planKey: 'starter',
+        billingInterval: 'monthly',
+        status: 'active',
+        currentPeriodStart: periodStart,
+        currentPeriodEnd: periodEnd,
+        provider: 'lemon_squeezy',
+        providerSubscriptionId: 'sub-123',
+        cancelAtPeriodEnd: true,
+        scheduledPlanChange: {
+          fromPlanKey: 'starter',
+          toPlanKey: 'starter',
+          fromBillingInterval: 'monthly',
+          toBillingInterval: 'yearly',
+          effectiveAt: periodEnd,
+          status: 'scheduled',
+        },
+      },
+      currentPeriodStart: periodStart,
+      currentPeriodEnd: periodEnd,
+      checkoutConfigured: true,
+      now,
+    });
+
+    expect(summary.scheduledBillingInterval).toBeUndefined();
+    expect(summary.cancelAtPeriodEnd).toBe(true);
+  });
+
+  it('exposes interval-only scheduled change without scheduled plan key', () => {
+    const periodStart = new Date('2026-06-01T00:00:00.000Z');
+    const summary = buildWorkspaceBillingSubscriptionSummary({
+      subscription: {
+        planKey: 'starter',
+        billingInterval: 'monthly',
+        status: 'active',
+        currentPeriodStart: periodStart,
+        currentPeriodEnd: periodEnd,
+        provider: 'lemon_squeezy',
+        providerSubscriptionId: 'sub-123',
+        cancelAtPeriodEnd: false,
+        scheduledPlanChange: {
+          fromPlanKey: 'starter',
+          toPlanKey: 'starter',
+          fromBillingInterval: 'monthly',
+          toBillingInterval: 'yearly',
+          effectiveAt: periodEnd,
+          status: 'scheduled',
+        },
+      },
+      currentPeriodStart: periodStart,
+      currentPeriodEnd: periodEnd,
+      checkoutConfigured: true,
+      now,
+    });
+
+    expect(summary.scheduledBillingInterval).toBe('yearly');
+    expect(summary.scheduledPlanKey).toBeUndefined();
+  });
+
+  it('exposes downgrade scheduled plan without separate interval banner fields', () => {
+    const periodStart = new Date('2026-06-01T00:00:00.000Z');
+    const summary = buildWorkspaceBillingSubscriptionSummary({
+      subscription: {
+        planKey: 'pro',
+        billingInterval: 'yearly',
+        status: 'active',
+        currentPeriodStart: periodStart,
+        currentPeriodEnd: periodEnd,
+        provider: 'lemon_squeezy',
+        providerSubscriptionId: 'sub-123',
+        cancelAtPeriodEnd: false,
+        scheduledPlanChange: {
+          fromPlanKey: 'pro',
+          toPlanKey: 'starter',
+          fromBillingInterval: 'yearly',
+          toBillingInterval: 'monthly',
+          effectiveAt: periodEnd,
+          status: 'scheduled',
+        },
+      },
+      currentPeriodStart: periodStart,
+      currentPeriodEnd: periodEnd,
+      checkoutConfigured: true,
+      now,
+    });
+
+    expect(summary.scheduledPlanKey).toBe('starter');
+    expect(summary.scheduledBillingInterval).toBeUndefined();
+  });
 });

@@ -12,9 +12,21 @@ import {
   isTopUpAddonKey,
   resolvePlanCardCheckoutAction,
 } from '@/lib/billingCheckout';
-import { shouldShowPlanPricingCard } from '@/pages/billing/billingSubscriptionDisplay';
+import {
+  formatPlanModalDaysLeftButtonLabel,
+  formatPlanModalExpiresOnButtonLabel,
+  shouldShowPlanPricingCard,
+} from '@/pages/billing/billingSubscriptionDisplay';
+import { resolveBillingPeriodEnd } from '@/pages/billing/billingSubscriptionOverviewDisplay';
 import type { PaidPlanCheckoutKey } from '@/lib/billingCheckout';
+import { isPlanCheckoutAvailableForPeriod } from '@/pages/billing/planPricingCardDisplay';
 import type { useBillingCheckout } from '@/hooks/useBillingCheckout';
+import { cn } from '@/lib/utils';
+import {
+  filterPlansForModal,
+  isAllowedBillingAddonKey,
+  type PlansModalMode,
+} from '@/lib/planModalDisplay';
 
 type CheckoutApi = Pick<
   ReturnType<typeof useBillingCheckout>,
@@ -31,52 +43,118 @@ export function PlansPricingCardsSection(props: {
   isOwner: boolean;
   checkout: CheckoutApi;
   onDowngradeToStarter?: () => void;
+  onUpgradeToPro?: () => void;
   downgradeLoading?: boolean;
+  upgradeLoading?: boolean;
+  /** When true (e.g. PlansModal), merges “What each plan includes” into each card. */
+  showCardIncludes?: boolean;
+  /** Contextual plan filtering for modal surfaces. */
+  mode?: PlansModalMode;
 }) {
   const currentPlanKey = props.summary.plan?.key ?? 'free';
   const isTrialPlan = props.summary.entitlements.isTrialPlan;
-  const plans = (props.summary.planCatalog ?? []).filter((plan) =>
+  const basePlans = (props.summary.planCatalog ?? []).filter((plan) =>
     shouldShowPlanPricingCard({
       planKey: plan.key,
       currentPlanKey,
       isTrialPlan,
     }),
   );
+  const plans = props.mode
+    ? filterPlansForModal(basePlans, {
+        mode: props.mode,
+        currentPlanKey,
+        isTrialPlan,
+      })
+    : basePlans;
   const billingPeriod = props.billingPeriod ?? 'monthly';
+
+  const showModalLayout = Boolean(props.showCardIncludes);
+  const billingPeriodEnd = resolveBillingPeriodEnd(props.summary);
+  const singlePlanLayout = showModalLayout && plans.length === 1;
 
   return (
     <section aria-label="Plans">
-      <div className="grid gap-5 lg:grid-cols-3 lg:items-stretch">
+      <div
+        className={cn(
+          showModalLayout
+            ? cn(
+                'grid w-full grid-cols-1 items-stretch gap-5',
+                singlePlanLayout ? 'max-w-md mx-auto' : 'sm:grid-cols-2',
+              )
+            : 'grid gap-5 lg:grid-cols-3 lg:items-stretch',
+        )}
+      >
         {plans.map((plan) => {
           const action = resolvePlanCardCheckoutAction({
             planKey: plan.key,
             currentPlanKey,
             isTrialPlan,
-            checkoutAvailable: plan.checkoutAvailable,
+            checkoutAvailable: isPlanCheckoutAvailableForPeriod(plan, billingPeriod),
             isOwner: props.isOwner,
           });
           const loading =
             action.canChangePlan && plan.key === 'starter'
               ? Boolean(props.downgradeLoading)
-              : props.checkout.isPlanLoading(plan.key);
+              : action.canChangePlan && plan.key === 'pro'
+                ? Boolean(props.upgradeLoading)
+                : props.checkout.isPlanLoading(plan.key);
 
-          return (
+          const isCurrent = plan.key === currentPlanKey;
+          const modalExpiresOnButtonLabel =
+            showModalLayout && isTrialPlan && plan.key === 'free'
+              ? formatPlanModalExpiresOnButtonLabel(props.summary)
+              : null;
+          const modalDaysLeftButtonLabel =
+            showModalLayout && isCurrent
+              ? formatPlanModalDaysLeftButtonLabel(billingPeriodEnd)
+              : null;
+
+          const card = (
             <BillingPlanCard
-              key={plan.key}
               plan={plan}
-              isCurrent={plan.key === currentPlanKey}
+              isCurrent={isCurrent}
               billingPeriod={billingPeriod}
+              variant={showModalLayout ? 'modal' : 'page'}
+              planCatalog={
+                showModalLayout ? (props.summary.planCatalog ?? []) : undefined
+              }
+              modalExpiresOnButtonLabel={modalExpiresOnButtonLabel}
+              modalDaysLeftButtonLabel={modalDaysLeftButtonLabel}
               actionLabel={action.label}
               actionDisabled={action.disabled}
               actionLoading={loading}
               onAction={
                 action.canChangePlan && plan.key === 'starter'
                   ? props.onDowngradeToStarter
-                  : action.canCheckout && (plan.key === 'starter' || plan.key === 'pro')
-                    ? () => void props.checkout.startPlanCheckout(plan.key as PaidPlanCheckoutKey)
-                    : undefined
+                  : action.canChangePlan && plan.key === 'pro'
+                    ? props.onUpgradeToPro
+                    : action.canCheckout && (plan.key === 'starter' || plan.key === 'pro')
+                      ? () =>
+                          void props.checkout.startPlanCheckout(
+                            plan.key as PaidPlanCheckoutKey,
+                            billingPeriod,
+                          )
+                      : undefined
               }
             />
+          );
+
+          if (showModalLayout) {
+            return (
+              <div
+                key={plan.key}
+                className="min-w-0 w-full"
+              >
+                {card}
+              </div>
+            );
+          }
+
+          return (
+            <div key={plan.key}>
+              {card}
+            </div>
           );
         })}
       </div>
@@ -85,20 +163,28 @@ export function PlansPricingCardsSection(props: {
 }
 
 export function PlanFeatureComparisonSection(props: { summary: WorkspaceBillingSummary }) {
-  const groups = buildPlanComparisonTableGroups(props.summary.planCatalog ?? []);
+  const currentPlanKey = props.summary.plan?.key ?? 'free';
+  const visibleCatalog = (props.summary.planCatalog ?? []).filter((plan) =>
+    shouldShowPlanPricingCard({
+      planKey: plan.key,
+      currentPlanKey,
+      isTrialPlan: props.summary.entitlements.isTrialPlan,
+    }),
+  );
+  const groups = buildPlanComparisonTableGroups(visibleCatalog);
 
   return (
     <BillingComparisonSection
       id="plans-feature-comparison-heading"
       title="What each plan includes"
-      subtitle="Compare Free, Starter, and Pro at a glance."
+      subtitle="Compare plans at a glance."
       align="center"
       compact
     >
       <BillingPlanComparisonTable
         groups={groups}
-        planCatalog={props.summary.planCatalog ?? []}
-        currentPlanKey={props.summary.plan?.key}
+        planCatalog={visibleCatalog}
+        currentPlanKey={currentPlanKey}
       />
     </BillingComparisonSection>
   );
@@ -110,18 +196,20 @@ export function AddonCatalogSection(props: {
   isOwner: boolean;
   checkout: CheckoutApi;
 }) {
-  const addons = props.summary.addonCatalog ?? [];
+  const addons = (props.summary.addonCatalog ?? []).filter((addon) =>
+    isAllowedBillingAddonKey(addon.key),
+  );
   const currentPlanKey = props.summary.plan?.key;
   const addonsAllowed = props.summary.entitlements.addonsAllowed;
 
   const handleAddonPurchase = useCallback(
-    async (addonKey: string) => {
+    async (addonKey: string, billingPeriod: PlanBillingPeriod = 'monthly') => {
       if (isTopUpAddonKey(addonKey)) {
         await props.checkout.startTopUpCheckout('ai_credits_1000');
         return;
       }
 
-      await props.checkout.startAddonCheckout(addonKey);
+      await props.checkout.startAddonCheckout(addonKey, undefined, billingPeriod);
     },
     [props.checkout],
   );
@@ -138,7 +226,6 @@ export function AddonCatalogSection(props: {
           <UsageAddonCard
             key={addon.key}
             addon={addon}
-            variant="plans"
             currentPlanKey={currentPlanKey}
             isOwner={props.isOwner}
             addonsAllowed={addonsAllowed}

@@ -21,7 +21,8 @@ export type PlanCardFeatures = {
 
 export type PlanBillingPeriod = 'monthly' | 'annual';
 
-export const ANNUAL_PLAN_DISCOUNT_RATE = 0.2;
+export const ANNUAL_PLAN_DISCOUNT_RATE = 0.1;
+export const PLAN_ANNUAL_SAVINGS_TAG = 'Save 10%';
 
 export function applyAnnualPlanDiscount(priceMonthly: number): number {
   return Math.round(priceMonthly * (1 - ANNUAL_PLAN_DISCOUNT_RATE));
@@ -85,7 +86,7 @@ export function formatPlanPriceCardParts(
     return {
       amount: `$${discountedMonthly.toLocaleString()}`,
       cadence: formatPlanAnnualCadenceLine(price),
-      savingsTag: 'Save 20%',
+      savingsTag: PLAN_ANNUAL_SAVINGS_TAG,
     };
   }
 

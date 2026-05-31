@@ -44,17 +44,28 @@ describe('billing-invoice-provider-url.util', () => {
     ).toBe('https://app.lemonsqueezy.com/my-orders/inv-plan');
   });
 
-  it('uses receiptUrl when invoiceUrl is missing', () => {
+  it('uses receiptUrl when invoiceUrl is missing for subscription invoices', () => {
     expect(
       resolveProviderHostedInvoiceUrl({
         invoiceUrl: null,
         receiptUrl: 'https://app.lemonsqueezy.com/receipt/order-99',
-        source: 'lemon_order',
+        source: 'lemon_subscription_invoice',
       }),
     ).toEqual({
       url: 'https://app.lemonsqueezy.com/receipt/order-99',
-      source: 'lemon_order',
+      source: 'lemon_subscription_invoice',
     });
+  });
+
+  it('does not treat order receipt URLs as direct PDF or hosted invoice pages', () => {
+    expect(
+      resolveBillingInvoiceDeliveryMode({
+        invoiceUrl: 'https://app.lemonsqueezy.com/receipt/order-top-up',
+        receiptUrl: 'https://app.lemonsqueezy.com/receipt/order-top-up',
+        source: 'lemon_order',
+        billingKind: 'order',
+      }),
+    ).toBe('local_pdf');
   });
 
   it('classifies delivery mode', () => {
@@ -71,6 +82,7 @@ describe('billing-invoice-provider-url.util', () => {
         invoiceUrl: 'https://app.lemonsqueezy.com/invoice/download/order-99',
         receiptUrl: null,
         source: 'lemon_order',
+        billingKind: 'order',
       }),
     ).toBe('direct_pdf');
 

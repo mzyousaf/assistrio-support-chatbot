@@ -1,3 +1,9 @@
+import {
+  resolveMonthlyEquivalentYearly,
+  resolveYearlyPriceFromMonthly,
+  YEARLY_DISCOUNT_PERCENT,
+} from '../billing/billing-interval.types';
+
 /** Workspace plan tier keys. */
 export const PLAN_KEYS = ['free', 'starter', 'pro'] as const;
 export type PlanKey = (typeof PLAN_KEYS)[number];
@@ -6,6 +12,9 @@ export type PlanDefinition = {
   key: PlanKey;
   name: string;
   priceMonthlyUsd: number;
+  priceYearlyUsd: number;
+  monthlyEquivalentYearlyUsd: number;
+  yearlyDiscountPercent: number;
   botLimit: number;
   memberLimit: number;
   monthlyAiCredits: number;
@@ -25,10 +34,28 @@ export type PlanDefinition = {
   memberInvitesAllowed: boolean;
 };
 
+function buildPaidPlanDefinition(input: Omit<
+  PlanDefinition,
+  'priceYearlyUsd' | 'monthlyEquivalentYearlyUsd' | 'yearlyDiscountPercent' | 'isTrialPlan' | 'trialDays'
+>): PlanDefinition {
+  const priceYearlyUsd = resolveYearlyPriceFromMonthly(input.priceMonthlyUsd);
+  return {
+    ...input,
+    priceYearlyUsd,
+    monthlyEquivalentYearlyUsd: resolveMonthlyEquivalentYearly(priceYearlyUsd),
+    yearlyDiscountPercent: YEARLY_DISCOUNT_PERCENT,
+    isTrialPlan: false,
+    trialDays: null,
+  };
+}
+
 export const FREE_PLAN: PlanDefinition = {
   key: 'free',
   name: 'Free',
   priceMonthlyUsd: 0,
+  priceYearlyUsd: 0,
+  monthlyEquivalentYearlyUsd: 0,
+  yearlyDiscountPercent: YEARLY_DISCOUNT_PERCENT,
   botLimit: 1,
   memberLimit: 1,
   monthlyAiCredits: 50,
@@ -45,10 +72,10 @@ export const FREE_PLAN: PlanDefinition = {
   memberInvitesAllowed: false,
 };
 
-export const STARTER_PLAN: PlanDefinition = {
+export const STARTER_PLAN: PlanDefinition = buildPaidPlanDefinition({
   key: 'starter',
   name: 'Starter',
-  priceMonthlyUsd: 49,
+  priceMonthlyUsd: 59,
   botLimit: 1,
   memberLimit: 5,
   monthlyAiCredits: 500,
@@ -57,18 +84,16 @@ export const STARTER_PLAN: PlanDefinition = {
   analyticsHistoryDays: null,
   canExportReports: true,
   showPoweredByAssistrio: true,
-  isTrialPlan: false,
-  trialDays: null,
   creditsRenewMonthly: true,
   autoTrainAllowed: true,
   addonsAllowed: true,
   memberInvitesAllowed: true,
-};
+});
 
-export const PRO_PLAN: PlanDefinition = {
+export const PRO_PLAN: PlanDefinition = buildPaidPlanDefinition({
   key: 'pro',
   name: 'Pro',
-  priceMonthlyUsd: 99,
+  priceMonthlyUsd: 119,
   botLimit: 1,
   memberLimit: 10,
   monthlyAiCredits: 2000,
@@ -77,13 +102,11 @@ export const PRO_PLAN: PlanDefinition = {
   analyticsHistoryDays: null,
   canExportReports: true,
   showPoweredByAssistrio: true,
-  isTrialPlan: false,
-  trialDays: null,
   creditsRenewMonthly: true,
   autoTrainAllowed: true,
   addonsAllowed: true,
   memberInvitesAllowed: true,
-};
+});
 
 export const PLAN_CATALOG: readonly PlanDefinition[] = [FREE_PLAN, STARTER_PLAN, PRO_PLAN];
 

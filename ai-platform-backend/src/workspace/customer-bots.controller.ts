@@ -292,8 +292,8 @@ export class CustomerBotsController extends WorkspaceBotsControllerBase {
     } catch (err) {
       if (err instanceof HttpException) throw err;
       const msg = err instanceof Error ? err.message : 'Lifecycle action failed';
-      if (msg === 'Bot not found') {
-        throw new HttpException({ error: 'Bot not found', errorCode: 'bot_not_found' }, HttpStatus.NOT_FOUND);
+      if (msg === 'AI Agent not found') {
+        throw new HttpException({ error: 'AI Agent not found', errorCode: 'bot_not_found' }, HttpStatus.NOT_FOUND);
       }
       if (
         msg.includes('Name is required') ||
@@ -484,7 +484,7 @@ export class CustomerBotsController extends WorkspaceBotsControllerBase {
     try {
       const bot = await this.botsService.findOne(id);
       if (!bot) {
-        throw new HttpException({ error: 'Bot not found', errorCode: 'bot_not_found' }, HttpStatus.NOT_FOUND);
+        throw new HttpException({ error: 'AI Agent not found', errorCode: 'bot_not_found' }, HttpStatus.NOT_FOUND);
       }
       const out = await this.tableImportService.confirmTableImport(id, parsed.importSessionId, {
         title: parsed.title,

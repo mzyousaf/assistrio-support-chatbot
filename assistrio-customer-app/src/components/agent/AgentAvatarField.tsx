@@ -199,7 +199,7 @@ export function AgentAvatarField({
           <div className="min-w-0 flex-1 pt-0.5">
             <p className="m-0 text-[0.8125rem] font-medium text-[var(--color-text-primary)]">Avatar</p>
             <p className="m-0 mt-1 text-[0.75rem] leading-snug text-[var(--color-text-secondary)]">
-              PNG, JPG, or WEBP up to 2 MB. Add an image for your AI agent.
+              PNG, JPG, or WEBP up to 2 MB. Add an image for your AI Agent.
             </p>
             <div className="mt-2.5 flex flex-wrap items-center gap-2">
               <Button

@@ -357,6 +357,6 @@ describe('BotsListPage', () => {
     renderPage();
     expect((await screen.findByTestId('agent-bot-locked')).getAttribute('data-locked')).toBe('true');
     fireEvent.click(screen.getByRole('button', { name: /reactivate/i }));
-    expect(mockOpenUpgradeModal).toHaveBeenCalledWith({ reason: 'bots', recommendedPlanKey: 'pro' });
+    expect(mockOpenUpgradeModal).toHaveBeenCalledWith({ reason: 'bots' });
   });
 });

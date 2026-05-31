@@ -111,6 +111,7 @@ describe('WorkspaceBillingSummaryService', () => {
                 currentPeriodEnd: periodEnd,
               }),
       ),
+      applyPendingScheduledPlanChanges: jest.fn().mockResolvedValue(undefined),
     };
     const memberUsage = options?.memberUsage ?? { memberCount: 1, pendingInviteCount: 1 };
     const memberLimitService = {
@@ -294,6 +295,17 @@ describe('WorkspaceBillingSummaryService', () => {
       topUpModel as never,
       billingOrderModel as never,
       webhookEventsService as never,
+      { buildSummary: jest.fn().mockResolvedValue({
+        status: 'off',
+        enabled: false,
+        checkoutAvailable: true,
+        cancelAtPeriodEnd: false,
+        currentPeriodEnd: null,
+        packsThisBillingPeriod: 0,
+        maxPacksPerBillingPeriod: 5,
+        packCredits: 1000,
+        packPriceUsd: 30,
+      }) } as never,
     );
 
     return {
@@ -432,8 +444,8 @@ describe('WorkspaceBillingSummaryService', () => {
     expect(summary.planCatalog).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ key: 'free', kbStorageMbPerBot: 5, priceMonthly: 0 }),
-        expect.objectContaining({ key: 'starter', kbStorageMbPerBot: 15, priceMonthly: 49 }),
-        expect.objectContaining({ key: 'pro', kbStorageMbPerBot: 30, priceMonthly: 99 }),
+        expect.objectContaining({ key: 'starter', kbStorageMbPerBot: 15, priceMonthly: 59 }),
+        expect.objectContaining({ key: 'pro', kbStorageMbPerBot: 30, priceMonthly: 119 }),
       ]),
     );
   });

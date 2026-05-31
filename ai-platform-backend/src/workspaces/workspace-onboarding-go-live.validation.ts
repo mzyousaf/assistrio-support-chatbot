@@ -69,7 +69,7 @@ export function validateOnboardingDraftForGoLive(
   if (draft.instructions.description.trim().length < MIN_AGENT_INSTRUCTIONS_LENGTH) {
     throw onboardingBadRequest(
       WORKSPACE_ONBOARDING_GO_LIVE_ERROR_CODES.instructionsIncomplete,
-      'Describe your AI agent in at least 80 characters before going live.',
+      'Describe your AI Agent in at least 80 characters before going live.',
     );
   }
 

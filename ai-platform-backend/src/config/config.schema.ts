@@ -13,6 +13,11 @@ export const configValidationSchema = Joi.object({
    * (see `shouldRegisterKbInProcessCronsForAppModule` / `shouldRegisterKbInProcessCronsForWorkerApp`).
    */
   ENABLE_KB_WORKER: Joi.string().valid('true', 'false', '1', '0', 'yes', 'no', '').optional().allow(''),
+  /**
+   * When `true` (default in all/worker, never in `api` or `runtime`), registers `BillingPeriodEndReconcileCron`
+   * (see `shouldRegisterBillingReconcileCronsForAppModule` / `shouldRegisterBillingReconcileCronsForWorkerApp`).
+   */
+  ENABLE_BILLING_RECONCILE_CRON: Joi.string().valid('true', 'false', '1', '0', 'yes', 'no', '').optional().allow(''),
   /** Global default for structured KB cron JSON logs when per-cron `KB_CRON_LOG_*` vars are unset. Only `true` enables. */
   KB_CRON_LOGS: Joi.string().valid('true', 'false', '1', '0', '').optional().allow(''),
   KB_CRON_LOG_CONTENT_EXTRACTION: Joi.string().valid('true', 'false', '').optional().allow(''),
@@ -51,11 +56,24 @@ export const configValidationSchema = Joi.object({
   LEMON_SQUEEZY_API_KEY: Joi.string().optional().allow(''),
   LEMON_SQUEEZY_STORE_ID: Joi.string().optional().allow(''),
   LEMON_SQUEEZY_WEBHOOK_SECRET: Joi.string().optional().allow(''),
+  LEMON_SQUEEZY_STARTER_MONTHLY_VARIANT_ID: Joi.string().optional().allow(''),
+  LEMON_SQUEEZY_STARTER_YEARLY_VARIANT_ID: Joi.string().optional().allow(''),
+  LEMON_SQUEEZY_PRO_MONTHLY_VARIANT_ID: Joi.string().optional().allow(''),
+  LEMON_SQUEEZY_PRO_YEARLY_VARIANT_ID: Joi.string().optional().allow(''),
+  /** @deprecated Use LEMON_SQUEEZY_STARTER_MONTHLY_VARIANT_ID */
   LEMON_SQUEEZY_STARTER_VARIANT_ID: Joi.string().optional().allow(''),
+  /** @deprecated Use LEMON_SQUEEZY_PRO_MONTHLY_VARIANT_ID */
   LEMON_SQUEEZY_PRO_VARIANT_ID: Joi.string().optional().allow(''),
+  LEMON_SQUEEZY_ADDON_EXTRA_BOT_MONTHLY_VARIANT_ID: Joi.string().optional().allow(''),
+  LEMON_SQUEEZY_ADDON_EXTRA_BOT_YEARLY_VARIANT_ID: Joi.string().optional().allow(''),
+  LEMON_SQUEEZY_ADDON_REMOVE_BRANDING_MONTHLY_VARIANT_ID: Joi.string().optional().allow(''),
+  LEMON_SQUEEZY_ADDON_REMOVE_BRANDING_YEARLY_VARIANT_ID: Joi.string().optional().allow(''),
+  /** @deprecated Use LEMON_SQUEEZY_ADDON_EXTRA_BOT_MONTHLY_VARIANT_ID */
   LEMON_SQUEEZY_ADDON_EXTRA_BOT_VARIANT_ID: Joi.string().optional().allow(''),
+  /** @deprecated Use LEMON_SQUEEZY_ADDON_REMOVE_BRANDING_MONTHLY_VARIANT_ID */
   LEMON_SQUEEZY_ADDON_REMOVE_BRANDING_VARIANT_ID: Joi.string().optional().allow(''),
   LEMON_SQUEEZY_TOPUP_1000_CREDITS_VARIANT_ID: Joi.string().optional().allow(''),
+  LEMON_SQUEEZY_AUTO_TOPUP_VARIANT_ID: Joi.string().optional().allow(''),
   /** Optional `Domain` for customer session cookie (`ar_customer_session`) only. */
   SESSION_COOKIE_DOMAIN: Joi.string().optional().allow(''),
   TOPIC_SENTIMENT_MODEL: Joi.string().optional().allow(''),

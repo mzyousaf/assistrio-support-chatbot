@@ -16,61 +16,57 @@ function baseConfig(overrides: Partial<AppConfig> = {}): AppConfig {
     lemonSqueezyStoreId: 'store-1',
     customerAppBaseUrl: 'https://app.example.com',
     lemonSqueezyWebhookSecret: '',
-    lemonSqueezyStarterVariantId: '',
-    lemonSqueezyProVariantId: '',
-    lemonSqueezyAddonExtraBotVariantId: '',
-    lemonSqueezyAddonRemoveBrandingVariantId: '',
+    lemonSqueezyStarterMonthlyVariantId: '',
+    lemonSqueezyStarterYearlyVariantId: '',
+    lemonSqueezyProMonthlyVariantId: '',
+    lemonSqueezyProYearlyVariantId: '',
+    lemonSqueezyAddonExtraBotMonthlyVariantId: '',
+    lemonSqueezyAddonExtraBotYearlyVariantId: '',
+    lemonSqueezyAddonRemoveBrandingMonthlyVariantId: '',
+    lemonSqueezyAddonRemoveBrandingYearlyVariantId: '',
     lemonSqueezyTopup1000CreditsVariantId: '',
     ...overrides,
   } as AppConfig;
 }
 
 describe('billing-config.util checkout availability', () => {
-  it('Starter checkout is true when Starter variant exists but add-on variants are missing', () => {
+  it('Starter monthly checkout is true when monthly variant exists', () => {
     const config = baseConfig({
-      lemonSqueezyStarterVariantId: 'v-starter',
+      lemonSqueezyStarterMonthlyVariantId: 'v-starter-m',
     });
-    expect(isPlanCheckoutAvailable(config, 'starter')).toBe(true);
+    expect(isPlanCheckoutAvailable(config, 'starter', 'monthly')).toBe(true);
+    expect(isPlanCheckoutAvailable(config, 'starter', 'yearly')).toBe(false);
     expect(isPlanCheckoutAvailable(config, 'pro')).toBe(false);
     expect(isAddonCheckoutAvailable(config, 'extra_bot')).toBe(false);
-    expect(isTopUpCheckoutAvailable(config, 'ai_credits_1000')).toBe(false);
-    expect(resolveLemonSqueezyBillingConfig(config)?.variantIds.starter).toBe('v-starter');
+    expect(resolveLemonSqueezyBillingConfig(config)?.variantIds.starter.monthly).toBe('v-starter-m');
   });
 
-  it('Pro checkout is true when Pro variant exists but add-on variants are missing', () => {
+  it('Starter yearly checkout is true when yearly variant exists', () => {
     const config = baseConfig({
-      lemonSqueezyProVariantId: 'v-pro',
+      lemonSqueezyStarterYearlyVariantId: 'v-starter-y',
     });
-    expect(isPlanCheckoutAvailable(config, 'pro')).toBe(true);
+    expect(isPlanCheckoutAvailable(config, 'starter', 'yearly')).toBe(true);
+    expect(isPlanCheckoutAvailable(config, 'starter', 'monthly')).toBe(false);
+  });
+
+  it('Pro checkout is independent per interval', () => {
+    const config = baseConfig({
+      lemonSqueezyProMonthlyVariantId: 'v-pro-m',
+      lemonSqueezyProYearlyVariantId: 'v-pro-y',
+    });
+    expect(isPlanCheckoutAvailable(config, 'pro', 'monthly')).toBe(true);
+    expect(isPlanCheckoutAvailable(config, 'pro', 'yearly')).toBe(true);
     expect(isPlanCheckoutAvailable(config, 'starter')).toBe(false);
-    expect(isAddonCheckoutAvailable(config, 'remove_branding')).toBe(false);
   });
 
-  it('missing Starter variant only disables Starter', () => {
+  it('add-on availability is independent per interval', () => {
     const config = baseConfig({
-      lemonSqueezyProVariantId: 'v-pro',
-      lemonSqueezyStarterVariantId: '',
+      lemonSqueezyAddonExtraBotMonthlyVariantId: 'v-bot-m',
+      lemonSqueezyAddonRemoveBrandingYearlyVariantId: 'v-branding-y',
     });
-    expect(isPlanCheckoutAvailable(config, 'starter')).toBe(false);
-    expect(isPlanCheckoutAvailable(config, 'pro')).toBe(true);
-  });
-
-  it('missing Pro variant only disables Pro', () => {
-    const config = baseConfig({
-      lemonSqueezyStarterVariantId: 'v-starter',
-      lemonSqueezyProVariantId: '',
-    });
-    expect(isPlanCheckoutAvailable(config, 'starter')).toBe(true);
-    expect(isPlanCheckoutAvailable(config, 'pro')).toBe(false);
-  });
-
-  it('add-on availability is independent per add-on', () => {
-    const config = baseConfig({
-      lemonSqueezyAddonExtraBotVariantId: 'v-bot',
-      lemonSqueezyAddonRemoveBrandingVariantId: 'v-branding',
-    });
-    expect(isAddonCheckoutAvailable(config, 'extra_bot')).toBe(true);
-    expect(isAddonCheckoutAvailable(config, 'remove_branding')).toBe(true);
+    expect(isAddonCheckoutAvailable(config, 'extra_bot', 'monthly')).toBe(true);
+    expect(isAddonCheckoutAvailable(config, 'extra_bot', 'yearly')).toBe(false);
+    expect(isAddonCheckoutAvailable(config, 'remove_branding', 'yearly')).toBe(true);
   });
 
   it('top-up ai_credits_1000 only requires top-up variant env', () => {
@@ -86,11 +82,11 @@ describe('billing-config.util checkout availability', () => {
   it('webhook secret missing does not disable checkout or base config', () => {
     const config = baseConfig({
       lemonSqueezyWebhookSecret: '',
-      lemonSqueezyStarterVariantId: 'v-starter',
+      lemonSqueezyStarterMonthlyVariantId: 'v-starter-m',
     });
     expect(isBillingWebhookConfigured(config)).toBe(false);
     expect(isBillingCheckoutConfigured(config)).toBe(true);
-    expect(isPlanCheckoutAvailable(config, 'starter')).toBe(true);
+    expect(isPlanCheckoutAvailable(config, 'starter', 'monthly')).toBe(true);
   });
 
   it('isBillingCheckoutConfigured is true with base env only (no variant IDs)', () => {

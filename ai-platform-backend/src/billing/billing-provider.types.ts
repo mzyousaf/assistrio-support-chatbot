@@ -1,4 +1,5 @@
 import type { PlanKey } from '../entitlements/plan-catalog';
+import type { BillingInterval } from './billing-interval.types';
 import type { ProviderInvoiceRow, ProviderPaymentMethodSummary } from './billing-invoice.types';
 export type { ProviderInvoiceRow, ProviderPaymentMethodSummary, SubscriptionPaymentFailureMetadata } from './billing-invoice.types';
 import type { BillingOrderInvoiceDetails, BillingInvoiceDownloadResult } from './billing-invoice-download.types';
@@ -8,7 +9,7 @@ export type { BillingOrderInvoiceDetails, BillingInvoiceDownloadResult } from '.
 export const BILLING_PROVIDERS = ['lemon_squeezy', 'stripe_future'] as const;
 export type BillingProvider = (typeof BILLING_PROVIDERS)[number];
 
-export const CHECKOUT_TYPES = ['plan', 'addon', 'top_up'] as const;
+export const CHECKOUT_TYPES = ['plan', 'addon', 'top_up', 'auto_top_up'] as const;
 export type CheckoutType = (typeof CHECKOUT_TYPES)[number];
 
 /** Paid plan keys available for subscription checkout (not free). */
@@ -33,12 +34,14 @@ export type BillingCheckoutCustomData = {
   addonKey?: BillingAddonCheckoutKey;
   topUpKey?: BillingTopUpCheckoutKey;
   targetBotId?: string;
+  billingInterval?: BillingInterval;
 };
 
 export type CreateSubscriptionCheckoutInput = {
   workspaceId: string;
   userId: string;
   planKey: BillingPlanCheckoutKey;
+  billingInterval?: BillingInterval;
   internalRequestId: string;
 };
 
@@ -46,7 +49,14 @@ export type CreateAddonCheckoutInput = {
   workspaceId: string;
   userId: string;
   addonKey: BillingAddonCheckoutKey;
+  billingInterval?: BillingInterval;
   targetBotId?: string;
+  internalRequestId: string;
+};
+
+export type CreateAutoTopUpCheckoutInput = {
+  workspaceId: string;
+  userId: string;
   internalRequestId: string;
 };
 
@@ -80,6 +90,7 @@ export type ProviderSubscriptionSnapshot = {
   currentPeriodEnd?: Date;
   cancelAtPeriodEnd?: boolean;
   planKey?: PlanKey;
+  billingInterval?: BillingInterval;
 };
 
 export type CancelProviderSubscriptionInput = {
@@ -93,6 +104,14 @@ export type RestoreProviderSubscriptionInput = {
 export type ChangeProviderSubscriptionPlanInput = {
   providerSubscriptionId: string;
   planKey: BillingPlanCheckoutKey;
+  billingInterval?: BillingInterval;
+  disableProrations?: boolean;
+};
+
+export type ChangeProviderAddonBillingIntervalInput = {
+  providerSubscriptionId: string;
+  addonKey: BillingAddonCheckoutKey;
+  billingInterval: BillingInterval;
   disableProrations?: boolean;
 };
 
@@ -131,6 +150,7 @@ export type BillingWebhookAction =
       currentPeriodStart?: Date;
       currentPeriodEnd?: Date;
       cancelAtPeriodEnd?: boolean;
+      billingInterval?: BillingInterval;
       paymentFailure?: {
         failedAt?: Date;
         invoiceId?: string | null;
@@ -149,6 +169,22 @@ export type BillingWebhookAction =
       topUpKey: BillingTopUpCheckoutKey;
       providerOrderId: string;
       creditsPurchased: number;
+      source?: 'manual' | 'auto_topup';
+    }
+  | {
+      kind: 'auto_top_up_subscription_sync';
+      workspaceId: string;
+      status: 'pending' | 'active' | 'past_due' | 'scheduled_disable' | 'canceled';
+      providerSubscriptionId: string;
+      providerSubscriptionItemId?: string;
+      providerCustomerId?: string;
+      providerVariantId?: string;
+      currentPeriodStart?: Date;
+      currentPeriodEnd?: Date;
+      cancelAtPeriodEnd?: boolean;
+      enableAutoTopUp?: boolean;
+      disableAutoTopUp?: boolean;
+      clearPaymentIssue?: boolean;
     }
   | {
       kind: 'order_record';
@@ -172,12 +208,15 @@ export type BillingWebhookAction =
       workspaceId: string;
       addonKey: BillingAddonCheckoutKey;
       targetBotId?: string;
-      status: 'active' | 'cancelled' | 'expired';
+      status: 'active' | 'past_due' | 'cancelled' | 'expired';
       providerSubscriptionId?: string;
+      providerVariantId?: string;
+      providerCustomerId?: string;
       providerOrderId?: string;
       currentPeriodStart?: Date;
       currentPeriodEnd?: Date;
       cancelAtPeriodEnd?: boolean;
+      billingInterval?: BillingInterval;
     }
   | { kind: 'ignored'; reason: string };
 
@@ -189,6 +228,8 @@ export interface BillingProviderAdapter {
   createAddonCheckout(input: CreateAddonCheckoutInput): Promise<BillingCheckoutResult>;
 
   createTopUpCheckout(input: CreateTopUpCheckoutInput): Promise<BillingCheckoutResult>;
+
+  createAutoTopUpCheckout(input: CreateAutoTopUpCheckoutInput): Promise<BillingCheckoutResult>;
 
   parseWebhook(rawBody: Buffer, headers: BillingWebhookHeaders): BillingWebhookEvent;
 
@@ -230,6 +271,15 @@ export interface BillingProviderAdapter {
   restoreSubscription(input: RestoreProviderSubscriptionInput): Promise<ProviderSubscriptionSnapshot>;
 
   changeSubscriptionPlan(input: ChangeProviderSubscriptionPlanInput): Promise<ProviderSubscriptionSnapshot>;
+
+  changeAddonBillingInterval(
+    input: ChangeProviderAddonBillingIntervalInput,
+  ): Promise<ProviderSubscriptionSnapshot>;
+
+  recordAutoTopUpUsage?(input: {
+    providerSubscriptionItemId: string;
+    quantity: number;
+  }): Promise<void>;
 }
 
 export function isBillingPlanCheckoutKey(value: string): value is BillingPlanCheckoutKey {

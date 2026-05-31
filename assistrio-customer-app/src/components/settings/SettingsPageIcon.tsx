@@ -1,10 +1,9 @@
-import { Building2, CreditCard, Gem, Users } from 'lucide-react';
+import { Building2, CreditCard, Users } from 'lucide-react';
 import type { SettingsNavRoute } from '@/lib/settingsNavigation';
 
 const ICONS = {
   '/settings/workspace': Building2,
   '/settings/members': Users,
-  '/settings/plans': Gem,
   '/settings/billing': CreditCard,
 } as const satisfies Record<SettingsNavRoute, typeof Building2>;
 

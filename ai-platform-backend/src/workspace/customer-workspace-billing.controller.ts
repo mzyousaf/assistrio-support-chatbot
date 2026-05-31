@@ -21,6 +21,13 @@ import { BillingProfileService } from '../billing/billing-profile.service';
 import { BillingManageService } from '../billing/billing-manage.service';
 import { BillingSubscriptionActionsService } from '../billing/billing-subscription-actions.service';
 import { BillingAddonActionsService } from '../billing/billing-addon-actions.service';
+import { BillingAddonIntervalActionsService } from '../billing/billing-addon-interval-actions.service';
+import { parseBillingInterval, isBillingInterval } from '../billing/billing-interval.types';
+import {
+  BillingCreditAutoTopUpService,
+  parseCreditAutoTopUpEnabledInput,
+} from '../billing/billing-credit-auto-topup.service';
+import { BillingAiCreditsAutoTopUpService } from '../billing/billing-ai-credits-auto-topup.service';
 import { WorkspaceBillingSummaryService } from './workspace-billing-summary.service';
 import {
   billingInvoicePdfQueryMetadata,
@@ -38,6 +45,9 @@ export class CustomerWorkspaceBillingController {
     private readonly billingSummaryService: WorkspaceBillingSummaryService,
     private readonly billingSubscriptionActionsService: BillingSubscriptionActionsService,
     private readonly billingAddonActionsService: BillingAddonActionsService,
+    private readonly billingAddonIntervalActionsService: BillingAddonIntervalActionsService,
+    private readonly billingCreditAutoTopUpService: BillingCreditAutoTopUpService,
+    private readonly billingAiCreditsAutoTopUpService: BillingAiCreditsAutoTopUpService,
     private readonly billingManageService: BillingManageService,
     private readonly billingInvoicesService: BillingInvoicesService,
     private readonly billingProfileService: BillingProfileService,
@@ -276,13 +286,59 @@ export class CustomerWorkspaceBillingController {
   async changeSubscriptionPlan(
     @Req() req: RequestWithUser,
     @Param('workspaceId') workspaceId: string,
-    @Body() body: { planKey?: string },
+    @Body() body: { planKey?: string; billingInterval?: string },
   ) {
     await this.assertWorkspaceOwner(req, workspaceId);
+    const billingInterval = body?.billingInterval
+      ? parseBillingInterval(body.billingInterval)
+      : undefined;
+    if (body?.billingInterval && !isBillingInterval(body.billingInterval)) {
+      throw new ForbiddenException({
+        error: 'Invalid billing interval.',
+        errorCode: 'invalid_billing_interval',
+      });
+    }
     const outcome = await this.billingSubscriptionActionsService.changePlan(
       workspaceId,
       String(body?.planKey ?? ''),
+      billingInterval,
     );
+    return this.buildSubscriptionActionResponse(workspaceId, outcome);
+  }
+
+  @Patch(':workspaceId/billing/subscription/schedule-interval')
+  async scheduleSubscriptionInterval(
+    @Req() req: RequestWithUser,
+    @Param('workspaceId') workspaceId: string,
+    @Body() body: { billingInterval?: string },
+  ) {
+    await this.assertWorkspaceOwner(req, workspaceId);
+    if (!body?.billingInterval || !isBillingInterval(body.billingInterval)) {
+      throw new ForbiddenException({
+        error: 'Invalid billing interval.',
+        errorCode: 'invalid_billing_interval',
+      });
+    }
+    const outcome = await this.billingSubscriptionActionsService.scheduleBillingIntervalChange(
+      workspaceId,
+      parseBillingInterval(body.billingInterval),
+    );
+    return this.buildSubscriptionActionResponse(workspaceId, outcome);
+  }
+
+  @Post(':workspaceId/billing/subscription/schedule-interval')
+  async scheduleSubscriptionIntervalPost(
+    @Req() req: RequestWithUser,
+    @Param('workspaceId') workspaceId: string,
+    @Body() body: { billingInterval?: string },
+  ) {
+    return this.scheduleSubscriptionInterval(req, workspaceId, body);
+  }
+
+  @Post(':workspaceId/billing/subscription/cancel-scheduled-downgrade')
+  async cancelScheduledDowngrade(@Req() req: RequestWithUser, @Param('workspaceId') workspaceId: string) {
+    await this.assertWorkspaceOwner(req, workspaceId);
+    const outcome = await this.billingSubscriptionActionsService.cancelScheduledDowngrade(workspaceId);
     return this.buildSubscriptionActionResponse(workspaceId, outcome);
   }
 
@@ -290,13 +346,99 @@ export class CustomerWorkspaceBillingController {
   async cancelAddon(
     @Req() req: RequestWithUser,
     @Param('workspaceId') workspaceId: string,
-    @Body() body: { addonKey?: string; targetBotId?: string },
+    @Body() body: { addonKey?: string; targetBotId?: string; addonInstanceId?: string },
   ) {
     await this.assertWorkspaceOwner(req, workspaceId);
-    const outcome = await this.billingAddonActionsService.cancelAddon(
+    const addonInstanceId = String(body?.addonInstanceId ?? '').trim();
+    const outcome = addonInstanceId
+      ? await this.billingAddonActionsService.cancelAddonByInstanceId(workspaceId, addonInstanceId)
+      : await this.billingAddonActionsService.cancelAddon(
+          workspaceId,
+          String(body?.addonKey ?? ''),
+          body?.targetBotId ?? null,
+        );
+    const summary = await this.billingSummaryService.getSummary(workspaceId);
+    return {
+      ...outcome,
+      summary,
+    };
+  }
+
+  @Post(':workspaceId/billing/addons/:addonInstanceId/cancel')
+  async cancelAddonInstance(
+    @Req() req: RequestWithUser,
+    @Param('workspaceId') workspaceId: string,
+    @Param('addonInstanceId') addonInstanceId: string,
+  ) {
+    await this.assertWorkspaceOwner(req, workspaceId);
+    const outcome = await this.billingAddonActionsService.cancelAddonByInstanceId(
       workspaceId,
-      String(body?.addonKey ?? ''),
-      body?.targetBotId ?? null,
+      addonInstanceId,
+    );
+    const summary = await this.billingSummaryService.getSummary(workspaceId);
+    return {
+      ...outcome,
+      summary,
+    };
+  }
+
+  @Post(':workspaceId/billing/addons/:addonInstanceId/schedule-interval')
+  async scheduleAddonInterval(
+    @Req() req: RequestWithUser,
+    @Param('workspaceId') workspaceId: string,
+    @Param('addonInstanceId') addonInstanceId: string,
+    @Body() body: { billingInterval?: string },
+  ) {
+    await this.assertWorkspaceOwner(req, workspaceId);
+    if (!body?.billingInterval || !isBillingInterval(body.billingInterval)) {
+      throw new ForbiddenException({
+        error: 'Invalid billing interval.',
+        errorCode: 'invalid_billing_interval',
+      });
+    }
+    const outcome = await this.billingAddonIntervalActionsService.scheduleAddonBillingIntervalChange(
+      workspaceId,
+      addonInstanceId,
+      parseBillingInterval(body.billingInterval),
+    );
+    const summary = await this.billingSummaryService.getSummary(workspaceId);
+    return { ...outcome, summary };
+  }
+
+  @Post(':workspaceId/billing/addons/:addonInstanceId/cancel-scheduled-interval')
+  async cancelScheduledAddonInterval(
+    @Req() req: RequestWithUser,
+    @Param('workspaceId') workspaceId: string,
+    @Param('addonInstanceId') addonInstanceId: string,
+  ) {
+    await this.assertWorkspaceOwner(req, workspaceId);
+    const outcome = await this.billingAddonIntervalActionsService.cancelScheduledAddonIntervalChange(
+      workspaceId,
+      addonInstanceId,
+    );
+    const summary = await this.billingSummaryService.getSummary(workspaceId);
+    return { ...outcome, summary };
+  }
+
+  @Post(':workspaceId/billing/auto-topup/disable')
+  async disableAutoTopUp(@Req() req: RequestWithUser, @Param('workspaceId') workspaceId: string) {
+    await this.assertWorkspaceOwner(req, workspaceId);
+    const outcome = await this.billingAiCreditsAutoTopUpService.disableAutoTopUp(workspaceId);
+    const summary = await this.billingSummaryService.getSummary(workspaceId);
+    return { ...outcome, summary };
+  }
+
+  @Patch(':workspaceId/billing/credit-auto-topup')
+  async patchCreditAutoTopUp(
+    @Req() req: RequestWithUser,
+    @Param('workspaceId') workspaceId: string,
+    @Body() body: { enabled?: unknown },
+  ) {
+    await this.assertWorkspaceOwner(req, workspaceId);
+    const enabled = parseCreditAutoTopUpEnabledInput(body?.enabled);
+    const outcome = await this.billingCreditAutoTopUpService.setAutoTopUpPromptEnabled(
+      workspaceId,
+      enabled,
     );
     const summary = await this.billingSummaryService.getSummary(workspaceId);
     return {

@@ -11,11 +11,11 @@ export const DEFAULT_AGENT_INSTRUCTIONS_TEMPLATE =
 export const MIN_AGENT_INSTRUCTIONS_LENGTH = 80;
 
 export function minAgentInstructionsError(): string {
-  return `Describe your AI agent in at least ${MIN_AGENT_INSTRUCTIONS_LENGTH} characters.`;
+  return `Describe your AI Agent in at least ${MIN_AGENT_INSTRUCTIONS_LENGTH} characters.`;
 }
 
 export function emptyAgentInstructionsError(): string {
-  return `Describe your AI agent is required — add at least ${MIN_AGENT_INSTRUCTIONS_LENGTH} characters.`;
+  return `Describe your AI Agent is required — add at least ${MIN_AGENT_INSTRUCTIONS_LENGTH} characters.`;
 }
 
 function personalityRecord(bot: CustomerBotDetail | null): Record<string, unknown> {

@@ -1,9 +1,10 @@
+export const BILLING_SETTINGS_LABEL = 'Billing & Plans';
+
 /** Workspace Settings sidebar order (labels only). */
 export const SETTINGS_NAV_ITEMS = [
   { to: '/settings/workspace', label: 'General' },
   { to: '/settings/members', label: 'Members' },
-  { to: '/settings/plans', label: 'Plans' },
-  { to: '/settings/billing', label: 'Billing & Invoices' },
+  { to: '/settings/billing', label: BILLING_SETTINGS_LABEL },
 ] as const;
 
 export type SettingsNavRoute = (typeof SETTINGS_NAV_ITEMS)[number]['to'];
@@ -15,6 +16,9 @@ export function normalizeSettingsPathname(pathname: string): string {
     pathname.startsWith('/settings/general')
   ) {
     return '/settings/workspace';
+  }
+  if (pathname.startsWith('/settings/plans') || pathname === '/plans') {
+    return '/settings/billing';
   }
   return pathname;
 }

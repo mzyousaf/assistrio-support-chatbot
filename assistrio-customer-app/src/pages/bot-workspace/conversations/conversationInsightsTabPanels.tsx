@@ -500,12 +500,12 @@ export function ConversationInsightsAdvancedTab({
             }
           />
           <ConversationInsightsSheetRow
-            label="Bot ID"
+            label="AI Agent ID"
             value={
               detail.botId ? (
                 <span className="inline-flex flex-wrap items-center gap-2">
                   <span className="break-all font-mono text-[12px]">{detail.botId}</span>
-                  <ConversationDetailCopyButton value={detail.botId} ariaLabel="Copy bot ID" />
+                  <ConversationDetailCopyButton value={detail.botId} ariaLabel="Copy AI Agent ID" />
                 </span>
               ) : (
                 INSIGHT_EM_DASH

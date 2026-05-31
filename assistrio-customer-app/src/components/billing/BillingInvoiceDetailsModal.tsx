@@ -66,7 +66,7 @@ export function BillingInvoiceDetailsModal({
           Billing details
         </h2>
         <p className="m-0 mt-2 text-sm text-slate-600">
-          These details are used when generating invoices for one-time purchases and credit top-ups.
+          These details are required to generate invoices for one-time purchases and credit top-ups.
         </p>
 
         <form

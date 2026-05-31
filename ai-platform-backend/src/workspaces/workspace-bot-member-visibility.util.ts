@@ -1,6 +1,6 @@
 /** Thrown when a workspace member cannot preview/test a bot in playground. */
 export const WORKSPACE_BOT_PREVIEW_ACCESS_DENIED_MESSAGE =
-  "You don't have permission to preview this agent. Ask a workspace owner or admin for access.";
+  "You don't have permission to preview this AI Agent. Ask a workspace owner or admin for access.";
 export const WORKSPACE_BOT_PREVIEW_ACCESS_DENIED_CODE = 'workspace_bot_preview_access_denied';
 
 export type BotWorkspaceMemberVisibilitySettings = {

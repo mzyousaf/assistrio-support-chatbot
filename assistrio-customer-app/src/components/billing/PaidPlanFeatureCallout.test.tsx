@@ -1,7 +1,6 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { UpgradePlanModalProvider } from '@/components/billing/UpgradePlanModalProvider';
 import {
   PaidPlanFeatureCallout,
   PaidPlanFeatureCalloutForReason,
@@ -46,19 +45,16 @@ vi.mock('@/api/customerApi', () => ({
   }),
 }));
 
-vi.mock('./UpgradePlanModalProvider', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./UpgradePlanModalProvider')>();
-  return {
-    ...actual,
-    useUpgradePlanModal: () => ({
-      openUpgradeModal: mockOpenUpgradeModal,
-      closeUpgradeModal: vi.fn(),
-    }),
-  };
-});
+vi.mock('@/components/billing/UpgradePlanModalProvider', () => ({
+  useUpgradePlanModal: () => ({
+    openUpgradeModal: mockOpenUpgradeModal,
+    closeUpgradeModal: vi.fn(),
+  }),
+  UpgradePlanModalProvider: ({ children }: { children: ReactNode }) => children,
+}));
 
 function renderWithProvider(ui: ReactNode) {
-  return render(<UpgradePlanModalProvider>{ui}</UpgradePlanModalProvider>);
+  return render(ui);
 }
 
 describe('PaidPlanFeatureCallout', () => {
@@ -81,7 +77,7 @@ describe('PaidPlanFeatureCallout', () => {
     expect(screen.getByRole('button', { name: 'View plans' })).toBeTruthy();
   });
 
-  it('opens UpgradePlanModal when action is clicked', () => {
+  it('opens plans modal when action is clicked', () => {
     renderWithProvider(
       <PaidPlanFeatureCallout
         title="Auto-train is available on paid plans"

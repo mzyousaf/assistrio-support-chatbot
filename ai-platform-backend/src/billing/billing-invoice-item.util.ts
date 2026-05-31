@@ -20,7 +20,7 @@ export type InvoiceItemKey =
 const LEGACY_KB_ITEM_KEYS = new Set(['kb_storage_5mb', 'kb_storage_10mb']);
 
 const ADDON_ITEM_NAMES: Record<string, string> = {
-  extra_bot: 'Extra bot',
+  extra_bot: 'Extra AI Agent',
   remove_branding: 'Remove Powered by Assistrio',
   legacy_kb_storage: 'Legacy KB storage add-on',
   ai_credits_1000: '1,000 AI credits',
@@ -105,7 +105,7 @@ export function mapInvoiceItemDescription(input: {
     if (reason === 'initial' || !reason) return 'Pro subscription started';
     return 'Pro subscription renewal';
   }
-  if (itemKey === 'extra_bot') return 'Extra bot add-on';
+  if (itemKey === 'extra_bot') return 'Extra AI Agent add-on';
   if (itemKey === 'remove_branding') return 'Remove branding add-on';
   if (itemKey === 'legacy_kb_storage' || LEGACY_KB_ITEM_KEYS.has(itemKey)) {
     return 'Legacy trained knowledge add-on';

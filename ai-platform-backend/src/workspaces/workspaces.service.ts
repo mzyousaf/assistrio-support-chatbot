@@ -64,6 +64,12 @@ import {
 } from '../models/workspace-invite.constants';
 import type { PlanKey } from '../entitlements/plan-catalog';
 import type { WorkspaceSubscriptionStatus } from '../models/workspace-subscription.schema';
+import type { WorkspaceMembershipStatus } from '../models/workspace-membership.schema';
+import { WORKSPACE_MEMBERSHIP_ACTIVE_STATUS_FILTER } from '../models/workspace-membership.schema';
+import {
+  assertWorkspaceActiveMembership,
+} from './workspace-membership-access.util';
+import { normalizeMembershipStatus } from '../entitlements/workspace-member-over-limit-reconcile.util';
 
 export type WorkspaceMemberListItem = {
   userId: string;
@@ -75,6 +81,7 @@ export type WorkspaceMemberListItem = {
   avatarUrl: string | null;
   role: WorkspaceMemberRole;
   joinedAt: Date | null;
+  membershipStatus: WorkspaceMembershipStatus;
 };
 
 function oidString(v: unknown): string {
@@ -186,12 +193,9 @@ export class WorkspacesService {
     return workspaceId;
   }
 
-  /** Sets active workspace when user is a member; throws 403 otherwise. */
+  /** Sets active workspace when user is an active member; throws 403 otherwise. */
   async activateWorkspaceForUser(userId: string, workspaceId: string): Promise<void> {
-    const isMember = await this.isUserMemberOfWorkspace(userId, workspaceId);
-    if (!isMember) {
-      throw new ForbiddenException({ error: 'Workspace access denied.' });
-    }
+    await assertWorkspaceActiveMembership(this.membershipModel, userId, workspaceId);
     await this.persistActiveWorkspaceId(userId, workspaceId);
   }
 
@@ -297,7 +301,10 @@ export class WorkspacesService {
   private async loadMembershipSessionRows(userId: string): Promise<WorkspaceMembershipSessionRow[]> {
     if (!Types.ObjectId.isValid(userId)) return [];
     const uid = new Types.ObjectId(userId);
-    const memberships = await this.membershipModel.find({ userId: uid }).select('workspaceId role').lean();
+    const memberships = await this.membershipModel
+      .find({ userId: uid, ...WORKSPACE_MEMBERSHIP_ACTIVE_STATUS_FILTER })
+      .select('workspaceId role')
+      .lean();
     if (!memberships.length) return [];
 
     const workspaceIds = (memberships as { workspaceId: Types.ObjectId }[]).map((row) => row.workspaceId);
@@ -344,6 +351,7 @@ export class WorkspacesService {
       .findOne({
         userId: new Types.ObjectId(userId),
         workspaceId: new Types.ObjectId(workspaceId),
+        ...WORKSPACE_MEMBERSHIP_ACTIVE_STATUS_FILTER,
       })
       .select('_id')
       .lean();
@@ -382,7 +390,12 @@ export class WorkspacesService {
       }[]).map((user) => [String(user._id), user]),
     );
 
-    return (memberships as { _id: Types.ObjectId; userId: Types.ObjectId; role: WorkspaceMemberRole }[])
+    return (memberships as {
+      _id: Types.ObjectId;
+      userId: Types.ObjectId;
+      role: WorkspaceMemberRole;
+      status?: string;
+    }[])
       .map((membership) => {
         const user = userById.get(String(membership.userId));
         const profile = {
@@ -403,6 +416,7 @@ export class WorkspacesService {
           avatarUrl: resolveWorkspaceMemberAvatarUrl(profile),
           role: membership.role ?? 'member',
           joinedAt: membership._id?.getTimestamp?.() ?? null,
+          membershipStatus: normalizeMembershipStatus(membership.status),
         };
       })
       .sort((a, b) => a.email.localeCompare(b.email));

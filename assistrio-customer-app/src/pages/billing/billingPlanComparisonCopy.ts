@@ -1,4 +1,8 @@
 import type { WorkspaceBillingPlanCatalogCard } from '@/api/types';
+import {
+  CUSTOMER_EXTRA_AI_AGENTS,
+  CUSTOMER_TRAINED_KNOWLEDGE_PER_AI_AGENT,
+} from '@/lib/customerAgentTerminology';
 
 export const PLAN_KEYS = ['free', 'starter', 'pro'] as const;
 export type BillingPlanKey = (typeof PLAN_KEYS)[number];
@@ -111,7 +115,7 @@ export function buildMainPlanComparisonRows(
       },
     },
     {
-      feature: 'Trained knowledge storage / bot',
+      feature: CUSTOMER_TRAINED_KNOWLEDGE_PER_AI_AGENT,
       featureHint: [TRAINED_KNOWLEDGE_UPLOAD_HELPER],
       values: {
         free: columnValue(catalog, 'free', (plan) => `${plan.kbStorageMbPerBot} MB`),
@@ -170,7 +174,7 @@ export function buildMainPlanComparisonRows(
       },
     },
     {
-      feature: 'Extra bots',
+      feature: CUSTOMER_EXTRA_AI_AGENTS,
       values: {
         free: 'Available on paid plans',
         starter: 'Coming soon',
@@ -203,7 +207,7 @@ const CORE_LIMITS_FEATURES = [
   'Agents',
   'Workspace members',
   'AI credits / month',
-  'Trained knowledge storage / bot',
+  CUSTOMER_TRAINED_KNOWLEDGE_PER_AI_AGENT,
   'File upload size',
 ] as const;
 
@@ -285,7 +289,7 @@ export const PLAN_COMPARISON_TABLE_GROUP_DEFS: Array<{
       'Agents',
       'Workspace members',
       'AI credits',
-      'Trained knowledge storage / bot',
+      CUSTOMER_TRAINED_KNOWLEDGE_PER_AI_AGENT,
     ],
   },
   {
@@ -328,10 +332,10 @@ export const PLAN_COMPARISON_TABLE_GROUP_DEFS: Array<{
 
 const TABLE_FEATURE_ALIASES: Record<string, string> = {
   'AI credits': 'AI credits / month',
-  'Trained knowledge storage / bot': 'Trained knowledge storage / bot',
+  [CUSTOMER_TRAINED_KNOWLEDGE_PER_AI_AGENT]: CUSTOMER_TRAINED_KNOWLEDGE_PER_AI_AGENT,
 };
 
-const TABLE_FEATURE_HINTS: Record<string, readonly string[]> = {
+export const TABLE_FEATURE_HINTS: Record<string, readonly string[]> = {
   'Basic analytics': [
     'Conversations Coverage',
     'Leads Coverage',
@@ -408,6 +412,111 @@ export function buildPlanComparisonTableGroups(
     rows: pickComparisonRows(catalog, group.features),
     note: PLAN_COMPARISON_GROUP_NOTES[group.id],
   })).filter((group) => group.rows.length > 0);
+}
+
+export type PlanCardIncludedItem = {
+  feature: string;
+  featureHint?: readonly string[];
+  value: string;
+};
+
+export type PlanCardIncludedGroup = {
+  id: string;
+  title: string;
+  note?: string;
+  items: PlanCardIncludedItem[];
+};
+
+export function buildPlanCardIncludedGroups(
+  planKey: BillingPlanKey,
+  catalog: WorkspaceBillingPlanCatalogCard[],
+): PlanCardIncludedGroup[] {
+  return buildPlanComparisonTableGroups(catalog).map((group) => ({
+    id: group.id,
+    title: group.title,
+    note: group.note,
+    items: group.rows.map((row) => ({
+      feature: row.feature,
+      featureHint: row.featureHint,
+      value: row.values[planKey],
+    })),
+  }));
+}
+
+/** Grouped sections for compact plan cards inside PlansModal. */
+export const PLAN_MODAL_CARD_GROUP_DEFS: Array<{
+  id: string;
+  title: string;
+  layout: 'limits' | 'features';
+  features: readonly string[];
+}> = [
+  {
+    id: 'core-limits',
+    title: 'Core limits',
+    layout: 'limits',
+    features: [
+      'Agents',
+      'Workspace members',
+      'AI credits',
+      CUSTOMER_TRAINED_KNOWLEDGE_PER_AI_AGENT,
+    ],
+  },
+  {
+    id: 'analytics',
+    title: 'Analytics',
+    layout: 'features',
+    features: [
+      'Basic analytics',
+      'Topic analytics',
+      'Sentiment analytics',
+      'Export reports',
+    ],
+  },
+  {
+    id: 'workspace-leads',
+    title: 'Workspace & leads',
+    layout: 'features',
+    features: ['Lead capture', 'Lead management', 'Member-level access', 'Agent-level access'],
+  },
+  {
+    id: 'widget-messaging',
+    title: 'Widget & messaging',
+    layout: 'features',
+    features: [
+      'Widget customization',
+      'Auto-train agent',
+      'Share preview link',
+      'Iframe/embed widget',
+      'Voice messages',
+      'Dictation',
+      'Language adaptation',
+      'Attachments',
+    ],
+  },
+  {
+    id: 'support',
+    title: 'Support',
+    layout: 'features',
+    features: ['Priority support'],
+  },
+];
+
+export function buildPlanModalCardIncludedGroups(
+  planKey: BillingPlanKey,
+  catalog: WorkspaceBillingPlanCatalogCard[],
+): PlanCardIncludedGroup[] {
+  return PLAN_MODAL_CARD_GROUP_DEFS.map((group) => ({
+    id: group.id,
+    title: group.title,
+    note: group.id === 'core-limits' ? PLAN_COMPARISON_GROUP_NOTES['core-limits'] : undefined,
+    items: pickComparisonRows(catalog, group.features)
+      .map((row) => ({
+        feature: row.feature,
+        featureHint: row.featureHint,
+        value: row.values[planKey],
+      }))
+      .filter((item) => group.layout === 'limits' || item.value !== '—'),
+  })).filter((group) => group.items.length > 0);
 }
 
 /** @deprecated Use buildPlanComparisonTableGroups instead. */

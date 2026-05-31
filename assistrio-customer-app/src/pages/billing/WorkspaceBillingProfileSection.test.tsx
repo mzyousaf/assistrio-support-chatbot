@@ -32,6 +32,8 @@ const savedProfile: WorkspaceBillingProfile = {
   city: 'Lahore',
   zipCode: '54000',
   country: 'PK',
+  taxId: 'TAX-12345',
+  notes: 'Include PO number on invoices.',
   updatedAt: '2026-05-01T00:00:00.000Z',
   updatedBy: 'user-1',
 };
@@ -59,7 +61,10 @@ describe('WorkspaceBillingProfileSection', () => {
     await waitFor(() => {
       expect(screen.getByText('Acme Inc')).toBeTruthy();
     });
+    expect(screen.getByText('Billing address')).toBeTruthy();
     expect(screen.getByText(/123 Mall Road/)).toBeTruthy();
+    expect(screen.getByText('TAX-12345')).toBeTruthy();
+    expect(screen.getByText('Include PO number on invoices.')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Edit billing details' })).toBeTruthy();
   });
 
@@ -73,8 +78,15 @@ describe('WorkspaceBillingProfileSection', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('No billing details saved')).toBeTruthy();
+      expect(screen.getByText('No billing details saved yet.')).toBeTruthy();
     });
+    expect(screen.getByText('{Company Name}')).toBeTruthy();
+    expect(screen.getByText('{Address}')).toBeTruthy();
+    expect(screen.getByText('{Tax ID}')).toBeTruthy();
+    expect(screen.getByText('{Notes}')).toBeTruthy();
+    expect(screen.getByText('Billing address')).toBeTruthy();
+    expect(screen.getByText('Tax ID')).toBeTruthy();
+    expect(screen.getByText('Notes')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Add billing details' })).toBeTruthy();
   });
 

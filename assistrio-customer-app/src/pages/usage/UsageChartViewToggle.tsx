@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils';
 
-export type UsageChartViewMode = 'trend' | 'highlights';
+export type UsageChartViewMode = 'trend' | 'heights';
 
 type Props = {
   value: UsageChartViewMode;
@@ -8,8 +8,8 @@ type Props = {
 };
 
 const OPTIONS: { id: UsageChartViewMode; label: string }[] = [
-  { id: 'trend', label: 'Trend' },
-  { id: 'highlights', label: 'Highlights' },
+  { id: 'trend', label: 'Trends' },
+  { id: 'heights', label: 'Heights' },
 ];
 
 export function UsageChartViewToggle({ value, onChange }: Props) {
@@ -17,7 +17,7 @@ export function UsageChartViewToggle({ value, onChange }: Props) {
     <div
       className="inline-flex rounded-lg border border-slate-200/90 bg-slate-50/80 p-0.5"
       role="group"
-      aria-label="Usage chart view"
+      aria-label="AI credits usage chart view"
     >
       {OPTIONS.map((option) => {
         const active = value === option.id;

@@ -4,9 +4,11 @@ import {
   WORKSPACE_ADMIN_ROLE,
   WORKSPACE_MANAGER_ROLES,
   WORKSPACE_OWNER_ROLE,
+  WORKSPACE_MEMBERSHIP_ACTIVE_STATUS_FILTER,
   WorkspaceMembership,
 } from '../models/workspace-membership.schema';
 import { isWorkspaceManagerRole, isWorkspaceOwnerRole } from '../models/workspace-membership-role.util';
+import { assertWorkspaceActiveMembership } from './workspace-membership-access.util';
 
 export async function countWorkspaceManagers(
   membershipModel: Model<WorkspaceMembership>,
@@ -91,6 +93,7 @@ export async function assertWorkspaceManager(
   userId: string,
   workspaceId: string,
 ): Promise<void> {
+  await assertWorkspaceActiveMembership(membershipModel, userId, workspaceId);
   const ok = await isWorkspaceManager(membershipModel, userId, workspaceId);
   if (!ok) {
     throw new ForbiddenException({
@@ -106,6 +109,7 @@ export async function assertWorkspaceOwner(
   userId: string,
   workspaceId: string,
 ): Promise<void> {
+  await assertWorkspaceActiveMembership(membershipModel, userId, workspaceId);
   const ok = await isWorkspaceOwner(membershipModel, userId, workspaceId);
   if (!ok) {
     throw new ForbiddenException({

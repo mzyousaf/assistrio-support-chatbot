@@ -16,6 +16,7 @@ describe('BillingProviderService', () => {
       mapWebhookEvent: jest.fn(),
       getCustomerPortalUrl: jest.fn(),
       fetchProviderSubscription: jest.fn(),
+      changeAddonBillingInterval: jest.fn(),
       provider: 'lemon_squeezy',
     };
     const service = new BillingProviderService(configService as never, lemon as never);
@@ -26,7 +27,7 @@ describe('BillingProviderService', () => {
     lemonSqueezyApiKey: 'key',
     lemonSqueezyStoreId: 'store',
     customerAppBaseUrl: 'https://app.example.com',
-    lemonSqueezyStarterVariantId: 'v-starter',
+    lemonSqueezyStarterMonthlyVariantId: 'v-starter-m',
   };
 
   it('returns 503 when base checkout env is missing', async () => {
@@ -51,13 +52,14 @@ describe('BillingProviderService', () => {
     });
   });
 
-  it('Starter checkout succeeds when only Starter variant is configured', async () => {
+  it('Starter checkout succeeds when only Starter monthly variant is configured', async () => {
     const { service, lemon } = createService(starterOnlyConfig);
     lemon.createSubscriptionCheckout.mockResolvedValue({
       checkoutUrl: 'https://checkout.example.com',
       provider: 'lemon_squeezy',
     });
-    expect(service.isPlanCheckoutAvailable('starter')).toBe(true);
+    expect(service.isPlanCheckoutAvailable('starter', 'monthly')).toBe(true);
+    expect(service.isPlanCheckoutAvailable('starter', 'yearly')).toBe(false);
     expect(service.isPlanCheckoutAvailable('pro')).toBe(false);
     expect(service.isAddonCheckoutAvailable('extra_bot')).toBe(false);
     const result = await service.createSubscriptionCheckout({
@@ -85,7 +87,7 @@ describe('BillingProviderService', () => {
     }
     expect(caught?.getResponse()).toMatchObject({
       errorCode: 'billing_provider_not_configured',
-      requiredEnv: expect.arrayContaining(['LEMON_SQUEEZY_PRO_VARIANT_ID']),
+      requiredEnv: expect.arrayContaining(['LEMON_SQUEEZY_PRO_MONTHLY_VARIANT_ID']),
     });
     expect(lemon.createSubscriptionCheckout).not.toHaveBeenCalled();
   });
@@ -96,7 +98,7 @@ describe('BillingProviderService', () => {
       lemonSqueezyWebhookSecret: '',
     });
     expect(service.isCheckoutConfigured()).toBe(true);
-    expect(service.isPlanCheckoutAvailable('starter')).toBe(true);
+    expect(service.isPlanCheckoutAvailable('starter', 'monthly')).toBe(true);
   });
 
   it('delegates customer portal url when base config is present', async () => {

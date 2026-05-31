@@ -39,7 +39,8 @@ describe('plan-catalog', () => {
     expect(STARTER_PLAN).toMatchObject({
       key: 'starter',
       name: 'Starter',
-      priceMonthlyUsd: 49,
+      priceMonthlyUsd: 59,
+      priceYearlyUsd: 637.2,
       memberLimit: 5,
       monthlyAiCredits: 500,
       kbStorageMbPerBot: 15,
@@ -58,7 +59,8 @@ describe('plan-catalog', () => {
     expect(PRO_PLAN).toMatchObject({
       key: 'pro',
       name: 'Pro',
-      priceMonthlyUsd: 99,
+      priceMonthlyUsd: 119,
+      priceYearlyUsd: 1285.2,
       memberLimit: 10,
       monthlyAiCredits: 2000,
       kbStorageMbPerBot: 30,

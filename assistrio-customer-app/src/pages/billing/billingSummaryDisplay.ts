@@ -1,4 +1,11 @@
 import type { WorkspaceBillingAddonCatalogCard, WorkspaceBillingPlanCatalogCard } from '@/api/types';
+import {
+  CUSTOMER_EXTRA_AI_AGENT,
+  CUSTOMER_KB_PER_AI_AGENT,
+  CUSTOMER_PER_AI_AGENT,
+  CUSTOMER_PER_AI_AGENT_TITLE,
+  formatCustomerFacingAgentText,
+} from '@/lib/customerAgentTerminology';
 
 export function formatPlanPriceMonthly(priceMonthly: number | null | undefined): string {
   const price = Number(priceMonthly ?? 0);
@@ -26,19 +33,19 @@ export function formatAddonBillingInterval(interval: WorkspaceBillingAddonCatalo
 }
 
 export function formatAddonScopeLabel(scope: WorkspaceBillingAddonCatalogCard['scope']): string {
-  return scope === 'bot' ? 'per bot' : 'workspace';
+  return scope === 'bot' ? CUSTOMER_PER_AI_AGENT : 'workspace';
 }
 
 /** User-facing add-on titles aligned with Epic 6 trained-knowledge wording. */
 export function formatAddonDisplayName(addon: WorkspaceBillingAddonCatalogCard): string {
-  if (addon.key === 'extra_bot') return 'Extra agent';
+  if (addon.key === 'extra_bot') return CUSTOMER_EXTRA_AI_AGENT;
   if (addon.key === 'ai_credits_1000') return '1,000 extra AI credits';
-  return addon.name;
+  return formatCustomerFacingAgentText(addon.name);
 }
 
 export function formatAddonPriceLabel(addon: WorkspaceBillingAddonCatalogCard): string {
   const interval = formatAddonBillingInterval(addon.billingInterval);
-  const scope = addon.scope === 'bot' ? ' per bot' : '';
+  const scope = addon.scope === 'bot' ? ` ${CUSTOMER_PER_AI_AGENT}` : '';
   return `$${addon.priceUsd} / ${interval}${scope}`;
 }
 
@@ -52,18 +59,27 @@ export function formatAddonTablePriceLabel(addon: WorkspaceBillingAddonCatalogCa
 
 /** Scope label for add-on comparison tables. */
 export function formatAddonTableScopeLabel(scope: WorkspaceBillingAddonCatalogCard['scope']): string {
-  return scope === 'bot' ? 'Per bot' : 'Workspace';
+  return scope === 'bot' ? CUSTOMER_PER_AI_AGENT_TITLE : 'Workspace';
 }
 
-/** Price line for add-on cards (e.g. "$30 one-time", "$49 per month"). */
+/** Price line for add-on cards (e.g. "$30", "$49 per month"). */
 export function formatAddonCardPriceLine(addon: WorkspaceBillingAddonCatalogCard): string {
   if (addon.billingInterval === 'one_time') {
-    return `$${addon.priceUsd.toLocaleString()} one-time`;
+    return `$${addon.priceUsd.toLocaleString()}`;
   }
   if (addon.scope === 'bot') {
-    return `$${addon.priceUsd.toLocaleString()} per month per bot`;
+    return `$${addon.priceUsd.toLocaleString()} per month ${CUSTOMER_PER_AI_AGENT}`;
   }
   return `$${addon.priceUsd.toLocaleString()} per month`;
+}
+
+/** Compact price · scope line for Usage add-on rows. */
+export function formatUsageAddonMetaLine(addon: WorkspaceBillingAddonCatalogCard): string {
+  const price =
+    addon.billingInterval === 'one_time'
+      ? `$${addon.priceUsd.toLocaleString()} one-time`
+      : `$${addon.priceUsd.toLocaleString()}/month`;
+  return `${price} · ${formatAddonTableScopeLabel(addon.scope)}`;
 }
 
 /** Short description copy for add-on cards. Frontend display only. */
@@ -72,12 +88,15 @@ export function formatAddonDescription(addon: WorkspaceBillingAddonCatalogCard):
     return 'Used after monthly credits.';
   }
   if (addon.key === 'extra_bot') {
-    return 'Adds one extra agent to this workspace while the add-on subscription is active.';
+    return 'Adds one extra AI agent to this workspace.';
   }
   if (addon.key === 'remove_branding') {
-    return 'Lets you hide “Powered by Assistrio” from your widget while active.';
+    return 'Hide "Powered by Assistrio" from your widget.';
   }
-  return addon.name;
+  if (addon.key === 'kb_storage_5mb' || addon.key === 'kb_storage_10mb') {
+    return 'Add more trained knowledge storage for one bot.';
+  }
+  return addon.description?.trim() || addon.name;
 }
 
 export function planCatalogFeatureLines(plan: WorkspaceBillingPlanCatalogCard): string[] {
@@ -92,10 +111,10 @@ export function planPricingCardFeatureLines(plan: WorkspaceBillingPlanCatalogCar
       : `${plan.monthlyAiCredits.toLocaleString()} AI credits / month`;
 
   return [
-    `${plan.botLimit} agent${plan.botLimit === 1 ? '' : 's'}`,
+    `${plan.botLimit} AI Agent${plan.botLimit === 1 ? '' : 's'}`,
     `${plan.memberLimit} member${plan.memberLimit === 1 ? '' : 's'}`,
     creditsLine,
-    `${plan.kbStorageMbPerBot} MB trained knowledge / bot`,
+    `${plan.kbStorageMbPerBot} MB ${CUSTOMER_KB_PER_AI_AGENT}`,
     formatAnalyticsHistoryCardLabel(plan.analyticsHistoryDays),
     formatExportReportsLabel(plan.canExportReports),
   ];

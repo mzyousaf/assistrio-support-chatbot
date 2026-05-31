@@ -210,7 +210,9 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
     if (!trimmed) return null;
     const result = await postCustomerWorkspaceActivate(trimmed);
     if (!result.ok) {
-      return null;
+      const err = new Error(result.error || 'Could not switch workspace.') as Error & { errorCode?: string };
+      err.errorCode = result.errorCode;
+      throw err;
     }
     setCustomer(result.data);
     const { needsOnboarding: need, bootstrapWarn } = await loadOnboardingFlags(result.data);

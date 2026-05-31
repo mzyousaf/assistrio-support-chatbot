@@ -37,8 +37,10 @@ import { sanitizeChatMessageContent } from "@acw/lib/chatMessageDisplay.util";
 import { resolveBrandingFooterDisplay } from "@acw/lib/resolveBrandingFooterDisplay";
 import { resolveChatRuntimeErrorMessage } from "@acw/lib/resolveChatRuntimeErrorMessage";
 import {
+  dispatchAiCreditsTopUpPromptModal,
   dispatchPlanLimitUpgradeModal,
   isChatUpgradeModalErrorCode,
+  PLAN_LIMIT_AI_CREDITS_CODE,
 } from "@/lib/planLimitError";
 import { streamAssistantReply } from "@acw/lib/streamAssistantReply";
 import { mergeWidgetStrings, type WidgetStrings } from "@acw/lib/widgetStrings";
@@ -163,6 +165,8 @@ interface SuperAdminChatResponse {
   error?: string;
   errorCode?: string;
   message?: string;
+  canAutoTopUpPrompt?: boolean;
+  topUpCheckoutAvailable?: boolean;
   debug?: SuperAdminChatDebug;
   userAttachments?: Array<{ name: string; mimeType: string; url: string; size?: number }>;
 }
@@ -1208,8 +1212,12 @@ export function AdminLiveChatAdapter({
             : [];
 
         if (!res.ok) {
-          if (mode === "preview" && isChatUpgradeModalErrorCode(data.errorCode)) {
-            dispatchPlanLimitUpgradeModal({ errorCode: data.errorCode });
+          if (mode === "preview") {
+            if (data.errorCode === PLAN_LIMIT_AI_CREDITS_CODE && data.canAutoTopUpPrompt) {
+              dispatchAiCreditsTopUpPromptModal();
+            } else if (isChatUpgradeModalErrorCode(data.errorCode)) {
+              dispatchPlanLimitUpgradeModal({ errorCode: data.errorCode });
+            }
           }
           const assistantErrId = generateId();
           const errText = sanitizeChatMessageContent(

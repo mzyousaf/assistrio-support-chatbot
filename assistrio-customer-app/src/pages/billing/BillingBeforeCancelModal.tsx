@@ -19,6 +19,9 @@ export function BillingBeforeCancelModal({
   onDowngradeToStarter,
 }: Props) {
   const showDowngrade = currentPlanKey === 'pro' && onDowngradeToStarter != null;
+  const description = showDowngrade
+    ? 'You can downgrade to Starter instead of cancelling. If you cancel, your paid access remains active until the end of the billing period. Cancellation is managed securely in Lemon Squeezy.'
+    : 'Your paid access remains active until the end of the billing period. Cancellation is managed securely in Lemon Squeezy.';
 
   return (
     <Modal
@@ -29,12 +32,7 @@ export function BillingBeforeCancelModal({
       allowDismiss={!portalLoading}
       title="Before you cancel"
       tone="default"
-      description={
-        <p className="m-0 text-sm leading-relaxed text-slate-600">
-          Your paid access remains active until the end of the billing period. You can also
-          downgrade if a lower plan is available.
-        </p>
-      }
+      description={<p className="m-0 text-sm leading-relaxed text-slate-600">{description}</p>}
       children={null}
       footer={
         <div className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">

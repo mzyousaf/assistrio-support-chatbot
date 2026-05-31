@@ -29,15 +29,15 @@ const KB_PLAN_LIMIT_HINTS: Record<string, string> = {
   plan_limit_faq_question_size:
     'Shorten your question lines — combined they must stay within the limit for this Q&A entry.',
   plan_limit_faq_answer_size: 'Shorten the answer and try again.',
-  plan_limit_faq_total_size: 'This bot’s Q&A section is too large in total. Remove or shorten entries.',
+  plan_limit_faq_total_size: 'This AI Agent’s Q&A section is too large in total. Remove or shorten entries.',
   plan_limit_snippet_title_size: 'Shorten the note title and try again.',
   plan_limit_snippet_description_size: 'Shorten the note body and try again.',
-  plan_limit_snippet_total_size: 'This bot’s notes section is too large in total. Remove or shorten entries.',
+  plan_limit_snippet_total_size: 'This AI Agent’s notes section is too large in total. Remove or shorten entries.',
   plan_limit_suggestion_text_size: 'Shorten the suggestion label and try again.',
   plan_limit_suggestion_description_size: 'Shorten the optional scoped text and try again.',
-  plan_limit_suggestion_total_size: 'This bot’s suggestions use too much space in total. Remove or shorten entries.',
+  plan_limit_suggestion_total_size: 'This AI Agent’s suggestions use too much space in total. Remove or shorten entries.',
   plan_limit_bot_kb_total:
-    `This agent has reached its ${TRAINED_KNOWLEDGE_STORAGE_LABEL.toLowerCase()} limit. Delete some knowledge or upgrade your plan.`,
+    `This AI Agent has reached its ${TRAINED_KNOWLEDGE_STORAGE_LABEL.toLowerCase()} limit. Delete some knowledge or upgrade your plan.`,
   plan_limit_document_batch_count: `You can upload up to ${KNOWLEDGE_DOCUMENT_UPLOAD_BATCH_MAX} files at a time.`,
   plan_limit_knowledge_documents_count: `Each agent can have at most ${KNOWLEDGE_DOCUMENTS_MAX} documents. Remove one to add another.`,
 };

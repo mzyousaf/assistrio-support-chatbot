@@ -2,7 +2,7 @@ import { Types } from 'mongoose';
 import type { WorkspaceBotAccessGrantSubjectType } from '../models/workspace-bot-access-grant.schema';
 
 export const WORKSPACE_BOT_ACCESS_DENIED_MESSAGE =
-  "You don't have access to this agent. Ask a workspace owner for access.";
+  "You don't have access to this AI Agent. Ask a workspace owner for access.";
 export const WORKSPACE_BOT_ACCESS_DENIED_CODE = 'workspace_bot_access_denied';
 
 export type BotAccessGrantInput = {

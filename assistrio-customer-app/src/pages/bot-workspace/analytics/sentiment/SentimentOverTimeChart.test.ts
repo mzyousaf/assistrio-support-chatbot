@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { formatSentimentOverTimeTooltipCount } from './SentimentOverTimeChart';
+import { formatSentimentOverTimeTooltipCount } from './sentimentTrendsChartHelpers';
 
-describe('SentimentOverTimeChart helpers', () => {
+describe('formatSentimentOverTimeTooltipCount', () => {
   it('formats tooltip counts as friendly user-message phrases', () => {
     expect(formatSentimentOverTimeTooltipCount(1)).toMatch(/1/);
     expect(formatSentimentOverTimeTooltipCount(1)).toContain('user messages');

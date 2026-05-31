@@ -3,6 +3,7 @@ import { Check, ChevronsUpDown, Loader2 } from 'lucide-react';
 import type { NavigateFunction } from 'react-router-dom';
 import type { CustomerMe, CustomerWorkspaceSummary } from '@/api/types';
 import { appToast } from '@/lib/app-toast';
+import { WORKSPACE_MEMBER_INACTIVE_OVER_LIMIT_MESSAGE } from '@/lib/workspaceMemberOverLimit';
 import { resolveActiveCustomerWorkspace } from '@/lib/resolveActiveCustomerWorkspace';
 import {
   activeWorkspaceNavbarLabel,
@@ -74,8 +75,16 @@ export const WorkspaceSwitcher = forwardRef<HTMLDetailsElement, Props>(function 
       }
       closeMenu();
       navigate(resolvePathAfterWorkspaceSwitch(updated), { replace: true });
-    } catch {
-      appToast.error('Could not switch workspace.');
+    } catch (err) {
+      const code =
+        typeof err === 'object' && err !== null && 'errorCode' in err
+          ? String((err as { errorCode?: string }).errorCode ?? '')
+          : '';
+      if (code === 'workspace_member_inactive_over_limit') {
+        appToast.error(WORKSPACE_MEMBER_INACTIVE_OVER_LIMIT_MESSAGE);
+      } else {
+        appToast.error('Could not switch workspace.');
+      }
     } finally {
       setActivatingId(null);
     }

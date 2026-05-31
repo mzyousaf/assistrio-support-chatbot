@@ -1,7 +1,6 @@
 import { Package } from 'lucide-react';
 import type { WorkspaceBillingAddonCatalogCard } from '@/api/types';
-import { PaidPlanFeatureCalloutForReason } from '@/components/billing/PaidPlanFeatureCallout';
-import { Button, Switch } from '@/components/ui';
+import { Button } from '@/components/ui';
 import { PAID_PLAN_ADDON_COPY } from '@/lib/planEntitlements';
 import { isTopUpAddonKey } from '@/lib/billingCheckout';
 import {
@@ -12,7 +11,6 @@ import {
 
 type Props = {
   addon: WorkspaceBillingAddonCatalogCard;
-  variant?: 'usage' | 'plans';
   currentPlanKey?: string | null;
   isOwner?: boolean;
   addonsAllowed?: boolean;
@@ -22,7 +20,6 @@ type Props = {
 
 export function UsageAddonCard({
   addon,
-  variant = 'usage',
   currentPlanKey,
   isOwner = false,
   addonsAllowed = false,
@@ -32,10 +29,8 @@ export function UsageAddonCard({
   const title = formatAddonDisplayName(addon);
   const priceLine = formatAddonCardPriceLine(addon);
   const description = formatAddonDescription(addon);
-  const isPlansPage = variant === 'plans';
   const onFreePlan = currentPlanKey === 'free' || !currentPlanKey;
-  const canPurchase =
-    isPlansPage && isOwner && addonsAllowed && addon.checkoutAvailable && Boolean(onPurchase);
+  const canPurchase = isOwner && addonsAllowed && addon.checkoutAvailable && Boolean(onPurchase);
   const addonStatusCopy = onFreePlan ? PAID_PLAN_ADDON_COPY : 'Coming soon';
   const purchaseLabel =
     addon.billingInterval === 'one_time' || isTopUpAddonKey(addon.key) ? 'Buy add-on' : 'Add';
@@ -52,24 +47,20 @@ export function UsageAddonCard({
         <h3 className="m-0 min-w-0 pt-1 text-base font-semibold text-slate-900">{title}</h3>
       </div>
 
-      {isPlansPage ? (
-        onFreePlan || !addonsAllowed ? (
-          <p className="m-0 mt-4 text-sm text-slate-500">{addonStatusCopy}</p>
-        ) : !isOwner ? (
-          <p className="m-0 mt-4 text-sm text-slate-500">
-            Only the workspace owner can manage billing.
-          </p>
-        ) : !addon.checkoutAvailable ? (
-          <p className="m-0 mt-4 text-sm text-slate-500">Coming soon</p>
-        ) : null
-      ) : (
-        <PaidPlanFeatureCalloutForReason reason="addons" compact className="mt-4" />
-      )}
+      {onFreePlan || !addonsAllowed ? (
+        <p className="m-0 mt-4 text-sm text-slate-500">{addonStatusCopy}</p>
+      ) : !isOwner ? (
+        <p className="m-0 mt-4 text-sm text-slate-500">
+          Only the workspace owner can manage billing.
+        </p>
+      ) : !addon.checkoutAvailable ? (
+        <p className="m-0 mt-4 text-sm text-slate-500">Coming soon</p>
+      ) : null}
 
       <p className="m-0 mt-3 text-sm font-semibold tabular-nums text-slate-900">{priceLine}</p>
       <p className="m-0 mt-2 text-sm leading-relaxed text-slate-600">{description}</p>
 
-      {isPlansPage && canPurchase ? (
+      {canPurchase ? (
         <Button
           type="button"
           variant="secondary"
@@ -80,18 +71,6 @@ export function UsageAddonCard({
         >
           {checkoutLoading ? 'Starting checkout…' : purchaseLabel}
         </Button>
-      ) : null}
-
-      {!isPlansPage ? (
-        <div className="mt-5 flex items-center gap-2.5 border-t border-slate-100 pt-4">
-          <Switch
-            checked={false}
-            onCheckedChange={() => undefined}
-            disabled
-            aria-label={`${title} auto charge`}
-          />
-          <span className="text-sm text-slate-500">Auto charge</span>
-        </div>
       ) : null}
     </article>
   );

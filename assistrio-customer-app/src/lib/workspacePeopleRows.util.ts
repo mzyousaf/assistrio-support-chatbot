@@ -1,4 +1,4 @@
-import type { WorkspaceInviteSummary, WorkspaceMemberSummary } from '@/api/types';
+import type { WorkspaceInviteSummary, WorkspaceMemberSummary, WorkspaceMembershipStatus } from '@/api/types';
 import { formatWorkspaceMemberDate, formatWorkspaceMemberName } from './workspaceMembersMessages';
 
 export function normalizeWorkspacePersonEmail(email: string): string {
@@ -49,7 +49,7 @@ export type WorkspacePersonRow =
       id: string;
       name: string;
       email: string;
-      status: 'Active';
+      status: 'Active' | 'Inactive — over seat limit';
       role: WorkspaceMemberSummary['role'];
       dateLabel: string;
       botAccessSummary?: { viewable: number; previewable: number };
@@ -67,6 +67,10 @@ export type WorkspacePersonRow =
       invite: WorkspaceInviteSummary;
     };
 
+function memberRowStatus(status?: WorkspaceMembershipStatus | null): 'Active' | 'Inactive — over seat limit' {
+  return status === 'inactive_over_limit' ? 'Inactive — over seat limit' : 'Active';
+}
+
 export function buildWorkspacePersonRows(
   members: WorkspaceMemberSummary[],
   invites: WorkspaceInviteSummary[],
@@ -77,7 +81,7 @@ export function buildWorkspacePersonRows(
     id: member.userId,
     name: formatWorkspaceMemberName(member),
     email: member.email,
-    status: 'Active',
+    status: memberRowStatus(member.membershipStatus),
     role: member.role,
     dateLabel: formatWorkspaceMemberDate(member.joinedAt),
     botAccessSummary: member.botAccessSummary,

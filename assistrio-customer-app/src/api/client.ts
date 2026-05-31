@@ -1,4 +1,5 @@
 import type { ApiErrorBody, ApiResult } from './types';
+import { formatCustomerFacingAgentText } from '@/lib/customerAgentTerminology';
 import { notifyCustomerFetchUnauthorized } from './customerSessionUnauthorized';
 
 const CUSTOMER_PREFIX = '/api/customer';
@@ -47,9 +48,9 @@ function errorMessageFromBody(body: unknown, fallback: string): { error: string;
       (typeof b.message === 'string' && b.message.trim() ? b.message.trim() : '') ||
       fallback;
     const code = typeof b.errorCode === 'string' && b.errorCode.trim() ? b.errorCode.trim() : undefined;
-    return { error: msg, errorCode: code };
+    return { error: formatCustomerFacingAgentText(msg), errorCode: code };
   }
-  return { error: fallback };
+  return { error: formatCustomerFacingAgentText(fallback) };
 }
 
 function parseContentDispositionFilename(header: string | null): string | null {

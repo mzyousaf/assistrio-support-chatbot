@@ -9,6 +9,7 @@ import { WorkspaceEntitlementsService } from '../entitlements/workspace-entitlem
 import { WorkspaceSubscriptionsService } from '../entitlements/workspace-subscriptions.service';
 import type { WorkspaceSubscriptionStatus } from '../models/workspace-subscription.schema';
 import { BillingProviderService } from './billing-provider.service';
+import { parseBillingInterval, isBillingInterval } from './billing-interval.types';
 import {
   isBillingAddonCheckoutKey,
   isBillingPlanCheckoutKey,
@@ -43,9 +44,22 @@ export class BillingCheckoutService {
     }
   }
 
-  async createPlanCheckout(workspaceId: string, userId: string, planKey: string) {
+  async createPlanCheckout(
+    workspaceId: string,
+    userId: string,
+    planKey: string,
+    billingIntervalRaw?: string,
+  ) {
     if (!isBillingPlanCheckoutKey(planKey)) {
       throw new BadRequestException({ error: 'Invalid plan key.', errorCode: 'invalid_plan_key' });
+    }
+
+    const billingInterval = parseBillingInterval(billingIntervalRaw);
+    if (billingIntervalRaw && !isBillingInterval(billingIntervalRaw)) {
+      throw new BadRequestException({
+        error: 'Invalid billing interval.',
+        errorCode: 'invalid_billing_interval',
+      });
     }
 
     const entitlements = await this.entitlementsService.resolveForWorkspace(workspaceId);
@@ -59,27 +73,69 @@ export class BillingCheckoutService {
       }
     }
 
+    if (
+      !entitlements.isTrialPlan &&
+      entitlements.planKey === 'starter' &&
+      planKey === 'pro'
+    ) {
+      const subscription = await this.subscriptionsService.findByWorkspaceId(workspaceId);
+      if (
+        subscription?.providerSubscriptionId &&
+        PAID_SUBSCRIPTION_STATUSES.includes(subscription.status)
+      ) {
+        throw new BadRequestException({
+          error: 'Use plan change to upgrade to Pro.',
+          errorCode: 'billing_plan_change_required',
+        });
+      }
+    }
+
     const internalRequestId = randomUUID();
     return this.billingProviderService.createSubscriptionCheckout({
       workspaceId,
       userId,
       planKey,
+      billingInterval,
       internalRequestId,
     });
   }
 
-  async createAddonCheckout(workspaceId: string, userId: string, addonKey: string) {
+  async createAddonCheckout(
+    workspaceId: string,
+    userId: string,
+    addonKey: string,
+    billingIntervalRaw?: string,
+  ) {
     if (!isBillingAddonCheckoutKey(addonKey)) {
       throw new BadRequestException({ error: 'Invalid add-on key.', errorCode: 'invalid_addon_key' });
     }
 
+    const billingInterval = parseBillingInterval(billingIntervalRaw);
+    if (billingIntervalRaw && !isBillingInterval(billingIntervalRaw)) {
+      throw new BadRequestException({
+        error: 'Invalid billing interval.',
+        errorCode: 'invalid_billing_interval',
+      });
+    }
+
     await this.assertPaidPlanForPurchases(workspaceId);
+
+    if (addonKey === 'remove_branding') {
+      const entitlements = await this.entitlementsService.resolveForWorkspace(workspaceId);
+      if (entitlements.canRemoveBranding) {
+        throw new BadRequestException({
+          error: 'Remove branding add-on is already active for this workspace.',
+          errorCode: 'billing_addon_already_active',
+        });
+      }
+    }
 
     const internalRequestId = randomUUID();
     return this.billingProviderService.createAddonCheckout({
       workspaceId,
       userId,
       addonKey,
+      billingInterval,
       internalRequestId,
     });
   }

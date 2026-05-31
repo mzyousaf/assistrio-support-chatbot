@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { mockBillingSubscription } from '@/lib/billingSummaryFixtures';
+import { mockTrialBillingEntitlements } from '@/lib/planEntitlements';
 import {
   formatCancelAtPeriodEndMessage,
   formatPastDueBillingWarning,
+  formatPlanModalDaysLeftButtonLabel,
+  formatPlanModalExpiresOnButtonLabel,
+  formatScheduledDowngradeMessage,
   shouldShowPlanPricingCard,
 } from '@/pages/billing/billingSubscriptionDisplay';
 import { resolvePlanCardCheckoutAction } from '@/lib/billingCheckout';
@@ -17,6 +21,34 @@ describe('billingSubscriptionDisplay', () => {
     });
     expect(message).toContain('Payment issue detected');
     expect(message).toContain('update your payment method');
+  });
+
+  it('formats modal days left button label', () => {
+    expect(formatPlanModalDaysLeftButtonLabel('2026-06-01T00:00:00.000Z', new Date('2026-05-20T00:00:00.000Z'))).toBe(
+      '12 Days Left',
+    );
+    expect(formatPlanModalDaysLeftButtonLabel('2026-05-21T00:00:00.000Z', new Date('2026-05-20T00:00:00.000Z'))).toBe(
+      '1 Day Left',
+    );
+  });
+
+  it('formats modal trial expiry as Expires on with date', () => {
+    const label = formatPlanModalExpiresOnButtonLabel({
+      plan: {
+        key: 'free',
+        name: 'Free',
+        priceMonthly: 0,
+        status: 'active',
+        currentPeriodEnd: '2026-06-01T00:00:00.000Z',
+      },
+      subscription: mockBillingSubscription({
+        currentPeriodEnd: '2026-06-01T00:00:00.000Z',
+        hasActivePaidSubscription: false,
+      }),
+      entitlements: mockTrialBillingEntitlements(),
+    });
+    expect(label).toMatch(/^Expires on /);
+    expect(label).toContain('2026');
   });
 
   it('hides Free plan card for paid Starter workspaces', () => {
@@ -37,8 +69,28 @@ describe('billingSubscriptionDisplay', () => {
         currentPeriodEnd: '2026-07-15T00:00:00.000Z',
       }),
     });
-    expect(message).toContain('scheduled to cancel on');
-    expect(message).not.toContain('initial');
+    expect(message).toContain('Cancellation scheduled');
+    expect(message).toContain('remains active until');
+  });
+
+  it('formats scheduled downgrade message', () => {
+    const message = formatScheduledDowngradeMessage({
+      plan: {
+        key: 'pro',
+        name: 'Pro',
+        priceMonthly: 99,
+        status: 'active',
+        currentPeriodStart: '2026-05-01T00:00:00.000Z',
+        currentPeriodEnd: '2026-07-01T00:00:00.000Z',
+      },
+      subscription: mockBillingSubscription({
+        scheduledPlanKey: 'starter',
+        scheduledPlanName: 'Starter',
+        scheduledPlanEffectiveDate: '2026-07-01T00:00:00.000Z',
+      }),
+    });
+    expect(message).toContain('Downgrade scheduled');
+    expect(message).toContain('Starter');
   });
 });
 

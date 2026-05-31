@@ -90,7 +90,7 @@ export class CustomerKnowledgeItemPrimarySourceAnalyticsService {
     queryIn: CustomerAgentResourcesAnalyticsQueryInput,
   ): Promise<CustomerKnowledgeItemPrimarySourceAnalyticsResponseDto> {
     if (!Types.ObjectId.isValid(botId)) {
-      throw new BadRequestException({ error: 'Invalid bot id', errorCode: 'INVALID_BOT_ID' });
+      throw new BadRequestException({ error: 'Invalid AI Agent id', errorCode: 'INVALID_BOT_ID' });
     }
     if (!Types.ObjectId.isValid(itemId)) {
       throw new BadRequestException({ error: 'Invalid knowledge item id', errorCode: 'INVALID_KB_ITEM_ID' });

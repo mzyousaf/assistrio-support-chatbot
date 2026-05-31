@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { EmailModule } from '../email/email.module';
 import { User, UserSchema, WorkspaceMembership, WorkspaceMembershipSchema } from '../models';
@@ -39,12 +39,21 @@ import { BillingInvoicesService } from './billing-invoices.service';
 import { BillingWorkspacePaymentNotificationService } from './billing-workspace-payment-notification.service';
 import { BillingSubscriptionActionsService } from './billing-subscription-actions.service';
 import { BillingAddonActionsService } from './billing-addon-actions.service';
+import { BillingAddonIntervalActionsService } from './billing-addon-interval-actions.service';
+import { BillingCreditAutoTopUpService } from './billing-credit-auto-topup.service';
+import { BillingAiCreditsAutoTopUpService } from './billing-ai-credits-auto-topup.service';
+import {
+  WorkspaceAutoTopUpSubscription,
+  WorkspaceAutoTopUpSubscriptionSchema,
+} from '../models/workspace-auto-top-up-subscription.schema';
 import { BillingProfileService } from './billing-profile.service';
 import { LemonSqueezyProvider } from './providers/lemon-squeezy.provider';
+import { BillingPeriodEndReconcileService } from './billing-period-end-reconcile.service';
+import { BillingPeriodEndReconcileCron } from './billing-period-end-reconcile.cron';
 
 @Module({
   imports: [
-    EntitlementsModule,
+    forwardRef(() => EntitlementsModule),
     EmailModule,
     MongooseModule.forFeature([
       { name: User.name, schema: UserSchema },
@@ -53,6 +62,7 @@ import { LemonSqueezyProvider } from './providers/lemon-squeezy.provider';
       { name: WorkspaceSubscription.name, schema: WorkspaceSubscriptionSchema },
       { name: WorkspaceAddon.name, schema: WorkspaceAddonSchema },
       { name: WorkspaceCreditTopUp.name, schema: WorkspaceCreditTopUpSchema },
+      { name: WorkspaceAutoTopUpSubscription.name, schema: WorkspaceAutoTopUpSubscriptionSchema },
       { name: WorkspaceBillingOrder.name, schema: WorkspaceBillingOrderSchema },
       { name: WorkspaceBillingProfile.name, schema: WorkspaceBillingProfileSchema },
       { name: Workspace.name, schema: WorkspaceSchema },
@@ -75,6 +85,11 @@ import { LemonSqueezyProvider } from './providers/lemon-squeezy.provider';
     BillingWorkspacePaymentNotificationService,
     BillingSubscriptionActionsService,
     BillingAddonActionsService,
+    BillingAddonIntervalActionsService,
+    BillingCreditAutoTopUpService,
+    BillingAiCreditsAutoTopUpService,
+    BillingPeriodEndReconcileService,
+    BillingPeriodEndReconcileCron,
   ],
   exports: [
     BillingProviderService,
@@ -88,6 +103,9 @@ import { LemonSqueezyProvider } from './providers/lemon-squeezy.provider';
     BillingProfileService,
     BillingSubscriptionActionsService,
     BillingAddonActionsService,
+    BillingAddonIntervalActionsService,
+    BillingCreditAutoTopUpService,
+    BillingAiCreditsAutoTopUpService,
   ],
 })
 export class BillingModule {}

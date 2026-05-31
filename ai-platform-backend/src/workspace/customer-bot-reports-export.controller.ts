@@ -44,7 +44,7 @@ export class CustomerBotReportsExportController {
   private async requireWorkspaceBot(req: RequestWithUser, botId: string) {
     const bot = await this.botsService.findOne(botId);
     if (!bot) {
-      throw new NotFoundException('Bot not found');
+      throw new NotFoundException('AI Agent not found');
     }
     const uid = req.user?._id != null ? String(req.user._id) : '';
     const ok = await this.workspacesService.canUserAccessWorkspaceBot(

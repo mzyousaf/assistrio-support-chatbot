@@ -1,13 +1,12 @@
 import { useState } from 'react';
-import { AlertTriangle } from 'lucide-react';
 import type { WorkspaceBillingSummary } from '@/api/types';
 import { Button } from '@/components/ui';
 import { useBillingPortal } from '@/hooks/useBillingPortal';
 import { useBillingSubscriptionActions } from '@/hooks/useBillingSubscriptionActions';
 import { isWorkspaceOwnerRole } from '@/lib/workspaceRoles';
-import { formatBillingRenewsOrEndsLabel } from '@/pages/billing/billingSubscriptionDisplay';
 import { BillingBeforeCancelModal } from '@/pages/billing/BillingBeforeCancelModal';
 import { BillingDowngradePlanModal } from '@/pages/billing/BillingDowngradePlanModal';
+import { formatUsagePeriodDate } from '@/pages/usage/usagePageFormat';
 
 type Props = {
   workspaceId: string;
@@ -27,6 +26,12 @@ function hasActivePaidPlanNotCanceling(summary: WorkspaceBillingSummary): boolea
   );
 }
 
+function formatCancelRenewalDate(summary: WorkspaceBillingSummary): string {
+  const end = summary.subscription?.currentPeriodEnd ?? summary.plan.currentPeriodEnd;
+  if (!end) return 'the end of your billing period';
+  return formatUsagePeriodDate(end);
+}
+
 export function BillingCancelSubscriptionSection(props: Props) {
   const [cancelOpen, setCancelOpen] = useState(false);
   const [downgradeOpen, setDowngradeOpen] = useState(false);
@@ -40,7 +45,7 @@ export function BillingCancelSubscriptionSection(props: Props) {
   const portalAvailable =
     props.summary.subscription.customerPortalAvailable ||
     props.summary.subscription.manageBillingAvailable;
-  const periodEndLabel = formatBillingRenewsOrEndsLabel(props.summary) ?? 'the end of your billing period';
+  const renewalDate = formatCancelRenewalDate(props.summary);
 
   if (!props.checkoutEnabled || !isOwner || !hasActivePaidPlanNotCanceling(props.summary)) {
     return null;
@@ -56,33 +61,30 @@ export function BillingCancelSubscriptionSection(props: Props) {
       id="billing-cancel-subscription"
       aria-labelledby="billing-cancel-subscription-heading"
       data-testid="billing-cancel-subscription"
-      className="rounded-2xl border border-red-200/70 bg-red-50/25 shadow-[var(--shadow-card)]"
+      className="overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-[var(--shadow-card)]"
     >
-      <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-start sm:gap-5">
-        <div
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-red-100/80 text-red-800 ring-1 ring-red-200/80"
-          aria-hidden
-        >
-          <AlertTriangle size={20} strokeWidth={1.75} />
-        </div>
-        <div className="min-w-0 flex-1 space-y-3">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div className="min-w-0">
-              <h2
-                id="billing-cancel-subscription-heading"
-                className="m-0 text-base font-semibold tracking-tight text-slate-900"
-              >
-                Cancel subscription
-              </h2>
-              <p className="m-0 mt-1 text-sm leading-relaxed text-slate-600">
-                Your plan stays active until {periodEndLabel}. You can restore anytime before that
-                date. Cancellation continues through Lemon Squeezy.
-              </p>
-            </div>
-            <Button type="button" variant="danger" size="sm" onClick={() => setCancelOpen(true)}>
+      <div className="border-l-[3px] border-l-rose-300/90 bg-gradient-to-r from-rose-50/35 via-white to-white">
+        <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0 space-y-1">
+            <h2
+              id="billing-cancel-subscription-heading"
+              className="m-0 text-base font-semibold tracking-tight text-slate-900"
+            >
               Cancel subscription
-            </Button>
+            </h2>
+            <p className="m-0 max-w-prose text-sm leading-relaxed text-slate-500">
+              Your plan stays active until {renewalDate}. You can restore it before that date.
+            </p>
           </div>
+          <Button
+            type="button"
+            variant="secondaryDanger"
+            size="sm"
+            className="shrink-0 self-start sm:self-center"
+            onClick={() => setCancelOpen(true)}
+          >
+            Cancel subscription
+          </Button>
         </div>
       </div>
 

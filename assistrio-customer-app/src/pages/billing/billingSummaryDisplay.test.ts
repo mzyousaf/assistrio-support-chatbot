@@ -23,7 +23,7 @@ describe('billingSummaryDisplay', () => {
         analyticsHistoryDays: null,
         canExportReports: true,
       }),
-    ).toContain('15 MB trained knowledge / bot');
+    ).toContain('15 MB trained knowledge / AI Agent');
     expect(
       planCatalogFeatureLines({
         key: 'free',
@@ -48,7 +48,7 @@ describe('billingSummaryDisplay', () => {
       scope: 'workspace',
       checkoutAvailable: false,
     };
-    expect(formatAddonDisplayName(addon)).toBe('Extra agent');
+    expect(formatAddonDisplayName(addon)).toBe('Extra AI Agent');
     expect(formatAddonPriceLabel(addon)).toBe('$49 / month');
   });
 });

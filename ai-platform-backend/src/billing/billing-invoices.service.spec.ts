@@ -58,6 +58,7 @@ describe('BillingInvoicesService', () => {
               billingOrderRows.length > 0 || topUpRows.length > 0 ? { _id: '1' } : null,
             ),
         }),
+        updateOne: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue({ modifiedCount: 1 }) }),
         find: jest.fn().mockImplementation((query?: { checkoutType?: string }) => {
           const isPlanQuery = query?.checkoutType === 'plan';
           const resultRows = isPlanQuery
@@ -104,12 +105,14 @@ describe('BillingInvoicesService', () => {
   function createBillingProfileService(overrides?: {
     hasCompleteProfile?: boolean;
     invoiceDetails?: Record<string, unknown> | null;
+    profile?: Record<string, unknown> | null;
   }) {
     return {
       hasCompleteProfile: jest
         .fn()
         .mockResolvedValue(overrides?.hasCompleteProfile ?? false),
       getInvoiceDetailsForOrder: jest.fn().mockResolvedValue(overrides?.invoiceDetails ?? null),
+      getProfile: jest.fn().mockResolvedValue(overrides?.profile ?? null),
       upsertProfile: jest.fn().mockResolvedValue({
         workspaceId,
         name: 'Jane Doe',
@@ -120,9 +123,31 @@ describe('BillingInvoicesService', () => {
         updatedAt: '2026-05-01T00:00:00.000Z',
         updatedBy: '507f1f77bcf86cd799439012',
       }),
-      getProfile: jest.fn().mockResolvedValue(null),
     };
   }
+
+  function mockPdfFetchResponse(content = '%PDF-1.4 generated-invoice') {
+    const buffer = Buffer.from(content);
+    return {
+      ok: true,
+      headers: {
+        get: (name: string) =>
+          name.toLowerCase() === 'content-type' ? 'application/pdf' : null,
+      },
+      arrayBuffer: async () =>
+        buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength),
+    };
+  }
+
+  function mockGenerateOrderInvoice(downloadUrl = 'https://app.lemonsqueezy.com/invoice/download/order-top-up') {
+    return jest.fn().mockResolvedValue({ downloadUrl });
+  }
+
+  const originalFetch = global.fetch;
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
 
   function createService(
     models: ReturnType<typeof createModels>,
@@ -289,8 +314,8 @@ describe('BillingInvoicesService', () => {
     expect(kbRow).toMatchObject({
       itemType: 'addon',
       itemKey: 'extra_bot',
-      itemName: 'Extra bot',
-      description: 'Extra bot add-on',
+      itemName: 'Extra AI Agent',
+      description: 'Extra AI Agent add-on',
       amountFormatted: '$10.00',
       invoiceUrl: 'https://invoice.example/kb',
     });
@@ -370,7 +395,7 @@ describe('BillingInvoicesService', () => {
     });
     expect(kbRow).toMatchObject({
       itemType: 'addon',
-      itemName: 'Extra bot',
+      itemName: 'Extra AI Agent',
       amountFormatted: '$10.00',
       invoiceUrl: 'https://invoice.example/kb-addon',
     });
@@ -457,7 +482,7 @@ describe('BillingInvoicesService', () => {
     });
     expect(rows.find((row) => row.id === subscriptionRowId('inv-addon-kb', 'sub-addon-bot'))).toMatchObject({
       itemType: 'addon',
-      itemName: 'Extra bot',
+      itemName: 'Extra AI Agent',
     });
   });
 
@@ -896,7 +921,7 @@ describe('BillingInvoicesService', () => {
     });
   });
 
-  it('streams local top-up PDF when saved billing profile exists', async () => {
+  it('generates Lemon order invoice when saved billing profile exists', async () => {
     const models = createModels({
       subscription: {
         provider: 'lemon_squeezy',
@@ -906,11 +931,12 @@ describe('BillingInvoicesService', () => {
       topUps: [{ providerOrderId: 'order-top-up', createdAt: new Date('2026-05-02T00:00:00.000Z') }],
     });
 
+    const downloadUrl = 'https://app.lemonsqueezy.com/invoice/download/order-top-up';
     const billingProviderService = {
       isCheckoutConfigured: jest.fn().mockReturnValue(true),
       listSubscriptionInvoices: jest.fn().mockResolvedValue([]),
       fetchOrderInvoice: jest.fn().mockResolvedValue(null),
-      generateOrderInvoice: jest.fn(),
+      generateOrderInvoice: mockGenerateOrderInvoice(downloadUrl),
     };
     const billingProfileService = createBillingProfileService({
       hasCompleteProfile: true,
@@ -923,15 +949,27 @@ describe('BillingInvoicesService', () => {
       },
     });
 
+    global.fetch = jest.fn().mockResolvedValue(mockPdfFetchResponse()) as typeof fetch;
+
     const service = createService(models, billingProviderService, billingProfileService);
     const result = await service.streamBillingItemPdf(workspaceId, 'order-top-up');
 
     expect(result.mode).toBe('pdf');
     if (result.mode !== 'pdf') return;
     expect(result.buffer.subarray(0, 4).toString('utf8')).toBe('%PDF');
-    expect(result.filename).toBe('assistrio-billing-order-top-up.pdf');
-    expect(result.buffer.toString('utf8')).toContain('Jane Doe');
-    expect(billingProviderService.generateOrderInvoice).not.toHaveBeenCalled();
+    expect(billingProviderService.generateOrderInvoice).toHaveBeenCalledWith(
+      'order-top-up',
+      expect.objectContaining({
+        name: 'Jane Doe',
+        address: '123 Mall Road',
+        city: 'Lahore',
+        zipCode: '54000',
+        country: 'PK',
+      }),
+      expect.objectContaining({ requestId: undefined }),
+    );
+    expect(global.fetch).toHaveBeenCalledWith(downloadUrl, { redirect: 'follow' });
+    expect(models.billingOrderModel.updateOne).toHaveBeenCalled();
   });
 
   it('returns billing_invoice_details_required when order PDF needs details and profile is missing', async () => {
@@ -950,13 +988,27 @@ describe('BillingInvoicesService', () => {
       fetchOrderInvoice: jest.fn().mockResolvedValue(null),
       generateOrderInvoice: jest.fn(),
     };
+    const billingProfileService = createBillingProfileService({
+      profile: {
+        workspaceId,
+        name: 'Partial',
+        address: '',
+        city: '',
+        zipCode: '',
+        country: '',
+        updatedAt: '2026-05-01T00:00:00.000Z',
+        updatedBy: '507f1f77bcf86cd799439012',
+      },
+    });
 
-    const service = createService(models, billingProviderService);
+    const service = createService(models, billingProviderService, billingProfileService);
     await expect(service.streamBillingItemPdf(workspaceId, 'order-top-up')).rejects.toMatchObject({
       response: {
         errorCode: 'billing_invoice_details_required',
+        profile: expect.objectContaining({ name: 'Partial' }),
       },
     });
+    expect(billingProviderService.generateOrderInvoice).not.toHaveBeenCalled();
   });
 
   it('saves profile when modal-submitted details include saveProfile', async () => {
@@ -973,9 +1025,11 @@ describe('BillingInvoicesService', () => {
       isCheckoutConfigured: jest.fn().mockReturnValue(true),
       listSubscriptionInvoices: jest.fn().mockResolvedValue([]),
       fetchOrderInvoice: jest.fn().mockResolvedValue(null),
-      generateOrderInvoice: jest.fn(),
+      generateOrderInvoice: mockGenerateOrderInvoice(),
     };
     const billingProfileService = createBillingProfileService();
+
+    global.fetch = jest.fn().mockResolvedValue(mockPdfFetchResponse()) as typeof fetch;
 
     const service = createService(models, billingProviderService, billingProfileService);
     await service.streamBillingItemPdf(
@@ -996,9 +1050,14 @@ describe('BillingInvoicesService', () => {
       '507f1f77bcf86cd799439012',
       expect.objectContaining({ country: 'PK' }),
     );
+    expect(billingProviderService.generateOrderInvoice).toHaveBeenCalledWith(
+      'order-top-up',
+      expect.objectContaining({ country: 'PK', zipCode: '54000' }),
+      expect.any(Object),
+    );
   });
 
-  it('streams local top-up PDF when billing details are provided inline', async () => {
+  it('generates Lemon order invoice when billing details are provided inline', async () => {
     const models = createModels({
       subscription: {
         provider: 'lemon_squeezy',
@@ -1012,8 +1071,10 @@ describe('BillingInvoicesService', () => {
       isCheckoutConfigured: jest.fn().mockReturnValue(true),
       listSubscriptionInvoices: jest.fn().mockResolvedValue([]),
       fetchOrderInvoice: jest.fn().mockResolvedValue(null),
-      generateOrderInvoice: jest.fn(),
+      generateOrderInvoice: mockGenerateOrderInvoice(),
     };
+
+    global.fetch = jest.fn().mockResolvedValue(mockPdfFetchResponse()) as typeof fetch;
 
     const service = createService(models, billingProviderService);
     const result = await service.streamBillingItemPdf(workspaceId, 'order-top-up', {
@@ -1028,12 +1089,19 @@ describe('BillingInvoicesService', () => {
     expect(result.mode).toBe('pdf');
     if (result.mode !== 'pdf') return;
     expect(result.buffer.subarray(0, 4).toString('utf8')).toBe('%PDF');
-    expect(result.filename).toBe('assistrio-billing-order-top-up.pdf');
-    expect(result.buffer.toString('utf8')).toContain('$30.00');
-    expect(billingProviderService.generateOrderInvoice).not.toHaveBeenCalled();
+    expect(billingProviderService.generateOrderInvoice).toHaveBeenCalledWith(
+      'order-top-up',
+      expect.objectContaining({
+        name: 'Jane Doe',
+        state: 'CA',
+        zipCode: '90210',
+        country: 'US',
+      }),
+      expect.any(Object),
+    );
   });
 
-  it('includes optional billing address on local order PDF when valid details are provided', async () => {
+  it('passes billing address fields to Lemon generate invoice API', async () => {
     const models = createModels({
       subscription: {
         provider: 'lemon_squeezy',
@@ -1047,11 +1115,13 @@ describe('BillingInvoicesService', () => {
       isCheckoutConfigured: jest.fn().mockReturnValue(true),
       listSubscriptionInvoices: jest.fn().mockResolvedValue([]),
       fetchOrderInvoice: jest.fn().mockResolvedValue(null),
-      generateOrderInvoice: jest.fn(),
+      generateOrderInvoice: mockGenerateOrderInvoice(),
     };
 
+    global.fetch = jest.fn().mockResolvedValue(mockPdfFetchResponse()) as typeof fetch;
+
     const service = createService(models, billingProviderService);
-    const result = await service.streamBillingItemPdf(workspaceId, 'order-top-up', {
+    await service.streamBillingItemPdf(workspaceId, 'order-top-up', {
       name: 'Jane Doe',
       address: '123 Main St',
       city: 'Anytown',
@@ -1060,14 +1130,21 @@ describe('BillingInvoicesService', () => {
       country: 'US',
     });
 
-    expect(result.mode).toBe('pdf');
-    if (result.mode !== 'pdf') return;
-    expect(result.buffer.toString('utf8')).toContain('Jane Doe');
-    expect(result.buffer.toString('utf8')).toContain('123 Main St');
-    expect(billingProviderService.generateOrderInvoice).not.toHaveBeenCalled();
+    expect(billingProviderService.generateOrderInvoice).toHaveBeenCalledWith(
+      'order-top-up',
+      expect.objectContaining({
+        name: 'Jane Doe',
+        address: '123 Main St',
+        city: 'Anytown',
+        state: 'CA',
+        zipCode: '90210',
+        country: 'US',
+      }),
+      expect.any(Object),
+    );
   });
 
-  it('rejects invalid billing details when optional address is provided for local PDF', async () => {
+  it('rejects invalid billing details when optional address is provided for order invoice', async () => {
     const models = createModels({
       subscription: {
         provider: 'lemon_squeezy',
@@ -1117,7 +1194,7 @@ describe('BillingInvoicesService', () => {
       isCheckoutConfigured: jest.fn().mockReturnValue(true),
       listSubscriptionInvoices: jest.fn().mockResolvedValue([]),
       fetchOrderInvoice: jest.fn().mockResolvedValue(null),
-      generateOrderInvoice: jest.fn(),
+      generateOrderInvoice: mockGenerateOrderInvoice(),
     };
     const billingProfileService = createBillingProfileService({
       hasCompleteProfile: true,
@@ -1130,8 +1207,10 @@ describe('BillingInvoicesService', () => {
       },
     });
 
+    global.fetch = jest.fn().mockResolvedValue(mockPdfFetchResponse()) as typeof fetch;
+
     const service = createService(models, billingProviderService, billingProfileService);
-    const result = await service.streamBillingItemPdf(workspaceId, 'order-top-up', {
+    await service.streamBillingItemPdf(workspaceId, 'order-top-up', {
       name: 'Override Name',
       address: '123 Main St',
       city: 'Anytown',
@@ -1140,13 +1219,19 @@ describe('BillingInvoicesService', () => {
       country: 'US',
     });
 
-    expect(result.mode).toBe('pdf');
-    if (result.mode !== 'pdf') return;
-    expect(result.buffer.toString('utf8')).toContain('Override Name');
-    expect(result.buffer.toString('utf8')).not.toContain('Saved Profile Name');
+    expect(billingProviderService.generateOrderInvoice).toHaveBeenCalledWith(
+      'order-top-up',
+      expect.objectContaining({ name: 'Override Name', country: 'US' }),
+      expect.any(Object),
+    );
+    expect(billingProviderService.generateOrderInvoice).not.toHaveBeenCalledWith(
+      'order-top-up',
+      expect.objectContaining({ name: 'Saved Profile Name' }),
+      expect.any(Object),
+    );
   });
 
-  it('returns provider URL for stored receipt order instead of local PDF', async () => {
+  it('does not use receipt URL for stored order invoice PDF download', async () => {
     const models = createModels({
       subscription: {
         provider: 'lemon_squeezy',
@@ -1173,16 +1258,56 @@ describe('BillingInvoicesService', () => {
       listSubscriptionInvoices: jest.fn().mockResolvedValue([]),
       generateOrderInvoice: jest.fn(),
     };
+    const billingProfileService = createBillingProfileService();
+
+    const service = createService(models, billingProviderService, billingProfileService);
+    await expect(service.streamBillingItemPdf(workspaceId, 'order-top-up')).rejects.toMatchObject({
+      response: {
+        errorCode: 'billing_invoice_details_required',
+      },
+    });
+    expect(billingProviderService.generateOrderInvoice).not.toHaveBeenCalled();
+  });
+
+  it('uses stored Lemon download invoice URL for order PDF without regenerating', async () => {
+    const models = createModels({
+      subscription: {
+        provider: 'lemon_squeezy',
+        providerSubscriptionId: 'sub-plan',
+        planKey: 'starter',
+      },
+      billingOrders: [
+        {
+          providerOrderId: 'order-top-up',
+          checkoutType: 'top_up',
+          topUpKey: 'ai_credits_1000',
+          amountCents: 3000,
+          currency: 'USD',
+          status: 'paid',
+          invoiceUrl: 'https://app.lemonsqueezy.com/invoice/download/order-top-up',
+          receiptUrl: 'https://app.lemonsqueezy.com/receipt/order-top-up',
+          orderCreatedAt: new Date('2026-05-02T00:00:00.000Z'),
+        },
+      ],
+    });
+
+    const billingProviderService = {
+      isCheckoutConfigured: jest.fn().mockReturnValue(true),
+      listSubscriptionInvoices: jest.fn().mockResolvedValue([]),
+      generateOrderInvoice: jest.fn(),
+    };
+
+    global.fetch = jest.fn().mockResolvedValue(mockPdfFetchResponse()) as typeof fetch;
 
     const service = createService(models, billingProviderService);
     const result = await service.streamBillingItemPdf(workspaceId, 'order-top-up');
 
-    expect(result).toEqual({
-      mode: 'provider_url',
-      url: 'https://app.lemonsqueezy.com/receipt/order-top-up',
-      source: 'lemon_order',
-    });
+    expect(result.mode).toBe('pdf');
     expect(billingProviderService.generateOrderInvoice).not.toHaveBeenCalled();
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://app.lemonsqueezy.com/invoice/download/order-top-up',
+      { redirect: 'follow' },
+    );
   });
 
   it('exposes officialInvoiceUrl and delivery mode on listed invoice rows', async () => {
@@ -1291,7 +1416,7 @@ describe('BillingInvoicesService', () => {
               status: 'paid',
               invoiceUrl: null,
               receiptUrl: null,
-              description: 'Extra bot add-on',
+              description: 'Extra AI Agent add-on',
               providerSubscriptionId: 'sub-addon',
               source: 'lemon_subscription_invoice',
             },
@@ -1309,7 +1434,7 @@ describe('BillingInvoicesService', () => {
     expect(csv).toContain('$15.00');
     expect(csv).toContain('$30.00');
     expect(csv).toContain('Starter');
-    expect(csv).toContain('Extra bot add-on');
+    expect(csv).toContain('Extra AI Agent add-on');
     expect(csv).toContain('https://invoice.example/plan');
     expect(service.getBillingHistoryCsvFilename()).toBe('assistrio-billing-history.csv');
   });

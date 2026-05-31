@@ -3,11 +3,11 @@ export function customerShellSectionTitle(pathname: string): string | null {
   const path = pathname.replace(/\/$/, '') || '/';
   if (path === '/') return null;
   if (path === '/usage') return 'Usage';
-  if (path.startsWith('/settings/plans') || path === '/plans') return 'Plans';
+  if (path.startsWith('/settings/plans') || path === '/plans') return 'Billing & Plans';
   if (path.startsWith('/settings/account') || path.startsWith('/settings/general')) return 'General';
   if (path.startsWith('/settings/workspace')) return 'General';
   if (path.startsWith('/settings/members')) return 'Members';
-  if (path.startsWith('/settings/billing')) return 'Billing';
+  if (path.startsWith('/settings/billing')) return 'Billing & Plans';
   if (path.startsWith('/settings/api-keys')) return 'API keys';
   if (path.startsWith('/settings')) return 'Settings';
   if (path === '/bots') return 'Agents';

@@ -35,13 +35,33 @@ export function configFactory() {
     lemonSqueezyApiKey: process.env.LEMON_SQUEEZY_API_KEY?.trim() ?? '',
     lemonSqueezyStoreId: process.env.LEMON_SQUEEZY_STORE_ID?.trim() ?? '',
     lemonSqueezyWebhookSecret: process.env.LEMON_SQUEEZY_WEBHOOK_SECRET?.trim() ?? '',
-    lemonSqueezyStarterVariantId: process.env.LEMON_SQUEEZY_STARTER_VARIANT_ID?.trim() ?? '',
-    lemonSqueezyProVariantId: process.env.LEMON_SQUEEZY_PRO_VARIANT_ID?.trim() ?? '',
-    lemonSqueezyAddonExtraBotVariantId: process.env.LEMON_SQUEEZY_ADDON_EXTRA_BOT_VARIANT_ID?.trim() ?? '',
-    lemonSqueezyAddonRemoveBrandingVariantId:
-      process.env.LEMON_SQUEEZY_ADDON_REMOVE_BRANDING_VARIANT_ID?.trim() ?? '',
+    lemonSqueezyStarterMonthlyVariantId:
+      process.env.LEMON_SQUEEZY_STARTER_MONTHLY_VARIANT_ID?.trim() ||
+      process.env.LEMON_SQUEEZY_STARTER_VARIANT_ID?.trim() ||
+      '',
+    lemonSqueezyStarterYearlyVariantId:
+      process.env.LEMON_SQUEEZY_STARTER_YEARLY_VARIANT_ID?.trim() ?? '',
+    lemonSqueezyProMonthlyVariantId:
+      process.env.LEMON_SQUEEZY_PRO_MONTHLY_VARIANT_ID?.trim() ||
+      process.env.LEMON_SQUEEZY_PRO_VARIANT_ID?.trim() ||
+      '',
+    lemonSqueezyProYearlyVariantId: process.env.LEMON_SQUEEZY_PRO_YEARLY_VARIANT_ID?.trim() ?? '',
+    lemonSqueezyAddonExtraBotMonthlyVariantId:
+      process.env.LEMON_SQUEEZY_ADDON_EXTRA_BOT_MONTHLY_VARIANT_ID?.trim() ||
+      process.env.LEMON_SQUEEZY_ADDON_EXTRA_BOT_VARIANT_ID?.trim() ||
+      '',
+    lemonSqueezyAddonExtraBotYearlyVariantId:
+      process.env.LEMON_SQUEEZY_ADDON_EXTRA_BOT_YEARLY_VARIANT_ID?.trim() ?? '',
+    lemonSqueezyAddonRemoveBrandingMonthlyVariantId:
+      process.env.LEMON_SQUEEZY_ADDON_REMOVE_BRANDING_MONTHLY_VARIANT_ID?.trim() ||
+      process.env.LEMON_SQUEEZY_ADDON_REMOVE_BRANDING_VARIANT_ID?.trim() ||
+      '',
+    lemonSqueezyAddonRemoveBrandingYearlyVariantId:
+      process.env.LEMON_SQUEEZY_ADDON_REMOVE_BRANDING_YEARLY_VARIANT_ID?.trim() ?? '',
     lemonSqueezyTopup1000CreditsVariantId:
       process.env.LEMON_SQUEEZY_TOPUP_1000_CREDITS_VARIANT_ID?.trim() ?? '',
+    lemonSqueezyAutoTopupVariantId:
+      process.env.LEMON_SQUEEZY_AUTO_TOPUP_VARIANT_ID?.trim() ?? '',
     /** Resend API key for transactional email (workspace invites, etc.). */
     resendApiKey: process.env.RESEND_API_KEY?.trim() ?? '',
     /** From address for transactional email (e.g. `Assistrio <noreply@assistrio.com>`). */

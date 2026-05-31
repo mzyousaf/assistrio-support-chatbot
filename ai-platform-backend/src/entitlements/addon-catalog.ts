@@ -1,3 +1,10 @@
+import {
+  resolveMonthlyEquivalentYearly,
+  resolveYearlyPriceFromMonthly,
+  YEARLY_DISCOUNT_PERCENT,
+  type BillingInterval,
+} from '../billing/billing-interval.types';
+
 /**
  * Static add-on catalog for billing/enforcement.
  */
@@ -21,12 +28,34 @@ export type WorkspaceAddonKey = (typeof WORKSPACE_ADDON_KEYS)[number];
 export type WorkspaceAddonDefinition = {
   key: WorkspaceAddonKey;
   name: string;
-  /** `one_time` | `monthly` — informational only for now. */
-  billingInterval: 'one_time' | 'monthly';
-  /** USD list price; billing integration deferred. */
+  billingInterval: 'one_time' | BillingInterval;
   priceUsd: number;
+  priceYearlyUsd?: number;
+  monthlyEquivalentYearlyUsd?: number;
+  yearlyDiscountPercent?: number;
+  billingIntervals?: readonly BillingInterval[];
   scope: 'workspace' | 'bot';
 };
+
+function buildRecurringAddonDefinition(input: {
+  key: WorkspaceAddonKey;
+  name: string;
+  priceMonthlyUsd: number;
+  scope: 'workspace' | 'bot';
+}): WorkspaceAddonDefinition {
+  const priceYearlyUsd = resolveYearlyPriceFromMonthly(input.priceMonthlyUsd);
+  return {
+    key: input.key,
+    name: input.name,
+    billingInterval: 'monthly',
+    priceUsd: input.priceMonthlyUsd,
+    priceYearlyUsd,
+    monthlyEquivalentYearlyUsd: resolveMonthlyEquivalentYearly(priceYearlyUsd),
+    yearlyDiscountPercent: YEARLY_DISCOUNT_PERCENT,
+    billingIntervals: ['monthly', 'yearly'],
+    scope: input.scope,
+  };
+}
 
 export const WORKSPACE_ADDON_CATALOG: readonly WorkspaceAddonDefinition[] = [
   {
@@ -36,18 +65,24 @@ export const WORKSPACE_ADDON_CATALOG: readonly WorkspaceAddonDefinition[] = [
     priceUsd: 30,
     scope: 'workspace',
   },
-  {
+  buildRecurringAddonDefinition({
     key: 'extra_bot',
-    name: 'Extra bot',
-    billingInterval: 'monthly',
-    priceUsd: 49,
+    name: 'Extra AI Agent',
+    priceMonthlyUsd: 39,
     scope: 'workspace',
-  },
-  {
+  }),
+  buildRecurringAddonDefinition({
     key: 'remove_branding',
     name: 'Remove Powered by Assistrio',
-    billingInterval: 'monthly',
-    priceUsd: 20,
+    priceMonthlyUsd: 49,
     scope: 'workspace',
-  },
+  }),
 ];
+
+export function getWorkspaceAddonDefinition(key: string): WorkspaceAddonDefinition | undefined {
+  return WORKSPACE_ADDON_CATALOG.find((item) => item.key === key);
+}
+
+export function isRecurringWorkspaceAddonKey(key: string): key is 'extra_bot' | 'remove_branding' {
+  return key === 'extra_bot' || key === 'remove_branding';
+}

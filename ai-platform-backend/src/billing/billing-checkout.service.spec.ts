@@ -60,6 +60,7 @@ describe('BillingCheckoutService', () => {
         subscription
           ? {
               workspaceId: new Types.ObjectId(workspaceId),
+              providerSubscriptionId: 'sub-1',
               ...subscription,
               currentPeriodStart: new Date(),
               currentPeriodEnd: new Date(),
@@ -96,6 +97,17 @@ describe('BillingCheckoutService', () => {
     expect(billingProviderService.createSubscriptionCheckout).toHaveBeenCalledWith(
       expect.objectContaining({ planKey: 'pro' }),
     );
+  });
+
+  it('blocks paid Starter to Pro checkout in favor of plan change', async () => {
+    const { service, billingProviderService } = createService({
+      subscription: { planKey: 'starter', status: 'active' },
+    });
+
+    await expect(service.createPlanCheckout(workspaceId, userId, 'pro')).rejects.toMatchObject({
+      response: { errorCode: 'billing_plan_change_required' },
+    });
+    expect(billingProviderService.createSubscriptionCheckout).not.toHaveBeenCalled();
   });
 
   it('blocks add-on checkout on free trial plan', async () => {

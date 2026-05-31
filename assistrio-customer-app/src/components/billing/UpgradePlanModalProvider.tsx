@@ -8,17 +8,24 @@ import {
   type ReactNode,
 } from 'react';
 import { useCustomerAuth } from '@/auth/CustomerAuthContext';
-import { UpgradePlanModal } from '@/components/billing/UpgradePlanModal';
+import { AiCreditsTopUpPromptModal } from '@/components/billing/AiCreditsTopUpPromptModal';
+import { BillingDowngradePlanModal } from '@/pages/billing/BillingDowngradePlanModal';
+import { BillingUpgradePlanModal } from '@/pages/billing/BillingUpgradePlanModal';
+import { PlansModal } from '@/components/billing/PlansModal';
 import { useBillingCheckout } from '@/hooks/useBillingCheckout';
-import { useWorkspaceBillingSummary } from '@/hooks/useWorkspaceBillingSummary';
-import { buildWorkspaceBillingSessionKey } from '@/hooks/useWorkspaceBillingSummary';
+import { useBillingSubscriptionActions } from '@/hooks/useBillingSubscriptionActions';
 import {
-  defaultRecommendedPlanKeyForReason,
+  buildWorkspaceBillingSessionKey,
+  useWorkspaceBillingSummary,
+} from '@/hooks/useWorkspaceBillingSummary';
+import {
+  AI_CREDITS_TOP_UP_PROMPT_EVENT,
   mapPlanLimitErrorCodeToUpgradeReason,
   PLAN_LIMIT_UPGRADE_EVENT,
   type PlanLimitUpgradeEventDetail,
   type UpgradePlanReason,
 } from '@/lib/planLimitError';
+import type { PlansModalMode } from '@/lib/planModalDisplay';
 import { resolveActiveCustomerWorkspace } from '@/lib/resolveActiveCustomerWorkspace';
 import { isWorkspaceManagerRole, isWorkspaceOwnerRole } from '@/lib/workspaceRoles';
 
@@ -26,22 +33,17 @@ export type OpenUpgradeModalInput = {
   reason?: UpgradePlanReason;
   errorCode?: string;
   recommendedPlanKey?: 'starter' | 'pro';
+  mode?: PlansModalMode;
 };
 
 type UpgradePlanModalContextValue = {
-  openUpgradeModal: (input: OpenUpgradeModalInput) => void;
+  openUpgradeModal: (input?: OpenUpgradeModalInput) => void;
   closeUpgradeModal: () => void;
+  openTopUpPromptModal: () => void;
+  closeTopUpPromptModal: () => void;
 };
 
 const UpgradePlanModalContext = createContext<UpgradePlanModalContextValue | null>(null);
-
-type ModalState = {
-  open: boolean;
-  reason: UpgradePlanReason;
-  recommendedPlanKey?: 'starter' | 'pro';
-};
-
-const DEFAULT_REASON: UpgradePlanReason = 'credits';
 
 export function useUpgradePlanModal(): UpgradePlanModalContextValue {
   const ctx = useContext(UpgradePlanModalContext);
@@ -51,82 +53,170 @@ export function useUpgradePlanModal(): UpgradePlanModalContextValue {
   return ctx;
 }
 
+type ModalState = {
+  open: boolean;
+  mode: PlansModalMode;
+  reason?: UpgradePlanReason;
+};
+
 export function UpgradePlanModalProvider({ children }: { children: ReactNode }) {
   const { customer } = useCustomerAuth();
-  const { workspace, activeWorkspaceId, role } = resolveActiveCustomerWorkspace(customer);
+  const { activeWorkspaceId, role } = resolveActiveCustomerWorkspace(customer);
   const sessionKey = buildWorkspaceBillingSessionKey({
     customerId: customer?.id,
     activeWorkspaceId,
     workspaceIds: customer?.workspaceIds,
   });
-  const { summary } = useWorkspaceBillingSummary(activeWorkspaceId, sessionKey);
+  const { summary, reload } = useWorkspaceBillingSummary(activeWorkspaceId, sessionKey);
   const checkout = useBillingCheckout(activeWorkspaceId);
-  const canManageBilling = isWorkspaceManagerRole(role);
-  const canUpgrade = isWorkspaceOwnerRole(role);
-
-  const [state, setState] = useState<ModalState>({
-    open: false,
-    reason: DEFAULT_REASON,
+  const subscriptionActions = useBillingSubscriptionActions(activeWorkspaceId, () => {
+    void reload();
   });
+  const canManageBilling = isWorkspaceManagerRole(role);
+  const isOwner = isWorkspaceOwnerRole(role);
+
+  const [modalState, setModalState] = useState<ModalState>({
+    open: false,
+    mode: 'upgrade',
+  });
+  const [downgradeOpen, setDowngradeOpen] = useState(false);
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const [topUpPromptOpen, setTopUpPromptOpen] = useState(false);
 
   const openUpgradeModal = useCallback(
-    (input: OpenUpgradeModalInput) => {
+    (input?: OpenUpgradeModalInput) => {
       if (!canManageBilling) return;
-      const mappedReason =
-        input.reason ??
-        (input.errorCode ? mapPlanLimitErrorCodeToUpgradeReason(input.errorCode) : null);
-      if (!mappedReason) return;
-      setState({
+      const reason =
+        input?.reason ??
+        mapPlanLimitErrorCodeToUpgradeReason(input?.errorCode) ??
+        undefined;
+      setModalState({
         open: true,
-        reason: mappedReason,
-        recommendedPlanKey:
-          input.recommendedPlanKey ?? defaultRecommendedPlanKeyForReason(mappedReason),
+        mode: input?.mode ?? 'upgrade',
+        reason,
       });
     },
     [canManageBilling],
   );
 
   const closeUpgradeModal = useCallback(() => {
-    setState((prev) => ({ ...prev, open: false }));
+    setModalState((current) => ({ ...current, open: false }));
+    setDowngradeOpen(false);
+    setUpgradeOpen(false);
+  }, []);
+
+  const openTopUpPromptModal = useCallback(() => {
+    if (!canManageBilling) return;
+    setTopUpPromptOpen(true);
+  }, [canManageBilling]);
+
+  const closeTopUpPromptModal = useCallback(() => {
+    setTopUpPromptOpen(false);
   }, []);
 
   useEffect(() => {
     if (!canManageBilling) return;
-    const onEvent = (event: Event) => {
+    const onUpgradeEvent = (event: Event) => {
       const detail = (event as CustomEvent<PlanLimitUpgradeEventDetail>).detail;
       if (!detail) return;
       openUpgradeModal({
-        reason: detail.reason,
+        reason:
+          detail.reason ??
+          mapPlanLimitErrorCodeToUpgradeReason(detail.errorCode) ??
+          undefined,
         errorCode: detail.errorCode,
         recommendedPlanKey: detail.recommendedPlanKey,
+        mode: 'upgrade',
       });
     };
-    window.addEventListener(PLAN_LIMIT_UPGRADE_EVENT, onEvent);
-    return () => window.removeEventListener(PLAN_LIMIT_UPGRADE_EVENT, onEvent);
-  }, [canManageBilling, openUpgradeModal]);
+    const onTopUpPromptEvent = () => {
+      openTopUpPromptModal();
+    };
+    window.addEventListener(PLAN_LIMIT_UPGRADE_EVENT, onUpgradeEvent);
+    window.addEventListener(AI_CREDITS_TOP_UP_PROMPT_EVENT, onTopUpPromptEvent);
+    return () => {
+      window.removeEventListener(PLAN_LIMIT_UPGRADE_EVENT, onUpgradeEvent);
+      window.removeEventListener(AI_CREDITS_TOP_UP_PROMPT_EVENT, onTopUpPromptEvent);
+    };
+  }, [canManageBilling, openTopUpPromptModal, openUpgradeModal]);
 
   const value = useMemo(
-    () => ({ openUpgradeModal, closeUpgradeModal }),
-    [closeUpgradeModal, openUpgradeModal],
+    () => ({
+      openUpgradeModal,
+      closeUpgradeModal,
+      openTopUpPromptModal,
+      closeTopUpPromptModal,
+    }),
+    [closeTopUpPromptModal, closeUpgradeModal, openTopUpPromptModal, openUpgradeModal],
   );
 
-  const currentPlanKey = summary?.plan.key ?? workspace?.planKey ?? 'free';
+  const handleSummaryUpdated = useCallback(() => {
+    void reload();
+  }, [reload]);
+
+  const topUpCheckoutAvailable =
+    summary?.topUpCheckoutAvailable ??
+    summary?.addonCatalog?.find((addon) => addon.key === 'ai_credits_1000')?.checkoutAvailable ??
+    true;
 
   return (
     <UpgradePlanModalContext.Provider value={value}>
       {children}
-      <UpgradePlanModal
-        open={state.open}
-        onClose={closeUpgradeModal}
-        reason={state.reason}
-        currentPlanKey={currentPlanKey}
-        planCatalog={summary?.planCatalog}
-        recommendedPlanKey={state.recommendedPlanKey}
-        canUpgrade={canUpgrade}
-        isTrialPlan={summary?.entitlements.isTrialPlan ?? currentPlanKey === 'free'}
-        onPlanCheckout={(planKey) => void checkout.startPlanCheckout(planKey)}
-        isPlanCheckoutLoading={checkout.isPlanLoading}
-      />
+      {summary && activeWorkspaceId ? (
+        <>
+          <PlansModal
+            open={modalState.open}
+            onClose={closeUpgradeModal}
+            summary={summary}
+            workspaceId={activeWorkspaceId}
+            role={role ?? undefined}
+            isOwner={isOwner}
+            checkout={checkout}
+            mode={modalState.mode}
+            upgradeReason={modalState.reason}
+            onSummaryUpdated={handleSummaryUpdated}
+            onDowngradeToStarter={() => setDowngradeOpen(true)}
+            onUpgradeToPro={() => setUpgradeOpen(true)}
+            downgradeLoading={subscriptionActions.busy}
+            upgradeLoading={subscriptionActions.busy}
+          />
+          <BillingUpgradePlanModal
+            open={upgradeOpen}
+            onClose={() => setUpgradeOpen(false)}
+            busy={subscriptionActions.busy}
+            onConfirm={async () => {
+              const ok = await subscriptionActions.changePlan('pro');
+              if (ok) {
+                setUpgradeOpen(false);
+                closeUpgradeModal();
+              }
+            }}
+          />
+          <BillingDowngradePlanModal
+            open={downgradeOpen}
+            onClose={() => setDowngradeOpen(false)}
+            busy={subscriptionActions.busy}
+            effectiveDate={summary.subscription.currentPeriodEnd}
+            onConfirm={async () => {
+              const ok = await subscriptionActions.changePlan('starter');
+              if (ok) {
+                setDowngradeOpen(false);
+                closeUpgradeModal();
+              }
+            }}
+          />
+          <AiCreditsTopUpPromptModal
+            open={topUpPromptOpen}
+            onClose={closeTopUpPromptModal}
+            checkoutAvailable={topUpCheckoutAvailable}
+            busy={checkout.isAddonLoading('ai_credits_1000')}
+            onBuyCredits={async () => {
+              const ok = await checkout.startTopUpCheckout('ai_credits_1000');
+              if (ok) closeTopUpPromptModal();
+            }}
+          />
+        </>
+      ) : null}
     </UpgradePlanModalContext.Provider>
   );
 }

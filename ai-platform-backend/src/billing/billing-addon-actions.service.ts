@@ -20,6 +20,7 @@ export type BillingAddonCancelOutcome = {
   ok: true;
   message: string;
   addonKey: BillingAddonCheckoutKey;
+  addonInstanceId?: string;
   targetBotId?: string | null;
   currentPeriodEnd?: string;
   cancelAtPeriodEnd: boolean;
@@ -53,6 +54,56 @@ export class BillingAddonActionsService {
     throw err;
   }
 
+  private assertRecurringAddonCatalog(addonKey: string) {
+    const catalog = WORKSPACE_ADDON_CATALOG.find((item) => item.key === addonKey);
+    if (!catalog || catalog.billingInterval !== 'monthly') {
+      throw new BadRequestException({
+        error: 'One-time purchases cannot be cancelled.',
+        errorCode: 'billing_addon_cancel_not_allowed',
+      });
+    }
+    return catalog;
+  }
+
+  async cancelAddonByInstanceId(
+    workspaceId: string,
+    addonInstanceId: string,
+    now: Date = new Date(),
+  ): Promise<BillingAddonCancelOutcome> {
+    this.assertBillingConfigured();
+
+    if (!Types.ObjectId.isValid(workspaceId) || !Types.ObjectId.isValid(addonInstanceId)) {
+      throw new NotFoundException({ error: 'Active add-on not found.' });
+    }
+
+    const addon = await this.addonModel
+      .findOne({
+        _id: new Types.ObjectId(addonInstanceId),
+        workspaceId: new Types.ObjectId(workspaceId),
+        status: 'active',
+      })
+      .lean()
+      .exec();
+
+    if (!addon) {
+      throw new NotFoundException({
+        error: 'Active add-on not found.',
+        errorCode: 'billing_addon_not_found',
+      });
+    }
+
+    if (!isBillingAddonCheckoutKey(String(addon.addonKey))) {
+      throw new BadRequestException({
+        error: 'Only recurring add-ons can be cancelled.',
+        errorCode: 'billing_addon_cancel_not_allowed',
+      });
+    }
+
+    this.assertRecurringAddonCatalog(String(addon.addonKey));
+
+    return this.cancelAddonDocument(addon, workspaceId, now);
+  }
+
   async cancelAddon(
     workspaceId: string,
     addonKey: string,
@@ -72,13 +123,7 @@ export class BillingAddonActionsService {
       throw new NotFoundException({ error: 'Workspace not found.' });
     }
 
-    const catalog = WORKSPACE_ADDON_CATALOG.find((item) => item.key === addonKey);
-    if (!catalog || catalog.billingInterval !== 'monthly') {
-      throw new BadRequestException({
-        error: 'One-time purchases cannot be cancelled.',
-        errorCode: 'billing_addon_cancel_not_allowed',
-      });
-    }
+    this.assertRecurringAddonCatalog(addonKey);
 
     const workspaceObjectId = new Types.ObjectId(workspaceId);
     const normalizedTargetBotId =
@@ -101,6 +146,33 @@ export class BillingAddonActionsService {
       });
     }
 
+    return this.cancelAddonDocument(addon, workspaceId, now);
+  }
+
+  private async cancelAddonDocument(
+    addon: {
+      _id: Types.ObjectId;
+      addonKey: string;
+      targetBotId?: Types.ObjectId | null;
+      status: string;
+      providerSubscriptionId?: string | null;
+      cancelAtPeriodEnd?: boolean;
+      currentPeriodStart?: Date | null;
+      currentPeriodEnd?: Date | null;
+      scheduledIntervalChange?: {
+        fromBillingInterval: string;
+        toBillingInterval: string;
+        effectiveAt: Date | string;
+        status: 'scheduled' | 'applied' | 'canceled';
+      } | null;
+    },
+    workspaceId: string,
+    now: Date,
+  ): Promise<BillingAddonCancelOutcome> {
+    const addonKey = String(addon.addonKey) as BillingAddonCheckoutKey;
+    const normalizedTargetBotId = addon.targetBotId ? String(addon.targetBotId) : null;
+    const addonInstanceId = String(addon._id);
+
     const providerSubscriptionId = addon.providerSubscriptionId?.trim() ?? '';
     if (!providerSubscriptionId) {
       throw new BadRequestException({
@@ -114,10 +186,25 @@ export class BillingAddonActionsService {
         ok: true,
         message: 'Add-on cancellation is already scheduled.',
         addonKey,
-        targetBotId: normalizedTargetBotId ? String(normalizedTargetBotId) : null,
+        addonInstanceId,
+        targetBotId: normalizedTargetBotId,
         currentPeriodEnd: addon.currentPeriodEnd?.toISOString(),
         cancelAtPeriodEnd: true,
       };
+    }
+
+    if (addon.scheduledIntervalChange?.status === 'scheduled') {
+      await this.addonModel.updateOne(
+        { _id: addon._id },
+        {
+          $set: {
+            scheduledIntervalChange: {
+              ...addon.scheduledIntervalChange,
+              status: 'canceled',
+            },
+          },
+        },
+      );
     }
 
     try {
@@ -130,7 +217,7 @@ export class BillingAddonActionsService {
           kind: 'addon_sync',
           workspaceId,
           addonKey,
-          targetBotId: normalizedTargetBotId ? String(normalizedTargetBotId) : undefined,
+          targetBotId: normalizedTargetBotId ?? undefined,
           status: 'active',
           providerSubscriptionId,
           currentPeriodStart: remote.currentPeriodStart ?? addon.currentPeriodStart ?? undefined,
@@ -143,18 +230,15 @@ export class BillingAddonActionsService {
       this.mapProviderError(err);
     }
 
-    const updated = await this.addonModel.findOne({
-      workspaceId: workspaceObjectId,
-      addonKey,
-      targetBotId: normalizedTargetBotId,
-    });
-
+    const updated = await this.addonModel.findById(addon._id);
     const periodEnd = updated?.currentPeriodEnd ?? addon.currentPeriodEnd;
     return {
       ok: true,
-      message: 'Add-on cancellation scheduled. It remains active until the end of the current billing period.',
+      message:
+        'Add-on cancellation scheduled. It remains active until the end of the current billing period.',
       addonKey,
-      targetBotId: normalizedTargetBotId ? String(normalizedTargetBotId) : null,
+      addonInstanceId,
+      targetBotId: normalizedTargetBotId,
       currentPeriodEnd: periodEnd?.toISOString(),
       cancelAtPeriodEnd: true,
     };

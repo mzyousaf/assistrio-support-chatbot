@@ -65,6 +65,11 @@ export function useBillingInvoiceDownload(workspaceId: string, options?: Options
       }
 
       if (result.errorCode === 'billing_invoice_details_required') {
+        const profileFromError = (result.body as { profile?: WorkspaceBillingProfile | null } | null)
+          ?.profile;
+        if (profileFromError) {
+          options?.applyProfile?.(profileFromError);
+        }
         setPendingItemId(billingItemId);
         setDetailsModalOpen(true);
         return;

@@ -38,6 +38,7 @@ describe('billing webhook → entitlements (integration)', () => {
       addonModel as never,
       topUpModel as never,
       billingOrderModel as never,
+      { syncFromWebhook: jest.fn() } as never,
     );
 
     await webhook.applyAction({
@@ -63,6 +64,7 @@ describe('billing webhook → entitlements (integration)', () => {
       subscriptionsService,
       topUpService as never,
       addonModel as never,
+      { reconcileIfNeeded: jest.fn().mockResolvedValue(null) } as never,
     );
 
     const resolved = await entitlements.resolveForWorkspace(workspaceId);

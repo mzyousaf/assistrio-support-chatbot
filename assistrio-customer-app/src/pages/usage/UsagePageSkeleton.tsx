@@ -4,21 +4,29 @@ function SkeletonBone({ className }: { className?: string }) {
   return <div className={cn('animate-pulse rounded bg-slate-200/80', className)} aria-hidden />;
 }
 
-function UsageMetricCardSkeleton() {
+function UsageMetricCardSkeleton(props: {
+  titleWidth?: string;
+  withBadge?: boolean;
+  withHelper?: boolean;
+}) {
   return (
     <article className="flex h-full flex-col rounded-xl border border-slate-200/90 bg-white shadow-[var(--shadow-card)]">
       <div className="flex flex-1 flex-col gap-3 p-4 sm:p-5">
         <div className="flex items-start gap-3">
           <SkeletonBone className="h-8 w-8 shrink-0 rounded-lg" />
           <div className="min-w-0 flex-1 space-y-1.5">
-            <SkeletonBone className="h-3.5 w-20" />
-            <SkeletonBone className="h-3 w-40 max-w-full" />
+            <div className="flex flex-wrap items-center gap-2">
+              <SkeletonBone className={cn('h-3.5', props.titleWidth ?? 'w-28')} />
+              {props.withBadge ? <SkeletonBone className="h-3.5 w-12 rounded-full" /> : null}
+            </div>
+            <SkeletonBone className="h-3 w-36 max-w-full" />
+            {props.withHelper ? <SkeletonBone className="h-3 w-52 max-w-full" /> : null}
           </div>
         </div>
         <div className="flex items-center justify-between gap-4">
           <div className="min-w-0 flex-1 space-y-2">
-            <SkeletonBone className="h-7 w-24" />
-            <SkeletonBone className="h-4 w-28 max-w-full" />
+            <SkeletonBone className="h-7 w-16" />
+            <SkeletonBone className="h-2.5 w-24 max-w-full" />
           </div>
           <SkeletonBone className="h-12 w-12 shrink-0 rounded-full" />
         </div>
@@ -46,6 +54,7 @@ function UsageTrendSectionSkeleton() {
     <section
       className="flex flex-col rounded-xl border border-slate-200/90 bg-white shadow-[var(--shadow-card)]"
       aria-hidden
+      data-testid="usage-trend-skeleton"
     >
       <UsageSectionHeaderSkeleton withHeaderAction />
       <div className="px-5 py-4">
@@ -60,6 +69,7 @@ function UsageAgentCreditsPanelSkeleton() {
     <section
       className="flex h-full flex-col rounded-xl border border-slate-200/90 bg-white shadow-[var(--shadow-card)]"
       aria-hidden
+      data-testid="usage-agent-credits-skeleton"
     >
       <UsageSectionHeaderSkeleton />
       <div className="relative flex min-h-[280px] flex-1 items-center justify-center px-5 py-4 sm:min-h-[300px]">
@@ -95,6 +105,7 @@ function UsageKnowledgePanelSkeleton(props: { rows?: number }) {
     <section
       className="flex h-full flex-col rounded-xl border border-slate-200/90 bg-white shadow-[var(--shadow-card)]"
       aria-hidden
+      data-testid="usage-knowledge-skeleton"
     >
       <UsageSectionHeaderSkeleton />
       <div className="divide-y divide-slate-100 px-5 py-2">
@@ -106,61 +117,79 @@ function UsageKnowledgePanelSkeleton(props: { rows?: number }) {
   );
 }
 
-function UsageAddonRowSkeleton() {
+function UsageAddonCardSkeleton() {
   return (
-    <article className="w-full rounded-xl border border-slate-200/90 bg-white p-5 shadow-[var(--shadow-card)]">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex min-w-0 items-start gap-3">
-          <SkeletonBone className="h-9 w-9 shrink-0 rounded-lg" />
-          <SkeletonBone className="h-4 w-40 max-w-full" />
-        </div>
-        <SkeletonBone className="h-8 w-52 max-w-full rounded-lg" />
+    <article
+      className="w-full rounded-xl border border-slate-200/90 bg-white p-5 shadow-[var(--shadow-card)]"
+      aria-hidden
+    >
+      <div className="flex min-w-0 items-start gap-3">
+        <SkeletonBone className="h-9 w-9 shrink-0 rounded-lg" />
+        <SkeletonBone className="mt-1 h-4 w-40 max-w-full" />
       </div>
-      <SkeletonBone className="mt-3 h-4 w-36 max-w-full" />
+      <SkeletonBone className="mt-4 h-4 w-48 max-w-full" />
+      <SkeletonBone className="mt-3 h-4 w-28" />
       <SkeletonBone className="mt-2 h-4 w-full max-w-md" />
-      <SkeletonBone className="mt-2 h-4 w-full max-w-sm" />
-      <div className="mt-5 flex items-center gap-2.5 border-t border-slate-100 pt-4">
-        <SkeletonBone className="h-5 w-9 rounded-full" />
-        <SkeletonBone className="h-4 w-16" />
-      </div>
     </article>
   );
 }
 
+function UsageAddonsSectionSkeleton({ rows = 2 }: { rows?: number }) {
+  return (
+    <section className="space-y-3" aria-hidden data-testid="usage-addons-skeleton">
+      <div className="space-y-2">
+        <SkeletonBone className="h-4 w-32" />
+        <SkeletonBone className="h-3 w-56 max-w-full" />
+      </div>
+      <div className="flex flex-col gap-3">
+        {Array.from({ length: rows }).map((_, index) => (
+          <UsageAddonCardSkeleton key={index} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
 type Props = {
+  /** When true, includes a Top-up credits metric card skeleton (4 cards total). */
+  showTopUpMetricCard?: boolean;
   addonRows?: number;
   knowledgeRows?: number;
 };
 
-export function UsagePageSkeleton({ addonRows = 2, knowledgeRows = 2 }: Props) {
+export function UsagePageSkeleton({
+  showTopUpMetricCard = false,
+  addonRows = 2,
+  knowledgeRows = 2,
+}: Props) {
+  const metricGridClass = showTopUpMetricCard
+    ? 'grid gap-4 sm:grid-cols-2 xl:grid-cols-4'
+    : 'grid gap-4 sm:grid-cols-2 lg:grid-cols-3';
+
   return (
     <div className="flex flex-col gap-6 pb-12" aria-busy="true" aria-label="Loading usage">
-      <section aria-hidden>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {Array.from({ length: 3 }).map((_, index) => (
-            <UsageMetricCardSkeleton key={index} />
-          ))}
+      <section aria-hidden data-testid="usage-metric-cards-skeleton">
+        <div className={metricGridClass}>
+          <UsageMetricCardSkeleton titleWidth="w-32" withHelper />
+          {showTopUpMetricCard ? (
+            <UsageMetricCardSkeleton titleWidth="w-24" withBadge />
+          ) : null}
+          <UsageMetricCardSkeleton titleWidth="w-16" />
+          <UsageMetricCardSkeleton titleWidth="w-20" />
         </div>
       </section>
 
       <UsageTrendSectionSkeleton />
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:items-stretch">
+      <div
+        className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:items-stretch"
+        data-testid="usage-agent-usage-row-skeleton"
+      >
         <UsageAgentCreditsPanelSkeleton />
         <UsageKnowledgePanelSkeleton rows={knowledgeRows} />
       </div>
 
-      <section className="space-y-3" aria-hidden>
-        <div className="space-y-2">
-          <SkeletonBone className="h-4 w-32" />
-          <SkeletonBone className="h-3 w-48 max-w-full" />
-        </div>
-        <div className="flex flex-col gap-3">
-          {Array.from({ length: addonRows }).map((_, index) => (
-            <UsageAddonRowSkeleton key={index} />
-          ))}
-        </div>
-      </section>
+      <UsageAddonsSectionSkeleton rows={addonRows} />
     </div>
   );
 }

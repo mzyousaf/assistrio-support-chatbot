@@ -29,9 +29,7 @@ export function planCheckoutButtonLabel(
     return 'Upgrade to Starter';
   }
   if (targetPlanKey === 'pro') {
-    if (currentPlanKey === 'starter') return 'Upgrade to Pro';
-    if (currentPlanKey === 'free' || options?.isTrialPlan) return 'Upgrade to Pro';
-    return 'Upgrade to Pro';
+    return 'Upgrade';
   }
   return 'Upgrade';
 }
@@ -77,6 +75,16 @@ export function resolvePlanCardCheckoutAction(input: {
     };
   }
 
+  if (currentPlanKey === 'starter' && planKey === 'pro' && !isTrialPlan) {
+    const enabled = isOwner && checkoutAvailable;
+    return {
+      label: 'Upgrade to Pro',
+      disabled: !enabled,
+      canCheckout: false,
+      canChangePlan: enabled,
+    };
+  }
+
   if (!isOwner || !checkoutAvailable) {
     return { label: 'Coming soon', disabled: true, canCheckout: false, canChangePlan: false };
   }
@@ -111,6 +119,7 @@ const CHECKOUT_ERROR_MESSAGES: Record<string, string> = {
   plan_already_active: 'You are already on this plan.',
   billing_provider_action_failed: 'Could not update your subscription. Please try again.',
   billing_plan_change_not_allowed: 'This plan change is not supported.',
+  billing_plan_change_required: 'Use plan change to upgrade to Pro.',
   billing_restore_not_allowed: 'This subscription cannot be restored.',
   billing_portal_not_available: 'Billing portal is not available right now.',
 };

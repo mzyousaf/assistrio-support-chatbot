@@ -1,6 +1,31 @@
 import type { LucideIcon } from 'lucide-react';
 import { Crown, Gift, Rocket } from 'lucide-react';
-import type { WorkspaceBillingPlanCatalogCard } from '@/api/types';
+import type {
+  WorkspaceBillingAddonCatalogCard,
+  WorkspaceBillingPlanCatalogCard,
+} from '@/api/types';
+
+export type PlanPricingSource = {
+  priceMonthly: number;
+  priceYearly?: number;
+  monthlyEquivalentYearly?: number;
+  yearlyDiscountPercent?: number;
+};
+
+function resolvePlanPricingSource(
+  priceMonthly: number | null | undefined,
+  plan?: PlanPricingSource | null,
+): PlanPricingSource {
+  if (plan) {
+    return {
+      priceMonthly: plan.priceMonthly,
+      priceYearly: plan.priceYearly,
+      monthlyEquivalentYearly: plan.monthlyEquivalentYearly,
+      yearlyDiscountPercent: plan.yearlyDiscountPercent,
+    };
+  }
+  return { priceMonthly: Number(priceMonthly ?? 0) };
+}
 
 export type PlanChecklistItem = {
   label: string;
@@ -21,34 +46,157 @@ export type PlanCardFeatures = {
 
 export type PlanBillingPeriod = 'monthly' | 'annual';
 
-export const ANNUAL_PLAN_DISCOUNT_RATE = 0.2;
+export const ANNUAL_PLAN_DISCOUNT_RATE = 0.1;
+export const PLAN_ANNUAL_SAVINGS_TAG = 'Save 10%';
+
+export function resolvePlanAnnualSavingsTag(pricing: PlanPricingSource): string {
+  const percent = pricing.yearlyDiscountPercent;
+  if (percent != null && Number.isFinite(percent) && percent > 0) {
+    return `Save ${percent}%`;
+  }
+  return PLAN_ANNUAL_SAVINGS_TAG;
+}
 
 export function applyAnnualPlanDiscount(priceMonthly: number): number {
   return Math.round(priceMonthly * (1 - ANNUAL_PLAN_DISCOUNT_RATE));
 }
 
-export function resolvePlanCardAnnualTotal(priceMonthly: number): number {
-  return Math.round(priceMonthly * 12 * (1 - ANNUAL_PLAN_DISCOUNT_RATE));
+export function resolvePlanCardAnnualTotal(
+  priceMonthly: number,
+  pricing?: PlanPricingSource | null,
+): number {
+  const source = resolvePlanPricingSource(priceMonthly, pricing);
+  if (source.priceYearly != null && Number.isFinite(source.priceYearly)) {
+    return Math.round(source.priceYearly);
+  }
+  return Math.round(source.priceMonthly * 12 * (1 - ANNUAL_PLAN_DISCOUNT_RATE));
 }
 
-export function formatPlanAnnualCadenceLine(priceMonthly: number): string {
-  const annualTotal = resolvePlanCardAnnualTotal(priceMonthly);
-  return `per month, ${formatPlanPriceAmount(annualTotal)} billed annually`;
+export function resolvePlanCardAnnualMonthlyEquivalent(
+  priceMonthly: number,
+  pricing?: PlanPricingSource | null,
+): number {
+  const source = resolvePlanPricingSource(priceMonthly, pricing);
+  if (source.monthlyEquivalentYearly != null && Number.isFinite(source.monthlyEquivalentYearly)) {
+    return Math.round(source.monthlyEquivalentYearly);
+  }
+  return applyAnnualPlanDiscount(source.priceMonthly);
+}
+
+export function formatPlanAnnualCadenceLine(
+  priceMonthly: number,
+  pricing?: PlanPricingSource | null,
+): string {
+  const annualTotal = resolvePlanCardAnnualTotal(priceMonthly, pricing);
+  return `, ${formatPlanPriceAmount(annualTotal)} billed annually`;
+}
+
+export function isPlanCheckoutAvailableForPeriod(
+  plan: Pick<
+    WorkspaceBillingPlanCatalogCard,
+    'checkoutAvailable' | 'checkoutAvailableMonthly' | 'checkoutAvailableYearly'
+  >,
+  billingPeriod: PlanBillingPeriod,
+): boolean {
+  if (billingPeriod === 'annual') {
+    return plan.checkoutAvailableYearly ?? plan.checkoutAvailable;
+  }
+  return plan.checkoutAvailableMonthly ?? plan.checkoutAvailable;
+}
+
+export function isAddonCheckoutAvailableForPeriod(
+  addon: Pick<
+    WorkspaceBillingAddonCatalogCard,
+    'checkoutAvailable' | 'checkoutAvailableMonthly' | 'checkoutAvailableYearly'
+  >,
+  billingPeriod: PlanBillingPeriod,
+): boolean {
+  if (billingPeriod === 'annual') {
+    return addon.checkoutAvailableYearly ?? addon.checkoutAvailable;
+  }
+  return addon.checkoutAvailableMonthly ?? addon.checkoutAvailable;
+}
+
+/** Compact inline price for subscription overview and add-on rows. */
+export function formatPlanOverviewPriceLine(
+  priceMonthly: number | null | undefined,
+  options?: {
+    planKey?: string;
+    billingPeriod?: PlanBillingPeriod;
+    pricing?: PlanPricingSource | null;
+  },
+): string {
+  const billingPeriod = options?.billingPeriod ?? 'monthly';
+  const pricing = resolvePlanPricingSource(priceMonthly, options?.pricing);
+  const price = pricing.priceMonthly;
+
+  if (options?.planKey === 'free' || !Number.isFinite(price) || price <= 0) {
+    return '$0/month';
+  }
+
+  if (billingPeriod === 'monthly') {
+    return `$${price.toLocaleString()}/month`;
+  }
+
+  const monthlyEquivalent = resolvePlanCardAnnualMonthlyEquivalent(price, pricing);
+  const annualTotal = resolvePlanCardAnnualTotal(price, pricing);
+  return `$${monthlyEquivalent.toLocaleString()}/month · $${annualTotal.toLocaleString()}/year`;
+}
+
+export function formatRecurringAddonPriceLine(
+  addon: Pick<WorkspaceBillingAddonCatalogCard, 'priceUsd' | 'priceYearly' | 'monthlyEquivalentYearly'>,
+  billingPeriod: PlanBillingPeriod,
+  options?: { scopeSuffix?: string },
+): string {
+  const scopeSuffix = options?.scopeSuffix?.trim() ?? '';
+  const pricing: PlanPricingSource = {
+    priceMonthly: addon.priceUsd,
+    priceYearly: addon.priceYearly,
+    monthlyEquivalentYearly: addon.monthlyEquivalentYearly,
+  };
+
+  if (billingPeriod === 'annual') {
+    const monthlyEquivalent = resolvePlanCardAnnualMonthlyEquivalent(addon.priceUsd, pricing);
+    const annualTotal = resolvePlanCardAnnualTotal(addon.priceUsd, pricing);
+    return `$${monthlyEquivalent.toLocaleString()}/month · $${annualTotal.toLocaleString()}/year${scopeSuffix}`;
+  }
+
+  return `$${addon.priceUsd.toLocaleString()}/month${scopeSuffix}`;
+}
+
+export function shouldShowBillingPeriodToggle(input: {
+  checkoutEnabled: boolean;
+  planCatalog?: Array<{ key: string; priceMonthly: number }>;
+  currentPlanPriceMonthly?: number | null;
+}): boolean {
+  if (!input.checkoutEnabled) return false;
+
+  const currentPrice = Number(input.currentPlanPriceMonthly ?? 0);
+  if (Number.isFinite(currentPrice) && currentPrice > 0) return true;
+
+  return (input.planCatalog ?? []).some(
+    (plan) => plan.key !== 'free' && Number(plan.priceMonthly) > 0,
+  );
 }
 
 export function resolvePlanCardDisplayPrice(
   priceMonthly: number | null | undefined,
-  options?: { planKey?: string; billingPeriod?: PlanBillingPeriod },
+  options?: {
+    planKey?: string;
+    billingPeriod?: PlanBillingPeriod;
+    pricing?: PlanPricingSource | null;
+  },
 ): number {
   const billingPeriod = options?.billingPeriod ?? 'monthly';
-  const price = Number(priceMonthly ?? 0);
+  const pricing = resolvePlanPricingSource(priceMonthly, options?.pricing);
+  const price = pricing.priceMonthly;
 
   if (options?.planKey === 'free' || !Number.isFinite(price) || price <= 0) {
     return 0;
   }
 
   if (billingPeriod === 'annual') {
-    return applyAnnualPlanDiscount(price);
+    return resolvePlanCardAnnualMonthlyEquivalent(price, pricing);
   }
 
   return price;
@@ -66,7 +214,11 @@ export function formatPlanPriceCardLabel(priceMonthly: number | null | undefined
 
 export function formatPlanPriceCardParts(
   priceMonthly: number | null | undefined,
-  options?: { planKey?: string; billingPeriod?: PlanBillingPeriod },
+  options?: {
+    planKey?: string;
+    billingPeriod?: PlanBillingPeriod;
+    pricing?: PlanPricingSource | null;
+  },
 ): {
   amount: string;
   cadence: string | null;
@@ -74,24 +226,25 @@ export function formatPlanPriceCardParts(
   billingNote?: string | null;
 } {
   const billingPeriod = options?.billingPeriod ?? 'monthly';
-  const price = Number(priceMonthly ?? 0);
+  const pricing = resolvePlanPricingSource(priceMonthly, options?.pricing);
+  const price = pricing.priceMonthly;
 
   if (options?.planKey === 'free' || !Number.isFinite(price) || price <= 0) {
-    return { amount: '$0', cadence: 'per month' };
+    return { amount: '$0', cadence: '/ month' };
   }
 
   if (billingPeriod === 'annual') {
-    const discountedMonthly = applyAnnualPlanDiscount(price);
+    const discountedMonthly = resolvePlanCardAnnualMonthlyEquivalent(price, pricing);
     return {
       amount: `$${discountedMonthly.toLocaleString()}`,
-      cadence: formatPlanAnnualCadenceLine(price),
-      savingsTag: 'Save 20%',
+      cadence: formatPlanAnnualCadenceLine(price, pricing),
+      savingsTag: resolvePlanAnnualSavingsTag(pricing),
     };
   }
 
-  const label = formatPlanPriceCardLabel(priceMonthly);
+  const label = formatPlanPriceCardLabel(price);
   if (!label.endsWith('/mo')) return { amount: label, cadence: null };
-  return { amount: label.slice(0, -3), cadence: 'per month' };
+  return { amount: label.slice(0, -3), cadence: '/ month' };
 }
 
 export function planPricingCardDescription(planKey: string): string {
@@ -164,7 +317,7 @@ const PLAN_WHY_SECTIONS: Record<string, PlanWhySection> = {
   free: {
     heading: 'Why Free?',
     bullets: [
-      'Test your first AI agent',
+      'Test your first AI Agent',
       'Add basic knowledge',
       'Capture leads',
       'Try voice, dictation, and sharing',
@@ -258,7 +411,7 @@ export function buildPlanCardLimitItems(plan: WorkspaceBillingPlanCatalogCard): 
       included: plan.key !== 'free',
     },
     { label: creditsLabel, included: true },
-    { label: `${plan.kbStorageMbPerBot} MB trained knowledge / bot`, included: true },
+    { label: `${plan.kbStorageMbPerBot} MB trained knowledge / AI Agent`, included: true },
     { label: analyticsWindow, included: true },
   ];
 }

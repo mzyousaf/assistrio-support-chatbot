@@ -418,7 +418,7 @@ export class KnowledgeOverviewService {
 
   private async assertWorkspaceBotLive(botId: string): Promise<void> {
     if (!Types.ObjectId.isValid(botId)) {
-      throw new HttpException({ error: 'Invalid bot id' }, HttpStatus.BAD_REQUEST);
+      throw new HttpException({ error: 'Invalid AI Agent id' }, HttpStatus.BAD_REQUEST);
     }
     const b = await this.botModel.findOne(this.liveBotFilter(botId)).select('_id').lean();
     if (!b) throw this.botNotFoundEx();
@@ -430,7 +430,7 @@ export class KnowledgeOverviewService {
     lifecyclePrecomputed?: CustomerTrainingLifecycleMetrics,
   ): Promise<KnowledgeOverviewResponse> {
     if (!Types.ObjectId.isValid(botId)) {
-      throw new HttpException({ error: 'Invalid bot id' }, HttpStatus.BAD_REQUEST);
+      throw new HttpException({ error: 'Invalid AI Agent id' }, HttpStatus.BAD_REQUEST);
     }
     const bot = await this.botModel
       .findOne(this.liveBotFilter(botId))
@@ -557,7 +557,7 @@ export class KnowledgeOverviewService {
 
   async patchTrainingSettings(botId: string, body: unknown): Promise<KnowledgeOverviewResponse> {
     if (!Types.ObjectId.isValid(botId)) {
-      throw new HttpException({ error: 'Invalid bot id' }, HttpStatus.BAD_REQUEST);
+      throw new HttpException({ error: 'Invalid AI Agent id' }, HttpStatus.BAD_REQUEST);
     }
     const bot = (await this.botModel
       .findOne(this.liveBotFilter(botId))
@@ -608,7 +608,7 @@ export class KnowledgeOverviewService {
 
   async queuePendingItems(botId: string): Promise<KnowledgeOverviewResponse> {
     if (!Types.ObjectId.isValid(botId)) {
-      throw new HttpException({ error: 'Invalid bot id' }, HttpStatus.BAD_REQUEST);
+      throw new HttpException({ error: 'Invalid AI Agent id' }, HttpStatus.BAD_REQUEST);
     }
     const bot = await this.botModel.findOne(this.liveBotFilter(botId)).select('_id').lean();
     if (!bot) {
@@ -630,7 +630,7 @@ export class KnowledgeOverviewService {
 
   async retryFailedItems(botId: string): Promise<KnowledgeOverviewResponse> {
     if (!Types.ObjectId.isValid(botId)) {
-      throw new HttpException({ error: 'Invalid bot id' }, HttpStatus.BAD_REQUEST);
+      throw new HttpException({ error: 'Invalid AI Agent id' }, HttpStatus.BAD_REQUEST);
     }
     const bot = await this.botModel.findOne(this.liveBotFilter(botId)).select('_id').lean();
     if (!bot) {
@@ -657,7 +657,7 @@ export class KnowledgeOverviewService {
   /** Aggregated UX status for sidebar + polls (cheap mapping over overview stats). */
   async getPendingTrainingItems(botId: string): Promise<PendingTrainingItemsResponse> {
     if (!Types.ObjectId.isValid(botId)) {
-      throw new HttpException({ error: 'Invalid bot id' }, HttpStatus.BAD_REQUEST);
+      throw new HttpException({ error: 'Invalid AI Agent id' }, HttpStatus.BAD_REQUEST);
     }
     const bot = await this.botModel.findOne(this.liveBotFilter(botId)).select('_id').lean();
     if (!bot) {
@@ -839,7 +839,7 @@ export class KnowledgeOverviewService {
 
   async trainKnowledgeNow(botId: string, body: unknown): Promise<KnowledgeOverviewResponse> {
     if (!Types.ObjectId.isValid(botId)) {
-      throw new HttpException({ error: 'Invalid bot id' }, HttpStatus.BAD_REQUEST);
+      throw new HttpException({ error: 'Invalid AI Agent id' }, HttpStatus.BAD_REQUEST);
     }
     const bot = await this.botModel.findOne(this.liveBotFilter(botId)).select('_id').lean();
     if (!bot) {
@@ -862,7 +862,7 @@ export class KnowledgeOverviewService {
     items: Awaited<ReturnType<KnowledgeBaseItemService['listLightweightTrainingStatuses']>>;
   }> {
     if (!Types.ObjectId.isValid(botId)) {
-      throw new HttpException({ error: 'Invalid bot id' }, HttpStatus.BAD_REQUEST);
+      throw new HttpException({ error: 'Invalid AI Agent id' }, HttpStatus.BAD_REQUEST);
     }
     const bot = await this.botModel.findOne(this.liveBotFilter(botId)).select('_id').lean();
     if (!bot) {

@@ -1,13 +1,15 @@
-import { useCallback, useEffect, useState } from 'react';
-import { AlertTriangle, Bot, Coins, Users } from 'lucide-react';
-import { getCustomerBots, getWorkspaceBillingSummary } from '@/api/customerApi';
-import type { CustomerBotListItem, WorkspaceBillingSummary } from '@/api/types';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { AlertTriangle, Bot, Coins, Package, Users } from 'lucide-react';
+import { getCustomerBots, getWorkspaceBillingSummary, getWorkspaceUsageAnalytics } from '@/api/customerApi';
+import type { CustomerBotListItem, WorkspaceBillingSummary, WorkspaceUsageAnalytics } from '@/api/types';
 import { useCustomerAuth } from '@/auth/CustomerAuthContext';
 import { SettingsPageHeader } from '@/components/settings/SettingsPageHeader';
 import { Button, Card, CardBody } from '@/components/ui';
 import { WorkspaceContentContainer } from '@/layout/workspace-layout/WorkspaceContentContainer';
 import { resolveActiveCustomerWorkspace } from '@/lib/resolveActiveCustomerWorkspace';
-import { UsageAddonCard } from '@/pages/usage/UsageAddonCard';
+import { isBillingCheckoutConfigured } from '@/lib/billingCheckout';
+import { buildUsageAnalyticsQueryParams } from '@/lib/usageAnalyticsQuery';
+import { BillingAddonsSection } from '@/pages/billing/BillingAddonsSection';
 import { UsageAgentCreditsTable } from '@/pages/usage/UsageAgentCreditsTable';
 import { UsageCreditsTrendChart } from '@/pages/usage/UsageCreditsTrendChart';
 import {
@@ -19,11 +21,16 @@ import { UsageKnowledgeStorageTable } from '@/pages/usage/UsageKnowledgeStorageT
 import { UsageMetricCard } from '@/pages/usage/UsageMetricCard';
 import { UsagePageSkeleton } from '@/pages/usage/UsagePageSkeleton';
 import { UsagePlanStatusChips } from '@/pages/usage/UsagePlanStatusChips';
-import { formatAiCreditsPercent, formatLimitPercent, formatUsagePeriodDate } from '@/pages/usage/usagePageFormat';
-import { AI_CREDITS_TOP_UP_COPY } from '@/lib/billingAddonCatalogDisplay';
+import { BillingTrialAlerts } from '@/pages/billing/BillingTrialAlerts';
+import {
+  buildMonthlyAiCreditsCardDisplay,
+  buildTopUpCreditsCardDisplay,
+  formatLimitPercent,
+} from '@/pages/usage/usagePageFormat';
 import { formatAiCreditsRingAriaLabel } from '@/lib/planEntitlements';
 
 type LoadState = 'idle' | 'loading' | 'ready' | 'error';
+type AnalyticsLoadState = 'idle' | 'loading' | 'ready' | 'error';
 
 function UsageErrorCard(props: { message: string; onRetry: () => void }) {
   return (
@@ -46,15 +53,19 @@ function UsageErrorCard(props: { message: string; onRetry: () => void }) {
 
 export function UsagePage() {
   const { customer } = useCustomerAuth();
-  const { activeWorkspaceId } = resolveActiveCustomerWorkspace(customer);
+  const { activeWorkspaceId, role } = resolveActiveCustomerWorkspace(customer);
 
   const [summary, setSummary] = useState<WorkspaceBillingSummary | null>(null);
+  const [analytics, setAnalytics] = useState<WorkspaceUsageAnalytics | null>(null);
   const [workspaceBots, setWorkspaceBots] = useState<CustomerBotListItem[]>([]);
   const [loadState, setLoadState] = useState<LoadState>('idle');
+  const [analyticsLoadState, setAnalyticsLoadState] = useState<AnalyticsLoadState>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [analyticsErrorMessage, setAnalyticsErrorMessage] = useState<string | null>(null);
   const [usageFilter, setUsageFilter] = useState<UsageFilterValues>(() => ({
     ...USAGE_FILTER_DEFAULTS,
   }));
+  const topUpMetricSkeletonHintRef = useRef<Record<string, boolean>>({});
 
   const loadSummary = useCallback(async () => {
     if (!activeWorkspaceId) {
@@ -79,9 +90,50 @@ export function UsagePage() {
     setLoadState('ready');
   }, [activeWorkspaceId]);
 
+  const loadAnalytics = useCallback(async () => {
+    if (!activeWorkspaceId) {
+      setAnalytics(null);
+      setAnalyticsLoadState('ready');
+      setAnalyticsErrorMessage(null);
+      return;
+    }
+
+    setAnalyticsLoadState('loading');
+    setAnalyticsErrorMessage(null);
+
+    const billingPeriod = summary
+      ? {
+          start: summary.usage?.aiCredits?.periodStart ?? summary.plan.currentPeriodStart,
+          end: summary.usage?.aiCredits?.periodEnd ?? summary.plan.currentPeriodEnd,
+        }
+      : null;
+
+    const params = buildUsageAnalyticsQueryParams({
+      date: usageFilter.date,
+      agentIds: usageFilter.agentIds,
+      billingPeriod,
+    });
+
+    const result = await getWorkspaceUsageAnalytics(activeWorkspaceId, params);
+    if (!result.ok) {
+      setAnalytics(null);
+      setAnalyticsLoadState('error');
+      setAnalyticsErrorMessage(result.error?.trim() || 'Could not load usage analytics.');
+      return;
+    }
+
+    setAnalytics(result.data);
+    setAnalyticsLoadState('ready');
+  }, [activeWorkspaceId, summary, usageFilter]);
+
   useEffect(() => {
     void loadSummary();
   }, [loadSummary]);
+
+  useEffect(() => {
+    if (loadState !== 'ready' || !summary) return;
+    void loadAnalytics();
+  }, [loadAnalytics, loadState, summary]);
 
   useEffect(() => {
     setUsageFilter((prev) => ({ ...prev, agentIds: [] }));
@@ -105,20 +157,35 @@ export function UsagePage() {
   }, [activeWorkspaceId]);
 
   const aiCredits = summary?.usage?.aiCredits;
+  const topUps = summary?.topUps ?? [];
   const botsUsage = summary?.usage?.bots;
   const membersUsage = summary?.usage?.members;
-  const trainedKnowledge = summary?.usage?.trainedKnowledge;
-  const addonCatalog = summary?.addonCatalog ?? [];
+  const checkoutEnabled = isBillingCheckoutConfigured(summary?.planCatalog);
 
-  const aiCreditsUsed = aiCredits?.monthlyCreditsUsed ?? 0;
-  const aiCreditsTotal = aiCredits?.monthlyCredits ?? 0;
-  const monthlyRemaining = aiCredits?.monthlyCreditsRemaining ?? Math.max(0, aiCreditsTotal - aiCreditsUsed);
-  const topUpRemaining = aiCredits?.topUpCreditsRemaining ?? 0;
-  const aiCreditsRemaining = aiCredits?.totalCreditsRemaining ?? monthlyRemaining + topUpRemaining;
+  const monthlyCreditsDisplay = buildMonthlyAiCreditsCardDisplay(aiCredits, {
+    isTrialPlan: summary?.entitlements.isTrialPlan,
+  });
+  const topUpCreditsDisplay = buildTopUpCreditsCardDisplay(
+    aiCredits?.topUpCreditsRemaining,
+    topUps,
+  );
+
+  useEffect(() => {
+    if (!activeWorkspaceId || !summary) return;
+    topUpMetricSkeletonHintRef.current[activeWorkspaceId] = topUpCreditsDisplay.showCard;
+  }, [activeWorkspaceId, summary, topUpCreditsDisplay.showCard]);
+
+  const showTopUpMetricSkeleton =
+    activeWorkspaceId && activeWorkspaceId in topUpMetricSkeletonHintRef.current
+      ? topUpMetricSkeletonHintRef.current[activeWorkspaceId]
+      : false;
   const aiCreditsOverLimit = Boolean(aiCredits?.isOverLimit);
-  const aiCreditsPercent = formatAiCreditsPercent(aiCreditsUsed, aiCreditsTotal);
+  const aiCreditsPercent = monthlyCreditsDisplay.monthlyUsagePercent;
   const aiCreditsRingTone = aiCreditsOverLimit || aiCreditsPercent >= 100 ? 'danger' : 'default';
   const aiCreditsCardTone = aiCreditsOverLimit || aiCreditsPercent >= 100 ? 'danger' : 'default';
+  const metricGridClass = topUpCreditsDisplay.showCard
+    ? 'grid gap-4 sm:grid-cols-2 xl:grid-cols-4'
+    : 'grid gap-4 sm:grid-cols-2 lg:grid-cols-3';
 
   const botsCurrent = botsUsage?.current ?? 0;
   const botsLimit = botsUsage?.limit ?? 0;
@@ -130,15 +197,8 @@ export function UsagePage() {
 
   const planStatusChips = summary ? <UsagePlanStatusChips summary={summary} /> : null;
   const maxHistoryDays = summary?.entitlements.analyticsHistoryDays ?? null;
-  const usageFilterBar = (
-    <UsageFilterBar
-      values={usageFilter}
-      onChange={setUsageFilter}
-      agents={workspaceBots}
-      disabled={!activeWorkspaceId || loadState === 'loading'}
-      maxHistoryDays={maxHistoryDays}
-    />
-  );
+  const agentFilterActive = usageFilter.agentIds.length > 0;
+  const analyticsLoading = analyticsLoadState === 'loading' || analyticsLoadState === 'idle';
 
   return (
     <>
@@ -146,7 +206,6 @@ export function UsagePage() {
         title="Usage"
         description="Track workspace limits, AI credits, agent usage, and trained knowledge storage."
         titleAddon={planStatusChips}
-        actions={activeWorkspaceId ? usageFilterBar : null}
       />
 
       <WorkspaceContentContainer size="editor" className="pt-0">
@@ -159,31 +218,26 @@ export function UsagePage() {
             </CardBody>
           </Card>
         ) : loadState === 'loading' && !summary ? (
-          <UsagePageSkeleton />
+          <UsagePageSkeleton showTopUpMetricCard={showTopUpMetricSkeleton} />
         ) : loadState === 'error' ? (
           <UsageErrorCard message={errorMessage ?? 'Could not load usage.'} onRetry={() => void loadSummary()} />
         ) : summary ? (
           <div className="flex flex-col gap-6 pb-12">
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <BillingTrialAlerts summary={summary} />
+            <div className={metricGridClass}>
               <UsageMetricCard
-                title="AI credits"
+                title={summary.entitlements.isTrialPlan ? 'Trial AI credits' : 'Monthly AI credits'}
                 icon={Coins}
-                valueLabel={`${aiCreditsUsed.toLocaleString()} / ${aiCreditsTotal.toLocaleString()} monthly used`}
+                valueLabel={monthlyCreditsDisplay.valueLabel}
                 ringPercent={aiCreditsPercent}
                 ringAriaLabel={formatAiCreditsRingAriaLabel(summary)}
                 ringTone={aiCreditsRingTone}
-                supportText={[
-                  `${monthlyRemaining.toLocaleString()} monthly remaining`,
-                  `${topUpRemaining.toLocaleString()} top-up remaining`,
-                  `${aiCreditsRemaining.toLocaleString()} total remaining`,
-                  aiCredits?.periodEnd ? `Resets ${formatUsagePeriodDate(aiCredits.periodEnd)}` : null,
-                ]
-                  .filter(Boolean)
-                  .join(' · ')}
+                supportText={monthlyCreditsDisplay.usageLine}
+                periodNote={monthlyCreditsDisplay.resetFooter}
                 helper={
                   summary?.entitlements.isTrialPlan
                     ? 'Trial credits do not renew. Upgrade for monthly AI credits.'
-                    : AI_CREDITS_TOP_UP_COPY
+                    : undefined
                 }
                 tone={aiCreditsCardTone}
                 footer={
@@ -194,6 +248,20 @@ export function UsagePage() {
                   ) : null
                 }
               />
+
+              {topUpCreditsDisplay.showCard ? (
+                <UsageMetricCard
+                  title="Top-up credits"
+                  icon={Package}
+                  badge="Reserve"
+                  badgeTooltip={topUpCreditsDisplay.reserveTooltip}
+                  valueLabel={topUpCreditsDisplay.valueLabel}
+                  ringPercent={topUpCreditsDisplay.ringPercent}
+                  ringAriaLabel="Top-up credits used"
+                  supportText={topUpCreditsDisplay.subtitleLine}
+                  periodNote={topUpCreditsDisplay.expiryFooter ?? undefined}
+                />
+              ) : null}
 
               <UsageMetricCard
                 title="Agents"
@@ -214,10 +282,19 @@ export function UsagePage() {
               />
             </div>
 
+            <UsageFilterBar
+              values={usageFilter}
+              onChange={setUsageFilter}
+              agents={workspaceBots}
+              disabled={!activeWorkspaceId || loadState === 'loading'}
+              maxHistoryDays={maxHistoryDays}
+            />
+
             <UsageCreditsTrendChart
-              periodStart={aiCredits?.periodStart}
-              periodEnd={aiCredits?.periodEnd}
-              monthlyCreditsUsed={aiCreditsUsed}
+              trend={analytics?.usageTrend}
+              loading={analyticsLoading}
+              errorMessage={analyticsLoadState === 'error' ? analyticsErrorMessage : null}
+              onRetry={() => void loadAnalytics()}
               className="w-full"
             />
 
@@ -226,32 +303,29 @@ export function UsagePage() {
               data-testid="usage-agent-usage-row"
             >
               <UsageAgentCreditsTable
-                summary={summary}
-                aiCredits={aiCredits}
-                agentIds={usageFilter.agentIds}
+                rows={analytics?.aiCreditsByAgent}
+                loading={analyticsLoading}
+                errorMessage={analyticsLoadState === 'error' ? analyticsErrorMessage : null}
+                agentFilterActive={agentFilterActive}
               />
               <UsageKnowledgeStorageTable
-                trainedKnowledge={trainedKnowledge}
+                rows={analytics?.trainedKnowledgeByAgent}
                 bots={workspaceBots}
-                agentIds={usageFilter.agentIds}
+                loading={analyticsLoading}
+                errorMessage={analyticsLoadState === 'error' ? analyticsErrorMessage : null}
+                agentFilterActive={agentFilterActive}
               />
             </div>
 
-            <section aria-labelledby="usage-addons-heading" className="space-y-3">
-              <div>
-                <h2 id="usage-addons-heading" className="m-0 text-sm font-semibold text-slate-900">
-                  Available add-ons
-                </h2>
-                <p className="m-0 mt-1 text-xs text-slate-500">
-                  Purchase add-ons from Plans or manage active add-ons on Billing &amp; Invoices.
-                </p>
-              </div>
-              <div className="flex flex-col gap-3">
-                {addonCatalog.map((addon) => (
-                  <UsageAddonCard key={addon.key} addon={addon} />
-                ))}
-              </div>
-            </section>
+            {checkoutEnabled ? (
+              <BillingAddonsSection
+                workspaceId={activeWorkspaceId}
+                role={role}
+                summary={summary}
+                checkoutEnabled={checkoutEnabled}
+                onSummaryUpdated={() => void loadSummary()}
+              />
+            ) : null}
           </div>
         ) : null}
       </WorkspaceContentContainer>

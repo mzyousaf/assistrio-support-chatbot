@@ -36,7 +36,7 @@ export function formatCancelAtPeriodEndMessage(
     return null;
   }
   const date = formatUsagePeriodDate(summary.subscription.currentPeriodEnd);
-  return `Your subscription is scheduled to cancel on ${date}.`;
+  return `Cancellation scheduled. Your plan remains active until ${date}.`;
 }
 
 export function canRestoreSubscription(
@@ -62,6 +62,28 @@ export function formatPastDueBillingWarning(
     return null;
   }
   return 'Payment issue detected. Please update your payment method to avoid losing access.';
+}
+
+export function hasScheduledPlanDowngrade(
+  summary: Pick<WorkspaceBillingSummary, 'subscription'>,
+): boolean {
+  return Boolean(String(summary.subscription?.scheduledPlanKey ?? '').trim());
+}
+
+export function formatScheduledDowngradeMessage(
+  summary: Pick<WorkspaceBillingSummary, 'subscription' | 'plan'>,
+): string | null {
+  const sub = summary.subscription;
+  const targetKey = String(sub.scheduledPlanKey ?? '').trim();
+  if (!targetKey) return null;
+
+  const targetName =
+    String(sub.scheduledPlanName ?? '').trim() ||
+    (targetKey === 'starter' ? 'Starter' : targetKey === 'pro' ? 'Pro' : targetKey);
+
+  const effectiveRaw = sub.scheduledPlanEffectiveDate ?? sub.currentPeriodEnd;
+  const date = formatUsagePeriodDate(effectiveRaw);
+  return `Downgrade scheduled. Your workspace will switch to ${targetName} on ${date}.`;
 }
 
 export function formatBillingRenewsOrEndsLabel(
@@ -90,5 +112,32 @@ export function shouldShowPlanPricingCard(input: {
   if (input.planKey !== 'free') return true;
   if (input.currentPlanKey === 'starter' || input.currentPlanKey === 'pro') return false;
   return true;
+}
+
+/** Modal Free trial card: disabled CTA title with workspace trial end date. */
+export function formatPlanModalExpiresOnButtonLabel(
+  summary: Pick<WorkspaceBillingSummary, 'plan' | 'subscription' | 'entitlements'>,
+): string | null {
+  if (!summary.entitlements.isTrialPlan) return null;
+
+  const end = summary.subscription?.currentPeriodEnd ?? summary.plan.currentPeriodEnd;
+  if (!end) return null;
+
+  return `Expires on ${formatUsagePeriodDate(end)}`;
+}
+
+/** Modal current-plan card: disabled CTA with days until period end. */
+export function formatPlanModalDaysLeftButtonLabel(
+  periodEnd: string | null | undefined,
+  now = new Date(),
+): string {
+  if (!periodEnd) return 'Days Left';
+
+  const end = new Date(periodEnd);
+  if (Number.isNaN(end.getTime())) return 'Days Left';
+
+  const diffMs = end.getTime() - now.getTime();
+  const days = Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
+  return days === 1 ? '1 Day Left' : `${days} Days Left`;
 }
 

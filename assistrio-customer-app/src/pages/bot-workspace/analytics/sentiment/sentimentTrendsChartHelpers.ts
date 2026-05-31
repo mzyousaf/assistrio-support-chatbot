@@ -1,7 +1,17 @@
 import type { CustomerSentimentBreakdownItem } from '@/api/types';
 import type { SentimentMetricMode } from '@/lib/sentimentAnalyticsQuery';
+import { formatAnalyticsInteger } from '@/lib/analyticsFormat';
 import { CHART } from '../shared/analyticsChartTheme';
 import { SENTIMENT_CHART_COLORS } from './sentimentChartTheme';
+
+/** Human-readable count line for stacked sentiment tooltips (tested). */
+export function formatSentimentOverTimeTooltipCount(
+  count: number,
+  unit: 'messages' | 'chats' = 'messages',
+): string {
+  const n = formatAnalyticsInteger(count);
+  return unit === 'chats' ? `${n} distinct chats` : `${n} user messages`;
+}
 
 export type SentimentChartStyle = 'bar' | 'trend' | 'distribution';
 

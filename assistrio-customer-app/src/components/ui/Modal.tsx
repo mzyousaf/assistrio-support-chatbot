@@ -25,6 +25,8 @@ export type ModalProps = {
   footerClassName?: string;
   /** Merged into the header strip (e.g. white background for settings modals). */
   headerClassName?: string;
+  /** Rendered between the title block and the close control (e.g. billing period toggle). */
+  headerActions?: ReactNode;
   /** Extra classes on the scrollable body region (default `px-4 py-4 sm:px-5`). */
   bodyClassName?: string;
   /** When true, does not set `document.body.style.overflow` (use for nested modals). */
@@ -69,6 +71,7 @@ export function Modal({
   titleClassName,
   footerClassName,
   headerClassName,
+  headerActions,
   bodyClassName,
   skipBodyScrollLock = false,
   allowDismiss = true,
@@ -254,7 +257,7 @@ export function Modal({
               headerClassName,
             )}
           >
-            <div className="min-w-0 flex-1">
+            <div className="min-w-0 flex-1 text-left">
               <h2
                 id={titleId}
                 className={cn(
@@ -271,7 +274,7 @@ export function Modal({
                 <div
                   id={descId}
                   className={cn(
-                    'mt-1 text-sm leading-relaxed',
+                    'mt-1 text-left text-sm leading-relaxed',
                     tone === 'danger' ? 'text-[var(--color-danger-text)]' : null,
                     tone === 'warning' ? 'text-amber-900/85' : null,
                     tone === 'default' ? 'text-slate-600' : null,
@@ -281,6 +284,9 @@ export function Modal({
                 </div>
               ) : null}
             </div>
+            {headerActions ? (
+              <div className="flex shrink-0 items-center self-center">{headerActions}</div>
+            ) : null}
             {allowDismiss ? (
               <button
                 type="button"

@@ -1,19 +1,7 @@
 import { AlertTriangle } from 'lucide-react';
 import { Button, Card, CardBody } from '@/components/ui';
 
-export function BillingPageSkeleton(props: { cards?: number }) {
-  const count = props.cards ?? 3;
-  return (
-    <div className="space-y-4" aria-busy="true" aria-label="Loading billing">
-      <div className="h-56 animate-pulse rounded-2xl border border-slate-200/90 bg-slate-50" />
-      <div className={`grid gap-4 ${count >= 3 ? 'lg:grid-cols-3' : 'sm:grid-cols-2'}`}>
-        {Array.from({ length: count }).map((_, index) => (
-          <div key={index} className="h-80 animate-pulse rounded-2xl border border-slate-200/90 bg-slate-50" />
-        ))}
-      </div>
-    </div>
-  );
-}
+export { BillingPageSkeleton } from '@/pages/billing/BillingPageSkeleton';
 
 export function BillingEmptyWorkspaceCard() {
   return (

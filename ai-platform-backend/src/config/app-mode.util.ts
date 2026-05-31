@@ -113,6 +113,48 @@ export function shouldRegisterKbInProcessCronsForWorkerApp(): boolean {
 }
 
 /**
+ * When unset: `true` in `all` and `worker`, `false` in `api` and `runtime`.
+ * When set to true/false (and 1/0, yes/no), that wins except in `api`/`runtime`, where the flag is always false.
+ */
+export function resolveEnableBillingReconcileCronFromEnv(): boolean {
+  const mode = parseAppModeFromEnv();
+  if (mode === 'api' || mode === 'runtime') return false;
+  const e = process.env.ENABLE_BILLING_RECONCILE_CRON?.trim().toLowerCase();
+  if (e === 'true' || e === '1' || e === 'yes') return true;
+  if (e === 'false' || e === '0' || e === 'no') return false;
+  return true;
+}
+
+/** Nest `AppModule` (monolith): register billing period-end reconcile cron when `all` and flag allows. */
+export function shouldRegisterBillingReconcileCronsForAppModule(): boolean {
+  if (parseAppModeFromEnv() !== 'all') return false;
+  return resolveEnableBillingReconcileCronFromEnv();
+}
+
+/** `WorkerAppModule`: register billing period-end reconcile cron when in worker mode and flag allows. */
+export function shouldRegisterBillingReconcileCronsForWorkerApp(): boolean {
+  if (parseAppModeFromEnv() !== 'worker') return false;
+  return resolveEnableBillingReconcileCronFromEnv();
+}
+
+/** Production: every 15 minutes. Non-production: every minute (idempotent; safe for local dev). */
+export function resolveBillingReconcileCronExpression(): string {
+  const nodeEnv = (process.env.NODE_ENV ?? 'development').trim();
+  if (nodeEnv === 'production') return '*/15 * * * *';
+  return '* * * * *';
+}
+
+/** Register Nest `ScheduleModule.forRoot()` in monolith when KB or billing reconcile crons are enabled. */
+export function shouldRegisterInProcessScheduleForAppModule(): boolean {
+  return shouldRegisterKbInProcessCronsForAppModule() || shouldRegisterBillingReconcileCronsForAppModule();
+}
+
+/** Register Nest `ScheduleModule.forRoot()` in worker when KB or billing reconcile crons are enabled. */
+export function shouldRegisterInProcessScheduleForWorkerApp(): boolean {
+  return shouldRegisterKbInProcessCronsForWorkerApp() || shouldRegisterBillingReconcileCronsForWorkerApp();
+}
+
+/**
  * Whether `main.ts` should bootstrap the dedicated **worker** root module
  * (ingestion + summary crons, no public HTTP for workspace/auth).
  */

@@ -42,6 +42,28 @@ describe('CustomerWorkspaceBillingController', () => {
         cancelAtPeriodEnd: true,
       }),
     };
+    const billingAddonIntervalActionsService = {
+      scheduleAddonBillingIntervalChange: jest.fn().mockResolvedValue({
+        ok: true,
+        message: 'Scheduled.',
+        addonInstanceId: '507f1f77bcf86cd799439099',
+        addonKey: 'extra_bot',
+        billingInterval: 'monthly',
+      }),
+      cancelScheduledAddonIntervalChange: jest.fn().mockResolvedValue({
+        ok: true,
+        message: 'Canceled.',
+        addonInstanceId: '507f1f77bcf86cd799439099',
+        addonKey: 'extra_bot',
+        billingInterval: 'monthly',
+      }),
+    };
+    const billingCreditAutoTopUpService = {
+      setAutoTopUpPromptEnabled: jest.fn().mockResolvedValue({
+        ok: true,
+        autoTopUpPromptEnabled: true,
+      }),
+    };
     const billingManageService = {
       createManageBillingUrl: jest.fn().mockResolvedValue({
         url: 'https://store.lemonsqueezy.com/billing?signed=1',
@@ -90,10 +112,17 @@ describe('CustomerWorkspaceBillingController', () => {
       }),
     };
 
+    const billingAiCreditsAutoTopUpService = {
+      disableAutoTopUp: jest.fn().mockResolvedValue({ ok: true }),
+    };
+
     const controller = new CustomerWorkspaceBillingController(
       billingSummaryService as never,
       billingSubscriptionActionsService as never,
       billingAddonActionsService as never,
+      billingAddonIntervalActionsService as never,
+      billingCreditAutoTopUpService as never,
+      billingAiCreditsAutoTopUpService as never,
       billingManageService as never,
       billingInvoicesService as never,
       billingProfileService as never,
@@ -105,6 +134,7 @@ describe('CustomerWorkspaceBillingController', () => {
       billingSummaryService,
       billingSubscriptionActionsService,
       billingAddonActionsService,
+      billingCreditAutoTopUpService,
       billingManageService,
       billingInvoicesService,
       billingProfileService,
@@ -181,6 +211,7 @@ describe('CustomerWorkspaceBillingController', () => {
     expect(billingSubscriptionActionsService.changePlan).toHaveBeenCalledWith(
       workspaceId,
       'starter',
+      undefined,
     );
     expect(billingSummaryService.getSummary).toHaveBeenCalledWith(workspaceId);
     expect(result.action).toBe('change_plan');

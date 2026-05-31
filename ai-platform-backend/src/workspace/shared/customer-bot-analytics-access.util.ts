@@ -23,7 +23,7 @@ export async function requireCustomerBotAnalyticsAccess(args: {
 }> {
   const bot = await args.botsService.findOne(args.botId);
   if (!bot) {
-    throw new NotFoundException('Bot not found');
+    throw new NotFoundException('AI Agent not found');
   }
   const uid = args.req.user?._id != null ? String(args.req.user._id) : '';
   const ok = await args.workspacesService.canUserAccessWorkspaceBot(

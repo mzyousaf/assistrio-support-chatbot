@@ -16,6 +16,14 @@ describe('CustomerWorkspaceEntitlementsController', () => {
         monthlyCreditsUsed: 0,
       }),
     };
+    const usageAnalyticsService = {
+      getAnalytics: jest.fn().mockResolvedValue({
+        dateRange: { startDate: '2026-05-01', endDate: '2026-05-07' },
+        usageTrend: [],
+        aiCreditsByAgent: [],
+        trainedKnowledgeByAgent: [],
+      }),
+    };
     const workspacesService = {
       isUserMemberOfWorkspace: jest.fn().mockResolvedValue(overrides?.isMember ?? true),
     };
@@ -23,10 +31,11 @@ describe('CustomerWorkspaceEntitlementsController', () => {
     const controller = new CustomerWorkspaceEntitlementsController(
       entitlementsService as never,
       aiCreditsUsageService as never,
+      usageAnalyticsService as never,
       workspacesService as never,
     );
 
-    return { controller, entitlementsService, aiCreditsUsageService, workspacesService };
+    return { controller, entitlementsService, aiCreditsUsageService, usageAnalyticsService, workspacesService };
   }
 
   it('blocks non-members from ai-credits usage endpoint', async () => {

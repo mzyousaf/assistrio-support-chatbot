@@ -51,7 +51,7 @@ import { CustomerLeadsPage } from './pages/bot-workspace/CustomerLeadsPage';
 import { BotsListPage } from './pages/BotsListPage';
 import { LoginPage } from './pages/LoginPage';
 import { InviteAcceptPage } from './pages/InviteAcceptPage';
-import { PlansPage, SettingsBillingPage } from './pages/PlansPage';
+import { SettingsBillingPage } from './pages/SettingsBillingPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { WorkspaceSettingsPage } from './pages/settings/WorkspaceSettingsPage';
 import { SettingsMembersPage } from './pages/settings/SettingsMembersPage';
@@ -125,14 +125,14 @@ export function App() {
             <Route element={<OnboardingCompleteRoute />}>
             <Route element={<AppShell />}>
             <Route path="/usage" element={<UsagePage />} />
-            <Route path="/plans" element={<Navigate to="/settings/plans" replace />} />
+            <Route path="/plans" element={<Navigate to="/settings/billing" replace />} />
+            <Route path="/settings/plans" element={<Navigate to="/settings/billing" replace />} />
             <Route path="/settings" element={<Navigate to="/settings/workspace" replace />} />
             <Route path="/settings/general" element={<Navigate to="/settings/workspace" replace />} />
             <Route path="/settings/account" element={<Navigate to="/settings/workspace" replace />} />
             <Route path="/settings/workspace" element={<WorkspaceSettingsPage />} />
             <Route path="/settings/members" element={<SettingsMembersPage />} />
             <Route path="/settings/billing" element={<SettingsBillingPage />} />
-            <Route path="/settings/plans" element={<PlansPage />} />
             <Route
               path="/settings/api-keys"
               element={

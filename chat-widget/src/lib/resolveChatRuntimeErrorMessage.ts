@@ -1,6 +1,5 @@
 export const PLAN_LIMIT_AI_CREDITS_CODE = "plan_limit_ai_credits" as const;
-export const PLAN_LIMIT_AI_CREDITS_MESSAGE =
-  "This workspace has used all AI credits for this billing period. Please upgrade your plan or wait until credits reset.";
+export const PLAN_LIMIT_AI_CREDITS_MESSAGE = "This agent is out of credits.";
 
 export const AI_CREDITS_USAGE_UNAVAILABLE_CODE = "ai_credits_usage_unavailable" as const;
 export const AI_CREDITS_USAGE_UNAVAILABLE_MESSAGE =

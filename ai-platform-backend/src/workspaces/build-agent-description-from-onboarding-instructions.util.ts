@@ -29,7 +29,7 @@ function truncateAtWordBoundary(text: string, maxLen: number): string {
 export function buildAgentDescriptionFromOnboardingInstructions(text: string): string {
   const source = normalizeSource(text);
   if (!source) {
-    return 'This AI agent helps customers get clear answers using the available knowledge base in a friendly, professional way.';
+    return 'This AI Agent helps customers get clear answers using the available knowledge base in a friendly, professional way.';
   }
 
   const sentences = splitSentences(source);
@@ -49,7 +49,7 @@ export function buildAgentDescriptionFromOnboardingInstructions(text: string): s
       : 'about products, services, pricing, policies, and support questions';
 
   const generated =
-    `This AI agent helps customers get clear answers ${focusClause}. ` +
+    `This AI Agent helps customers get clear answers ${focusClause}. ` +
     'It responds in a friendly, professional way and uses the available knowledge base to guide users to the right next step.';
 
   return truncateAtWordBoundary(generated, MAX_AGENT_DESCRIPTION_LENGTH);

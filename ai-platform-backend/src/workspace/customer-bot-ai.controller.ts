@@ -39,7 +39,7 @@ export class CustomerBotAiController {
   private async assertCanManageWorkspaceBot(req: RequestWithUser, botId: string): Promise<void> {
     const bot = await this.botsService.findOne(botId);
     if (!bot) {
-      throw new HttpException({ error: 'Bot not found', errorCode: 'bot_not_found' }, HttpStatus.NOT_FOUND);
+      throw new HttpException({ error: 'AI Agent not found', errorCode: 'bot_not_found' }, HttpStatus.NOT_FOUND);
     }
     const uid = req.user?._id != null ? String(req.user._id) : '';
     const role = req.user?.role ?? '';
@@ -60,7 +60,7 @@ export class CustomerBotAiController {
     @Req() req: RequestWithUser,
   ) {
     if (!Types.ObjectId.isValid(botId)) {
-      throw new HttpException({ error: 'Invalid bot id' }, HttpStatus.BAD_REQUEST);
+      throw new HttpException({ error: 'Invalid AI Agent id' }, HttpStatus.BAD_REQUEST);
     }
     await this.assertCanManageWorkspaceBot(req, botId);
     const parsed = parseRefineBody(body);

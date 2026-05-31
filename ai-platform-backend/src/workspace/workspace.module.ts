@@ -57,6 +57,7 @@ import {
   WorkspaceBillingOrderSchema,
 } from '../models/workspace-billing-order.schema';
 import { WorkspaceBillingSummaryService } from './workspace-billing-summary.service';
+import { WorkspaceUsageAnalyticsService } from './workspace-usage-analytics.service';
 import { OnboardingKbTransferModule } from './onboarding-kb-transfer.module';
 
 /**
@@ -135,6 +136,7 @@ import { OnboardingKbTransferModule } from './onboarding-kb-transfer.module';
     KnowledgeItemManualRetryService,
     WorkspaceOnboardingGoLiveService,
     WorkspaceBillingSummaryService,
+    WorkspaceUsageAnalyticsService,
   ],
   exports: [],
 })

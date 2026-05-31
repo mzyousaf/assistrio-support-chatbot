@@ -14,12 +14,12 @@ import {
 export const PLAN_LIMIT_WORKSPACE_BOTS_CODE = 'plan_limit_workspace_bots' as const;
 
 export const PLAN_LIMIT_WORKSPACE_BOTS_MESSAGE =
-  'Your workspace has reached the bot limit for the current plan.';
+  'Your workspace has reached the AI Agent limit for the current plan.';
 
 export const WORKSPACE_BOT_LIMIT_EXCEEDED_CODE = 'workspace_bot_limit_exceeded' as const;
 
 export const WORKSPACE_BOT_LIMIT_EXCEEDED_MESSAGE =
-  'This agent is inactive because your workspace is over its agent limit.';
+  'This AI Agent is inactive because your workspace is over its AI Agent limit.';
 
 export type WorkspaceBotLimitExceededPayload = {
   message: string;

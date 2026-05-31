@@ -18,8 +18,8 @@ describe('billingCheckout', () => {
 
   it('resolves upgrade button labels', () => {
     expect(planCheckoutButtonLabel('free', 'starter', { isTrialPlan: true })).toBe('Upgrade to Starter');
-    expect(planCheckoutButtonLabel('free', 'pro', { isTrialPlan: true })).toBe('Upgrade to Pro');
-    expect(planCheckoutButtonLabel('starter', 'pro')).toBe('Upgrade to Pro');
+    expect(planCheckoutButtonLabel('free', 'pro', { isTrialPlan: true })).toBe('Upgrade');
+    expect(planCheckoutButtonLabel('starter', 'pro')).toBe('Upgrade');
   });
 
   it('enables owner checkout when checkoutAvailable', () => {
@@ -33,6 +33,19 @@ describe('billingCheckout', () => {
     expect(action.canCheckout).toBe(true);
     expect(action.label).toBe('Upgrade to Starter');
     expect(action.disabled).toBe(false);
+  });
+
+  it('offers in-app upgrade from Starter to Pro for owner', () => {
+    const action = resolvePlanCardCheckoutAction({
+      planKey: 'pro',
+      currentPlanKey: 'starter',
+      isTrialPlan: false,
+      checkoutAvailable: true,
+      isOwner: true,
+    });
+    expect(action.canChangePlan).toBe(true);
+    expect(action.canCheckout).toBe(false);
+    expect(action.label).toBe('Upgrade to Pro');
   });
 
   it('offers in-app downgrade from Pro to Starter for owner', () => {

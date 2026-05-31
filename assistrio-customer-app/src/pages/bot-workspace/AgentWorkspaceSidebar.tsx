@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type MouseEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import {
   ChevronDown,
   User,
@@ -31,7 +31,11 @@ import {
 import { useWorkspaceDiscardModal } from './WorkspaceDiscardModal';
 import { TrainingStatusSidebarCard } from './components/TrainingStatusSidebarCard';
 
-type Props = { bot?: CustomerBotDetail | null; health?: Record<string, unknown> | null };
+type Props = {
+  bot?: CustomerBotDetail | null;
+  health?: Record<string, unknown> | null;
+  creditsWidget?: ReactNode;
+};
 
 const navCls = (isActive: boolean) =>
   cn(
@@ -55,7 +59,7 @@ const parentBtnCls = (isActive: boolean) =>
 const iconCls = (isActive: boolean) =>
   cn('shrink-0 transition-colors duration-150', isActive ? 'text-teal-600' : 'text-slate-400 group-hover:text-teal-600');
 
-export function AgentWorkspaceSidebar({ bot, health }: Props) {
+export function AgentWorkspaceSidebar({ bot, health, creditsWidget }: Props) {
   const { id: routeBotId } = useParams();
   const { pathname } = useLocation();
   const navigate = useNavigate();
@@ -216,14 +220,14 @@ export function AgentWorkspaceSidebar({ bot, health }: Props) {
     <aside
       className={cn(
         'relative z-0 scrollbar-none flex w-[var(--sidebar-width)] shrink-0 flex-col self-stretch bg-white',
-        'min-h-0 overflow-y-auto overflow-x-hidden',
-        'p-3 max-[900px]:max-h-[min(42vh,22rem)] max-[900px]:w-full max-[900px]:self-start max-[900px]:border-b max-[900px]:border-r-0 max-[900px]:p-2',
+        'min-h-0 overflow-hidden',
+        'max-[900px]:max-h-[min(42vh,22rem)] max-[900px]:w-full max-[900px]:self-start max-[900px]:border-b max-[900px]:border-r-0',
       )}
       style={{ borderRight: '1px solid var(--border-sidebar)' }}
       aria-label="Agent workspace"
     >
       <nav
-        className="flex flex-col max-[900px]:flex-row max-[900px]:flex-wrap max-[900px]:gap-[0.35rem]"
+        className="flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden p-3 max-[900px]:flex-row max-[900px]:flex-wrap max-[900px]:gap-[0.35rem] max-[900px]:p-2"
         aria-label="Workspace sections"
       >
         {routeBotId ? (
@@ -382,6 +386,10 @@ export function AgentWorkspaceSidebar({ bot, health }: Props) {
           )}
         </div>
       </nav>
+
+      {creditsWidget ? (
+        <div className="shrink-0 px-3 pb-2 max-[900px]:hidden">{creditsWidget}</div>
+      ) : null}
     </aside>
   );
 }

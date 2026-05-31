@@ -88,6 +88,8 @@ export function workspaceMembersErrorMessage(result: ApiResult<unknown>, fallbac
       return 'A pending invite already exists for this email.';
     case 'workspace_invite_member_exists':
       return 'This person is already a member of this workspace.';
+    case 'workspace_member_inactive_over_limit':
+      return 'Your access to this workspace is inactive because the workspace is over its member limit.';
     case 'workspace_access_denied':
       return 'Only workspace owners and admins can manage members.';
     case 'workspace_owner_protected':

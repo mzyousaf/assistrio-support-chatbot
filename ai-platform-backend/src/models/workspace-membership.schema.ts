@@ -16,6 +16,14 @@ export type WorkspaceMemberRole = (typeof WORKSPACE_MEMBER_ROLES)[number];
 export const WORKSPACE_MANAGER_ROLES = [WORKSPACE_OWNER_ROLE, WORKSPACE_ADMIN_ROLE] as const;
 export type WorkspaceManagerRole = (typeof WORKSPACE_MANAGER_ROLES)[number];
 
+export const WORKSPACE_MEMBERSHIP_STATUSES = ['active', 'inactive_over_limit'] as const;
+export type WorkspaceMembershipStatus = (typeof WORKSPACE_MEMBERSHIP_STATUSES)[number];
+
+/** Mongo filter for memberships that may access the workspace. */
+export const WORKSPACE_MEMBERSHIP_ACTIVE_STATUS_FILTER = {
+  status: { $ne: 'inactive_over_limit' as const },
+};
+
 @Schema({ timestamps: false, collection: 'workspace_memberships' })
 export class WorkspaceMembership {
   @Prop({ type: Types.ObjectId, ref: 'Workspace', required: true, index: true })
@@ -26,6 +34,9 @@ export class WorkspaceMembership {
 
   @Prop({ required: true, enum: WORKSPACE_MEMBER_ROLES, default: WORKSPACE_MEMBER_ROLE })
   role: WorkspaceMemberRole;
+
+  @Prop({ required: true, enum: WORKSPACE_MEMBERSHIP_STATUSES, default: 'active' })
+  status: WorkspaceMembershipStatus;
 }
 
 export const WorkspaceMembershipSchema = SchemaFactory.createForClass(WorkspaceMembership);

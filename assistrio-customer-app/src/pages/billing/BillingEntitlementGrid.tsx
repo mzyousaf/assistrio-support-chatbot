@@ -52,7 +52,7 @@ export function buildBillingEntitlementItems(summary: WorkspaceBillingSummary): 
     {
       icon: HardDrive,
       label: TRAINED_KNOWLEDGE_STORAGE_LABEL,
-      value: `${entitlements.kbStorageMbPerBot} MB / bot`,
+      value: `${entitlements.kbStorageMbPerBot} MB / AI Agent`,
       hint: TRAINED_KNOWLEDGE_STORAGE_HELPER,
     },
     {

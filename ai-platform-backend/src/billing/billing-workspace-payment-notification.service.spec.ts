@@ -99,7 +99,7 @@ describe('BillingWorkspacePaymentNotificationService', () => {
 
     expect(emailService.send).toHaveBeenCalledTimes(1);
     expect(emailService.send.mock.calls[0][0].subject).toBe('Payment failed for your Assistrio workspace');
-    expect(emailService.send.mock.calls[0][0].text).toContain('Billing & Invoices');
+    expect(emailService.send.mock.calls[0][0].text).toContain('Billing & Plans');
     expect(subscriptionModel.updateOne).toHaveBeenCalled();
   });
 

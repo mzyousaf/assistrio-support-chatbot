@@ -198,7 +198,7 @@ export class CustomerKnowledgeController {
     }
     const bot = await this.botsService.findOne(botId);
     if (!bot) {
-      throw new HttpException({ error: 'Bot not found' }, HttpStatus.NOT_FOUND);
+      throw new HttpException({ error: 'AI Agent not found' }, HttpStatus.NOT_FOUND);
     }
     const uid = req.user?._id != null ? String(req.user._id) : '';
     const ok = await this.workspacesService.canUserAccessWorkspaceBot(uid, req.user?.role ?? '', bot as Record<string, unknown>);
@@ -213,7 +213,7 @@ export class CustomerKnowledgeController {
     }
     const bot = await this.botsService.findOne(botId);
     if (!bot) {
-      throw new HttpException({ error: 'Bot not found' }, HttpStatus.NOT_FOUND);
+      throw new HttpException({ error: 'AI Agent not found' }, HttpStatus.NOT_FOUND);
     }
     const uid = req.user?._id != null ? String(req.user._id) : '';
     const role = req.user?.role ?? '';

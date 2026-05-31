@@ -15,7 +15,12 @@ describe('WorkspaceEntitlementsService', () => {
   ) {
     const subscriptionsService = {
       findByWorkspaceId: jest.fn().mockResolvedValue(subscription),
+      applyPendingScheduledPlanChanges: jest.fn().mockImplementation(async () => subscription),
     } as unknown as WorkspaceSubscriptionsService;
+
+    const memberOverLimitReconcileService = {
+      reconcileIfNeeded: jest.fn().mockResolvedValue(null),
+    };
 
     const topUpService = {
       sumRemainingCredits: jest.fn().mockResolvedValue(options.topUpRemaining ?? 0),
@@ -36,6 +41,7 @@ describe('WorkspaceEntitlementsService', () => {
         subscriptionsService,
         topUpService as never,
         addonModel as never,
+        memberOverLimitReconcileService as never,
       ),
       subscriptionsService,
       topUpService,
@@ -191,6 +197,31 @@ describe('WorkspaceEntitlementsService', () => {
 
     const entitlements = await service.resolveForWorkspace(workspaceId);
     expect(entitlements.topUpCreditsRemaining).toBe(750);
+  });
+
+  it('keeps Pro entitlements before scheduled downgrade effective date', async () => {
+    const { service } = createService({
+      workspaceId: new Types.ObjectId(workspaceId),
+      planKey: 'pro',
+      status: 'active',
+      currentPeriodStart: new Date('2026-05-01'),
+      currentPeriodEnd: new Date('2026-07-01'),
+      scheduledPlanChange: {
+        fromPlanKey: 'pro',
+        toPlanKey: 'starter',
+        effectiveAt: new Date('2026-07-01'),
+        status: 'scheduled',
+      },
+    });
+
+    const entitlements = await service.resolveForWorkspace(
+      workspaceId,
+      new Date('2026-06-15'),
+    );
+
+    expect(entitlements.planKey).toBe('pro');
+    expect(entitlements.monthlyAiCredits).toBe(2000);
+    expect(entitlements.memberLimit).toBe(10);
   });
 
   it('falls back to free expired after canceled paid subscription', async () => {

@@ -31,7 +31,7 @@ export function OnboardingShell({ sidebar, mobileStepper, children, className }:
               Agent Setup
             </span>
             <h1 className="onboarding-sidebar-heading m-0 mt-2.5 text-[var(--color-text-primary)]">
-              Set up your first AI agent
+              Set up your first AI Agent
             </h1>
             <p className="onboarding-sidebar-lead m-0 mt-1 text-[var(--color-text-secondary)]">
               From setup to go live, then use your agent on your website.

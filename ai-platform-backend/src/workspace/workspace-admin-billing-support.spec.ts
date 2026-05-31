@@ -216,6 +216,19 @@ describe('WorkspaceBillingSummaryService admin support', () => {
           },
         ]),
       } as never,
+      {
+        buildSummary: jest.fn().mockResolvedValue({
+          status: 'off',
+          enabled: false,
+          checkoutAvailable: true,
+          cancelAtPeriodEnd: false,
+          currentPeriodEnd: null,
+          packsThisBillingPeriod: 0,
+          maxPacksPerBillingPeriod: 5,
+          packCredits: 1000,
+          packPriceUsd: 30,
+        }),
+      } as never,
     );
 
     const summary = await service.getAdminSummary(workspaceId);

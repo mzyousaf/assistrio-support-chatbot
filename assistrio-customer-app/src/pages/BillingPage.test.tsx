@@ -5,7 +5,7 @@ import type { CustomerMe, WorkspaceBillingSummary } from '@/api/types';
 import { TRAINED_KNOWLEDGE_STORAGE_HELPER } from '@/lib/trainedKnowledgeStorageCopy';
 import { mockBillingSubscription } from '@/lib/billingSummaryFixtures';
 import { mockTrialBillingEntitlements, mockTrialWorkspaceSummary } from '@/lib/planEntitlements';
-import { SettingsBillingPage } from './PlansPage';
+import { SettingsBillingPage } from './SettingsBillingPage';
 
 const mockGetWorkspaceBillingSummary = vi.fn();
 const mockGetWorkspaceBillingInvoices = vi.fn();
@@ -14,6 +14,7 @@ const mockFetchWorkspaceBillingHistoryCsv = vi.fn();
 const mockGetWorkspaceBillingProfile = vi.fn();
 const mockCreateBillingManageSession = vi.fn();
 const mockRestoreWorkspaceSubscription = vi.fn();
+const mockCancelScheduledWorkspaceDowngrade = vi.fn();
 
 const mockCancelWorkspaceAddon = vi.fn();
 
@@ -27,12 +28,17 @@ vi.mock('@/api/customerApi', () => ({
     mockFetchWorkspaceBillingHistoryCsv(...args),
   createBillingManageSession: (...args: unknown[]) => mockCreateBillingManageSession(...args),
   restoreWorkspaceSubscription: (...args: unknown[]) => mockRestoreWorkspaceSubscription(...args),
+  cancelScheduledWorkspaceDowngrade: (...args: unknown[]) =>
+    mockCancelScheduledWorkspaceDowngrade(...args),
   cancelWorkspaceAddon: (...args: unknown[]) => mockCancelWorkspaceAddon(...args),
   getCustomerBots: vi.fn().mockResolvedValue({ ok: true, data: [] }),
   createAddonCheckoutSession: vi.fn(),
   createTopUpCheckoutSession: vi.fn(),
   createPlanCheckoutSession: vi.fn(),
   changeWorkspaceSubscriptionPlan: vi.fn(),
+  patchWorkspaceCreditAutoTopUp: vi.fn(),
+  createAutoTopUpCheckoutSession: vi.fn(),
+  disableWorkspaceAutoTopUp: vi.fn(),
 }));
 
 const baseWorkspace = mockTrialWorkspaceSummary();
@@ -140,19 +146,168 @@ describe('SettingsBillingPage', () => {
     vi.clearAllMocks();
   });
 
-  it('renders Billing & Invoices page title', async () => {
+  it('renders Billing & Plans page title', async () => {
     renderPage();
-    expect(await screen.findByRole('heading', { name: 'Billing & Invoices', level: 1 })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Billing & Plans', level: 1 })).toBeTruthy();
     expect(
       screen.getByText('Manage your subscription, payment method, invoices, and add-ons.'),
     ).toBeTruthy();
   });
 
-  it('renders current billing summary with view plans link', async () => {
+  it('renders current billing summary and opens plans modal from Adjust Plan', async () => {
+    mockGetWorkspaceBillingSummary.mockResolvedValue({
+      ok: true,
+      data: buildSummary({
+        planCatalog: [
+          {
+            key: 'free',
+            name: 'Free',
+            priceMonthly: 0,
+            botLimit: 1,
+            memberLimit: 3,
+            monthlyAiCredits: 50,
+            kbStorageMbPerBot: 5,
+            analyticsHistoryDays: 7,
+            canExportReports: false,
+            checkoutAvailable: true,
+          },
+          {
+            key: 'starter',
+            name: 'Starter',
+            priceMonthly: 49,
+            botLimit: 1,
+            memberLimit: 3,
+            monthlyAiCredits: 500,
+            kbStorageMbPerBot: 15,
+            analyticsHistoryDays: null,
+            canExportReports: true,
+            checkoutAvailable: true,
+          },
+          {
+            key: 'pro',
+            name: 'Pro',
+            priceMonthly: 99,
+            botLimit: 1,
+            memberLimit: 5,
+            monthlyAiCredits: 2000,
+            kbStorageMbPerBot: 30,
+            analyticsHistoryDays: null,
+            canExportReports: true,
+            checkoutAvailable: true,
+          },
+        ],
+      }),
+    });
     renderPage();
-    expect(await screen.findByRole('heading', { name: 'Free trial', level: 2 })).toBeTruthy();
-    expect(screen.getByText('Included credits')).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'View plans' }).getAttribute('href')).toBe('/settings/plans');
+    expect(await screen.findByRole('heading', { name: 'Subscription overview', level: 2 })).toBeTruthy();
+    const currentPlan = screen.getByTestId('billing-current-plan');
+    expect(within(currentPlan).getByRole('heading', { name: 'Free trial', level: 3 })).toBeTruthy();
+    expect(within(currentPlan).getByText('$0/month')).toBeTruthy();
+    expect(within(currentPlan).getByText(/Your workspace is currently on Free trial/i)).toBeTruthy();
+    expect(screen.queryByText('Included credits')).toBeNull();
+    const nextPlan = screen.getByTestId('billing-next-plan');
+    expect(within(nextPlan).getByText('Upgrade Available')).toBeTruthy();
+    expect(within(nextPlan).getByText('FREE')).toBeTruthy();
+    expect(within(nextPlan).getByText('STARTER')).toBeTruthy();
+    expect(within(nextPlan).getByRole('heading', { name: 'Starter', level: 3 })).toBeTruthy();
+    expect(within(nextPlan).getByText('$49')).toBeTruthy();
+    expect(within(nextPlan).getByText('/ month')).toBeTruthy();
+    expect(within(nextPlan).getByText(/AI credits\s+50/)).toBeTruthy();
+    expect(within(nextPlan).getByText(/500/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Adjust Plan' }));
+    expect(await screen.findByRole('heading', { name: 'Plans', level: 2 })).toBeTruthy();
+    expect(screen.getByText('Compare plans and choose the one that fits your workspace.')).toBeTruthy();
+  });
+
+  it('shows trial ending soon banner on billing page', async () => {
+    mockGetWorkspaceBillingSummary.mockResolvedValue({
+      ok: true,
+      data: buildSummary({
+        plan: {
+          ...buildSummary().plan,
+          currentPeriodEnd: new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString(),
+        },
+      }),
+    });
+    renderPage();
+    expect(await screen.findByText(/Your trial ends soon/i)).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'View plans' })).toBeTruthy();
+  });
+
+  it('shows expired trial upgrade banner on billing page', async () => {
+    mockGetWorkspaceBillingSummary.mockResolvedValue({
+      ok: true,
+      data: buildSummary({
+        entitlements: {
+          ...mockTrialBillingEntitlements(),
+          isTrialExpired: true,
+        },
+      }),
+    });
+    renderPage();
+    expect(await screen.findByText(/Your free trial has ended/i)).toBeTruthy();
+  });
+
+  it('shows Pro upgrade benefits and upgrade button for Starter when checkout enabled', async () => {
+    mockGetWorkspaceBillingSummary.mockResolvedValue({
+      ok: true,
+      data: {
+        ...buildSummary({
+          plan: {
+            key: 'starter',
+            name: 'Starter',
+            priceMonthly: 49,
+            status: 'active',
+            currentPeriodStart: '2026-05-01T00:00:00.000Z',
+            currentPeriodEnd: '2026-06-01T00:00:00.000Z',
+          },
+          entitlements: {
+            ...mockTrialBillingEntitlements(),
+            isTrialPlan: false,
+          },
+        }),
+        planCatalog: [
+          {
+            key: 'starter',
+            name: 'Starter',
+            priceMonthly: 49,
+            botLimit: 3,
+            memberLimit: 5,
+            monthlyAiCredits: 500,
+            kbStorageMbPerBot: 15,
+            analyticsHistoryDays: null,
+            canExportReports: true,
+            checkoutAvailable: true,
+          },
+          {
+            key: 'pro',
+            name: 'Pro',
+            priceMonthly: 99,
+            botLimit: 10,
+            memberLimit: 10,
+            monthlyAiCredits: 2000,
+            kbStorageMbPerBot: 30,
+            analyticsHistoryDays: null,
+            canExportReports: true,
+            checkoutAvailable: true,
+          },
+        ],
+      },
+    });
+
+    renderPage();
+    const nextPlan = await screen.findByTestId('billing-next-plan');
+    expect(within(nextPlan).getByText('Upgrade Available')).toBeTruthy();
+    expect(within(nextPlan).getByText('STARTER')).toBeTruthy();
+    expect(within(nextPlan).getByText('PRO')).toBeTruthy();
+    expect(within(nextPlan).getByRole('heading', { name: 'Pro', level: 3 })).toBeTruthy();
+    expect(within(nextPlan).getByText('$99')).toBeTruthy();
+    expect(within(nextPlan).getByText('/ month')).toBeTruthy();
+    expect(within(nextPlan).getByText(/AI credits\s+500/)).toBeTruthy();
+    expect(within(nextPlan).getByText(/2,000/)).toBeTruthy();
+    expect(within(nextPlan).getByText(/Support\s+Standard/)).toBeTruthy();
+    expect(within(nextPlan).getByText('Priority')).toBeTruthy();
+    expect(within(nextPlan).getByRole('button', { name: 'Upgrade to Pro' })).toBeTruthy();
   });
 
   it('shows payment setup notice', async () => {
@@ -163,7 +318,7 @@ describe('SettingsBillingPage', () => {
 
   it('does not render usage snapshot', async () => {
     renderPage();
-    await screen.findByRole('heading', { name: 'Billing & Invoices', level: 1 });
+    await screen.findByRole('heading', { name: 'Billing & Plans', level: 1 });
     expect(screen.queryByText('Usage snapshot')).toBeNull();
   });
 
@@ -272,7 +427,7 @@ describe('SettingsBillingPage', () => {
       },
     });
     renderPage();
-    await screen.findByText(/Visa ending in 4242/);
+    await screen.findByRole('heading', { name: 'Payment method' });
     expect(screen.queryByRole('button', { name: 'Manage billing' })).toBeNull();
     expect(screen.queryByRole('button', { name: /payment method/i })).toBeNull();
   });
@@ -442,7 +597,8 @@ describe('SettingsBillingPage', () => {
       data: { message: 'Subscription restored.', summary: buildSummary() },
     });
     renderPage();
-    expect(await screen.findByText(/scheduled to cancel on/i)).toBeTruthy();
+    expect(await screen.findByText(/Cancellation scheduled/i)).toBeTruthy();
+    expect(screen.getByText(/remains active until/i)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Restore subscription' }));
     expect(await screen.findByRole('heading', { name: 'Restore subscription?' })).toBeTruthy();
     fireEvent.click(screen.getAllByRole('button', { name: 'Restore subscription' })[1]!);
@@ -451,7 +607,52 @@ describe('SettingsBillingPage', () => {
     });
   });
 
-  it('shows invoice amount formatted and Download PDF action', async () => {
+  it('shows scheduled downgrade banner with Keep Pro plan button', async () => {
+    mockGetWorkspaceBillingSummary.mockResolvedValue({
+      ok: true,
+      data: buildSummary({
+        plan: {
+          key: 'pro',
+          name: 'Pro',
+          priceMonthly: 99,
+          status: 'active',
+          currentPeriodStart: '2026-05-01T00:00:00.000Z',
+          currentPeriodEnd: '2026-07-01T00:00:00.000Z',
+        },
+        subscription: mockBillingSubscription({
+          subscriptionStatus: 'active',
+          hasActivePaidSubscription: true,
+          scheduledPlanKey: 'starter',
+          scheduledPlanName: 'Starter',
+          scheduledPlanEffectiveDate: '2026-07-01T00:00:00.000Z',
+        }),
+        entitlements: { ...mockTrialBillingEntitlements(), isTrialPlan: false },
+        planCatalog: [
+          {
+            key: 'starter',
+            name: 'Starter',
+            priceMonthly: 49,
+            botLimit: 1,
+            memberLimit: 3,
+            monthlyAiCredits: 500,
+            kbStorageMbPerBot: 15,
+            analyticsHistoryDays: null,
+            canExportReports: true,
+            checkoutAvailable: true,
+          },
+        ],
+      }),
+    });
+    mockCancelScheduledWorkspaceDowngrade.mockResolvedValue({
+      ok: true,
+      data: { message: 'Scheduled downgrade canceled.', summary: buildSummary() },
+    });
+    renderPage();
+    expect(await screen.findByText(/Downgrade scheduled/i)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Keep Pro plan' })).toBeTruthy();
+  });
+
+  it('shows invoice amount formatted and View Invoice action', async () => {
     mockGetWorkspaceBillingSummary.mockResolvedValue({
       ok: true,
       data: {
@@ -509,8 +710,8 @@ describe('SettingsBillingPage', () => {
     expect(within(invoicesSection!).getByText('Starter subscription started')).toBeTruthy();
     expect(within(invoicesSection!).queryByText('initial')).toBeNull();
     expect(within(invoicesSection!).queryByText('Trained knowledge storage')).toBeNull();
-    expect(within(invoicesSection!).getByRole('button', { name: /Download PDF/i })).toBeTruthy();
-    expect(within(invoicesSection!).getByRole('button', { name: /Download billing history/i })).toBeTruthy();
+    expect(within(invoicesSection!).getByRole('button', { name: /View Invoice/i })).toBeTruthy();
+    expect(within(invoicesSection!).getByRole('button', { name: /^Export$/i })).toBeTruthy();
     expect(within(invoicesSection!).queryByRole('link', { name: /View invoice/i })).toBeNull();
   });
 
@@ -595,23 +796,152 @@ describe('SettingsBillingPage', () => {
       return section!;
     });
     expect(await within(invoicesSection).findByText('Starter')).toBeTruthy();
-    expect(within(invoicesSection).getByText('Extra bot')).toBeTruthy();
+    expect(within(invoicesSection).getByText('Extra AI Agent')).toBeTruthy();
     expect(within(invoicesSection).getAllByText('$49.00').length).toBeGreaterThanOrEqual(2);
   });
 
-  it('shows past_due warning', async () => {
+  it('shows past_due warning with link to manage payments', async () => {
     mockGetWorkspaceBillingSummary.mockResolvedValue({
       ok: true,
       data: buildSummary({
+        planCatalog: [
+          {
+            key: 'starter',
+            name: 'Starter',
+            priceMonthly: 49,
+            botLimit: 1,
+            memberLimit: 3,
+            monthlyAiCredits: 500,
+            kbStorageMbPerBot: 15,
+            analyticsHistoryDays: null,
+            canExportReports: true,
+            checkoutAvailable: true,
+          },
+        ],
+        plan: {
+          key: 'starter',
+          name: 'Starter',
+          priceMonthly: 49,
+          status: 'past_due',
+          currentPeriodStart: '2026-05-01T00:00:00.000Z',
+          currentPeriodEnd: '2026-06-01T00:00:00.000Z',
+        },
         subscription: mockBillingSubscription({
           subscriptionStatus: 'past_due',
+          hasActivePaidSubscription: true,
           hasPaymentIssue: true,
+          manageBillingAvailable: true,
+          customerPortalAvailable: true,
         }),
+        entitlements: { ...mockTrialBillingEntitlements(), isTrialPlan: false },
       }),
     });
     renderPage();
     expect(await screen.findByText(/Payment issue detected/i)).toBeTruthy();
-    expect(screen.getByText(/update your payment method to avoid losing access/i)).toBeTruthy();
+    const managePaymentsLink = screen.getByRole('link', { name: 'Manage payments' });
+    expect(managePaymentsLink.getAttribute('href')).toBe('#billing-manage-payments');
+    const currentPlan = await screen.findByTestId('billing-current-plan');
+    expect(within(currentPlan).getByText('Payment issue')).toBeTruthy();
+    expect(
+      within(currentPlan).getByText(/Please update your payment method to avoid losing access/i),
+    ).toBeTruthy();
+    expect(within(currentPlan).getByRole('button', { name: 'Manage in Lemon Squeezy' })).toBeTruthy();
+  });
+
+  it('opens Lemon portal from current plan Manage in Lemon Squeezy', async () => {
+    const openMock = vi.mocked(window.open);
+    mockGetWorkspaceBillingSummary.mockResolvedValue({
+      ok: true,
+      data: buildSummary({
+        planCatalog: [
+          {
+            key: 'starter',
+            name: 'Starter',
+            priceMonthly: 49,
+            botLimit: 1,
+            memberLimit: 3,
+            monthlyAiCredits: 500,
+            kbStorageMbPerBot: 15,
+            analyticsHistoryDays: null,
+            canExportReports: true,
+            checkoutAvailable: true,
+          },
+        ],
+        plan: {
+          key: 'starter',
+          name: 'Starter',
+          priceMonthly: 49,
+          status: 'past_due',
+          currentPeriodStart: '2026-05-01T00:00:00.000Z',
+          currentPeriodEnd: '2026-06-01T00:00:00.000Z',
+        },
+        subscription: mockBillingSubscription({
+          subscriptionStatus: 'past_due',
+          hasActivePaidSubscription: true,
+          hasPaymentIssue: true,
+          manageBillingAvailable: true,
+          customerPortalAvailable: true,
+        }),
+        entitlements: { ...mockTrialBillingEntitlements(), isTrialPlan: false },
+      }),
+    });
+    renderPage();
+    const currentPlan = await screen.findByTestId('billing-current-plan');
+    fireEvent.click(
+      await within(currentPlan).findByRole('button', {
+        name: 'Manage in Lemon Squeezy',
+      }),
+    );
+    await waitFor(() => {
+      expect(mockCreateBillingManageSession).toHaveBeenCalledWith('ws-1');
+      expect(openMock).toHaveBeenCalledWith(
+        'https://portal.lemonsqueezy.com/billing',
+        '_blank',
+        'noopener,noreferrer',
+      );
+    });
+  });
+
+  it('does not show payment issue on active plan', async () => {
+    mockGetWorkspaceBillingSummary.mockResolvedValue({
+      ok: true,
+      data: buildSummary({
+        planCatalog: [
+          {
+            key: 'starter',
+            name: 'Starter',
+            priceMonthly: 49,
+            botLimit: 1,
+            memberLimit: 3,
+            monthlyAiCredits: 500,
+            kbStorageMbPerBot: 15,
+            analyticsHistoryDays: null,
+            canExportReports: true,
+            checkoutAvailable: true,
+          },
+        ],
+        plan: {
+          key: 'starter',
+          name: 'Starter',
+          priceMonthly: 49,
+          status: 'active',
+          currentPeriodStart: '2026-05-01T00:00:00.000Z',
+          currentPeriodEnd: '2026-06-01T00:00:00.000Z',
+        },
+        subscription: mockBillingSubscription({
+          subscriptionStatus: 'active',
+          hasActivePaidSubscription: true,
+          manageBillingAvailable: true,
+          customerPortalAvailable: true,
+        }),
+        entitlements: { ...mockTrialBillingEntitlements(), isTrialPlan: false },
+      }),
+    });
+    renderPage();
+    const currentPlan = await screen.findByTestId('billing-current-plan');
+    expect(within(currentPlan).getByText('Active')).toBeTruthy();
+    expect(within(currentPlan).queryByText('Payment issue')).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 
   it('renders current plan and add-ons in the first row when checkout enabled', async () => {
@@ -662,10 +992,11 @@ describe('SettingsBillingPage', () => {
     });
 
     renderPage();
-    const row = await screen.findByTestId('billing-plan-addons-row');
-    expect(row).toBeTruthy();
-    expect(within(row).getByTestId('billing-current-plan')).toBeTruthy();
-    expect(within(row).getByRole('heading', { name: 'Add-ons' })).toBeTruthy();
+    const overview = await screen.findByTestId('billing-subscription-overview');
+    expect(overview).toBeTruthy();
+    expect(within(overview).getByTestId('billing-current-plan')).toBeTruthy();
+    expect(within(overview).getByTestId('billing-addons-subsection')).toBeTruthy();
+    expect(within(overview).getByText('Add-ons')).toBeTruthy();
   });
 
   it('renders billing sections in required order', async () => {
@@ -722,10 +1053,10 @@ describe('SettingsBillingPage', () => {
     });
 
     renderPage();
-    await screen.findByTestId('billing-plan-addons-row');
+    await screen.findByTestId('billing-subscription-overview');
 
     const sectionNodes = [
-      document.querySelector('[data-testid="billing-plan-addons-row"]'),
+      document.getElementById('billing-subscription-overview'),
       document.getElementById('billing-manage-payments'),
       document.getElementById('billing-profile'),
       document.getElementById('billing-invoices'),
@@ -818,10 +1149,8 @@ describe('SettingsBillingPage', () => {
       },
     });
     renderPage();
-    expect(await screen.findByRole('heading', { name: 'Manage payments' })).toBeTruthy();
-    expect(screen.getByText('Visa ending in 4242')).toBeTruthy();
-    expect(screen.getByText('Stored securely by Lemon Squeezy')).toBeTruthy();
-    expect(screen.getByText(/Update payment method and payment details securely in Lemon Squeezy/i)).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Payment method' })).toBeTruthy();
+    expect(screen.getByText(/Manage your saved payment method through Lemon Squeezy/i)).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Manage in Lemon Squeezy' })).toBeTruthy();
     expect(screen.queryByText(/Update payment details/i)).toBeNull();
     expect(await screen.findByText('No invoices yet.')).toBeTruthy();
@@ -853,7 +1182,7 @@ describe('SettingsBillingPage', () => {
     renderPage();
     expect(await screen.findByText('Could not load billing details')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
-    expect(await screen.findByRole('heading', { name: 'Billing & Invoices', level: 1 })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Billing & Plans', level: 1 })).toBeTruthy();
   });
 
   it('shows loading skeleton while fetching', async () => {
@@ -935,14 +1264,15 @@ describe('SettingsBillingPage', () => {
     });
 
     renderPage();
-    expect(await screen.findByRole('heading', { name: 'Add-ons' })).toBeTruthy();
+    expect(await screen.findByText('Add-ons')).toBeTruthy();
     expect(screen.getByText('1,000 extra AI credits')).toBeTruthy();
-    expect(screen.getByText('Extra agent')).toBeTruthy();
+    expect(screen.getByText('Extra AI Agent')).toBeTruthy();
     expect(screen.getAllByText('Not active').length).toBeGreaterThan(0);
-    expect(screen.getByRole('button', { name: 'Buy credits' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Buy add-on: 1,000 extra AI credits' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Buy add-on: Remove Powered by Assistrio' })).toBeTruthy();
   });
 
-  it('shows AI credit top-up details in add-ons and Download PDF in invoices', async () => {
+  it('shows AI credit top-up details in add-ons and View Invoice in invoices', async () => {
     mockGetWorkspaceBillingSummary.mockResolvedValue({
       ok: true,
       data: {
@@ -1023,15 +1353,16 @@ describe('SettingsBillingPage', () => {
     });
 
     renderPage();
-    expect(await screen.findByText(/Top-up credits are used only after monthly plan credits/)).toBeTruthy();
-    expect(screen.getByText(/800 of 1,000 remaining/)).toBeTruthy();
+    expect(await screen.findByText(/Monthly credits are used first\. Existing top-up credits are used second\./)).toBeTruthy();
+    expect(screen.getByRole('progressbar', { name: '200 of 1,000 extra AI credits used' })).toBeTruthy();
+    expect(screen.getByText('Extra AI Credits Used')).toBeTruthy();
     expect(screen.queryByRole('link', { name: /View receipt/i })).toBeNull();
     expect(screen.queryByRole('link', { name: /View invoice/i })).toBeNull();
 
     const invoicesSection = document.getElementById('billing-invoices');
     expect(invoicesSection).toBeTruthy();
     expect(await within(invoicesSection!).findByText('1,000 AI credits top-up')).toBeTruthy();
-    expect(within(invoicesSection!).getByRole('button', { name: /Download PDF/i })).toBeTruthy();
+    expect(within(invoicesSection!).getByRole('button', { name: /View Invoice/i })).toBeTruthy();
   });
 
   it('opens cancel add-on confirmation modal for active recurring add-on', async () => {
@@ -1078,7 +1409,19 @@ describe('SettingsBillingPage', () => {
             status: 'active',
             active: true,
             currentPeriodEnd: '2026-06-01T00:00:00.000Z',
-            effectLabel: '+1 agent (limit 2)',
+            effectLabel: '+1 agent',
+          },
+        ],
+        extraBotAddons: [
+          {
+            id: 'addon-instance-1',
+            addonKey: 'extra_bot',
+            name: 'Extra bot',
+            status: 'active',
+            cancelAtPeriodEnd: false,
+            currentPeriodEnd: '2026-06-01T00:00:00.000Z',
+            priceUsd: 49,
+            effectLabel: '+1 agent',
           },
         ],
         topUps: [],
@@ -1093,6 +1436,72 @@ describe('SettingsBillingPage', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Cancel add-on' }));
     expect(
       await screen.findByText(/This add-on remains active until the end of the current billing period/i),
+    ).toBeTruthy();
+  });
+
+  it('shows auto top-up enable flow on billing page', async () => {
+    mockGetWorkspaceBillingSummary.mockResolvedValue({
+      ok: true,
+      data: {
+        ...buildSummary({
+          plan: {
+            key: 'starter',
+            name: 'Starter',
+            priceMonthly: 49,
+            status: 'active',
+            currentPeriodStart: '2026-05-01T00:00:00.000Z',
+            currentPeriodEnd: '2026-06-01T00:00:00.000Z',
+          },
+          entitlements: {
+            ...mockTrialBillingEntitlements(),
+            isTrialPlan: false,
+            addonsAllowed: true,
+          },
+        }),
+        addonCatalog: [
+          {
+            key: 'ai_credits_1000',
+            name: '1,000 extra AI credits',
+            billingInterval: 'one_time',
+            priceUsd: 30,
+            scope: 'workspace',
+            checkoutAvailable: true,
+            status: 'inactive',
+          },
+        ],
+        planCatalog: [
+          {
+            key: 'starter',
+            name: 'Starter',
+            priceMonthly: 49,
+            botLimit: 1,
+            memberLimit: 3,
+            monthlyAiCredits: 500,
+            kbStorageMbPerBot: 15,
+            analyticsHistoryDays: null,
+            canExportReports: true,
+            checkoutAvailable: true,
+          },
+        ],
+        autoTopUp: {
+          status: 'off',
+          enabled: false,
+          checkoutAvailable: true,
+          cancelAtPeriodEnd: false,
+          currentPeriodEnd: null,
+          packsThisBillingPeriod: 0,
+          maxPacksPerBillingPeriod: 5,
+          packCredits: 1000,
+          packPriceUsd: 30,
+        },
+      },
+    });
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Enable auto top-up' }));
+    expect(await screen.findByRole('heading', { name: 'Enable auto top-up?' })).toBeTruthy();
+    expect(
+      screen.getByText(/Monthly credits are used first\. Existing top-up credits are used second\./),
     ).toBeTruthy();
   });
 });

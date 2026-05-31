@@ -89,7 +89,7 @@ export function AgentInstructionsTextarea({
 
     <FieldRow
 
-      label="Describe your AI agent"
+      label="Describe your AI Agent"
 
       required
 

@@ -36,10 +36,15 @@ import {
 } from './billing-local-pdf.util';
 import {
   resolveBillingInvoiceDeliveryMode,
+  resolveOrderDirectPdfUrl,
   resolveProviderDirectPdfUrl,
   resolveProviderHostedInvoiceUrl,
 } from './billing-invoice-provider-url.util';
-import { fetchRemoteInvoicePdf } from './billing-invoice-pdf.util';
+import {
+  buildBillingInvoicePdfFilename,
+  fetchRemoteInvoicePdf,
+} from './billing-invoice-pdf.util';
+import { BillingProviderActionError } from './billing-provider.types';
 import {
   BILLING_HISTORY_CSV_FILENAME,
   buildBillingHistoryCsv,
@@ -198,8 +203,9 @@ export class BillingInvoicesService {
   ): Promise<BillingInvoicePdfResolveResult> {
     const row = await this.resolveBillingItemRow(workspaceId, billingItemId);
     const billingKind = row.billingKind ?? 'subscription_invoice';
-    const hostedProviderUrl = resolveProviderHostedInvoiceUrl(row);
-    const directPdfUrl = resolveProviderDirectPdfUrl(row);
+    const isOrder = billingKind === 'order';
+    const hostedProviderUrl = isOrder ? null : resolveProviderHostedInvoiceUrl(row);
+    const directPdfUrl = isOrder ? resolveOrderDirectPdfUrl(row) : resolveProviderDirectPdfUrl(row);
     const hasCompleteProfile = await this.billingProfileService.hasCompleteProfile(workspaceId);
     const requiresBillingDetails =
       billingKind === 'order' && !hostedProviderUrl && !directPdfUrl && !hasCompleteProfile;
@@ -220,7 +226,13 @@ export class BillingInvoicesService {
         hasInvoiceUrl: Boolean(row.invoiceUrl?.trim()),
         hasDownloadUrl: Boolean(directPdfUrl),
         hasReceiptUrl: Boolean(row.receiptUrl?.trim()),
-        pdfSource: hostedProviderUrl ? 'provider_url' : directPdfUrl ? 'provider_pdf' : 'local',
+        pdfSource: hostedProviderUrl
+          ? 'provider_url'
+          : directPdfUrl
+            ? 'provider_pdf'
+            : isOrder
+              ? 'lemon_generate_invoice'
+              : 'local',
       }),
     );
 
@@ -255,8 +267,19 @@ export class BillingInvoicesService {
       return {
         mode: 'pdf',
         buffer,
-        filename: buildLocalBillingPdfFilename(row.id),
+        filename: isOrder
+          ? buildBillingInvoicePdfFilename({ billingItemId: row.id, date: row.date })
+          : buildLocalBillingPdfFilename(row.id),
       };
+    }
+
+    if (isOrder) {
+      return this.streamGeneratedOrderInvoicePdf(
+        workspaceId,
+        row,
+        detailsInput,
+        requestContext,
+      );
     }
 
     const pdfContext = await this.loadLocalPdfContext(workspaceId, requestContext?.userId);
@@ -313,6 +336,107 @@ export class BillingInvoicesService {
         ...payload,
       }),
     );
+  }
+
+  private async streamGeneratedOrderInvoicePdf(
+    workspaceId: string,
+    row: ProviderInvoiceRow,
+    detailsInput?: Partial<BillingOrderInvoiceDetails> | null,
+    requestContext?: BillingInvoicePdfRequestContext,
+  ): Promise<BillingInvoicePdfResolveResult> {
+    const billingDetails = await this.resolveLocalPdfBillingDetails({
+      workspaceId,
+      billingKind: 'order',
+      detailsInput,
+      profileExtras: detailsInput as WorkspaceBillingProfileInput | null | undefined,
+      requestContext,
+      billingItemId: row.id,
+    });
+
+    const providerOrderId = String(row.providerOrderId ?? row.id).trim();
+    if (!billingDetails) {
+      throw new BadRequestException({
+        message: 'Billing details are required to generate this invoice.',
+        errorCode: 'billing_invoice_details_required',
+        profile: (await this.billingProfileService.getProfile(workspaceId)) ?? null,
+      });
+    }
+
+    try {
+      const generated = await this.billingProviderService.generateOrderInvoice(
+        providerOrderId,
+        billingDetails,
+        { requestId: requestContext?.requestId },
+      );
+
+      await this.persistGeneratedOrderInvoiceUrl(workspaceId, providerOrderId, generated.downloadUrl);
+
+      const buffer = await fetchRemoteInvoicePdf(generated.downloadUrl, {
+        context: {
+          requestId: requestContext?.requestId,
+          billingItemId: row.id,
+          billingKind: 'order',
+          providerOrderId,
+          providerInvoiceId: null,
+        },
+        log: (payload) => this.logger.debug(JSON.stringify(payload)),
+      });
+
+      this.logger.debug(
+        JSON.stringify({
+          event: 'billing_order_invoice_pdf_generated',
+          requestId: requestContext?.requestId,
+          billingItemId: row.id,
+          providerOrderId,
+          hasDownloadUrl: Boolean(generated.downloadUrl),
+        }),
+      );
+
+      return {
+        mode: 'pdf',
+        buffer,
+        filename: buildBillingInvoicePdfFilename({ billingItemId: row.id, date: row.date }),
+      };
+    } catch (err) {
+      if (err instanceof BillingProviderActionError) {
+        this.logBillingInvoicePdfError(requestContext, {
+          errorCode: err.errorCode,
+          billingItemId: row.id,
+          billingKind: 'order',
+          providerOrderId,
+          reason: err.message,
+        });
+        throw new BadRequestException({
+          message:
+            err.errorCode === 'billing_invoice_generation_failed'
+              ? err.message
+              : 'Please check your billing details.',
+          errorCode:
+            err.errorCode === 'billing_invoice_generation_failed'
+              ? 'billing_invoice_generation_failed'
+              : 'billing_invoice_details_invalid',
+        });
+      }
+      throw err;
+    }
+  }
+
+  private async persistGeneratedOrderInvoiceUrl(
+    workspaceId: string,
+    providerOrderId: string,
+    invoiceUrl: string,
+  ): Promise<void> {
+    if (!Types.ObjectId.isValid(workspaceId)) return;
+    const url = String(invoiceUrl ?? '').trim();
+    const orderId = String(providerOrderId ?? '').trim();
+    if (!url || !orderId) return;
+
+    await this.billingOrderModel
+      .updateOne(
+        { workspaceId: new Types.ObjectId(workspaceId), providerOrderId: orderId },
+        { $set: { invoiceUrl: url } },
+      )
+      .exec();
   }
 
   private async resolveBillingItemRow(
@@ -415,6 +539,7 @@ export class BillingInvoicesService {
     }
 
     if (billingKind === 'order' && !resolved) {
+      const profile = await this.billingProfileService.getProfile(workspaceId);
       this.logBillingInvoicePdfError(requestContext, {
         errorCode: 'billing_invoice_details_required',
         billingItemId,
@@ -424,6 +549,7 @@ export class BillingInvoicesService {
       throw new BadRequestException({
         message: 'Billing details are required to generate this invoice.',
         errorCode: 'billing_invoice_details_required',
+        profile: profile ?? null,
       });
     }
 
@@ -457,7 +583,10 @@ export class BillingInvoicesService {
         reason: parsed.message,
       });
       throw new BadRequestException({
-        message: parsed.message,
+        message:
+          parsed.errorCode === 'billing_invoice_details_invalid'
+            ? 'Please check your billing details.'
+            : parsed.message,
         errorCode: parsed.errorCode,
       });
     }
@@ -493,7 +622,10 @@ export class BillingInvoicesService {
         reason: parsed.message,
       });
       throw new BadRequestException({
-        message: parsed.message,
+        message:
+          parsed.errorCode === 'billing_invoice_details_invalid'
+            ? 'Please check your billing details.'
+            : parsed.message,
         errorCode: parsed.errorCode,
       });
     }

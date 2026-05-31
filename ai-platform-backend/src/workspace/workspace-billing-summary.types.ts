@@ -88,6 +88,9 @@ export type WorkspaceBillingPlanCatalogCard = {
   key: PlanKey;
   name: string;
   priceMonthly: number;
+  priceYearly: number;
+  monthlyEquivalentYearly: number;
+  yearlyDiscountPercent: number;
   botLimit: number;
   memberLimit: number;
   monthlyAiCredits: number;
@@ -95,23 +98,32 @@ export type WorkspaceBillingPlanCatalogCard = {
   analyticsHistoryDays: number | null;
   canExportReports: boolean;
   checkoutAvailable: boolean;
+  checkoutAvailableMonthly: boolean;
+  checkoutAvailableYearly: boolean;
 };
 
 export type WorkspaceBillingAddonCatalogCard = {
   key: WorkspaceAddonKey;
   name: string;
-  billingInterval: 'one_time' | 'monthly';
+  billingInterval: 'one_time' | 'monthly' | 'yearly';
   priceUsd: number;
+  priceYearly?: number;
+  monthlyEquivalentYearly?: number;
+  yearlyDiscountPercent?: number;
   scope: 'workspace' | 'bot';
   checkoutAvailable: boolean;
+  checkoutAvailableMonthly?: boolean;
+  checkoutAvailableYearly?: boolean;
   description?: string;
   active?: boolean;
-  status?: 'active' | 'inactive' | 'cancel_at_period_end' | 'expired' | 'cancelled';
+  status?: 'active' | 'inactive' | 'cancel_at_period_end' | 'expired' | 'cancelled' | 'past_due' | 'payment_failed';
   targetBotId?: string | null;
   targetBotName?: string | null;
   currentPeriodEnd?: string | null;
   cancelAtPeriodEnd?: boolean;
   effectLabel?: string | null;
+  /** ai_credits_1000 only — workspace preference for auto-prompt top-up purchases. */
+  autoTopUpPromptEnabled?: boolean;
 };
 
 export type WorkspaceBillingTopUpRow = {
@@ -135,7 +147,7 @@ export type WorkspaceBillingActiveAddonRow = {
   status: string;
   targetBotId: string | null;
   targetBotName: string | null;
-  billingInterval?: 'one_time' | 'monthly';
+  billingInterval?: 'one_time' | 'monthly' | 'yearly';
   priceUsd?: number;
   currentPeriodStart: string | null;
   currentPeriodEnd: string | null;
@@ -155,6 +167,13 @@ export type WorkspaceBillingSubscriptionSummary = {
   paymentMethod: WorkspaceBillingPaymentMethodSummary | null;
   customerPortalAvailable: boolean;
   manageBillingAvailable: boolean;
+  scheduledPlanKey?: string;
+  scheduledPlanName?: string;
+  scheduledPlanEffectiveDate?: string;
+  billingInterval?: 'monthly' | 'yearly';
+  scheduledBillingInterval?: 'monthly' | 'yearly';
+  scheduledBillingIntervalEffectiveDate?: string;
+  scheduledFromBillingInterval?: 'monthly' | 'yearly';
 };
 
 export type WorkspaceBillingInvoiceRow = {
@@ -179,6 +198,27 @@ export type WorkspaceBillingInvoiceRow = {
   source?: 'lemon_subscription_invoice' | 'lemon_order' | 'local_top_up';
 };
 
+export type WorkspaceBillingExtraBotAddonInstance = {
+  id: string;
+  addonKey: 'extra_bot';
+  name: string;
+  status: 'active' | 'cancel_at_period_end' | 'expired' | 'cancelled' | 'past_due' | 'payment_failed';
+  cancelAtPeriodEnd: boolean;
+  currentPeriodStart?: string | null;
+  currentPeriodEnd?: string | null;
+  priceUsd: number;
+  billingInterval?: 'monthly' | 'yearly';
+  scheduledBillingInterval?: 'monthly' | 'yearly';
+  scheduledBillingIntervalEffectiveDate?: string | null;
+  scheduledIntervalChange?: {
+    fromBillingInterval: 'monthly' | 'yearly';
+    toBillingInterval: 'monthly' | 'yearly';
+    effectiveAt: string;
+    status: 'scheduled' | 'applied' | 'canceled';
+  } | null;
+  effectLabel: '+1 agent';
+};
+
 /** GET /api/customer/workspaces/:workspaceId/billing/summary */
 export type WorkspaceBillingSummary = {
   workspaceId: string;
@@ -190,6 +230,21 @@ export type WorkspaceBillingSummary = {
   addonCatalog: WorkspaceBillingAddonCatalogCard[];
   activeAddons: WorkspaceBillingActiveAddonRow[];
   topUps: WorkspaceBillingTopUpRow[];
+  extraBotAddons?: WorkspaceBillingExtraBotAddonInstance[];
+  aiCreditsAutoTopUpPromptEnabled?: boolean;
+  autoTopUpThresholdCredits?: number;
+  topUpCheckoutAvailable?: boolean;
+  autoTopUp?: {
+    status: 'off' | 'pending' | 'active' | 'payment_issue' | 'scheduled_disable';
+    enabled: boolean;
+    checkoutAvailable: boolean;
+    cancelAtPeriodEnd: boolean;
+    currentPeriodEnd: string | null;
+    packsThisBillingPeriod: number;
+    maxPacksPerBillingPeriod: number;
+    packCredits: number;
+    packPriceUsd: number;
+  };
 };
 
 export type AdminWorkspaceBillingMetadata = {

@@ -1,6 +1,7 @@
 import { Package } from 'lucide-react';
 import type { WorkspaceBillingSummary } from '@/api/types';
 import { SettingsInfoCard } from '@/components/settings/SettingsInfoCard';
+import { formatCustomerFacingAgentText } from '@/lib/customerAgentTerminology';
 import { formatUsagePeriodDate } from '@/pages/usage/usagePageFormat';
 
 type Props = {
@@ -38,14 +39,14 @@ export function BillingActiveAddonsSection({ summary }: Props) {
             addon.targetBotName != null
               ? ` · ${addon.targetBotName}`
               : addon.targetBotId
-                ? ` · Bot ${addon.targetBotId}`
+                ? ` · AI Agent ${addon.targetBotId}`
                 : '';
 
           return (
             <SettingsInfoCard
               key={`${addon.addonKey}-${addon.targetBotId ?? 'workspace'}`}
               icon={Package}
-              title={addon.name}
+              title={formatCustomerFacingAgentText(addon.name)}
               description={`${addon.status}${target}${period ? ` · ${period}` : ''}`}
               variant="muted"
             />

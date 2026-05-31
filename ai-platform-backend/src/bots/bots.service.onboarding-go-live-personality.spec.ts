@@ -87,7 +87,7 @@ describe('BotsService.createPublishedBotFromWorkspaceOnboarding personality mapp
     const payload = captured();
     expect(payload).not.toBeNull();
     expect(payload!.description).not.toBe(userDescription);
-    expect(String(payload!.description)).toMatch(/This AI agent helps customers/i);
+    expect(String(payload!.description)).toMatch(/This AI Agent helps customers/i);
     expect(payload!.shortDescription).toBe('Helper');
     expect(payload!.welcomeMessage).toContain('{{Name}}');
     expect(payload!.visitorMultiChatEnabled).toBe(true);

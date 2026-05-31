@@ -1,9 +1,10 @@
 import { useCallback, useState } from 'react';
 import {
+  cancelScheduledWorkspaceDowngrade,
   changeWorkspaceSubscriptionPlan,
   restoreWorkspaceSubscription,
 } from '@/api/customerApi';
-import type { ApiResult, WorkspaceBillingSummary } from '@/api/types';
+import type { ApiResult, BillingInterval, WorkspaceBillingSummary } from '@/api/types';
 import { appToast } from '@/lib/app-toast';
 import { mapBillingSubscriptionActionError } from '@/lib/billingCheckout';
 
@@ -45,11 +46,14 @@ export function useBillingSubscriptionActions(
   }, [workspaceId, busy, handleResult]);
 
   const changePlan = useCallback(
-    async (planKey: 'starter' | 'pro') => {
+    async (planKey: 'starter' | 'pro', billingInterval?: BillingInterval) => {
       if (!workspaceId || busy) return false;
       setBusy(true);
       try {
-        const result = await changeWorkspaceSubscriptionPlan(workspaceId, { planKey });
+        const result = await changeWorkspaceSubscriptionPlan(workspaceId, {
+          planKey,
+          ...(billingInterval ? { billingInterval } : {}),
+        });
         return handleResult(result);
       } finally {
         setBusy(false);
@@ -58,9 +62,21 @@ export function useBillingSubscriptionActions(
     [workspaceId, busy, handleResult],
   );
 
+  const cancelScheduledDowngrade = useCallback(async () => {
+    if (!workspaceId || busy) return false;
+    setBusy(true);
+    try {
+      const result = await cancelScheduledWorkspaceDowngrade(workspaceId);
+      return handleResult(result);
+    } finally {
+      setBusy(false);
+    }
+  }, [workspaceId, busy, handleResult]);
+
   return {
     busy,
     restoreSubscription,
     changePlan,
+    cancelScheduledDowngrade,
   };
 }

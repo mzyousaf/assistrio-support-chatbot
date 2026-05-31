@@ -7,7 +7,9 @@ import { resolveActiveCustomerWorkspace } from '../../lib/resolveActiveCustomerW
 import {
   isChatUpgradeModalErrorCode,
   PLAN_LIMIT_AI_CREDITS_CODE,
+  PLAN_LIMIT_AI_CREDITS_MEMBER_MESSAGE,
   FREE_TRIAL_EXPIRED_CODE,
+  readAiCreditsExhaustionMetadata,
 } from '@/lib/planLimitError';
 import {
   resolveChatRuntimeErrorMessage,
@@ -26,13 +28,14 @@ export function PlaygroundSection() {
   const { bot, botId } = useBotWorkspace();
   const { customer } = useCustomerAuth();
   const { role } = resolveActiveCustomerWorkspace(customer);
-  const canViewPlans = isWorkspaceManagerRole(role);
-  const { openUpgradeModal } = useUpgradePlanModal();
+  const canManageBilling = isWorkspaceManagerRole(role);
+  const { openUpgradeModal, openTopUpPromptModal } = useUpgradePlanModal();
   const [messages, setMessages] = useState<Turn[]>([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [errCode, setErrCode] = useState<string | null>(null);
+  const [canAutoTopUpPrompt, setCanAutoTopUpPrompt] = useState(false);
 
   useEffect(() => {
     if (!botId) return;
@@ -55,9 +58,15 @@ export function PlaygroundSection() {
   );
 
   useEffect(() => {
-    if (!errCode || !canViewPlans || !isChatUpgradeModalErrorCode(errCode)) return;
-    openUpgradeModal({ errorCode: errCode });
-  }, [canViewPlans, errCode, openUpgradeModal]);
+    if (!errCode || !canManageBilling) return;
+    if (errCode === PLAN_LIMIT_AI_CREDITS_CODE && canAutoTopUpPrompt) {
+      openTopUpPromptModal();
+      return;
+    }
+    if (isChatUpgradeModalErrorCode(errCode)) {
+      openUpgradeModal({ errorCode: errCode });
+    }
+  }, [canAutoTopUpPrompt, canManageBilling, errCode, openTopUpPromptModal, openUpgradeModal]);
 
   if (!bot || !botId) return null;
   const id = botId;
@@ -67,6 +76,7 @@ export function PlaygroundSection() {
     if (!text || sending) return;
     setErr(null);
     setErrCode(null);
+    setCanAutoTopUpPrompt(false);
     const userTurn: Turn = { id: crypto.randomUUID(), role: 'user', text };
     const next = [...messages, userTurn];
     setMessages(next);
@@ -76,7 +86,13 @@ export function PlaygroundSection() {
     const res = await postCustomerBotChat(id, { message: text });
     setSending(false);
     if (!res.ok) {
-      setErr(resolveChatRuntimeErrorMessage(res));
+      const exhaustion = readAiCreditsExhaustionMetadata(res.body);
+      setCanAutoTopUpPrompt(exhaustion.canAutoTopUpPrompt);
+      if (res.errorCode === PLAN_LIMIT_AI_CREDITS_CODE && !canManageBilling) {
+        setErr(PLAN_LIMIT_AI_CREDITS_MEMBER_MESSAGE);
+      } else {
+        setErr(resolveChatRuntimeErrorMessage(res));
+      }
       setErrCode(res.errorCode ?? null);
       return;
     }
@@ -108,8 +124,8 @@ export function PlaygroundSection() {
               <div className={ws.err}>
                 <p className="m-0">{err}</p>
                 {errCode === PLAN_LIMIT_AI_CREDITS_CODE || errCode === FREE_TRIAL_EXPIRED_CODE ? (
-                  canViewPlans ? (
-                  <Link to="/settings/plans" className="mt-2 inline-block text-sm font-medium text-teal-700 underline">
+                  canManageBilling ? (
+                  <Link to="/settings/billing" className="mt-2 inline-block text-sm font-medium text-teal-700 underline">
                     View plans
                   </Link>
                   ) : null

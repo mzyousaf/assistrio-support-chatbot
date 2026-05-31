@@ -36,8 +36,15 @@ describe('CustomerWorkspaceBillingCheckoutController', () => {
         provider: 'lemon_squeezy',
       }),
     };
+    const billingAiCreditsAutoTopUpService = {
+      beginEnableCheckout: jest.fn().mockResolvedValue({
+        checkoutUrl: 'https://pay.example/auto-topup',
+        provider: 'lemon_squeezy',
+      }),
+    };
     const controller = new CustomerWorkspaceBillingCheckoutController(
       billingCheckoutService as never,
+      billingAiCreditsAutoTopUpService as never,
       workspacesService as never,
     );
     return { controller, workspacesService, billingCheckoutService };
@@ -51,6 +58,7 @@ describe('CustomerWorkspaceBillingCheckoutController', () => {
       workspaceId,
       ownerUserId,
       'starter',
+      undefined,
     );
   });
 
@@ -61,6 +69,7 @@ describe('CustomerWorkspaceBillingCheckoutController', () => {
       workspaceId,
       ownerUserId,
       'pro',
+      undefined,
     );
   });
 

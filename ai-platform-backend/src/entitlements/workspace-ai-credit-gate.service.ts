@@ -1,5 +1,12 @@
-import { HttpException, HttpStatus, Injectable, ServiceUnavailableException } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable, ServiceUnavailableException, Inject, forwardRef } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { isTopUpCheckoutAvailable, readMergedBillingAppConfig } from '../billing/billing-config.util';
+import { resolveCanAutoTopUpPrompt } from '../billing/billing-ai-credits-auto-topup-prompt.util';
+import { BillingAiCreditsAutoTopUpService } from '../billing/billing-ai-credits-auto-topup.service';
 import { WorkspaceAiCreditsUsageService } from './workspace-ai-credits-usage.service';
+import { WorkspaceEntitlementsService } from './workspace-entitlements.service';
+import { WorkspaceSubscriptionsService } from './workspace-subscriptions.service';
+import { WorkspaceCreditTopUpService } from './workspace-credit-topup.service';
 
 export const PLAN_LIMIT_AI_CREDITS_CODE = 'plan_limit_ai_credits' as const;
 export const FREE_TRIAL_EXPIRED_CODE = 'free_trial_expired' as const;
@@ -28,6 +35,8 @@ export type PlanLimitAiCreditsPayload = {
   message: string;
   errorCode: typeof PLAN_LIMIT_AI_CREDITS_CODE;
   usage: PlanLimitAiCreditsUsage;
+  canAutoTopUpPrompt: boolean;
+  topUpCheckoutAvailable: boolean;
 };
 
 export type FreeTrialExpiredPayload = {
@@ -60,13 +69,19 @@ export function isPlanLimitAiCreditsHttpException(err: unknown): err is HttpExce
 /**
  * Pre-flight AI credit enforcement for billable chat turns.
  *
- * MVP uses a non-atomic check-before-call pattern: usage is read here, ledger rows are
- * appended after the OpenAI completion path. Concurrent requests may briefly exceed the
- * monthly cap; future work should add atomic reservation/debit in the usage ledger.
+ * Credit order: monthly allowance → existing top-up pool → automatic top-up pack (if enabled).
  */
 @Injectable()
 export class WorkspaceAiCreditGateService {
-  constructor(private readonly usageService: WorkspaceAiCreditsUsageService) {}
+  constructor(
+    private readonly usageService: WorkspaceAiCreditsUsageService,
+    private readonly entitlementsService: WorkspaceEntitlementsService,
+    private readonly subscriptionsService: WorkspaceSubscriptionsService,
+    private readonly configService: ConfigService,
+    private readonly creditTopUpService: WorkspaceCreditTopUpService,
+    @Inject(forwardRef(() => BillingAiCreditsAutoTopUpService))
+    private readonly billingAiCreditsAutoTopUpService: BillingAiCreditsAutoTopUpService,
+  ) {}
 
   async assertCanUseAiCredits(
     workspaceId: string,
@@ -93,8 +108,8 @@ export class WorkspaceAiCreditGateService {
     const current = usageSummary.monthlyCreditsUsed;
     const limit = usageSummary.monthlyAiCredits;
     const monthlyRemaining = usageSummary.monthlyCreditsRemaining;
-    const topUpRemaining = usageSummary.topUpCreditsRemaining;
-    const totalRemaining = monthlyRemaining + topUpRemaining;
+    let topUpRemaining = usageSummary.topUpCreditsRemaining;
+    let totalRemaining = monthlyRemaining + topUpRemaining;
 
     const usagePayload: PlanLimitAiCreditsUsage = {
       current,
@@ -123,12 +138,43 @@ export class WorkspaceAiCreditGateService {
       if (spill <= topUpRemaining) {
         return;
       }
+
+      const fulfill = await this.billingAiCreditsAutoTopUpService.tryFulfillAtCreditGate(
+        wsId,
+        estimatedCredits,
+        now,
+      );
+      if (fulfill.ok) {
+        topUpRemaining = await this.creditTopUpService.sumRemainingCredits(wsId, now);
+        totalRemaining = monthlyRemaining + topUpRemaining;
+        if (spill <= topUpRemaining) {
+          return;
+        }
+      }
+
+      const [subscription, entitlements] = await Promise.all([
+        this.subscriptionsService.findByWorkspaceId(wsId),
+        this.entitlementsService.resolveForWorkspace(wsId, now),
+      ]);
+      const appConfig = readMergedBillingAppConfig(this.configService);
+      const topUpCheckoutAvailable = isTopUpCheckoutAvailable(appConfig, 'ai_credits_1000');
+      const canAutoTopUpPrompt = resolveCanAutoTopUpPrompt({
+        subscription,
+        entitlements,
+        totalCreditsRemaining: totalRemaining,
+      });
+
       const payload: PlanLimitAiCreditsPayload = {
         message: usageSummary.isTrialPlan
           ? PLAN_LIMIT_AI_CREDITS_TRIAL_MESSAGE
           : PLAN_LIMIT_AI_CREDITS_MESSAGE,
         errorCode: PLAN_LIMIT_AI_CREDITS_CODE,
-        usage: usagePayload,
+        usage: {
+          ...usagePayload,
+          remaining: totalRemaining,
+        },
+        canAutoTopUpPrompt: canAutoTopUpPrompt && topUpCheckoutAvailable,
+        topUpCheckoutAvailable,
       };
       throw new HttpException(payload, HttpStatus.FORBIDDEN);
     }

@@ -287,7 +287,7 @@ export function CoreDateGranularityPreviewCapsules({
               {maxHistoryDays != null ? (
                 <p className="m-0 mt-2 text-[0.7rem] leading-snug text-slate-600">
                   {ANALYTICS_HISTORY_LOCKED_HELPER}{' '}
-                  <Link to="/settings/plans" className="font-medium text-teal-700 underline">
+                  <Link to="/settings/billing" className="font-medium text-teal-700 underline">
                     View plans
                   </Link>
                 </p>

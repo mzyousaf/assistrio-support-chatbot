@@ -1,10 +1,17 @@
 import type { PlanKey } from './plan-catalog';
 import type { WorkspaceSubscriptionStatus } from '../models/workspace-subscription.schema';
+import { resolveEntitlementPlanKey } from './workspace-scheduled-plan-change.util';
 
 export type SubscriptionForEffectivePlan = {
   planKey: string;
   status: WorkspaceSubscriptionStatus;
   currentPeriodEnd?: Date | null;
+  scheduledPlanChange?: {
+    fromPlanKey: PlanKey;
+    toPlanKey: PlanKey;
+    effectiveAt: Date | string;
+    status: 'scheduled' | 'applied' | 'canceled';
+  } | null;
 };
 
 const PAID_PLAN_KEYS = new Set<string>(['starter', 'pro']);
@@ -37,8 +44,14 @@ export function resolveEffectivePlanKey(
   now: Date = new Date(),
 ): PlanKey {
   if (!subscription) return 'free';
-  if (isPaidSubscriptionEntitled(subscription, now)) {
-    return subscription.planKey as PlanKey;
+  const entitlementPlanKey = resolveEntitlementPlanKey(subscription, now);
+  if (
+    isPaidSubscriptionEntitled(
+      { ...subscription, planKey: entitlementPlanKey },
+      now,
+    )
+  ) {
+    return entitlementPlanKey;
   }
   return 'free';
 }
