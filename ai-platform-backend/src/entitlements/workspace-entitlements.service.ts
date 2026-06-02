@@ -145,6 +145,7 @@ export class WorkspaceEntitlementsService {
       autoTrainAllowed: !isTrialExpired && plan.autoTrainAllowed,
       addonsAllowed: !isTrialExpired && plan.addonsAllowed,
       memberInvitesAllowed: !isTrialExpired && plan.memberInvitesAllowed,
+      sharePreviewAllowed: !isTrialExpired && plan.sharePreviewAllowed,
       canRemoveBranding: false,
       activeAddons: [],
       topUpCreditsRemaining,

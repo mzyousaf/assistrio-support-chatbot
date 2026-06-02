@@ -36,6 +36,11 @@ import {
 } from './publishOriginHelpers';
 import { usePublishWorkspace, type EmbedInstallMode } from './PublishWorkspaceContext';
 import { useBotWorkspace } from './BotWorkspaceContext';
+import { PaidPlanFeatureCalloutForReason } from '@/components/billing/PaidPlanFeatureCallout';
+import { useCustomerAuth } from '@/auth/CustomerAuthContext';
+import { resolveActiveCustomerWorkspace } from '@/lib/resolveActiveCustomerWorkspace';
+import { useWorkspaceBillingSummary } from '@/hooks/useWorkspaceBillingSummary';
+import { workspaceSharePreviewAllowed } from '@/lib/planEntitlements';
 import { WorkspaceSectionHeader } from './WorkspaceSectionHeader';
 import { ws } from './workspace';
 
@@ -352,6 +357,10 @@ export function PublishSection() {
   const ctx = usePublishWorkspace();
   const lifecycle = useBotLifecycleControls();
   const { canManageBot } = useBotWorkspace();
+  const { customer } = useCustomerAuth();
+  const { activeWorkspaceId } = resolveActiveCustomerWorkspace(customer);
+  const { summary: billingSummary } = useWorkspaceBillingSummary(activeWorkspaceId);
+  const sharePreviewAllowed = workspaceSharePreviewAllowed(billingSummary?.entitlements);
 
   const {
     copyText,
@@ -789,6 +798,26 @@ export function PublishSection() {
                       </ul>
                     )}
                   </div>
+                </section>
+              </CardBody>
+            </Card>
+
+            <Card className={standardCardClass}>
+              <CardBody className="w-full min-w-0 px-5 py-6 sm:px-6 sm:py-7">
+                <section className="flex min-w-0 flex-col gap-4" aria-labelledby="share-preview-heading">
+                  <WorkspaceSectionHeader
+                    id="share-preview-heading"
+                    title="Share preview link"
+                    description="Create an Assistrio-hosted preview link from Share Agent Preview in the top bar, or open that modal to manage an existing link."
+                  />
+                  {!sharePreviewAllowed ? (
+                    <PaidPlanFeatureCalloutForReason reason="share_preview" compact />
+                  ) : (
+                    <p className="m-0 text-sm leading-relaxed text-slate-600">
+                      Share preview links are available on your current plan. Use Share Agent Preview in the top bar to
+                      generate, copy, or manage your hosted link.
+                    </p>
+                  )}
                 </section>
               </CardBody>
             </Card>

@@ -1,14 +1,21 @@
 import { useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
-import { AdminLiveChatAdapter, type SuggestedQuestionChip } from '@assistrio/chat-widget';
+import { Check } from 'lucide-react';
+import { AdminLiveChatAdapter, ClampedTextWithSeeMore, type SuggestedQuestionChip } from '@assistrio/chat-widget';
 import type { BotChatUI } from '@acw/models/botChatUI';
-import { getCustomerApiOrigin } from '@/api/client';
+import { customerGoogleAuthStartUrl, getCustomerApiOrigin } from '@/api/client';
 import { getSharedBotInit } from '@/api/customerApi';
 import type { SharedBotInitPayload } from '@/api/types';
+import { useCustomerAuth } from '@/auth/CustomerAuthContext';
+import { GoogleSignInLink } from '@/components/auth/GoogleSignInButton';
+import { PLAN_LIMIT_SHARE_PREVIEW_CODE } from '@/lib/planLimitError';
 import { PageLoaderSpinner } from '@/components/PageLoader';
 import { cn } from '@/lib/utils';
 
-function formatSharePreviewUserMessage(raw: string): string {
+export function formatSharePreviewUserMessage(raw: string, errorCode?: string): string {
+  if (errorCode === PLAN_LIMIT_SHARE_PREVIEW_CODE) {
+    return 'This preview link is no longer active. Please contact the workspace owner.';
+  }
   const t = raw.trim();
   if (!t || t.startsWith('{')) {
     return 'This preview link is not available. Ask the agent owner to check Share Agent Preview in their workspace.';
@@ -42,13 +49,25 @@ function formatSharePreviewUserMessage(raw: string): string {
   return t.length > 320 ? `${t.slice(0, 317)}…` : t;
 }
 
-function SharePageShell({ children }: { children: React.ReactNode }) {
+const SHARE_PREVIEW_FEATURES = [
+  'Knowledge-based answers',
+  'Preview experience',
+  'Secure shared link',
+] as const;
+
+/** Desktop widget panel targets inside the website preview canvas (not full-card embed). */
+export const SHARE_PREVIEW_WIDGET_COLLAPSED_W = 404;
+export const SHARE_PREVIEW_WIDGET_COLLAPSED_H_MAX = 720;
+export const SHARE_PREVIEW_WIDGET_EXPANDED_W_MAX = 620;
+
+function SharePreviewPageShell({ children }: { children: React.ReactNode }) {
   return (
     <div
       className={cn(
         'relative flex h-dvh min-h-dvh min-w-0 flex-col overflow-x-hidden',
-        'bg-gradient-to-br from-white via-[var(--color-teal-50)]/45 to-slate-100/90',
+        'bg-gradient-to-br from-white via-[var(--color-teal-50)]/50 to-slate-100/95',
       )}
+      data-share-preview-page-shell
     >
       <div
         className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_95%_60%_at_50%_-15%,color-mix(in_oklab,var(--color-teal-400)_16%,transparent),transparent_55%)]"
@@ -71,7 +90,7 @@ function SharePoweredByFooter({ className }: { className?: string }) {
   return (
     <p
       className={cn(
-        'border-t border-slate-200/60 pt-4 text-center text-[0.8125rem] text-slate-500 sm:pt-5',
+        'text-[0.8125rem] text-slate-500',
         className,
       )}
     >
@@ -82,8 +101,8 @@ function SharePoweredByFooter({ className }: { className?: string }) {
 
 function ShareLoadingView() {
   return (
-    <SharePageShell>
-      <main className="relative z-[1] mx-auto flex w-full max-w-[1100px] flex-1 flex-col px-4 py-8 sm:px-6 sm:py-10">
+    <SharePreviewPageShell>
+      <main className="relative z-[1] flex flex-1 flex-col p-6 sm:p-8">
         <div className="flex flex-1 flex-col items-center justify-center px-4 text-center">
           <div
             className="flex max-w-lg flex-col items-center"
@@ -99,17 +118,17 @@ function ShareLoadingView() {
             </p>
           </div>
         </div>
-        <SharePoweredByFooter />
+        <SharePoweredByFooter className="mt-8 text-center" />
       </main>
-    </SharePageShell>
+    </SharePreviewPageShell>
   );
 }
 
 function ShareUnavailableView({ message }: { message: string }) {
   const detail = formatSharePreviewUserMessage(message);
   return (
-    <SharePageShell>
-      <main className="relative z-[1] mx-auto flex w-full max-w-[1100px] flex-1 flex-col px-4 py-8 sm:px-6 sm:py-10">
+    <SharePreviewPageShell>
+      <main className="relative z-[1] flex flex-1 flex-col p-6 sm:p-8">
         <div className="flex flex-1 flex-col items-center justify-center">
           <div className="w-full max-w-lg rounded-3xl border border-slate-200/90 bg-white/95 px-8 py-10 text-center shadow-[var(--shadow-lg)] ring-1 ring-slate-900/[0.04] backdrop-blur-sm sm:px-10">
             <img
@@ -126,39 +145,281 @@ function ShareUnavailableView({ message }: { message: string }) {
             <p className="mt-3 text-sm leading-relaxed text-slate-600">{detail}</p>
           </div>
         </div>
-        <SharePoweredByFooter />
+        <SharePoweredByFooter className="mt-8 text-center" />
       </main>
-    </SharePageShell>
+    </SharePreviewPageShell>
   );
 }
 
-function ShareBrandHeader({ botName }: { botName: string }) {
+function SharePreviewLiveHeader({ className }: { className?: string }) {
   return (
-    <header className="shrink-0">
-      <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
-        <div className="flex items-center gap-2.5">
-          <img
-            src="/logo-180x180.png"
-            alt=""
-            width={36}
-            height={36}
-            className="h-9 w-9 rounded-xl object-contain shadow-sm ring-1 ring-slate-900/[0.05]"
-            decoding="async"
+    <div className={cn('text-center', className)} data-share-preview-live-header>
+      <p
+        className="m-0 text-[11px] font-semibold uppercase tracking-wider text-slate-500"
+        data-share-preview-live-label
+      >
+        Live widget preview
+      </p>
+      <p className="mt-1.5 m-0 text-sm leading-snug text-slate-600">
+        Interact with this agent like it is installed on a website.
+      </p>
+    </div>
+  );
+}
+
+function SharePreviewWebsiteFooter({ className }: { className?: string }) {
+  return (
+    <div
+      className={cn(
+        'pointer-events-auto absolute inset-x-0 bottom-0 z-[1] px-4 pb-4 pt-3 sm:px-6 sm:pb-5',
+        className,
+      )}
+      data-share-preview-website-footer
+    >
+      <SharePreviewLiveHeader />
+      <SharePoweredByFooter className="mt-3 text-center" />
+    </div>
+  );
+}
+
+function SharePreviewCreateAgentCta() {
+  const { status } = useCustomerAuth();
+  const googleStartUrl = customerGoogleAuthStartUrl();
+
+  if (status === 'loading' || status === 'authenticated') {
+    return null;
+  }
+
+  return (
+    <div className="mt-6 flex max-w-full flex-col gap-3" data-share-preview-create-agent-cta>
+      <p className="m-0 text-sm font-semibold text-slate-800">Create your own Free AI support agent</p>
+      <GoogleSignInLink href={googleStartUrl} className="w-fit max-w-full font-semibold" />
+    </div>
+  );
+}
+
+function SharePreviewWebsiteContent({
+  agentName,
+  description,
+}: {
+  agentName: string;
+  description?: string;
+}) {
+  const subtitle =
+    description?.trim() ||
+    'This AI agent is shared through Assistrio. Ask a question and test how it responds.';
+
+  return (
+    <div
+      className={cn(
+        'pointer-events-auto absolute inset-0 z-[1] overflow-x-hidden overflow-y-auto',
+        'pb-28 sm:pb-32',
+      )}
+      data-share-preview-stage-intro
+      data-share-preview-website-hero
+    >
+      <div
+        className={cn(
+          'flex min-h-full w-full min-w-0 items-center',
+          'py-8 sm:py-10',
+          'pl-[clamp(1.25rem,8vw,7rem)] pr-3',
+          'sm:pr-5 md:pl-[clamp(2rem,12vw,10rem)] md:pr-6',
+          'lg:pl-[clamp(2.5rem,14vw,12rem)]',
+        )}
+      >
+        <div className="w-full min-w-0 max-w-lg md:max-w-[min(32rem,52%)] break-words [overflow-wrap:anywhere]">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <div className="flex min-w-0 items-center gap-2.5">
+              <img
+                src="/logo-180x180.png"
+                alt=""
+                width={36}
+                height={36}
+                className="h-9 w-9 shrink-0 rounded-xl object-contain shadow-sm ring-1 ring-slate-900/[0.05]"
+                decoding="async"
+              />
+              <span className="truncate text-lg font-semibold tracking-tight text-slate-900">Assistrio</span>
+            </div>
+            <span
+              className="rounded-full border border-teal-200/95 bg-teal-50 px-2.5 py-0.5 text-[0.65rem] font-semibold uppercase tracking-wide text-teal-900"
+              data-share-preview-badge
+            >
+              Shared agent preview
+            </span>
+          </div>
+
+          <h1 className="mt-5 m-0 text-[1.375rem] font-bold leading-tight tracking-tight text-slate-900 sm:text-[1.625rem] md:text-[2rem] md:leading-snug">
+            Chat with{' '}
+            <span className="text-[var(--color-teal-800)]">{agentName}</span>
+          </h1>
+          <ClampedTextWithSeeMore
+            text={subtitle}
+            modalTitle={`Chat with ${agentName}`}
+            maxLines={10}
+            className="mt-3 min-w-0 text-[0.9375rem] leading-relaxed text-slate-600 sm:text-base"
+            seeMoreClassName="text-teal-700"
           />
-          <span className="text-lg font-semibold tracking-tight text-slate-900">Assistrio</span>
+
+          <ul className="m-0 mt-5 list-none space-y-2 p-0">
+            {SHARE_PREVIEW_FEATURES.map((label) => (
+              <li key={label} className="flex min-w-0 items-start gap-2.5 text-sm leading-snug text-slate-700">
+                <Check className="mt-0.5 h-4 w-4 shrink-0 text-teal-600" strokeWidth={2.25} aria-hidden />
+                <span className="min-w-0 break-words">{label}</span>
+              </li>
+            ))}
+          </ul>
+
+          <SharePreviewCreateAgentCta />
         </div>
-        <span className="rounded-full border border-teal-200/95 bg-teal-50 px-2.5 py-0.5 text-[0.65rem] font-semibold uppercase tracking-wide text-teal-900">
-          Shared preview
+      </div>
+    </div>
+  );
+}
+
+function SharePreviewWebsiteBackdrop() {
+  return (
+    <div
+      className="pointer-events-none absolute inset-0 z-0 overflow-hidden"
+      data-share-preview-website-backdrop
+      aria-hidden
+    >
+      <div className="absolute inset-x-0 top-0 flex items-center gap-4 border-b border-slate-200/40 bg-white/30 px-6 py-3">
+        <span className="h-2 w-14 rounded-full bg-slate-200/70" />
+        <span className="h-2 w-10 rounded-full bg-slate-200/50" />
+        <span className="h-2 w-10 rounded-full bg-slate-200/50" />
+        <span className="ml-auto h-2 w-16 rounded-full bg-slate-200/40" />
+      </div>
+      <div className="absolute bottom-[28%] left-6 right-6 grid grid-cols-2 gap-3 md:left-8 md:right-8">
+        <span className="block h-24 rounded-xl border border-slate-200/50 bg-white/50" />
+        <span className="block h-24 rounded-xl border border-slate-200/50 bg-white/50" />
+      </div>
+    </div>
+  );
+}
+
+function SharePreviewWidgetStage({
+  websiteContent,
+  websiteFooter,
+  children,
+}: {
+  websiteContent?: React.ReactNode;
+  websiteFooter?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      className={cn(
+        'relative flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden',
+        'border border-slate-200/90 bg-white/95',
+      )}
+      data-share-preview-widget-stage
+      data-share-preview-website-canvas
+    >
+      <div
+        className="flex shrink-0 items-center gap-3 border-b border-slate-200/80 bg-slate-50/95 px-4 py-2.5"
+        data-share-preview-website-chrome
+        aria-hidden
+      >
+        <span className="flex gap-1.5">
+          <span className="h-2.5 w-2.5 rounded-full bg-red-300/90" />
+          <span className="h-2.5 w-2.5 rounded-full bg-amber-300/90" />
+          <span className="h-2.5 w-2.5 rounded-full bg-emerald-300/90" />
+        </span>
+        <span className="min-w-0 flex-1 truncate rounded-md border border-slate-200/80 bg-white px-3 py-1 text-[11px] text-slate-400">
+          your-website.com
         </span>
       </div>
-      <h1 className="mt-4 text-[1.35rem] font-semibold leading-tight tracking-tight text-slate-900 sm:mt-5 sm:text-2xl sm:leading-snug">
-        Preview{' '}
-        <span className="text-[var(--color-teal-800)]">{botName}</span>
-      </h1>
-      <p className="mt-2 max-w-[52rem] text-sm leading-relaxed text-slate-600 sm:mt-2.5 sm:text-[0.9375rem]">
-        Try this chatbot on an Assistrio-hosted preview page before installing it on a website.
-      </p>
-    </header>
+      <div
+        data-widget-preview-measure
+        data-share-preview-measure-host
+        className={cn(
+          'relative min-h-0 flex-1 overflow-hidden',
+          'bg-gradient-to-br from-slate-50/90 via-white to-[var(--color-teal-50)]/40',
+        )}
+      >
+        <SharePreviewWebsiteBackdrop />
+        {websiteContent}
+        {websiteFooter}
+        <div className="pointer-events-none absolute inset-0 z-[2]">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+function SharePreviewReadyView({
+  init,
+  sharePreviewToken,
+}: {
+  init: SharedBotInitPayload;
+  sharePreviewToken: string;
+}) {
+  const settings = init.settings ?? {};
+  const chatUI = (settings.chatUI ?? undefined) as BotChatUI | undefined;
+  const chips = (init.bot.suggestedQuestionChips ?? undefined) as SuggestedQuestionChip[] | undefined;
+  const brandProps = {
+    agentName: init.bot.name,
+    description: init.bot.description ?? init.bot.tagline,
+  };
+
+  return (
+    <SharePreviewPageShell>
+      <main
+        className={cn(
+          'relative z-[1] flex h-full min-h-0 w-full flex-1 flex-col',
+          'max-md:overflow-y-auto',
+          'min-w-0 overflow-x-hidden',
+        )}
+        data-testid="share-preview-ready-layout"
+        data-share-preview-ready-layout
+      >
+        <div
+          className={cn(
+            'flex h-full min-h-0 w-full min-w-0 flex-1 flex-col',
+          )}
+          data-share-preview-chat-column
+          data-share-preview-live-widget-column
+        >
+          <SharePreviewWidgetStage
+            websiteContent={<SharePreviewWebsiteContent {...brandProps} />}
+            websiteFooter={<SharePreviewWebsiteFooter />}
+          >
+            <AdminLiveChatAdapter
+              botId={init.bot.id}
+              mode="runtime"
+              runtimeSurface="shared"
+              sharedSlug={init.shareSlug}
+              sharePreviewToken={sharePreviewToken || undefined}
+              botName={init.bot.name}
+              avatarUrl={init.bot.imageUrl}
+              avatarEmoji={init.bot.avatarEmoji}
+              chatUI={chatUI}
+              tagline={init.bot.tagline}
+              description={init.bot.description}
+              welcomeMessage={init.bot.welcomeMessage}
+              suggestedQuestions={init.bot.suggestedQuestions ?? init.bot.exampleQuestions}
+              suggestedQuestionChips={chips}
+              apiBaseUrl={getCustomerApiOrigin()}
+              chatVisitorId={init.chatVisitorId}
+              debug={false}
+              footerPrivacyText={typeof settings.privacyText === 'string' ? settings.privacyText : undefined}
+              visitorMultiChatEnabled={settings.visitorMultiChatEnabled === true}
+              visitorMultiChatMax={
+                settings.visitorMultiChatMax === null || settings.visitorMultiChatMax === undefined
+                  ? null
+                  : Number(settings.visitorMultiChatMax)
+              }
+              stageMode="live-widget"
+              containedStage
+              defaultOpen
+              inlinePanelCollapsedWidth={SHARE_PREVIEW_WIDGET_COLLAPSED_W}
+              inlinePanelCollapsedHeight={SHARE_PREVIEW_WIDGET_COLLAPSED_H_MAX}
+              inlinePanelExpandedWidth={SHARE_PREVIEW_WIDGET_EXPANDED_W_MAX}
+              className="h-full min-h-0 w-full"
+            />
+          </SharePreviewWidgetStage>
+        </div>
+      </main>
+    </SharePreviewPageShell>
   );
 }
 
@@ -169,14 +430,6 @@ export function SharedChatPage() {
   const [phase, setPhase] = useState<'loading' | 'error' | 'ready'>('loading');
   const [errorText, setErrorText] = useState('');
   const [init, setInit] = useState<SharedBotInitPayload | null>(null);
-  const [panelPx, setPanelPx] = useState({ w: 1200, h: 800 });
-
-  useEffect(() => {
-    const upd = () => setPanelPx({ w: window.innerWidth, h: window.innerHeight });
-    upd();
-    window.addEventListener('resize', upd);
-    return () => window.removeEventListener('resize', upd);
-  }, []);
 
   useEffect(() => {
     const s = (slug ?? '').trim().toLowerCase();
@@ -193,7 +446,21 @@ export function SharedChatPage() {
       const r = await getSharedBotInit(s, existing, sharePreviewToken || undefined);
       if (cancelled) return;
       if (!r.ok) {
-        setErrorText(r.error);
+        const body =
+          r.body && typeof r.body === 'object' ? (r.body as Record<string, unknown>) : null;
+        const errorCode =
+          typeof r.errorCode === 'string'
+            ? r.errorCode
+            : typeof body?.errorCode === 'string'
+              ? body.errorCode
+              : undefined;
+        const message =
+          typeof body?.message === 'string' && body.message.trim()
+            ? body.message.trim()
+            : typeof body?.error === 'string' && body.error.trim()
+              ? body.error.trim()
+              : r.error;
+        setErrorText(formatSharePreviewUserMessage(message, errorCode));
         setPhase('error');
         return;
       }
@@ -218,68 +485,5 @@ export function SharedChatPage() {
     return <ShareUnavailableView message={errorText} />;
   }
 
-  const settings = init.settings ?? {};
-  const chatUI = (settings.chatUI ?? undefined) as BotChatUI | undefined;
-  const chips = (init.bot.suggestedQuestionChips ?? undefined) as SuggestedQuestionChip[] | undefined;
-
-  return (
-    <SharePageShell>
-      <main className="relative z-[1] mx-auto flex min-h-0 w-full max-w-[1100px] flex-1 flex-col overflow-x-hidden px-4 pb-5 pt-5 sm:px-6 sm:pb-6 sm:pt-6">
-        <ShareBrandHeader botName={init.bot.name} />
-
-        <div
-          className={cn(
-            'mt-4 flex min-h-0 min-w-0 flex-1 flex-col basis-0 sm:mt-5',
-            'rounded-2xl bg-transparent',
-            'shadow-[var(--shadow-lg)]',
-            'max-sm:rounded-xl max-sm:shadow-md',
-            'sm:rounded-3xl',
-          )}
-        >
-          <div
-            data-widget-preview-measure
-            className="flex min-h-0 w-full min-w-0 flex-1 flex-col basis-0 self-stretch"
-          >
-            <AdminLiveChatAdapter
-              botId={init.bot.id}
-              mode="runtime"
-              runtimeSurface="shared"
-              sharedSlug={init.shareSlug}
-              sharePreviewToken={sharePreviewToken || undefined}
-              botName={init.bot.name}
-              avatarUrl={init.bot.imageUrl}
-              avatarEmoji={init.bot.avatarEmoji}
-              chatUI={chatUI}
-              tagline={init.bot.tagline}
-              description={init.bot.description}
-              welcomeMessage={init.bot.welcomeMessage}
-              suggestedQuestions={init.bot.suggestedQuestions ?? init.bot.exampleQuestions}
-              suggestedQuestionChips={chips}
-              apiBaseUrl={getCustomerApiOrigin()}
-              accessKey=""
-              secretKey=""
-              chatVisitorId={init.chatVisitorId}
-              debug={false}
-              footerPrivacyText={typeof settings.privacyText === 'string' ? settings.privacyText : undefined}
-              useFloatingLauncher={false}
-              showContainedLauncherPreview={false}
-              visitorMultiChatEnabled={settings.visitorMultiChatEnabled === true}
-              visitorMultiChatMax={
-                settings.visitorMultiChatMax === null || settings.visitorMultiChatMax === undefined
-                  ? null
-                  : Number(settings.visitorMultiChatMax)
-              }
-              className="min-h-0 min-w-0 flex-1"
-              inlinePanelCollapsedWidth={panelPx.w}
-              inlinePanelCollapsedHeight={panelPx.h}
-              inlinePanelExpandedWidth={panelPx.w}
-              inlinePanelExpandedHeight={panelPx.h}
-            />
-          </div>
-        </div>
-
-        <SharePoweredByFooter className="mt-4 shrink-0 sm:mt-5" />
-      </main>
-    </SharePageShell>
-  );
+  return <SharePreviewReadyView init={init} sharePreviewToken={sharePreviewToken} />;
 }

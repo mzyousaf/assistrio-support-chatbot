@@ -3,7 +3,6 @@ import {
   Button,
   Card,
   CardBody,
-  Input,
   Label,
   Modal,
   Range,
@@ -22,9 +21,9 @@ import type {
 } from '@/api/types';
 import { CUSTOMER_TOPICS_ANALYTICS_MAIN_TOPIC_IDS } from '@/api/types';
 import { customYmdRangeIsValid } from '@/lib/analyticsQueryDates';
+import { DateRangeCustomPickerTrigger } from '@/components/analytics/DateRangeFilter';
 import {
   ANALYTICS_DATE_PRESET_OPTIONS,
-  seedCustomRangeIfEmpty,
 } from '@/pages/bot-workspace/analytics/shared/analyticsFilterCapsuleUtils';
 import { WIDGET_CHANNEL_SECTIONS } from '@/pages/bot-workspace/analytics/shared/AnalyticsInsightsFilterBars';
 import { SENTIMENT_DISPLAY_FALLBACK, SENTIMENT_STACK_ORDER } from '@/pages/bot-workspace/analytics/sentiment/sentimentChartTheme';
@@ -327,9 +326,8 @@ export function ConversationFilters({ open, onClose, initialDraft, onApply, onCl
                     const v = e.target.value as ConversationDatePreset;
                     setDraft((d) => {
                       if (v === 'all') return { ...d, datePreset: 'all', customFrom: '', customTo: '' };
-                      if (v === 'custom' && !d.customFrom.trim() && !d.customTo.trim())
-                        return { ...d, datePreset: 'custom', ...seedCustomRangeIfEmpty() };
-                      return { ...d, datePreset: v };
+                      if (v === 'custom') return { ...d, datePreset: 'custom' };
+                      return { ...d, datePreset: v, customFrom: '', customTo: '' };
                     });
                   }}
                 >
@@ -342,36 +340,13 @@ export function ConversationFilters({ open, onClose, initialDraft, onApply, onCl
               </FilterInlineRow>
               {draft.datePreset === 'custom' ? (
                 <div className="mt-2 border-t border-slate-200/50 pt-2">
-                  <div className="grid grid-cols-2 gap-3 sm:gap-4">
-                    <div className="flex min-w-0 flex-col gap-0">
-                      <Label htmlFor="conv-f-from" className="mb-1.5 cursor-default text-xs font-medium text-slate-600">
-                        From
-                      </Label>
-                      <Input
-                        id="conv-f-from"
-                        type="date"
-                        value={draft.customFrom}
-                        onChange={(ev) => setDraft((d) => ({ ...d, customFrom: ev.target.value }))}
-                        inputSize="sm"
-                        quiet
-                        wrapperClassName="w-full min-w-0"
-                      />
-                    </div>
-                    <div className="flex min-w-0 flex-col gap-0">
-                      <Label htmlFor="conv-f-to" className="mb-1.5 cursor-default text-xs font-medium text-slate-600">
-                        To
-                      </Label>
-                      <Input
-                        id="conv-f-to"
-                        type="date"
-                        value={draft.customTo}
-                        onChange={(ev) => setDraft((d) => ({ ...d, customTo: ev.target.value }))}
-                        inputSize="sm"
-                        quiet
-                        wrapperClassName="w-full min-w-0"
-                      />
-                    </div>
-                  </div>
+                  <DateRangeCustomPickerTrigger
+                    from={draft.customFrom}
+                    to={draft.customTo}
+                    onApply={(customFrom, customTo) => {
+                      setDraft((d) => ({ ...d, customFrom, customTo }));
+                    }}
+                  />
                 </div>
               ) : null}
             </div>

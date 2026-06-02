@@ -9,7 +9,8 @@ export type UpgradePlanReason =
   | 'auto_train'
   | 'export'
   | 'branding'
-  | 'addons';
+  | 'addons'
+  | 'share_preview';
 
 export const PLAN_LIMIT_AI_CREDITS_CODE = 'plan_limit_ai_credits' as const;
 export const FREE_TRIAL_EXPIRED_CODE = 'free_trial_expired' as const;
@@ -22,6 +23,9 @@ export const PLAN_LIMIT_BOT_KB_TOTAL_CODE = 'plan_limit_bot_kb_total' as const;
 export const PLAN_LIMIT_AUTO_TRAIN_CODE = 'plan_limit_auto_train' as const;
 export const PLAN_LIMIT_EXPORT_REPORTS_CODE = 'plan_limit_export_reports' as const;
 export const PLAN_LIMIT_REMOVE_BRANDING_CODE = 'plan_limit_remove_branding' as const;
+export const PLAN_LIMIT_SHARE_PREVIEW_CODE = 'plan_limit_share_preview' as const;
+export const PLAN_LIMIT_SHARE_PREVIEW_MESSAGE =
+  'Share preview links are available on paid plans.';
 
 const ERROR_CODE_TO_REASON: Record<string, UpgradePlanReason> = {
   [PLAN_LIMIT_AI_CREDITS_CODE]: 'credits',
@@ -33,6 +37,7 @@ const ERROR_CODE_TO_REASON: Record<string, UpgradePlanReason> = {
   [PLAN_LIMIT_AUTO_TRAIN_CODE]: 'auto_train',
   [PLAN_LIMIT_EXPORT_REPORTS_CODE]: 'export',
   [PLAN_LIMIT_REMOVE_BRANDING_CODE]: 'branding',
+  [PLAN_LIMIT_SHARE_PREVIEW_CODE]: 'share_preview',
 };
 
 export function mapPlanLimitErrorCodeToUpgradeReason(
@@ -68,6 +73,8 @@ export function resolveUpgradePlanReasonSubtitle(reason: UpgradePlanReason): str
       return 'Removing Assistrio branding requires the branding add-on.';
     case 'addons':
       return 'Add-ons are available on paid plans.';
+    case 'share_preview':
+      return 'Share hosted preview links with teammates or clients on paid plans.';
     default:
       return 'Upgrade your plan to unlock this feature.';
   }

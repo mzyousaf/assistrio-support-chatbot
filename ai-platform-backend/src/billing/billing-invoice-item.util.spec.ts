@@ -1,11 +1,14 @@
 import {
+  attachInvoiceBillingInterval,
   buildSubscriptionInvoiceRowId,
   enrichInvoiceRow,
   mapInvoiceItemDescription,
+  resolveInvoiceBillingInterval,
   resolveInvoiceItemMatch,
   variantIdToItemKey,
 } from './billing-invoice-item.util';
 import type { LemonSqueezyBillingConfig } from './billing-config.util';
+import type { ProviderInvoiceRow } from './billing-invoice.types';
 
 describe('billing-invoice-item.util', () => {
   const lemonConfig: LemonSqueezyBillingConfig = {
@@ -64,6 +67,51 @@ describe('billing-invoice-item.util', () => {
     expect(variantIdToItemKey('333', lemonConfig)).toBe('extra_bot');
     expect(variantIdToItemKey('777', lemonConfig)).toBe('ai_credits_1000');
     expect(variantIdToItemKey('', lemonConfig)).toBeUndefined();
+  });
+
+  it('resolves billing interval from variant id for plans and add-ons', () => {
+    expect(
+      resolveInvoiceBillingInterval({
+        providerVariantId: '112',
+        itemType: 'plan',
+        lemonConfig,
+      }),
+    ).toBe('yearly');
+    expect(
+      resolveInvoiceBillingInterval({
+        providerVariantId: '334',
+        itemType: 'addon',
+        lemonConfig,
+      }),
+    ).toBe('yearly');
+    expect(
+      resolveInvoiceBillingInterval({
+        providerVariantId: '777',
+        itemType: 'top_up',
+        lemonConfig,
+      }),
+    ).toBeUndefined();
+  });
+
+  it('attaches billing interval onto invoice rows', () => {
+    const baseRow: ProviderInvoiceRow = {
+      id: 'inv-1',
+      provider: 'lemon_squeezy',
+      date: '2026-05-01T00:00:00.000Z',
+      amount: 49,
+      amountCents: 4900,
+      amountFormatted: '$49.00',
+      currency: 'USD',
+      status: 'paid',
+      invoiceUrl: null,
+      receiptUrl: null,
+      description: 'Starter subscription started',
+      itemType: 'plan',
+      providerVariantId: '111',
+    };
+    const row = attachInvoiceBillingInterval(baseRow, lemonConfig);
+
+    expect(row.billingInterval).toBe('monthly');
   });
 
   it('matches main plan subscription by providerSubscriptionId', () => {

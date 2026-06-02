@@ -26,6 +26,7 @@ export type WorkspaceEntitlements = {
   autoTrainAllowed: boolean;
   addonsAllowed: boolean;
   memberInvitesAllowed: boolean;
+  sharePreviewAllowed: boolean;
   canRemoveBranding: boolean;
   activeAddons: string[];
   topUpCreditsRemaining: number;

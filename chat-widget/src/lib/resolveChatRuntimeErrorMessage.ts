@@ -13,6 +13,10 @@ export const WORKSPACE_BOT_LIMIT_EXCEEDED_CODE = "workspace_bot_limit_exceeded" 
 export const WORKSPACE_BOT_LIMIT_EXCEEDED_MESSAGE =
   "This agent is currently inactive. Please contact the workspace owner.";
 
+export const PLAN_LIMIT_SHARE_PREVIEW_CODE = "plan_limit_share_preview" as const;
+export const PLAN_LIMIT_SHARE_PREVIEW_MESSAGE =
+  "This preview link is no longer active. Please contact the workspace owner.";
+
 export type ChatRuntimeErrorInput = {
   error?: string;
   errorCode?: string;
@@ -51,6 +55,8 @@ export function resolveChatRuntimeErrorMessage(
       return WORKSPACE_BOT_PREVIEW_ACCESS_DENIED_MESSAGE;
     case WORKSPACE_BOT_LIMIT_EXCEEDED_CODE:
       return WORKSPACE_BOT_LIMIT_EXCEEDED_MESSAGE;
+    case PLAN_LIMIT_SHARE_PREVIEW_CODE:
+      return PLAN_LIMIT_SHARE_PREVIEW_MESSAGE;
     case "BOT_NOT_PUBLISHED":
       return "This bot is not available for embedding right now.";
     case "INVALID_ACCESS_KEY":

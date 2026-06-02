@@ -72,12 +72,36 @@ describe('AdminWorkspaceBillingController', () => {
         message: 'Subscription synced from billing provider.',
       }),
     };
+    const adminWorkspaceSupportService = {
+      getSupportSummary: jest.fn().mockResolvedValue({
+        workspace: { id: workspaceId, name: 'Acme', onboardingStatus: null, createdAt: null },
+        owner: { userId: 'u1', name: 'Owner', email: 'owner@example.com' },
+        subscription: { subscriptionStatus: 'free' },
+        entitlements: { monthlyAiCredits: 50 },
+        usage: { lockedAgentsCount: 0, inactiveMembersCount: 0 },
+        agents: [],
+        members: [],
+        invites: [],
+        knowledge: [],
+        conversations: [],
+        billing: { workspaceId },
+        webhookHealth: { failedCount: 0, recentFailureCount: 0, lastProcessedAt: null },
+        recentEvents: [],
+      }),
+      getUsageAnalytics: jest.fn().mockResolvedValue({
+        dateRange: { startDate: '2026-05-01', endDate: '2026-05-31' },
+        usageTrend: [],
+        aiCreditsByAgent: [],
+        trainedKnowledgeByAgent: [],
+      }),
+    };
 
     const controller = new AdminWorkspaceBillingController(
       billingSummaryService as never,
       billingAdminSyncService as never,
+      adminWorkspaceSupportService as never,
     );
-    return { controller, billingSummaryService, billingAdminSyncService };
+    return { controller, billingSummaryService, billingAdminSyncService, adminWorkspaceSupportService };
   }
 
   it('returns admin billing summary for superadmin route', async () => {
@@ -110,5 +134,31 @@ describe('AdminWorkspaceBillingController', () => {
     const result = await controller.syncBilling(workspaceId);
     expect(billingAdminSyncService.syncWorkspaceBilling).toHaveBeenCalledWith(workspaceId);
     expect(result).toMatchObject({ synced: true });
+  });
+
+  it('returns support summary for superadmin route', async () => {
+    const { controller, adminWorkspaceSupportService } = buildController();
+    const result = await controller.getSupportSummary(workspaceId);
+    expect(adminWorkspaceSupportService.getSupportSummary).toHaveBeenCalledWith(workspaceId);
+    expect(result).toMatchObject({
+      workspace: { id: workspaceId, name: 'Acme' },
+      owner: { email: 'owner@example.com' },
+    });
+  });
+
+  it('returns usage analytics for superadmin route', async () => {
+    const { controller, adminWorkspaceSupportService } = buildController();
+    const result = await controller.getUsageAnalytics(
+      workspaceId,
+      '2026-05-01',
+      '2026-05-31',
+      '507f1f77bcf86cd799439012',
+    );
+    expect(adminWorkspaceSupportService.getUsageAnalytics).toHaveBeenCalledWith(workspaceId, {
+      startDate: '2026-05-01',
+      endDate: '2026-05-31',
+      botIds: '507f1f77bcf86cd799439012',
+    });
+    expect(result.dateRange.endDate).toBe('2026-05-31');
   });
 });

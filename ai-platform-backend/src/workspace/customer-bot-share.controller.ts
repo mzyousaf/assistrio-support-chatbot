@@ -33,6 +33,7 @@ import {
   getSharePreviewTokenEncryptionKey,
 } from '../bots/share-preview-token-encryption.util';
 import { generateSharePreviewPlainToken, hashSharePreviewToken } from '../bots/share-preview-token.util';
+import { WorkspaceSharePreviewEntitlementService } from '../entitlements/workspace-share-preview-entitlement.service';
 import { WorkspacesService } from '../workspaces/workspaces.service';
 
 type RequestWithUser = FastifyRequest & { user?: RequestUser };
@@ -50,6 +51,7 @@ export class CustomerBotShareController {
     private readonly botsService: BotsService,
     private readonly workspacesService: WorkspacesService,
     private readonly configService: ConfigService,
+    private readonly sharePreviewEntitlementService: WorkspaceSharePreviewEntitlementService,
   ) {}
 
   private async requireWorkspaceBot(req: RequestWithUser, botId: string) {
@@ -77,6 +79,12 @@ export class CustomerBotShareController {
     const uid = req.user?._id != null ? String(req.user._id) : '';
     await this.workspacesService.assertCanManageWorkspaceBot(uid, req.user?.role ?? '', bot);
     return bot;
+  }
+
+  private async assertSharePreviewAllowed(bot: Record<string, unknown>): Promise<void> {
+    const workspaceId = bot.workspaceId != null ? String(bot.workspaceId).trim() : '';
+    if (!workspaceId) return;
+    await this.sharePreviewEntitlementService.assertCanUseSharePreview(workspaceId);
   }
 
   private safeShareResponse(
@@ -148,6 +156,7 @@ export class CustomerBotShareController {
   ) {
     const hours = assertAllowedSharePreviewExpiresInHours(body?.expiresInHours);
     const bot = await this.requireWorkspaceBotManage(req, id);
+    await this.assertSharePreviewAllowed(bot);
     const now = new Date();
     const prev =
       bot.shareChat != null && typeof bot.shareChat === 'object'
@@ -224,6 +233,7 @@ export class CustomerBotShareController {
     const isRotate = body.rotateSlug === true;
 
     if (isRegenerate || isRotate) {
+      await this.assertSharePreviewAllowed(bot);
       let slug = typeof sc.slug === 'string' ? sc.slug.trim().toLowerCase() : '';
       if (isRotate) {
         slug = await this.botsService.generateUniqueShareSlug();
@@ -256,6 +266,7 @@ export class CustomerBotShareController {
     }
 
     if (body.enabled === true) {
+      await this.assertSharePreviewAllowed(bot);
       if (shareChatTokenRevokedAtSet(sc)) {
         throw new HttpException(
           {

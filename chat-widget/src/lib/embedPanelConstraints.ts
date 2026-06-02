@@ -12,6 +12,64 @@ export const PANEL_EXPANDED_VIEWPORT_HEIGHT_RATIO = 0.85;
 /** Matches `ChatLauncherBubble` default and `ChatWithLauncher` launcher offset math. */
 export const LAUNCHER_EDGE_INSET_PX = 16;
 export const PANEL_ABOVE_LAUNCHER_GAP_PX = 12;
+
+/** Bottom/right inset when a live widget floats inside a contained website-preview stage (px). */
+export const CONTAINED_STAGE_EDGE_INSET_PX = 24;
+
+/** Combined inset for live-widget panel sizing (top + bottom or left + right) inside a large stage. */
+export const CONTAINED_STAGE_SIZING_INSET_PX = CONTAINED_STAGE_EDGE_INSET_PX * 2;
+
+export const LIVE_WIDGET_COLLAPSED_HEIGHT_MIN_PX = 620;
+export const LIVE_WIDGET_COLLAPSED_HEIGHT_MAX_PX = 720;
+export const LIVE_WIDGET_EXPANDED_WIDTH_MAX_PX = 620;
+
+export type WidgetAnchorCorner = "bottom-right" | "bottom-left" | "top-right" | "top-left";
+
+export type WidgetAnchorCss = {
+  bottom?: number | string;
+  top?: number | string;
+  left?: number | string;
+  right?: number | string;
+};
+
+/** Absolute anchor for launcher/panel inside a `position: relative` preview stage. */
+export function containedWidgetAnchorStyle(
+  corner: WidgetAnchorCorner,
+  edgeInsetPx: number = CONTAINED_STAGE_EDGE_INSET_PX,
+): WidgetAnchorCss {
+  switch (corner) {
+    case "bottom-right":
+      return { bottom: edgeInsetPx, right: edgeInsetPx, top: "auto", left: "auto" };
+    case "bottom-left":
+      return { bottom: edgeInsetPx, left: edgeInsetPx, top: "auto", right: "auto" };
+    case "top-right":
+      return { top: edgeInsetPx, right: edgeInsetPx, bottom: "auto", left: "auto" };
+    case "top-left":
+      return { top: edgeInsetPx, left: edgeInsetPx, bottom: "auto", right: "auto" };
+  }
+}
+
+/** Bottom/top offset for the open panel so it sits above (or below) the launcher with a gap. */
+export function containedLauncherStackInsetPx(
+  launcherSize?: number,
+  edgeInsetPx: number = CONTAINED_STAGE_EDGE_INSET_PX,
+): number {
+  return edgeInsetPx + defaultLauncherDiameterPx(launcherSize) + PANEL_ABOVE_LAUNCHER_GAP_PX;
+}
+
+/** Panel anchor in contained mode: same horizontal corner as launcher, lifted above the bubble. */
+export function containedPanelAboveLauncherAnchorStyle(
+  corner: WidgetAnchorCorner,
+  launcherSize?: number,
+  edgeInsetPx: number = CONTAINED_STAGE_EDGE_INSET_PX,
+): WidgetAnchorCss {
+  const base = containedWidgetAnchorStyle(corner, edgeInsetPx);
+  const stackPx = containedLauncherStackInsetPx(launcherSize, edgeInsetPx);
+  if (corner === "bottom-right" || corner === "bottom-left") {
+    return { ...base, bottom: stackPx, top: "auto" };
+  }
+  return { ...base, top: stackPx, bottom: "auto" };
+}
 const HORIZONTAL_VIEW_MARGIN_PX = 20;
 const TOP_VIEW_MARGIN_PX = 16;
 
@@ -123,6 +181,14 @@ export function computeContainedPanelBox(
      */
     reservedBottomPx?: number;
     /**
+     * Live-widget website preview: size panel to measured stage minus this inset (typically 48px).
+     * Collapsed height is capped by `collapsedHeightMaxPx`; expanded height follows `expandedHeight` (default 85vh / 75vh) capped at 900px.
+     */
+    stageSizingInsetPx?: number;
+    collapsedHeightMinPx?: number;
+    collapsedHeightMaxPx?: number;
+    expandedWidthMaxPx?: number;
+    /**
      * Assistrio-hosted `/iframe/:botId` and `/share/:slug`: size the panel to the measured host (no default
      * px caps or viewport margins). Does not apply to dashboard preview or script embed launcher.
      */
@@ -149,6 +215,31 @@ export function computeContainedPanelBox(
     ? opts.expandedWidth
     : PANEL_EXPANDED_WIDTH_PX;
   const ehPixels = parseExpandedHeightPx(opts?.expandedHeight, vh);
+
+  const stageSizingInset =
+    typeof opts?.stageSizingInsetPx === "number" && Number.isFinite(opts.stageSizingInsetPx) && opts.stageSizingInsetPx > 0
+      ? opts.stageSizingInsetPx
+      : 0;
+  if (stageSizingInset > 0) {
+    const topInset = stageSizingInset / 2;
+    const bottomInset = Math.max(topInset, reservedBottomEarly);
+    const availW = Math.max(200, Math.min(hostW, vw - 8) - stageSizingInset);
+    const availH = Math.max(240, Math.min(hostH, vh - 8) - topInset - bottomInset);
+    const collapsedW = Math.min(cw0, availW);
+    const collapsedMax = opts?.collapsedHeightMaxPx ?? LIVE_WIDGET_COLLAPSED_HEIGHT_MAX_PX;
+    const collapsedH = Math.min(collapsedMax, availH);
+    if (!isExpanded) {
+      return { width: Math.round(collapsedW), height: Math.round(collapsedH) };
+    }
+    const expandedWCap = opts?.expandedWidthMaxPx ?? LIVE_WIDGET_EXPANDED_WIDTH_MAX_PX;
+    const expandedW = Math.min(Math.max(collapsedW, expandedWCap), availW);
+    const expandedH = Math.min(ehPixels, availH);
+    return {
+      width: Math.round(expandedW),
+      height: Math.round(Math.max(collapsedH, expandedH)),
+    };
+  }
+
   const reservedBottom = reservedBottomEarly;
 
   const availW = Math.max(200, Math.min(hostW, vw - 8));
@@ -179,6 +270,10 @@ export function containedPanelCanMeaningfulExpand(
     expandedWidth?: number;
     expandedHeight?: number | string;
     reservedBottomPx?: number;
+    stageSizingInsetPx?: number;
+    collapsedHeightMinPx?: number;
+    collapsedHeightMaxPx?: number;
+    expandedWidthMaxPx?: number;
     fillHost?: boolean;
   },
 ): boolean {

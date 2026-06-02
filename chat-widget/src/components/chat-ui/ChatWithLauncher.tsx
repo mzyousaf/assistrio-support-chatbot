@@ -9,6 +9,8 @@ import type { ChatLauncherWhenOpen, ChatOpenAnimation } from "../../models/botCh
 import { chatPanelOutlineStyle } from "./chatPanelChrome";
 import { chatShadowIntensityClass } from "./chatShadowStyles";
 import {
+  containedPanelAboveLauncherAnchorStyle,
+  containedWidgetAnchorStyle,
   DEFAULT_LAUNCHER_DIAMETER_PX,
   LAUNCHER_EDGE_INSET_PX,
   PANEL_ABOVE_LAUNCHER_GAP_PX,
@@ -27,6 +29,8 @@ export interface ChatWithLauncherProps extends Omit<ChatProps, "onClose"> {
   launcherCloseLabel?: string;
   /** Initially open (default false). Maps from `chatUI.openChatOnLoad` in embeds. */
   defaultOpen?: boolean;
+  /** While true and the panel is closed, show a spinner on the launcher bubble. */
+  launcherLoading?: boolean;
   /** Bubble diameter in px (`chatUI.launcherSize`). */
   launcherSize?: number;
   launcherShadowIntensity?: ChatLauncherBubbleProps["shadowIntensity"];
@@ -40,6 +44,11 @@ export interface ChatWithLauncherProps extends Omit<ChatProps, "onClose"> {
   panelOpenAnimation?: ChatOpenAnimation;
   /** `aria-label` for the dialog wrapper (default "Chat"). */
   dialogAriaLabel?: string;
+  /**
+   * `viewport` (default): fixed launcher/panel on the browser window.
+   * `contained`: absolute positioning inside a `position: relative` stage host.
+   */
+  anchorMode?: "viewport" | "contained";
 }
 
 const panelHorizontalClasses = {
@@ -59,6 +68,7 @@ export function ChatWithLauncher({
   launcherOpenLabel,
   launcherCloseLabel,
   defaultOpen = false,
+  launcherLoading = false,
   launcherSize,
   launcherShadowIntensity,
   launcherAvatar,
@@ -73,8 +83,10 @@ export function ChatWithLauncher({
   width = 404,
   height = 730,
   onClose,
+  anchorMode = "viewport",
   ...chatProps
 }: ChatWithLauncherProps) {
+  const containedAnchor = anchorMode === "contained";
   const composerTextAreaRef = useRef<HTMLTextAreaElement>(null);
   const launcherButtonRef = useRef<HTMLButtonElement>(null);
   const prevPanelOpenRef = useRef(false);
@@ -145,6 +157,12 @@ export function ChatWithLauncher({
       ? { bottom: panelEdgeInsetPx, top: "auto" }
       : { top: panelEdgeInsetPx, bottom: "auto" };
 
+  const containedLauncherAnchorStyle = containedWidgetAnchorStyle(launcherPosition);
+  const containedPanelAnchorStyle = containedPanelAboveLauncherAnchorStyle(
+    launcherPosition,
+    effectiveLauncherDiameterPx,
+  );
+
   const anim: ChatOpenAnimation = normalizeChatOpenAnimation(panelOpenAnimation);
   const expandOrigin =
     launcherPosition === "bottom-left" ? "bottom left" : "bottom right";
@@ -171,7 +189,12 @@ export function ChatWithLauncher({
           };
 
   return (
-    <div className="assistrio-chat-widget">
+    <div
+      className={cx(
+        "assistrio-chat-widget",
+        containedAnchor && "relative h-full w-full min-h-0 pointer-events-none",
+      )}
+    >
       <ChatLauncherBubble
         isOpen={isOpen}
         onToggle={() => setIsOpen((prev) => !prev)}
@@ -189,20 +212,25 @@ export function ChatWithLauncher({
         avatarRingWidth={launcherAvatarRingWidth}
         launcherWhenOpen={launcherWhenOpen}
         alwaysShowSameIcon={launcherAlwaysShowSameIcon}
+        inline={containedAnchor}
+        loading={!isOpen && launcherLoading}
+        className={containedAnchor ? "!absolute z-[20] pointer-events-auto" : undefined}
+        style={containedAnchor ? containedLauncherAnchorStyle : undefined}
       />
       {isOpen && (
         <div
           className={cx(
-            "fixed z-[9998] flex flex-col overflow-hidden rounded-2xl",
+            containedAnchor ? "absolute z-[19] pointer-events-auto" : "fixed z-[9998]",
+            "flex flex-col overflow-hidden rounded-2xl",
             chatShadowIntensityClass(shadowIntensity),
-            panelHorizontalClasses[launcherPosition],
+            !containedAnchor && panelHorizontalClasses[launcherPosition],
             dark ? "dark bg-gray-900" : "bg-white",
             chatClassName,
           )}
           style={{
             width: typeof width === "number" ? `${width}px` : width,
             height: typeof height === "number" ? `${height}px` : height,
-            ...panelVerticalStyle,
+            ...(containedAnchor ? containedPanelAnchorStyle : panelVerticalStyle),
             ...panelMotionStyle,
             ...chatPanelOutlineStyle(
               showChatBorder,

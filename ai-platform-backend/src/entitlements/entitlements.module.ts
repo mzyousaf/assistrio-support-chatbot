@@ -25,6 +25,7 @@ import { WorkspaceAiCreditsUsageService } from './workspace-ai-credits-usage.ser
 import { WorkspaceAnalyticsEntitlementService } from './workspace-analytics-entitlement.service';
 import { WorkspaceBrandingEntitlementService } from './workspace-branding-entitlement.service';
 import { WorkspaceExportReportEntitlementService } from './workspace-export-report-entitlement.service';
+import { WorkspaceSharePreviewEntitlementService } from './workspace-share-preview-entitlement.service';
 import { WorkspaceBotLimitService } from './workspace-bot-limit.service';
 import { BotKnowledgeSizeResolverService } from './bot-knowledge-size-resolver.service';
 import { WorkspaceEntitlementsService } from './workspace-entitlements.service';
@@ -67,6 +68,7 @@ import { TrialReminderService } from './trial-reminder.service';
     WorkspaceBrandingEntitlementService,
     WorkspaceAnalyticsEntitlementService,
     WorkspaceExportReportEntitlementService,
+    WorkspaceSharePreviewEntitlementService,
     BotKnowledgeSizeResolverService,
   ],
   exports: [
@@ -81,6 +83,7 @@ import { TrialReminderService } from './trial-reminder.service';
     WorkspaceBrandingEntitlementService,
     WorkspaceAnalyticsEntitlementService,
     WorkspaceExportReportEntitlementService,
+    WorkspaceSharePreviewEntitlementService,
     BotKnowledgeSizeResolverService,
   ],
 })

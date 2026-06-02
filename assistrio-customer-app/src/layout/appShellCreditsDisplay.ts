@@ -24,11 +24,13 @@ export type AppShellCreditsDisplay = {
   monthlyTotal: number;
   monthlyRemaining: number;
   monthlyPercent: number;
+  monthlyValueLabel: string;
   monthlyTooltip: string;
   topUpRemaining: number;
   topUpUsed: number;
   topUpTotal: number;
   topUpPercent: number;
+  topUpValueLabel: string;
   showTopUpBar: boolean;
   totalRemaining: number;
   isOverLimit: boolean;
@@ -115,11 +117,13 @@ export function buildAppShellCreditsDisplay(
     monthlyTotal,
     monthlyRemaining,
     monthlyPercent,
+    monthlyValueLabel: `${used.toLocaleString()} / ${monthlyTotal.toLocaleString()}`,
     monthlyTooltip: buildAiCreditsSidebarMonthlyTooltip(aiCredits.periodEnd),
     topUpRemaining,
     topUpUsed,
     topUpTotal,
     topUpPercent,
+    topUpValueLabel: `${topUpUsed.toLocaleString()} / ${topUpTotal.toLocaleString()}`,
     showTopUpBar,
     totalRemaining,
     isOverLimit: Boolean(aiCredits.isOverLimit),

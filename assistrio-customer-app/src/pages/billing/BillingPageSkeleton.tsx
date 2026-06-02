@@ -154,21 +154,22 @@ function InvoiceHistorySkeleton() {
       <div className="flex flex-col gap-4 p-5">
         <BillingSectionHeaderSkeleton withSubtitle withAction />
         <div className="overflow-hidden rounded-lg border border-slate-200/80">
-          <div className="grid grid-cols-5 gap-3 border-b border-slate-200/80 px-3 py-2.5">
-            {Array.from({ length: 5 }).map((_, index) => (
+          <div className="grid grid-cols-6 gap-3 border-b border-slate-200/80 px-3 py-2.5">
+            {Array.from({ length: 6 }).map((_, index) => (
               <SkeletonBone key={index} className="h-2.5 w-full max-w-[3.5rem]" />
             ))}
           </div>
           {Array.from({ length: 4 }).map((_, rowIndex) => (
             <div
               key={rowIndex}
-              className="grid grid-cols-5 items-center gap-3 border-b border-slate-100/80 px-3 py-3 last:border-b-0"
+              className="grid grid-cols-6 items-center gap-3 border-b border-slate-100/80 px-3 py-3 last:border-b-0"
             >
               <SkeletonBone className="h-3 w-16" />
               <div className="space-y-1.5">
                 <SkeletonBone className="h-3 w-full max-w-[5.5rem]" />
                 <SkeletonBone className="h-2.5 w-full max-w-[4rem]" />
               </div>
+              <SkeletonBone className="h-3 w-12" />
               <SkeletonBone className="h-3 w-12" />
               <SkeletonBone className="h-4 w-10 rounded" />
               <SkeletonBone className="h-3 w-20 justify-self-start" />

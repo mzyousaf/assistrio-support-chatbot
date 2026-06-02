@@ -21,6 +21,20 @@ export function workspaceAutoTrainAllowed(
   return workspace?.planKey !== 'free';
 }
 
+export function workspaceSharePreviewAllowed(
+  entitlements:
+    | Pick<import('@/api/types').WorkspaceBillingEntitlementsSummary, 'sharePreviewAllowed' | 'isTrialPlan'>
+    | Pick<CustomerWorkspaceSummary, 'sharePreviewAllowed' | 'planKey' | 'isTrialPlan'>
+    | null
+    | undefined,
+): boolean {
+  if (entitlements?.sharePreviewAllowed === false) return false;
+  if (entitlements?.sharePreviewAllowed === true) return true;
+  if ('planKey' in (entitlements ?? {}) && entitlements?.planKey === 'free') return false;
+  if (entitlements?.isTrialPlan) return false;
+  return true;
+}
+
 export function formatCreditsIncludedLabel(summary: WorkspaceBillingSummary): string {
   if (summary.entitlements.isTrialPlan) {
     return `${summary.entitlements.monthlyAiCredits.toLocaleString()} trial AI credits`;
@@ -85,6 +99,7 @@ export function mockTrialBillingEntitlements(
     autoTrainAllowed: false,
     addonsAllowed: false,
     memberInvitesAllowed: false,
+    sharePreviewAllowed: false,
     canRemoveBranding: false,
     activeAddons: [],
     topUpCreditsRemaining: 0,

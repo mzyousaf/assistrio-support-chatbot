@@ -117,7 +117,7 @@ describe('AppShellCreditsWidget', () => {
     renderWidget();
     expect(screen.getByText('AI credits')).toBeTruthy();
     expect(screen.getByText('Monthly AI credits')).toBeTruthy();
-    expect(screen.getByText('38 remaining')).toBeTruthy();
+    expect(screen.getByText('12 / 50')).toBeTruthy();
     expect(screen.getByLabelText('Monthly AI credits used this billing period')).toBeTruthy();
   });
 
@@ -152,7 +152,7 @@ describe('AppShellCreditsWidget', () => {
         byBot: [],
       },
     });
-    expect(screen.getByText('0 remaining')).toBeTruthy();
+    expect(screen.getByText('55 / 50')).toBeTruthy();
     expect(screen.getByText('Over monthly limit')).toBeTruthy();
   });
 
@@ -180,7 +180,7 @@ describe('AppShellCreditsWidget', () => {
       ],
     });
     expect(screen.getByText('Top-up credits')).toBeTruthy();
-    expect(screen.getByText('1,000 remaining')).toBeTruthy();
+    expect(screen.getByText('0 / 1,000')).toBeTruthy();
     expect(screen.getByLabelText('Top-up credits used')).toBeTruthy();
   });
 
@@ -315,13 +315,46 @@ describe('AppShellCreditsWidget', () => {
     expect(screen.getByRole('button', { name: /ai credits/i }).getAttribute('aria-expanded')).toBe(
       'false',
     );
-    expect(screen.queryByText('Monthly AI credits')).toBeNull();
-    expect(screen.getByText('38 monthly left')).toBeTruthy();
+    expect(screen.getByText('Monthly AI credits')).toBeTruthy();
+    expect(screen.getByText('12 / 50')).toBeTruthy();
     expect(screen.getByRole('link', { name: /upgrade to pro/i })).toBeTruthy();
     expect(screen.queryByText('Upgrade Available')).toBeNull();
   });
 
-  it('shows top-up credits in collapsed view when monthly credits are used', () => {
+  it('shows top-up credits in collapsed view when monthly credits are fully used', () => {
+    renderWidget({
+      collapseContext: 'agent',
+      aiCredits: {
+        periodStart: '',
+        periodEnd: '',
+        monthlyCredits: 500,
+        monthlyCreditsUsed: 500,
+        monthlyCreditsRemaining: 0,
+        topUpCreditsRemaining: 1000,
+        totalCreditsAvailable: 1500,
+        totalCreditsRemaining: 1000,
+        isOverLimit: false,
+        byBot: [],
+      },
+      topUps: [
+        {
+          creditsPurchased: 1000,
+          creditsRemaining: 1000,
+          expiresAt: '2027-05-29T00:00:00.000Z',
+          createdAt: '2026-05-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    expect(screen.getByRole('button', { name: /ai credits/i }).getAttribute('aria-expanded')).toBe(
+      'false',
+    );
+    expect(screen.getByText('Top-up credits')).toBeTruthy();
+    expect(screen.getByText('0 / 1,000')).toBeTruthy();
+    expect(screen.queryByText('Monthly AI credits')).toBeNull();
+  });
+
+  it('shows monthly credits in collapsed view when monthly credits remain', () => {
     renderWidget({
       collapseContext: 'agent',
       aiCredits: {
@@ -346,11 +379,9 @@ describe('AppShellCreditsWidget', () => {
       ],
     });
 
-    expect(screen.getByRole('button', { name: /ai credits/i }).getAttribute('aria-expanded')).toBe(
-      'false',
-    );
-    expect(screen.getByText('Top-up credits')).toBeTruthy();
-    expect(screen.getByText('1,000 remaining')).toBeTruthy();
+    expect(screen.getByText('Monthly AI credits')).toBeTruthy();
+    expect(screen.getByLabelText('Monthly AI credits used this billing period')).toBeTruthy();
+    expect(screen.queryByText('Top-up credits')).toBeNull();
   });
 
   it('shows auto top-up status when active', () => {
@@ -372,7 +403,7 @@ describe('AppShellCreditsWidget', () => {
     expect(screen.getByText('Auto top-up: Active')).toBeTruthy();
   });
 
-  it('hides top-up credits in collapsed view when monthly credits are unused', () => {
+  it('shows monthly credits in collapsed view when top-ups exist but monthly credits remain', () => {
     renderWidget({
       collapseContext: 'agent',
       aiCredits: {
@@ -397,6 +428,8 @@ describe('AppShellCreditsWidget', () => {
       ],
     });
 
+    expect(screen.getByText('Monthly AI credits')).toBeTruthy();
+    expect(screen.getByLabelText('Monthly AI credits used this billing period')).toBeTruthy();
     expect(screen.queryByText('Top-up credits')).toBeNull();
   });
 

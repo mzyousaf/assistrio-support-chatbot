@@ -123,6 +123,7 @@ export function FilterCapsule({
       if (wrapRef.current?.contains(t)) return;
       if (panelRef.current?.contains(t)) return;
       if (t instanceof Element && t.closest('[data-ui-select-menu]')) return;
+      if (t instanceof Element && t.closest('[data-assistrio-date-range-popover]')) return;
       onClose();
     };
     const onKey = (e: KeyboardEvent) => {

@@ -26,6 +26,7 @@ import { getCustomerApiOrigin } from '../api/client';
 import type { CustomerBotDetail, CustomerBotLifecycleResponse, CustomerMe, CustomerShareLinkResponse } from '../api/types';
 import { AgentWorkspaceSidebar } from '../pages/bot-workspace/AgentWorkspaceSidebar';
 import { SharePreviewModal } from '../pages/bot-workspace/SharePreviewModal';
+import { workspaceSharePreviewAllowed } from '@/lib/planEntitlements';
 import { useWorkspaceDiscardModal } from '../pages/bot-workspace/WorkspaceDiscardModal';
 import { useCustomerAuth } from '../auth/CustomerAuthContext';
 import { useCustomerLogout } from '../auth/useCustomerLogout';
@@ -1584,6 +1585,7 @@ export function AppShell() {
           botId={agentId}
           bot={agentBot}
           agentStatus={currentStatus}
+          sharePreviewAllowed={workspaceSharePreviewAllowed(activeBillingSummary?.entitlements)}
           onRefresh={refreshAgentFromApi}
           onShareUpdated={onSharePreviewUpdated}
         />

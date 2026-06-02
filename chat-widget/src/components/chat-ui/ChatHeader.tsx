@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { getQuickLinkIcon } from "../../lib/quickLinkIcons";
 import { AssistrioPageLoaderSpinner } from "./AssistrioPageLoaderSpinner";
+import { ClampedTextWithSeeMore } from "./ClampedTextWithSeeMore";
 import { cx } from "./utils";
 
 export interface ChatMenuQuickLink {
@@ -305,7 +306,14 @@ export function ChatHeader({
           ) : null}
         </div>
         {subtitle ? (
-          <p className={cx("text-xs truncate mt-0.5", dark ? "text-gray-400" : "text-gray-500")}>{subtitle}</p>
+          <ClampedTextWithSeeMore
+            text={subtitle}
+            modalTitle={title}
+            maxLines={10}
+            dark={dark}
+            className={cx("text-xs mt-0.5", dark ? "text-gray-400" : "text-gray-500")}
+            seeMoreClassName={dark ? "text-indigo-300" : "text-teal-700"}
+          />
         ) : null}
       </div>
 

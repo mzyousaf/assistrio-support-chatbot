@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
-import { ExtractJob, ExtractJobSchema, TrainJob, TrainJobSchema, Bot, BotSchema, Workspace, WorkspaceSchema, WorkspaceOnboardingDraft, WorkspaceOnboardingDraftSchema, User, UserSchema, WorkspaceMembership, WorkspaceMembershipSchema, WorkspaceSubscription, WorkspaceSubscriptionSchema, UsageLedger, UsageLedgerSchema } from '../models';
+import { ExtractJob, ExtractJobSchema, TrainJob, TrainJobSchema, Bot, BotSchema, Workspace, WorkspaceSchema, WorkspaceOnboardingDraft, WorkspaceOnboardingDraftSchema, User, UserSchema, WorkspaceMembership, WorkspaceMembershipSchema, WorkspaceSubscription, WorkspaceSubscriptionSchema, UsageLedger, UsageLedgerSchema, Conversation, ConversationSchema } from '../models';
 import { BotsModule } from '../bots/bots.module';
 import { ChatModule } from '../chat/chat.module';
 import { DocumentsModule } from '../documents/documents.module';
@@ -58,6 +58,7 @@ import {
 } from '../models/workspace-billing-order.schema';
 import { WorkspaceBillingSummaryService } from './workspace-billing-summary.service';
 import { WorkspaceUsageAnalyticsService } from './workspace-usage-analytics.service';
+import { AdminWorkspaceSupportService } from './admin-workspace-support.service';
 import { OnboardingKbTransferModule } from './onboarding-kb-transfer.module';
 
 /**
@@ -91,6 +92,7 @@ import { OnboardingKbTransferModule } from './onboarding-kb-transfer.module';
       { name: WorkspaceCreditTopUp.name, schema: WorkspaceCreditTopUpSchema },
       { name: WorkspaceBillingOrder.name, schema: WorkspaceBillingOrderSchema },
       { name: UsageLedger.name, schema: UsageLedgerSchema },
+      { name: Conversation.name, schema: ConversationSchema },
     ]),
   ],
   controllers: [
@@ -137,6 +139,7 @@ import { OnboardingKbTransferModule } from './onboarding-kb-transfer.module';
     WorkspaceOnboardingGoLiveService,
     WorkspaceBillingSummaryService,
     WorkspaceUsageAnalyticsService,
+    AdminWorkspaceSupportService,
   ],
   exports: [],
 })

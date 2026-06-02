@@ -8,6 +8,8 @@ import type {
   AdminCustomersListParams,
   AdminCustomersListResponse,
   AdminWorkspaceBillingSummary,
+  AdminWorkspaceSupportSummary,
+  AdminWorkspaceUsageAnalytics,
   BillingAdminSyncResult,
   AdminLoginResponse,
   AdminLogoutResponse,
@@ -111,6 +113,26 @@ export function getAdminCustomerWorkspaces(customerId: string) {
 export function getAdminWorkspaceBillingSummary(workspaceId: string) {
   return adminFetch<AdminWorkspaceBillingSummary>(
     `${P}/workspaces/${encodeURIComponent(workspaceId)}/billing/summary`,
+  );
+}
+
+export function getAdminWorkspaceSupportSummary(workspaceId: string) {
+  return adminFetch<AdminWorkspaceSupportSummary>(
+    `${P}/workspaces/${encodeURIComponent(workspaceId)}/support-summary`,
+  );
+}
+
+export function getAdminWorkspaceUsageAnalytics(
+  workspaceId: string,
+  params?: { startDate?: string; endDate?: string; botIds?: string },
+) {
+  const q = new URLSearchParams();
+  if (params?.startDate) q.set('startDate', params.startDate);
+  if (params?.endDate) q.set('endDate', params.endDate);
+  if (params?.botIds) q.set('botIds', params.botIds);
+  const qs = q.toString();
+  return adminFetch<AdminWorkspaceUsageAnalytics>(
+    `${P}/workspaces/${encodeURIComponent(workspaceId)}/usage/analytics${qs ? `?${qs}` : ''}`,
   );
 }
 

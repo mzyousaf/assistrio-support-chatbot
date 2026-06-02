@@ -7,6 +7,7 @@ import {
   isWorkspaceBotPreviewAccessDenied,
 } from './botsListMessages';
 import {
+  PLAN_LIMIT_SHARE_PREVIEW_CODE,
   WORKSPACE_BOT_LIMIT_EXCEEDED_CODE,
   WORKSPACE_BOT_LIMIT_EXCEEDED_MESSAGE,
 } from './planLimitError';
@@ -43,6 +44,9 @@ export function resolveChatRuntimeErrorMessage(result: {
   }
   if (code === WORKSPACE_BOT_LIMIT_EXCEEDED_CODE) {
     return result.error?.trim() || WORKSPACE_BOT_LIMIT_EXCEEDED_MESSAGE;
+  }
+  if (code === PLAN_LIMIT_SHARE_PREVIEW_CODE) {
+    return 'This preview link is no longer active. Please contact the workspace owner.';
   }
 
   if (isWorkspaceBotPreviewAccessDenied(result)) {

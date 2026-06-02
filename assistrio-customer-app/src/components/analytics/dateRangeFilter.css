@@ -1,0 +1,306 @@
+@import "@daypicker/react/style.css";
+
+/** Portaled custom range popover — premium compact SaaS calendar. */
+.assistrio-date-range-popover,
+.date-range-popover {
+  position: fixed;
+  z-index: 1200;
+  width: max-content;
+  max-width: calc(100vw - 24px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  max-height: calc(100vh - 96px);
+  overscroll-behavior: contain;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+
+.date-range-custom-trigger--active {
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--color-teal-600, #0d9488) 8%, transparent);
+}
+
+.date-range-popover__header {
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid rgb(241 245 249);
+}
+
+.date-range-popover__title {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: rgb(15 23 42);
+}
+
+.date-range-popover__subtitle {
+  margin: 0.125rem 0 0;
+  font-size: 0.6875rem;
+  line-height: 1.125rem;
+  font-weight: 400;
+  color: rgb(100 116 139);
+}
+
+.date-range-popover__calendar {
+  padding: 8px 12px 4px;
+  display: flex;
+  justify-content: center;
+}
+
+.date-range-popover .rdp-root {
+  --rdp-range-fill: color-mix(in oklab, var(--color-teal-600, #0d9488) 22%, white);
+  --rdp-accent-color: var(--color-teal-600, #0d9488);
+  --rdp-accent-background-color: var(--rdp-range-fill);
+  --rdp-day-height: 34px;
+  --rdp-day-width: 34px;
+  --rdp-day_button-height: 34px;
+  --rdp-day_button-width: 34px;
+  --rdp-day_button-border-radius: 9999px;
+  --rdp-selected-border: 2px solid transparent;
+  --rdp-nav-height: 1.875rem;
+  --rdp-nav_button-height: 1.375rem;
+  --rdp-nav_button-width: 1.375rem;
+  --rdp-months-gap: 0;
+  --rdp-today-color: var(--color-teal-700, #0f766e);
+  --rdp-disabled-opacity: 0.32;
+  --rdp-outside-opacity: 0;
+  --rdp-weekday-padding: 0.2rem 0;
+  --rdp-range_start-color: #fff;
+  --rdp-range_end-color: #fff;
+  --rdp-range_middle-background-color: var(--rdp-range-fill);
+  --rdp-range_middle-color: rgb(19 78 74);
+  --rdp-range_start-date-background-color: var(--color-teal-600, #0d9488);
+  --rdp-range_end-date-background-color: var(--color-teal-600, #0d9488);
+  --rdp-range_start-background: linear-gradient(90deg, transparent 50%, var(--rdp-range-fill) 50%);
+  --rdp-range_end-background: linear-gradient(90deg, var(--rdp-range-fill) 50%, transparent 50%);
+  width: max-content;
+  max-width: 100%;
+}
+
+.date-range-popover .rdp-months {
+  max-width: 100%;
+}
+
+.date-range-popover .rdp-month_caption {
+  justify-content: center;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: rgb(15 23 42);
+  height: var(--rdp-nav-height);
+}
+
+.date-range-popover .rdp-weekday {
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: rgb(148 163 184);
+  opacity: 1;
+  text-transform: uppercase;
+}
+
+.date-range-popover .rdp-day {
+  padding: 0;
+}
+
+.date-range-popover .rdp-day_button {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: rgb(51 65 85);
+  border: 2px solid transparent;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.date-range-popover .rdp-day:not(.rdp-disabled):not(.rdp-selected):not(.rdp-range_start):not(.rdp-range_end):not(.rdp-range_middle)
+  .rdp-day_button:hover:not([disabled]) {
+  background: rgba(20, 184, 166, 0.1);
+  color: rgb(15 23 42);
+}
+
+.date-range-popover .rdp-today:not(.rdp-outside):not(.rdp-selected):not(.rdp-range_start):not(.rdp-range_end):not(.rdp-range_middle)
+  .rdp-day_button {
+  box-shadow: inset 0 0 0 1.5px color-mix(in oklab, var(--color-teal-600, #0d9488) 55%, rgb(226 232 240));
+}
+
+.date-range-popover .rdp-selected {
+  font-size: inherit;
+  font-weight: inherit;
+}
+
+/* Partial range: only start selected (DayPicker uses .rdp-selected before end is picked). */
+.date-range-popover
+  .rdp-day.rdp-selected:not(.rdp-range_middle):not(.rdp-range_end):not(.rdp-range_start)
+  .rdp-day_button,
+.date-range-popover .rdp-day.rdp-selected.rdp-focused:not(.rdp-range_middle):not(.rdp-range_end):not(.rdp-range_start)
+  .rdp-day_button {
+  background-color: var(--color-teal-600, #0d9488);
+  color: #fff;
+  font-weight: 700;
+  border-radius: 9999px;
+}
+
+.date-range-popover .rdp-range_middle {
+  background-color: var(--rdp-range-fill);
+  border-radius: 0;
+}
+
+.date-range-popover .rdp-range_middle .rdp-day_button {
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
+  border-color: transparent;
+  background-color: var(--rdp-range-fill);
+  color: rgb(19 78 74);
+  font-weight: 500;
+}
+
+.date-range-popover .rdp-range_middle .rdp-day_button:hover:not([disabled]) {
+  background-color: color-mix(in oklab, var(--color-teal-600, #0d9488) 30%, white);
+  color: rgb(15 23 42);
+}
+
+.date-range-popover .rdp-range_start:not(.rdp-range_end) {
+  background: linear-gradient(90deg, transparent 50%, var(--rdp-range-fill) 50%);
+  border-radius: 9999px 0 0 9999px;
+}
+
+.date-range-popover .rdp-range_end:not(.rdp-range_start) {
+  background: linear-gradient(90deg, var(--rdp-range-fill) 50%, transparent 50%);
+  border-radius: 0 9999px 9999px 0;
+}
+
+.date-range-popover .rdp-range_start .rdp-day_button,
+.date-range-popover .rdp-range_end .rdp-day_button {
+  background-color: var(--color-teal-600, #0d9488);
+  color: #fff;
+  font-weight: 700;
+  border-radius: 9999px;
+  border-color: transparent;
+}
+
+.date-range-popover .rdp-range_start .rdp-day_button:hover:not([disabled]),
+.date-range-popover .rdp-range_end .rdp-day_button:hover:not([disabled]) {
+  background-color: var(--color-teal-700, #0f766e);
+  color: #fff;
+}
+
+/* Same-day range: one solid circle, no strip background. */
+.date-range-popover .rdp-day.rdp-range_start.rdp-range_end {
+  background: transparent;
+  border-radius: 9999px;
+}
+
+.date-range-popover .rdp-day.rdp-range_start.rdp-range_end .rdp-day_button {
+  background-color: var(--color-teal-600, #0d9488);
+  color: #fff;
+  font-weight: 700;
+}
+
+.date-range-popover .rdp-day.rdp-selected.rdp-today:not(.rdp-range_middle) .rdp-day_button,
+.date-range-popover .rdp-day.rdp-range_start.rdp-today .rdp-day_button,
+.date-range-popover .rdp-day.rdp-range_end.rdp-today .rdp-day_button {
+  box-shadow: none;
+}
+
+.date-range-popover .rdp-disabled:not(.rdp-selected) {
+  opacity: 1;
+}
+
+.date-range-popover .rdp-disabled:not(.rdp-selected) .rdp-day_button {
+  color: rgb(203 213 225);
+  cursor: not-allowed;
+  background: transparent;
+}
+
+.date-range-popover .rdp-disabled:not(.rdp-selected) .rdp-day_button:hover:not([disabled]) {
+  background: transparent;
+  color: rgb(203 213 225);
+}
+
+.date-range-popover .rdp-button_previous,
+.date-range-popover .rdp-button_next {
+  border-radius: 9999px;
+  color: rgb(148 163 184);
+}
+
+.date-range-popover .rdp-chevron {
+  width: 0.75rem;
+  height: 0.75rem;
+  fill: currentColor;
+}
+
+.date-range-popover .rdp-button_previous:hover:not([disabled]),
+.date-range-popover .rdp-button_next:hover:not([disabled]) {
+  background: rgb(248 250 252);
+  color: rgb(100 116 139);
+}
+
+.date-range-popover__one-day-action {
+  margin: 0 12px 4px;
+  border: none;
+  background: transparent;
+  padding: 0;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 1rem;
+  color: var(--color-teal-700, #0f766e);
+  text-align: left;
+  cursor: pointer;
+}
+
+.date-range-popover__one-day-action:hover:not(:disabled) {
+  color: var(--color-teal-800, rgb(17 94 89));
+  text-decoration: underline;
+}
+
+.date-range-popover__footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: auto;
+  border-top: 1px solid rgb(241 245 249);
+  background: rgb(255 255 255 / 0.96);
+  backdrop-filter: blur(6px);
+  padding: 10px 12px 12px;
+}
+
+.date-range-popover__footer-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.assistrio-date-range-popover--mobile {
+  left: 12px !important;
+  right: 12px !important;
+  bottom: 0 !important;
+  top: auto !important;
+  width: auto !important;
+  max-width: calc(100vw - 24px) !important;
+  border-radius: 1rem 1rem 0 0;
+  max-height: min(88vh, calc(100vh - 96px));
+}
+
+.assistrio-date-range-popover--mobile .date-range-popover__calendar {
+  display: flex;
+  justify-content: center;
+}
+
+.assistrio-date-range-popover--mobile .date-range-popover__footer {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.assistrio-date-range-popover--mobile .date-range-popover__footer-actions {
+  width: 100%;
+}
+
+.assistrio-date-range-popover--mobile .date-range-popover__footer-actions [data-ui-button] {
+  flex: 1;
+}

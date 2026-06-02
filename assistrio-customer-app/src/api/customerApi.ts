@@ -1388,8 +1388,20 @@ async function runtimeBackendJson<T>(
     'error' in body &&
     typeof (body as { error: unknown }).error === 'string'
       ? (body as { error: string }).error.trim()
-      : res.statusText || `Request failed (${res.status})`;
-  return { ok: false, status: res.status, error: err || 'Request failed', body };
+      : body &&
+          typeof body === 'object' &&
+          'message' in body &&
+          typeof (body as { message: unknown }).message === 'string'
+        ? (body as { message: string }).message.trim()
+        : res.statusText || `Request failed (${res.status})`;
+  const errorCode =
+    body &&
+    typeof body === 'object' &&
+    'errorCode' in body &&
+    typeof (body as { errorCode: unknown }).errorCode === 'string'
+      ? (body as { errorCode: string }).errorCode.trim()
+      : undefined;
+  return { ok: false, status: res.status, error: err || 'Request failed', errorCode, body };
 }
 
 /** GET `/api/shared/bots/:slug/init` — Assistrio-hosted share preview; optional `shareToken` for draft links. */

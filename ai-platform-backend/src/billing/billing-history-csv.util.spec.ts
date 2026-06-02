@@ -20,6 +20,7 @@ describe('billing-history-csv.util', () => {
         itemKey: 'starter',
         itemName: 'Starter',
         billingKind: 'subscription_invoice',
+        billingInterval: 'monthly',
       },
       {
         id: 'inv-addon',
@@ -37,6 +38,7 @@ describe('billing-history-csv.util', () => {
         itemKey: 'extra_bot',
         itemName: 'Extra AI Agent add-on',
         billingKind: 'subscription_invoice',
+        billingInterval: 'yearly',
       },
       {
         id: 'order-top-up',
@@ -58,7 +60,12 @@ describe('billing-history-csv.util', () => {
     ];
 
     const csv = buildBillingHistoryCsv(rows);
-    expect(csv).toContain('Date,Item,Description,Type,Amount,Currency,Status,Provider,Invoice/Receipt URL');
+    expect(csv).toContain(
+      'Date,Item,Description,Type,Billing cadence,Amount,Currency,Status,Provider,Invoice/Receipt URL',
+    );
+    expect(csv).toContain('Monthly');
+    expect(csv).toContain('Annually');
+    expect(csv).toContain('One-time');
     expect(csv).toContain('$49.00');
     expect(csv).toContain('$15.00');
     expect(csv).toContain('$30.00');
@@ -90,6 +97,7 @@ describe('billing-history-csv.util', () => {
     ]);
 
     const dataLine = csv.split('\r\n')[1];
+    expect(dataLine).toContain('One-time');
     expect(dataLine?.endsWith(',paid,Lemon Squeezy,')).toBe(true);
   });
 });

@@ -36,4 +36,13 @@ describe("resolveChatRuntimeErrorMessage", () => {
       }),
     ).toBe(WORKSPACE_BOT_LIMIT_EXCEEDED_MESSAGE);
   });
+
+  it("maps plan_limit_share_preview to inactive preview copy", () => {
+    expect(
+      resolveChatRuntimeErrorMessage({
+        errorCode: "plan_limit_share_preview",
+        message: "Share preview links are available on paid plans.",
+      }),
+    ).toBe("This preview link is no longer active. Please contact the workspace owner.");
+  });
 });

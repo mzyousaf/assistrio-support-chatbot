@@ -10,6 +10,10 @@ import { ContainedLauncherPreview } from "./ContainedLauncherPreview";
 import { cx } from "./chat-ui/utils";
 import { useChatPanelBox } from "../hooks/useChatPanelLayout";
 import {
+  containedLauncherStackInsetPx,
+  CONTAINED_STAGE_SIZING_INSET_PX,
+  LIVE_WIDGET_COLLAPSED_HEIGHT_MAX_PX,
+  LIVE_WIDGET_EXPANDED_WIDTH_MAX_PX,
   PANEL_COLLAPSED_HEIGHT_PX,
   PANEL_COLLAPSED_WIDTH_PX,
   PANEL_EXPANDED_WIDTH_PX,
@@ -110,8 +114,6 @@ function resolveScrollToBottomAlign(chatUI: BotChatUI | undefined | null): "left
   return "center";
 }
 
-const SUBTITLE_MAX_LENGTH = 80;
-
 interface SuperAdminChatDebug {
   finalAnswerPipeline?: "unified";
   finalAnswerMode?: "grounded" | "general" | "safe_fallback";
@@ -137,11 +139,6 @@ interface SuperAdminChatResponse {
   userAttachments?: Array<{ name: string; mimeType: string; url: string; size?: number }>;
 }
 
-function truncateSubtitle(text: string, maxLen: number): string {
-  const t = text.trim();
-  if (t.length > maxLen) return t;
-  return t.slice(0, maxLen).trimEnd().replace(/\s+\S*$/, "") + "…";
-}
 
 /** Map embed API `messages` (runtime or preview) to `ChatUIMessage` for display parity with the DB. */
 function mapEmbedApiRowsToChatUIMessages(
@@ -272,6 +269,23 @@ export interface AdminLiveChatAdapterProps {
   iframeParentOrigin?: string;
   /** Parent page URL when embedder passes `parentPageUrl` on the iframe src (cross-origin safe). */
   iframeParentPageUrl?: string;
+  /**
+   * Size the contained panel to the nearest `[data-widget-preview-measure]` host (100% width/height stage).
+   * Used by Assistrio-hosted share preview card layout; does not affect floating launcher embeds.
+   */
+  fillParent?: boolean;
+  /** Visual chrome hint for host-mounted surfaces (`embedded-card` flattens inner corners for outer card radius). */
+  surfaceVariant?: "default" | "embedded-card";
+  /**
+   * Host-mounted presentation for dashboard / share preview stages.
+   * `live-widget`: interactive launcher + panel anchored in a relative stage (expand supported).
+   * `embedded-card`: panel fills a fixed card (legacy share embed).
+   */
+  stageMode?: "default" | "live-widget" | "embedded-card";
+  /** When `stageMode === "live-widget"`, mount launcher/panel inside a relative stage host. */
+  containedStage?: boolean;
+  /** Override `chatUI.openChatOnLoad` for floating / live-widget stage (default follows chatUI). */
+  defaultOpen?: boolean;
 }
 
 const DEFAULT_PRIMARY = "#14B8A6";
@@ -360,9 +374,19 @@ export function AdminLiveChatAdapter({
   sharePreviewToken,
   iframeParentOrigin,
   iframeParentPageUrl,
+  fillParent = false,
+  surfaceVariant = "default",
+  stageMode = "default",
+  containedStage = false,
+  defaultOpen,
 }: AdminLiveChatAdapterProps) {
   void expandHref;
   void debug;
+
+  const liveWidgetStage = stageMode === "live-widget" && containedStage;
+  const embeddedCardStage =
+    stageMode === "embedded-card" || (fillParent && surfaceVariant === "embedded-card");
+  const effectiveUseFloatingLauncher = liveWidgetStage || useFloatingLauncher;
 
   const previewScopeSuffix =
     mode === "preview" && previewVisitorScope?.trim() ? `:${previewVisitorScope.trim()}` : "";
@@ -906,7 +930,7 @@ export function AdminLiveChatAdapter({
 
   const subtitle =
     (tagline ?? "").trim() ||
-    (description?.trim() ? truncateSubtitle(description, SUBTITLE_MAX_LENGTH) : "") ||
+    (description?.trim() ?? "") ||
     "Live test";
 
   const ws = mergeWidgetStrings(widgetStrings);
@@ -1478,75 +1502,107 @@ export function AdminLiveChatAdapter({
           )
       : undefined;
 
-  const menuExpanded = useFloatingLauncher ? floatingPanelExpanded : expanded;
+  const menuExpanded = effectiveUseFloatingLauncher ? floatingPanelExpanded : expanded;
 
   useEffect(() => {
-    if (useFloatingLauncher) {
+    if (effectiveUseFloatingLauncher) {
       onContainedPanelExpandChange?.(false);
       return;
     }
     onContainedPanelExpandChange?.(menuExpanded);
-  }, [useFloatingLauncher, menuExpanded, onContainedPanelExpandChange]);
+  }, [effectiveUseFloatingLauncher, menuExpanded, onContainedPanelExpandChange]);
 
-  /** Panel pixel box matches measured host (`/share/:slug` card or `/iframe/:botId` viewport). */
+  /** Panel pixel box matches measured host (`/share/:slug` stage or `/iframe/:botId` viewport). */
   const containedSizeToHost = useMemo(
-    () =>
-      !useFloatingLauncher &&
-      mode === "runtime" &&
-      (runtimeSurface === "shared" || runtimeSurface === "iframe"),
-    [useFloatingLauncher, mode, runtimeSurface],
+    () => {
+      if (embeddedCardStage && fillParent) return true;
+      if (liveWidgetStage) return false;
+      return (
+        fillParent ||
+        (!effectiveUseFloatingLauncher &&
+          mode === "runtime" &&
+          (runtimeSurface === "shared" || runtimeSurface === "iframe"))
+      );
+    },
+    [
+      embeddedCardStage,
+      fillParent,
+      liveWidgetStage,
+      effectiveUseFloatingLauncher,
+      mode,
+      runtimeSurface,
+    ],
   );
 
   /** Square inner chrome so outer host supplies border-radius (avoids clipped / double corners). */
-  const containedFlattenInnerChrome = containedSizeToHost;
+  const containedFlattenInnerChrome =
+    containedSizeToHost &&
+    (embeddedCardStage || surfaceVariant === "embedded-card" || runtimeSurface === "iframe") &&
+    !liveWidgetStage;
 
   const containedIframeNoTransition = useMemo(
-    () => !useFloatingLauncher && mode === "runtime" && runtimeSurface === "iframe",
-    [useFloatingLauncher, mode, runtimeSurface],
+    () => !effectiveUseFloatingLauncher && mode === "runtime" && runtimeSurface === "iframe",
+    [effectiveUseFloatingLauncher, mode, runtimeSurface],
   );
 
   /** Share hosted page: let Chat panel border paint fully; iframe embed still clips. */
   const containedInnerOverflowHidden =
     !containedFlattenInnerChrome || runtimeSurface === "iframe";
 
+  const launcherReservePx = liveWidgetStage
+    ? containedLauncherStackInsetPx(launcherBubble.size)
+    : showContainedLauncherPreview
+      ? containedLauncherPreviewBottomOutsetPx(launcherBubble.size)
+      : 0;
+
   const containedSizeOpts = useMemo(
-    () => ({
-      collapsedWidth: inlinePanelCollapsedWidth ?? PANEL_COLLAPSED_WIDTH_PX,
-      collapsedHeight: inlinePanelCollapsedHeight ?? PANEL_COLLAPSED_HEIGHT_PX,
-      expandedWidth: inlinePanelExpandedWidth ?? PANEL_EXPANDED_WIDTH_PX,
-      expandedHeight: inlinePanelExpandedHeight ?? "75vh",
-      reservedBottomPx: showContainedLauncherPreview
-        ? containedLauncherPreviewBottomOutsetPx(launcherBubble.size)
-        : 0,
-      fillHost: containedSizeToHost,
-    }),
+    () =>
+      liveWidgetStage
+        ? {
+            collapsedWidth: inlinePanelCollapsedWidth ?? PANEL_COLLAPSED_WIDTH_PX,
+            collapsedHeightMaxPx: inlinePanelCollapsedHeight ?? LIVE_WIDGET_COLLAPSED_HEIGHT_MAX_PX,
+            expandedWidthMaxPx: inlinePanelExpandedWidth ?? LIVE_WIDGET_EXPANDED_WIDTH_MAX_PX,
+            expandedHeight: inlinePanelExpandedHeight ?? "75vh",
+            stageSizingInsetPx: CONTAINED_STAGE_SIZING_INSET_PX,
+            reservedBottomPx: launcherReservePx,
+            fillHost: false,
+          }
+        : {
+            collapsedWidth: inlinePanelCollapsedWidth ?? PANEL_COLLAPSED_WIDTH_PX,
+            collapsedHeight: inlinePanelCollapsedHeight ?? PANEL_COLLAPSED_HEIGHT_PX,
+            expandedWidth: inlinePanelExpandedWidth ?? PANEL_EXPANDED_WIDTH_PX,
+            expandedHeight: inlinePanelExpandedHeight ?? "75vh",
+            reservedBottomPx: launcherReservePx,
+            fillHost: containedSizeToHost,
+          },
     [
+      liveWidgetStage,
       inlinePanelCollapsedWidth,
       inlinePanelCollapsedHeight,
       inlinePanelExpandedWidth,
       inlinePanelExpandedHeight,
-      showContainedLauncherPreview,
-      launcherBubble.size,
+      launcherReservePx,
       containedSizeToHost,
     ],
   );
 
   const { box: panelBox, canExpand: panelCanExpand } = useChatPanelBox(
-    useFloatingLauncher,
+    effectiveUseFloatingLauncher && !liveWidgetStage,
     menuExpanded,
     launcherBubble.size,
     containedStageRef,
     containedSizeOpts,
+    { containedFloating: liveWidgetStage },
   );
 
   useEffect(() => {
     if (panelCanExpand) return;
-    if (useFloatingLauncher) {
+    if (effectiveUseFloatingLauncher) {
       setFloatingPanelExpanded(false);
     } else {
       setExpanded(false);
     }
-  }, [panelCanExpand, useFloatingLauncher]);
+  }, [panelCanExpand, effectiveUseFloatingLauncher]);
 
   const chatShared = {
     width: "100%" as const,
@@ -1596,7 +1652,7 @@ export function AdminLiveChatAdapter({
     onBack: onBack ?? (() => { }),
     onMenu,
     showMenuExpand: chatUI?.showMenuExpand !== false && panelCanExpand,
-    onMenuExpand: useFloatingLauncher
+    onMenuExpand: effectiveUseFloatingLauncher
       ? () => setFloatingPanelExpanded((e) => !e)
       : () => setExpanded((e) => !e),
     isExpanded: menuExpanded,
@@ -1677,43 +1733,71 @@ export function AdminLiveChatAdapter({
     onSpeechAnalytics: speechClientEnabled ? onSpeechAnalytics : undefined,
   };
 
-  if (useFloatingLauncher) {
-    return (
-      <ChatWithLauncher
-        {...chatShared}
-        launcherPosition={launcherPosition}
-        defaultOpen={chatUI?.openChatOnLoad !== false}
-        launcherSize={launcherBubble.size}
-        launcherShadowIntensity={launcherBubble.shadowIntensity}
-        launcherAvatar={launcherBubble.avatar}
-        launcherAvatarWithBackground={launcherBubble.avatarWithBackground}
-        launcherAvatarRingWidth={launcherBubble.avatarRingWidth}
-        launcherWhenOpen={launcherBubble.launcherWhenOpen}
-        panelOpenAnimation={chatUI?.chatOpenAnimation ?? "slide-up-fade"}
-        width={panelBox.width}
-        height={panelBox.height}
-        accentColor={primaryColor}
-        dark={dark}
-        onClose={onClose}
-        dialogAriaLabel={ws.chatDialogLabel}
-        className={className}
-        style={style}
-      />
-    );
+  const resolvedDefaultOpen =
+    typeof defaultOpen === "boolean" ? defaultOpen : chatUI?.openChatOnLoad !== false;
+  const liveWidgetDeferredOpen = liveWidgetStage && resolvedDefaultOpen;
+  const liveWidgetBootstrapping = liveWidgetDeferredOpen && conversationLoading;
+  const effectiveDefaultOpen = liveWidgetDeferredOpen ? !liveWidgetBootstrapping : resolvedDefaultOpen;
+
+  const floatingLauncherNode = (
+    <ChatWithLauncher
+      {...chatShared}
+      launcherPosition={launcherPosition}
+      defaultOpen={effectiveDefaultOpen}
+      launcherLoading={liveWidgetBootstrapping}
+      launcherSize={launcherBubble.size}
+      launcherShadowIntensity={launcherBubble.shadowIntensity}
+      launcherAvatar={launcherBubble.avatar}
+      launcherAvatarWithBackground={launcherBubble.avatarWithBackground}
+      launcherAvatarRingWidth={launcherBubble.avatarRingWidth}
+      launcherWhenOpen={launcherBubble.launcherWhenOpen}
+      panelOpenAnimation={chatUI?.chatOpenAnimation ?? "slide-up-fade"}
+      width={panelBox.width}
+      height={panelBox.height}
+      accentColor={primaryColor}
+      dark={dark}
+      onClose={onClose}
+      dialogAriaLabel={ws.chatDialogLabel}
+      anchorMode={liveWidgetStage ? "contained" : "viewport"}
+      className={liveWidgetStage ? undefined : className}
+      style={liveWidgetStage ? undefined : style}
+    />
+  );
+
+  if (effectiveUseFloatingLauncher) {
+    if (liveWidgetStage) {
+      return (
+        <div
+          ref={containedStageRef}
+          className={cx("relative h-full min-h-0 w-full min-w-0 overflow-hidden pointer-events-none", className)}
+          style={style}
+        >
+          {floatingLauncherNode}
+        </div>
+      );
+    }
+    return floatingLauncherNode;
   }
+
+  const stageWidth = fillParent ? "100%" : panelBox.width;
+  const stageHeight = fillParent ? "100%" : panelBox.height;
 
   return (
     <div
       ref={containedStageRef}
-      className={cx("assistrio-chat-widget relative max-h-full min-h-0 min-w-0 max-w-full overflow-visible", className)}
+      className={cx(
+        "assistrio-chat-widget relative max-h-full min-h-0 min-w-0 max-w-full overflow-visible",
+        fillParent && "h-full w-full",
+        className,
+      )}
       style={{
-        width: panelBox.width,
-        height: panelBox.height,
+        width: stageWidth,
+        height: stageHeight,
         minHeight: 0,
         maxWidth: "100%",
         maxHeight: "100%",
         boxSizing: "border-box",
-        transition: containedIframeNoTransition ? "none" : "width 0.3s ease-out, height 0.3s ease-out",
+        transition: containedIframeNoTransition || fillParent ? "none" : "width 0.3s ease-out, height 0.3s ease-out",
         ...style,
       }}
     >

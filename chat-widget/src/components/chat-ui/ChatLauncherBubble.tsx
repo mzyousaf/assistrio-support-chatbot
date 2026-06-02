@@ -1,6 +1,7 @@
 import React from "react";
 import { ChevronDown, MessageCircle } from "lucide-react";
 import type { ChatLauncherWhenOpen } from "../../models/botChatUI";
+import { AssistrioPageLoaderSpinner } from "./AssistrioPageLoaderSpinner";
 import { chatShadowIntensityClass } from "./chatShadowStyles";
 import { cx } from "./utils";
 
@@ -34,6 +35,8 @@ export interface ChatLauncherBubbleProps {
   openLabel?: string;
   /** Accessible label when open (default "Close chat"). */
   closeLabel?: string;
+  /** Show bootstrap spinner on the bubble while the widget is preparing (panel stays closed). */
+  loading?: boolean;
   /** When true, button is in-flow (no fixed positioning); use for embedding in layout (e.g. right pane). */
   inline?: boolean;
   /** Size in pixels (default 40). */
@@ -91,6 +94,7 @@ export function ChatLauncherBubble({
   alwaysShowSameIcon = false,
   openLabel = "Open chat",
   closeLabel = "Close chat",
+  loading = false,
   inline = false,
   size = 40,
   shadowIntensity = "medium",
@@ -101,8 +105,8 @@ export function ChatLauncherBubble({
   style,
 }: ChatLauncherBubbleProps) {
   const showBadge =
-    typeof unreadCount === "number" && unreadCount > 0 && !isOpen;
-  const label = isOpen ? closeLabel : openLabel;
+    typeof unreadCount === "number" && unreadCount > 0 && !isOpen && !loading;
+  const label = loading && !isOpen ? "Loading chat" : isOpen ? closeLabel : openLabel;
 
   const whenOpen: ChatLauncherWhenOpen =
     launcherWhenOpenProp ?? (alwaysShowSameIcon ? "same" : "chevron-down");
@@ -121,9 +125,16 @@ export function ChatLauncherBubble({
     shadowIntensity === "none" || shadowIntensity === "low" || shadowIntensity === "medium" || shadowIntensity === "high"
       ? shadowIntensity
       : "medium";
-  const iconContent = isOpen ? openGlyph : closedGlyph;
-
   const sizePx = typeof size === "number" && size > 0 ? Math.round(size) : 40;
+  const showLauncherLoader = loading && !isOpen;
+  const iconContent = showLauncherLoader ? (
+    <AssistrioPageLoaderSpinner size="page" decorative />
+  ) : isOpen ? (
+    openGlyph
+  ) : (
+    closedGlyph
+  );
+
   const useAvatarRing =
     avatarWithBackground &&
     avatar != null &&
@@ -142,12 +153,18 @@ export function ChatLauncherBubble({
       onClick={onToggle}
       aria-label={label}
       aria-expanded={isOpen}
+      aria-busy={loading && !isOpen ? true : undefined}
+      disabled={loading && !isOpen}
       className={cx(
-        "flex items-center justify-center rounded-full transition-transform hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 overflow-hidden",
-        chatShadowIntensityClass(intensity),
-        dark
-          ? "text-white focus-visible:ring-offset-gray-900"
-          : "text-white focus-visible:ring-offset-white",
+        "flex items-center justify-center transition-transform focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
+        showLauncherLoader
+          ? "overflow-visible rounded-none border-0 bg-transparent p-0 shadow-none hover:scale-100 cursor-wait focus-visible:ring-teal-500/35"
+          : "overflow-hidden rounded-full hover:scale-105",
+        !showLauncherLoader && chatShadowIntensityClass(intensity),
+        !showLauncherLoader &&
+          (dark
+            ? "text-white focus-visible:ring-offset-gray-900"
+            : "text-white focus-visible:ring-offset-white"),
         !inline && "fixed z-[9999]",
         !inline && positionClasses[position],
         className
@@ -155,13 +172,16 @@ export function ChatLauncherBubble({
       style={{
         width: sizePx,
         height: sizePx,
-        backgroundColor: accentColor,
+        backgroundColor: showLauncherLoader ? "transparent" : accentColor,
         ...style,
       }}
     >
+      {showLauncherLoader ? (
+        iconContent
+      ) : (
       <span
         className={cx(
-          "relative flex items-center justify-center w-full h-full",
+          "relative flex h-full w-full items-center justify-center",
           ringPct > 0 ? "[&>img]:w-full [&>img]:h-full [&>img]:object-cover [&>img]:rounded-full" : "[&>img]:w-full [&>img]:h-full [&>img]:object-cover [&>img]:rounded-full"
         )}
         style={ringPct > 0 ? { padding: `${ringPct}%` } : undefined}
@@ -176,6 +196,7 @@ export function ChatLauncherBubble({
           </span>
         )}
       </span>
+      )}
     </button>
   );
 }

@@ -453,6 +453,19 @@ export type AdminWorkspaceBillingPlanSummary = {
   currentPeriodEnd: string;
 };
 
+export type AdminWorkspaceBillingSubscriptionSummary = {
+  provider: string | null;
+  subscriptionStatus: string;
+  cancelAtPeriodEnd: boolean;
+  currentPeriodEnd: string;
+  hasActivePaidSubscription?: boolean;
+  customerPortalAvailable?: boolean;
+  manageBillingAvailable?: boolean;
+  paymentIssue?: boolean;
+  scheduledPlanChange?: unknown;
+  billingInterval?: string;
+};
+
 export type AdminWorkspaceBillingEntitlementsSummary = {
   botLimit: number;
   memberLimit: number;
@@ -564,12 +577,132 @@ export type BillingAdminSyncResult = {
 export type AdminWorkspaceBillingSummary = {
   workspaceId: string;
   plan: AdminWorkspaceBillingPlanSummary;
+  subscription?: AdminWorkspaceBillingSubscriptionSummary;
   entitlements: AdminWorkspaceBillingEntitlementsSummary;
   usage: AdminWorkspaceBillingUsageSummary;
   planCatalog: Array<{ key: string; name: string }>;
   addonCatalog: Array<{ key: string; name: string; checkoutAvailable: false }>;
   admin: AdminWorkspaceBillingMetadata;
   support: AdminWorkspaceBillingSupport;
+};
+
+export type AdminWorkspaceSupportWorkspace = {
+  id: string;
+  name: string;
+  onboardingStatus: string | null;
+  createdAt: string | null;
+};
+
+export type AdminWorkspaceSupportOwner = {
+  userId: string;
+  name: string;
+  email: string | null;
+};
+
+export type AdminWorkspaceSupportAgent = {
+  id: string;
+  name: string;
+  status: string;
+  visibility: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+  isOverLimitLocked: boolean;
+  lockedReason: string | null;
+  sharePreviewEnabled: boolean;
+  sharePreviewStatus: string | null;
+  kbUsedMb: number | null;
+  kbMaxMb: number | null;
+  conversationCount: number | null;
+  creditsUsedThisPeriod: number;
+};
+
+export type AdminWorkspaceSupportMember = {
+  userId: string;
+  email: string;
+  name: string;
+  role: string;
+  membershipStatus: string;
+  joinedAt: string | null;
+};
+
+export type AdminWorkspaceSupportInvite = {
+  id: string;
+  email: string;
+  role: string;
+  status: string;
+  createdAt: string | null;
+  expiresAt: string | null;
+};
+
+export type AdminWorkspaceSupportKnowledgeAgent = {
+  botId: string;
+  botName: string;
+  usedMb: number;
+  maxMb: number;
+  percentUsed: number;
+};
+
+export type AdminWorkspaceSupportConversation = {
+  id: string;
+  botId: string;
+  botName: string;
+  startedFrom: string | null;
+  messageCount: number | null;
+  creditsUsed: number | null;
+  lastActivityAt: string | null;
+  leadCaptured: boolean;
+  country: string | null;
+  device: string | null;
+};
+
+export type AdminWorkspaceSupportWebhookHealth = {
+  failedCount: number;
+  recentFailureCount: number;
+  lastProcessedAt: string | null;
+};
+
+export type AdminWorkspaceSupportSummary = {
+  workspace: AdminWorkspaceSupportWorkspace;
+  owner: AdminWorkspaceSupportOwner | null;
+  subscription: AdminWorkspaceBillingSubscriptionSummary | Record<string, unknown>;
+  entitlements: AdminWorkspaceBillingEntitlementsSummary | Record<string, unknown>;
+  usage: AdminWorkspaceBillingUsageSummary & {
+    lockedAgentsCount: number;
+    inactiveMembersCount: number;
+  };
+  agents: AdminWorkspaceSupportAgent[];
+  members: AdminWorkspaceSupportMember[];
+  invites: AdminWorkspaceSupportInvite[];
+  knowledge: AdminWorkspaceSupportKnowledgeAgent[];
+  conversations: AdminWorkspaceSupportConversation[];
+  billing: AdminWorkspaceBillingSummary;
+  webhookHealth: AdminWorkspaceSupportWebhookHealth;
+  recentEvents: AdminBillingWebhookEventRow[];
+};
+
+export type AdminWorkspaceUsageAnalytics = {
+  dateRange: { startDate: string; endDate: string };
+  usageTrend: Array<{
+    date: string;
+    totalCreditsUsed: number;
+    monthlyCreditsUsed: number;
+    topUpCreditsUsed: number;
+  }>;
+  aiCreditsByAgent: Array<{
+    botId: string;
+    botName: string;
+    totalCreditsUsed: number;
+    monthlyCreditsUsed: number;
+    topUpCreditsUsed: number;
+    messageCount: number;
+  }>;
+  trainedKnowledgeByAgent: Array<{
+    botId: string;
+    botName: string;
+    usedMb: number;
+    maxMb: number;
+    percentUsed: number;
+  }>;
 };
 
 export type AdminCustomersListParams = {

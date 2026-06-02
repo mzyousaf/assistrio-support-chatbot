@@ -1,13 +1,16 @@
 import { useCallback, useMemo, useState } from 'react';
 import { Check } from 'lucide-react';
 import type { CustomerBotListItem } from '@/api/types';
-import { FieldRow, FilterCapsule, Input } from '@/components/ui';
-import { customYmdRangeIsValid } from '@/lib/analyticsQueryDates';
+import { FilterCapsule } from '@/components/ui';
+import {
+  DateRangeFilter,
+  fromDateRangeFilterValue,
+  toDateRangeFilterValue,
+} from '@/components/analytics/DateRangeFilter';
 import {
   filterAnalyticsDatePresetsForHistoryLimit,
   minAnalyticsCustomFromYmd,
 } from '@/lib/analyticsEntitlementWindow';
-import { localYmd } from '@/lib/chatsAnalyticsQuery';
 import {
   USAGE_DATE_FILTER_DEFAULTS,
   usageDateRangeMatchesDefault,
@@ -34,15 +37,6 @@ type Props = {
   disabled?: boolean;
   maxHistoryDays?: number | null;
 };
-
-const dateInputCls =
-  'h-9 w-full min-w-0 rounded-md border border-slate-200 bg-white px-2.5 text-sm text-slate-800 focus:border-[var(--color-teal-600)]/50 focus:outline-none focus:ring-2 focus:ring-[var(--color-teal-600)]/20';
-
-function seedCustomRangeIfEmpty(): { customFrom: string; customTo: string } {
-  const to = new Date();
-  const from = new Date(to.getTime() - 30 * 86400000);
-  return { customFrom: localYmd(from), customTo: localYmd(to) };
-}
 
 function agentFilterValueLabel(selectedIds: string[], agents: CustomerBotListItem[]): string {
   if (selectedIds.length === 0) return 'All agents';
@@ -79,24 +73,20 @@ function UsageDateRangeCapsule({
   const [engaged, setEngaged] = useState(false);
   const dateAtDefault = usageDateRangeMatchesDefault(values);
   const quietValueRow = !engaged && dateAtDefault;
-  const datePresetOptions = useMemo(() => {
-    const rolling = filterAnalyticsDatePresetsForHistoryLimit(
-      [
-        { id: '7d', label: 'Last 7 days' },
-        { id: '30d', label: 'Last 30 days' },
-        { id: '90d', label: 'Last 90 days' },
-        { id: 'custom', label: 'Custom range' },
-      ],
-      maxHistoryDays,
-    );
-    return [...rolling, { id: 'billing_period' as const, label: 'Current billing period' }];
-  }, [maxHistoryDays]);
+  const datePresetOptions = useMemo(
+    () =>
+      filterAnalyticsDatePresetsForHistoryLimit(
+        [
+          { id: '7d', label: 'Last 7 days' },
+          { id: '30d', label: 'Last 30 days' },
+          { id: '90d', label: 'Last 90 days' },
+          { id: 'custom', label: 'Custom range' },
+        ],
+        maxHistoryDays,
+      ),
+    [maxHistoryDays],
+  );
   const customFromMin = minAnalyticsCustomFromYmd(maxHistoryDays);
-  const customInvalid =
-    values.preset === 'custom' &&
-    values.customFrom.trim() &&
-    values.customTo.trim() &&
-    !customYmdRangeIsValid(values.customFrom, values.customTo);
 
   return (
     <FilterCapsule
@@ -115,74 +105,30 @@ function UsageDateRangeCapsule({
         closeAll();
       }}
     >
-      <div className="min-w-[11rem] space-y-2 py-0.5">
-        <ul className="m-0 list-none space-y-0.5 p-0">
-          {datePresetOptions.map((opt) => {
-            const selected = values.preset === opt.id;
-            return (
-              <li key={opt.id}>
-                <button
-                  type="button"
-                  role="option"
-                  aria-selected={selected}
-                  disabled={disabled}
-                  className="flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-left text-xs text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                  onClick={() => {
-                    setEngaged(true);
-                    if (opt.id === 'custom') {
-                      onChange({ ...values, preset: 'custom', ...seedCustomRangeIfEmpty() });
-                    } else {
-                      onChange({ ...values, preset: opt.id as UsageDateFilterValues['preset'] });
-                    }
-                  }}
-                >
-                  <span className="flex w-3.5 shrink-0 justify-center" aria-hidden>
-                    {selected ? (
-                      <Check className="h-3 w-3 text-[var(--color-teal-600)]" strokeWidth={2.5} />
-                    ) : null}
-                  </span>
-                  <span className="min-w-0 flex-1 truncate">{opt.label}</span>
-                </button>
-              </li>
-            );
+      <div className="min-w-[11rem] p-0.5">
+        <DateRangeFilter
+          value={toDateRangeFilterValue({
+            preset: values.preset,
+            customFrom: values.customFrom,
+            customTo: values.customTo,
           })}
-        </ul>
-        {values.preset === 'custom' ? (
-          <div className="space-y-2 border-t border-slate-100 pt-2">
-            <FieldRow label="From">
-              <Input
-                type="date"
-                className={dateInputCls}
-                value={values.customFrom}
-                min={customFromMin ?? undefined}
-                disabled={disabled}
-                onChange={(event) => {
-                  setEngaged(true);
-                  onChange({ ...values, customFrom: event.target.value });
-                }}
-              />
-            </FieldRow>
-            <FieldRow label="To">
-              <Input
-                type="date"
-                className={dateInputCls}
-                value={values.customTo}
-                min={customFromMin ?? undefined}
-                disabled={disabled}
-                onChange={(event) => {
-                  setEngaged(true);
-                  onChange({ ...values, customTo: event.target.value });
-                }}
-              />
-            </FieldRow>
-            {customInvalid ? (
-              <p className="m-0 text-[11px] text-amber-800">Choose a valid custom date range.</p>
-            ) : null}
-          </div>
-        ) : null}
-        <p className={cn('m-0 text-[11px] leading-relaxed text-slate-500')}>
-          Applies to usage trend and AI credits by agent.
-        </p>
+          onChange={(next) => {
+            setEngaged(true);
+            onChange(fromDateRangeFilterValue(next) as UsageDateFilterValues);
+          }}
+          presets={datePresetOptions}
+          disabled={disabled}
+          align="right"
+          compact
+          minFromYmd={customFromMin}
+          onAfterPresetSelect={closeAll}
+          onAfterCustomApply={closeAll}
+          footer={
+            <p className={cn('m-0 border-t border-slate-100 pt-2 text-[11px] leading-relaxed text-slate-500')}>
+              Applies to usage trend and AI credits by agent.
+            </p>
+          }
+        />
       </div>
     </FilterCapsule>
   );

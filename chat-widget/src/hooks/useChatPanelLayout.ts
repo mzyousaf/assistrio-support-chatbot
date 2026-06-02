@@ -60,6 +60,10 @@ export type ContainedSizeOpts = {
   expandedWidth?: number;
   expandedHeight?: number | string;
   reservedBottomPx?: number;
+  stageSizingInsetPx?: number;
+  collapsedHeightMinPx?: number;
+  collapsedHeightMaxPx?: number;
+  expandedWidthMaxPx?: number;
   fillHost?: boolean;
 };
 
@@ -73,11 +77,14 @@ export function useChatPanelBox(
   launcherSize: number | undefined,
   containerRef: React.RefObject<HTMLDivElement | null>,
   containedOpts: ContainedSizeOpts,
+  opts?: { containedFloating?: boolean },
 ): { box: PanelBox; canExpand: boolean } {
+  const containedFloating = opts?.containedFloating === true;
   const { vw, vh } = useViewportSize();
-  const { w: hostW, h: hostH } = useHostBox(containerRef, !useFloating);
+  const measureHost = !useFloating || containedFloating;
+  const { w: hostW, h: hostH } = useHostBox(containerRef, measureHost);
   return useMemo(() => {
-    if (useFloating) {
+    if (useFloating && !containedFloating) {
       const inset = floatingLauncherBottomInsetPx(launcherSize);
       return {
         box: computeFloatingPanelBox(vw, vh, inset, isExpanded),
@@ -88,5 +95,5 @@ export function useChatPanelBox(
       box: computeContainedPanelBox(hostW, hostH, vw, vh, isExpanded, containedOpts),
       canExpand: containedPanelCanMeaningfulExpand(hostW, hostH, vw, vh, containedOpts),
     };
-  }, [useFloating, vw, vh, isExpanded, launcherSize, hostW, hostH, containedOpts]);
+  }, [useFloating, containedFloating, vw, vh, isExpanded, launcherSize, hostW, hostH, containedOpts]);
 }

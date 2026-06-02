@@ -28,6 +28,7 @@ export function mockFreeWorkspaceEntitlements(
     autoTrainAllowed: false,
     addonsAllowed: false,
     memberInvitesAllowed: false,
+    sharePreviewAllowed: false,
     canRemoveBranding: false,
     activeAddons: [],
     topUpCreditsRemaining: 0,

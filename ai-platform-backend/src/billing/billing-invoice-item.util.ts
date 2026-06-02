@@ -1,7 +1,12 @@
 import type { PlanKey } from '../entitlements/plan-catalog';
 import type { WorkspaceAddonKey } from '../entitlements/addon-catalog';
-import { isLegacyKbAddonKey, WORKSPACE_ADDON_CATALOG } from '../entitlements/addon-catalog';import type { LemonSqueezyBillingConfig } from './billing-config.util';
-import type { ProviderInvoiceRow } from './billing-invoice.types';
+import { isLegacyKbAddonKey, WORKSPACE_ADDON_CATALOG } from '../entitlements/addon-catalog';
+import type { LemonSqueezyBillingConfig } from './billing-config.util';
+import {
+  variantIdToAddonKeyAndInterval,
+  variantIdToPlanKeyAndInterval,
+} from './billing-config.util';
+import type { ProviderInvoiceBillingInterval, ProviderInvoiceRow } from './billing-invoice.types';
 
 export type InvoiceItemType = 'plan' | 'addon' | 'top_up' | 'unknown';
 
@@ -62,8 +67,16 @@ export function variantIdToItemKey(
   const id = String(variantId ?? '').trim();
   if (!id || !lemonConfig) return undefined;
 
-  const entries = Object.entries(lemonConfig.variantIds) as Array<[InvoiceItemKey, string]>;
-  const match = entries.find(([, configuredId]) => {
+  const planMatch = variantIdToPlanKeyAndInterval(id, lemonConfig);
+  if (planMatch) return planMatch.planKey;
+
+  const addonMatch = variantIdToAddonKeyAndInterval(id, lemonConfig);
+  if (addonMatch) return addonMatch.addonKey;
+
+  const flatEntries = Object.entries(lemonConfig.variantIds).filter(
+    (entry): entry is [InvoiceItemKey, string] => typeof entry[1] === 'string',
+  );
+  const match = flatEntries.find(([, configuredId]) => {
     const configured = String(configuredId ?? '').trim();
     return configured.length > 0 && configured === id;
   });
@@ -209,6 +222,35 @@ function buildMatch(itemKey: string, billingReason: string | null): InvoiceItemM
     description: mapInvoiceItemDescription({ itemKey: normalizedKey, billingReason }),
   };
 }
+export function resolveInvoiceBillingInterval(input: {
+  providerVariantId?: string | null;
+  itemType?: InvoiceItemType;
+  lemonConfig: LemonSqueezyBillingConfig | null;
+}): ProviderInvoiceBillingInterval | undefined {
+  if (input.itemType === 'top_up') return undefined;
+
+  const planMatch = variantIdToPlanKeyAndInterval(input.providerVariantId, input.lemonConfig);
+  if (planMatch) return planMatch.billingInterval;
+
+  const addonMatch = variantIdToAddonKeyAndInterval(input.providerVariantId, input.lemonConfig);
+  if (addonMatch) return addonMatch.billingInterval;
+
+  return undefined;
+}
+
+export function attachInvoiceBillingInterval<T extends ProviderInvoiceRow>(
+  row: T,
+  lemonConfig: LemonSqueezyBillingConfig | null,
+): T {
+  const billingInterval = resolveInvoiceBillingInterval({
+    providerVariantId: row.providerVariantId,
+    itemType: row.itemType,
+    lemonConfig,
+  });
+  if (!billingInterval) return row;
+  return { ...row, billingInterval };
+}
+
 export function enrichInvoiceRow<T extends ProviderInvoiceRow>(
   row: T,
   match: InvoiceItemMatch,

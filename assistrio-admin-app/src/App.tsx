@@ -28,6 +28,7 @@ import { CustomersListPage } from './pages/customers/CustomersListPage';
 import { CustomerDetailLayout } from './pages/customers/CustomerDetailLayout';
 import { CustomerOverviewPage } from './pages/customers/CustomerOverviewPage';
 import { CustomerWorkspacesPage } from './pages/customers/CustomerWorkspacesPage';
+import { AdminWorkspaceSupportPage } from './pages/customers/AdminWorkspaceSupportPage';
 import { CustomerBotsPage } from './pages/customers/CustomerBotsPage';
 import { CustomerAnalyticsPage } from './pages/customers/CustomerAnalyticsPage';
 import { AdminBotsAreaLayout } from './pages/admin-bots/AdminBotsAreaLayout';
@@ -58,6 +59,7 @@ export function App() {
             >
               <Route path="/" element={<Navigate to="/customers" replace />} />
               <Route path="/customers" element={<CustomersListPage />} />
+              <Route path="/admin/workspaces/:workspaceId" element={<AdminWorkspaceSupportPage />} />
               <Route path="/customers/:customerId" element={<CustomerDetailLayout />}>
                 <Route index element={<CustomerOverviewPage />} />
                 <Route path="workspaces" element={<CustomerWorkspacesPage />} />

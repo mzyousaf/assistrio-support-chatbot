@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
-import { useOutletContext, useParams } from 'react-router-dom';
+import { Link, useOutletContext, useParams } from 'react-router-dom';
 import { getAdminCustomerWorkspaces } from '@/api/adminApi';
 import type { AdminCustomerWorkspace } from '@/api/types';
 import { Button, Card, CardBody } from '@/components/ui';
@@ -115,6 +115,7 @@ export function CustomerWorkspacesPage() {
             <th className="px-4 py-3 text-right">Members</th>
             <th className="px-4 py-3 text-right">Bots</th>
             <th className="px-4 py-3">Created</th>
+            <th className="px-4 py-3">Support</th>
           </tr>
         </thead>
         <tbody>
@@ -154,10 +155,18 @@ export function CustomerWorkspacesPage() {
                     {ws.botLimit != null ? ` / ${ws.botLimit}` : ''}
                   </td>
                   <td className="px-4 py-3 text-slate-600">{formatAdminDate(ws.createdAt)}</td>
+                  <td className="px-4 py-3">
+                    <Link
+                      to={`/admin/workspaces/${encodeURIComponent(ws.id)}`}
+                      className="text-[0.8125rem] font-medium text-teal-700 hover:text-teal-900 hover:underline"
+                    >
+                      Open
+                    </Link>
+                  </td>
                 </tr>
                 {expanded ? (
                   <tr className="border-b border-slate-100 bg-slate-50/40">
-                    <td colSpan={9} className="px-4 py-4">
+                    <td colSpan={10} className="px-4 py-4">
                       <AdminWorkspaceBillingSection workspaceId={ws.id} />
                     </td>
                   </tr>

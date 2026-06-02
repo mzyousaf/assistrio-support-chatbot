@@ -32,6 +32,7 @@ describe('plan-catalog', () => {
       autoTrainAllowed: false,
       addonsAllowed: false,
       memberInvitesAllowed: false,
+      sharePreviewAllowed: false,
     });
   });
 
@@ -51,6 +52,7 @@ describe('plan-catalog', () => {
       autoTrainAllowed: true,
       addonsAllowed: true,
       memberInvitesAllowed: true,
+      sharePreviewAllowed: true,
     });
     expect(STARTER_PLAN.analyticsHistoryDays).toBeNull();
   });
@@ -68,6 +70,7 @@ describe('plan-catalog', () => {
       autoTrainAllowed: true,
       addonsAllowed: true,
       memberInvitesAllowed: true,
+      sharePreviewAllowed: true,
     });
     expect(PRO_PLAN.analyticsHistoryDays).toBeNull();
   });

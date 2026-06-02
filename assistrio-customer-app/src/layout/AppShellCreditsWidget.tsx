@@ -148,11 +148,8 @@ function CreditsCollapsibleSection(props: {
 
 function CreditsWidgetToggleHeader(props: {
   collapsed: boolean;
-  summaryLabel: string | null;
   onToggle: () => void;
 }) {
-  const showSummary = props.collapsed && props.summaryLabel;
-
   return (
     <button
       type="button"
@@ -162,16 +159,6 @@ function CreditsWidgetToggleHeader(props: {
       aria-controls="app-shell-credits-widget-body"
     >
       <CreditsHeading className="min-w-0 flex-1" />
-      <span
-        className={cn(
-          'shrink-0 overflow-hidden whitespace-nowrap text-[11px] font-semibold tabular-nums text-slate-500',
-          CREDITS_WIDGET_HEADER_TRANSITION,
-          showSummary ? 'max-w-[8rem] opacity-100' : 'max-w-0 opacity-0',
-        )}
-        aria-hidden={!showSummary}
-      >
-        {showSummary && props.summaryLabel ? props.summaryLabel : '\u00a0'}
-      </span>
       <ChevronDown
         size={14}
         strokeWidth={2}
@@ -186,49 +173,44 @@ function CreditsWidgetToggleHeader(props: {
   );
 }
 
-function resolveCreditsSummaryLabel(
-  activeWorkspaceId: string | null,
-  loadState: WorkspaceBillingLoadState,
-  aiCredits: WorkspaceBillingAiCreditsUsageSummary | undefined,
-  topUps?: WorkspaceBillingTopUpRow[],
-  billingSummary?: WorkspaceBillingSummary | null,
-): string | null {
-  if (!activeWorkspaceId) return null;
-
-  const display = buildAppShellCreditsDisplay(aiCredits, topUps);
-  if (display) {
-    if (billingSummary?.entitlements.isTrialPlan) {
-      return `${display.monthlyRemaining.toLocaleString()} trial left`;
-    }
-    return `${display.monthlyRemaining.toLocaleString()} monthly left`;
-  }
-
-  if (loadState === 'loading') return '…';
-  if (loadState === 'error') return 'Unavailable';
-
-  return null;
-}
-
-function CreditsCollapsedTopUpSummary(props: {
+function CreditsCollapsedCreditsSummary(props: {
   activeWorkspaceId: string | null;
   aiCredits: WorkspaceBillingAiCreditsUsageSummary | undefined;
   topUps?: WorkspaceBillingTopUpRow[];
+  isTrialPlan?: boolean;
 }) {
   if (!props.activeWorkspaceId) return null;
 
   const display = buildAppShellCreditsDisplay(props.aiCredits, props.topUps);
-  if (!display?.showTopUpBar || display.used <= 0) return null;
+  if (!display) return null;
 
-  return (
-    <div className="mt-2">
+  const showTopUpOnly = display.monthlyRemaining <= 0 && display.showTopUpBar;
+
+  if (showTopUpOnly) {
+    return (
       <CreditsBarRow
         label="Top-up credits"
-        valueLabel={`${display.topUpRemaining.toLocaleString()} remaining`}
+        valueLabel={display.topUpValueLabel}
         percent={display.topUpPercent}
         ariaLabel="Top-up credits used"
         tooltip={AI_CREDITS_SIDEBAR_TOP_UP_TOOLTIP}
       />
-    </div>
+    );
+  }
+
+  return (
+    <CreditsBarRow
+      label={props.isTrialPlan ? 'Trial AI credits' : 'Monthly AI credits'}
+      valueLabel={display.monthlyValueLabel}
+      percent={display.monthlyPercent}
+      isOverLimit={display.isOverLimit}
+      ariaLabel={
+        props.isTrialPlan
+          ? 'Trial AI credits used'
+          : 'Monthly AI credits used this billing period'
+      }
+      tooltip={display.monthlyTooltip}
+    />
   );
 }
 
@@ -579,7 +561,7 @@ function CreditsBody(props: {
       <div className="space-y-2.5">
         <CreditsBarRow
           label="Monthly AI credits"
-          valueLabel={`${display.monthlyRemaining.toLocaleString()} remaining`}
+          valueLabel={display.monthlyValueLabel}
           percent={display.monthlyPercent}
           isOverLimit={display.isOverLimit}
           ariaLabel="Monthly AI credits used this billing period"
@@ -588,7 +570,7 @@ function CreditsBody(props: {
         {display.showTopUpBar ? (
           <CreditsBarRow
             label="Top-up credits"
-            valueLabel={`${display.topUpRemaining.toLocaleString()} remaining`}
+            valueLabel={display.topUpValueLabel}
             percent={display.topUpPercent}
             ariaLabel="Top-up credits used"
             tooltip={AI_CREDITS_SIDEBAR_TOP_UP_TOOLTIP}
@@ -649,25 +631,13 @@ export function AppShellCreditsWidget(props: AppShellCreditsWidgetProps) {
 
   if (!props.activeWorkspaceId) return null;
 
-  const summaryLabel = resolveCreditsSummaryLabel(
-    props.activeWorkspaceId,
-    props.loadState,
-    props.aiCredits,
-    props.topUps,
-    props.billingSummary,
-  );
-
   return (
     <div
       className="mb-3 overflow-hidden rounded-xl shadow-[var(--shadow-card)]"
       style={{ background: 'var(--bg-card)', border: '1px solid var(--border-soft)' }}
     >
       <div className="p-3 pb-0">
-        <CreditsWidgetToggleHeader
-          collapsed={collapsed}
-          summaryLabel={summaryLabel}
-          onToggle={toggleCollapsed}
-        />
+        <CreditsWidgetToggleHeader collapsed={collapsed} onToggle={toggleCollapsed} />
       </div>
       {expandedPanel.mounted ? (
         <CreditsCollapsibleSection
@@ -697,10 +667,11 @@ export function AppShellCreditsWidget(props: AppShellCreditsWidgetProps) {
       {collapsedPanel.mounted ? (
         <CreditsCollapsibleSection open={collapsedPanel.visible} contentClassName="px-3 pb-3 pt-2">
           <div>
-            <CreditsCollapsedTopUpSummary
+            <CreditsCollapsedCreditsSummary
               activeWorkspaceId={props.activeWorkspaceId}
               aiCredits={props.aiCredits}
               topUps={props.topUps}
+              isTrialPlan={props.billingSummary?.entitlements.isTrialPlan}
             />
             <div className="mt-2">
               <CreditsPlanFooter

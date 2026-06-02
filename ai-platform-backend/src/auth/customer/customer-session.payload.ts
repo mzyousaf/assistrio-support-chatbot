@@ -34,6 +34,7 @@ export type CustomerSessionWorkspaceSummary = {
   autoTrainAllowed: boolean;
   addonsAllowed: boolean;
   memberInvitesAllowed: boolean;
+  sharePreviewAllowed: boolean;
   onboardingStatus: WorkspaceOnboardingStatus;
   onboardingCurrentStep: WorkspaceOnboardingStep;
   onboardingCreatedBotId: string | null;
@@ -98,6 +99,7 @@ async function buildWorkspaceSummaries(
         autoTrainAllowed: entitlements.autoTrainAllowed,
         addonsAllowed: entitlements.addonsAllowed,
         memberInvitesAllowed: entitlements.memberInvitesAllowed,
+        sharePreviewAllowed: entitlements.sharePreviewAllowed,
         onboardingStatus: workspace.onboardingStatus,
         onboardingCurrentStep: workspace.onboardingCurrentStep,
         onboardingCreatedBotId: workspace.onboardingCreatedBotId,

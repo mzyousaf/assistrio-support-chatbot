@@ -383,7 +383,13 @@ function AutoTopUpControls(props: {
               Turn off
             </Button>
           ) : (
-            <Button type="button" variant="primary" size="sm" disabled={props.busy} onClick={props.onEnable}>
+            <Button
+              type="button"
+              variant="outlinePrimary"
+              size="sm"
+              disabled={props.busy}
+              onClick={props.onEnable}
+            >
               Enable auto top-up
             </Button>
           )

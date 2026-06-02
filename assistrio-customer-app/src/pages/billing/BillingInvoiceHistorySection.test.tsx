@@ -115,6 +115,137 @@ describe('BillingInvoiceHistorySection', () => {
     });
   });
 
+  it('paginates billing history client-side with ten rows per page by default', async () => {
+    mockGetWorkspaceBillingInvoices.mockResolvedValue({
+      ok: true,
+      data: Array.from({ length: 11 }, (_, index) =>
+        buildInvoice({
+          id: `inv-${index + 1}`,
+          itemName: `Invoice ${index + 1}`,
+        }),
+      ),
+    });
+
+    render(<BillingInvoiceHistorySection workspaceId="ws-1" canView />);
+
+    expect(await screen.findByText('Invoice 1')).toBeTruthy();
+    expect(screen.getByText('Invoice 10')).toBeTruthy();
+    expect(screen.queryByText('Invoice 11')).toBeNull();
+    expect(screen.getByRole('navigation', { name: 'Billing history pagination' })).toBeTruthy();
+    expect(screen.getByText('Showing 1–10 of 11')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+
+    expect(await screen.findByText('Invoice 11')).toBeTruthy();
+    expect(screen.queryByText('Invoice 1')).toBeNull();
+    expect(screen.getByText('Showing 11–11 of 11')).toBeTruthy();
+    expect(screen.getByText('Page 2 / 2')).toBeTruthy();
+  });
+
+  it('shows per page selector even when all invoices fit on one page', async () => {
+    mockGetWorkspaceBillingInvoices.mockResolvedValue({
+      ok: true,
+      data: [
+        buildInvoice({ id: 'inv-1', itemName: 'Invoice One' }),
+        buildInvoice({ id: 'inv-2', itemName: 'Invoice Two' }),
+      ],
+    });
+
+    render(<BillingInvoiceHistorySection workspaceId="ws-1" canView />);
+
+    expect(await screen.findByLabelText('Items per page')).toBeTruthy();
+    expect(screen.getByRole('navigation', { name: 'Billing history pagination' })).toBeTruthy();
+    expect(screen.getByText('Showing 1–2 of 2')).toBeTruthy();
+  });
+
+  it('changes visible rows when per page size changes', async () => {
+    mockGetWorkspaceBillingInvoices.mockResolvedValue({
+      ok: true,
+      data: Array.from({ length: 11 }, (_, index) =>
+        buildInvoice({
+          id: `inv-${index + 1}`,
+          itemName: `Invoice ${index + 1}`,
+        }),
+      ),
+    });
+
+    render(<BillingInvoiceHistorySection workspaceId="ws-1" canView />);
+
+    expect(await screen.findByText('Invoice 10')).toBeTruthy();
+    expect(screen.queryByText('Invoice 11')).toBeNull();
+
+    fireEvent.click(screen.getByLabelText('Items per page'));
+    fireEvent.click(screen.getByRole('option', { name: '3' }));
+
+    expect(await screen.findByText('Invoice 3')).toBeTruthy();
+    expect(screen.queryByText('Invoice 11')).toBeNull();
+    expect(screen.getByText('Showing 1–3 of 11')).toBeTruthy();
+  });
+
+  it('exports full billing history from backend while paginated on page two', async () => {
+    const csvBlob = new Blob(['Date,Item'], { type: 'text/csv' });
+    mockGetWorkspaceBillingInvoices.mockResolvedValue({
+      ok: true,
+      data: Array.from({ length: 11 }, (_, index) =>
+        buildInvoice({
+          id: `inv-${index + 1}`,
+          itemName: `Invoice ${index + 1}`,
+        }),
+      ),
+    });
+    mockFetchWorkspaceBillingHistoryCsv.mockResolvedValue({
+      ok: true,
+      data: { blob: csvBlob, filename: 'assistrio-billing-history.csv' },
+    });
+
+    render(<BillingInvoiceHistorySection workspaceId="ws-1" canView />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Next' }));
+    expect(await screen.findByText('Invoice 11')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: /Export/i }));
+
+    await waitFor(() => {
+      expect(mockFetchWorkspaceBillingHistoryCsv).toHaveBeenCalledWith('ws-1');
+      expect(mockFetchWorkspaceBillingHistoryCsv).toHaveBeenCalledTimes(1);
+      expect(mockTriggerBlobDownload).toHaveBeenCalledWith(
+        csvBlob,
+        'assistrio-billing-history.csv',
+      );
+    });
+  });
+
+  it('shows billing cadence for monthly, annual, and one-time rows', async () => {
+    mockGetWorkspaceBillingInvoices.mockResolvedValue({
+      ok: true,
+      data: [
+        buildInvoice({
+          id: 'inv-monthly',
+          itemName: 'Starter',
+          billingInterval: 'monthly',
+        }),
+        buildInvoice({
+          id: 'inv-annual',
+          itemName: 'Pro',
+          itemKey: 'pro',
+          billingInterval: 'yearly',
+        }),
+        buildInvoice({
+          id: 'order-top-up',
+          itemType: 'top_up',
+          itemName: '1,000 AI credits',
+          billingInterval: undefined,
+        }),
+      ],
+    });
+
+    render(<BillingInvoiceHistorySection workspaceId="ws-1" canView />);
+
+    expect(await screen.findByText('Monthly')).toBeTruthy();
+    expect(screen.getByText('Annually')).toBeTruthy();
+    expect(screen.getByText('One-time')).toBeTruthy();
+  });
+
   it('shows View Invoice for subscription invoice without invoice URL', async () => {
     mockGetWorkspaceBillingInvoices.mockResolvedValue({
       ok: true,

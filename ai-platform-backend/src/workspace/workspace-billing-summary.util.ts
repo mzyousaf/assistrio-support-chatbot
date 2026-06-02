@@ -45,6 +45,7 @@ export function mapEntitlementsToBillingSummary(
     autoTrainAllowed: entitlements.autoTrainAllowed,
     addonsAllowed: entitlements.addonsAllowed,
     memberInvitesAllowed: entitlements.memberInvitesAllowed,
+    sharePreviewAllowed: entitlements.sharePreviewAllowed,
     canRemoveBranding: entitlements.canRemoveBranding,
     activeAddons: entitlements.activeAddons,
     topUpCreditsRemaining: entitlements.topUpCreditsRemaining,

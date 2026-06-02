@@ -2,7 +2,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Check, Search } from 'lucide-react';
 import type { CustomerChatsAnalyticsStartedFromKey, CustomerSentimentLabelId } from '@/api/types';
-import { FieldRow, FilterCapsule, Input } from '@/components/ui';
+import { Input, FilterCapsule } from '@/components/ui';
+import {
+  DateRangeFilter,
+  fromDateRangeFilterValue,
+  toDateRangeFilterValue,
+} from '@/components/analytics/DateRangeFilter';
 import { CHATS_ANALYTICS_DEFAULTS, type ChatsAnalyticsUiState } from '@/lib/chatsAnalyticsQuery';
 import type { LeadsAnalyticsUiState, LeadsFieldCaptureStatusFilter } from '@/lib/leadsAnalyticsQuery';
 import { LEADS_ANALYTICS_DEFAULTS } from '@/lib/leadsAnalyticsQuery';
@@ -12,7 +17,6 @@ import type { TopicsAnalyticsUiState, TopicsMessageTopicScope } from '@/lib/topi
 import { TOPICS_ANALYTICS_DEFAULTS } from '@/lib/topicsAnalyticsQuery';
 import type { AgentResourcesAnalyticsUiState } from '@/lib/agentResourcesAnalyticsQuery';
 import { AGENT_RESOURCES_ANALYTICS_DEFAULTS } from '@/lib/agentResourcesAnalyticsQuery';
-import { customYmdRangeIsValid } from '@/lib/analyticsQueryDates';
 import { formatAnalyticsGranularityViewCaption, resolveAnalyticsGranularity } from '@/lib/analyticsGranularity';
 import { computeDateRangeFromAnalyticsPreset } from '@/lib/chatsAnalyticsQuery';
 import { getLeadsFilterCountryOptions } from '@/pages/bot-workspace/leads/leadsFilterCountryOptions';
@@ -21,7 +25,6 @@ import { SENTIMENT_DISPLAY_FALLBACK, SENTIMENT_STACK_ORDER } from '@/pages/bot-w
 import {
   ANALYTICS_DATE_PRESET_OPTIONS,
   analyticsDateRangeValueLabel,
-  seedCustomRangeIfEmpty,
   type StandardDateControlValues,
 } from './analyticsFilterCapsuleUtils';
 import {
@@ -89,9 +92,6 @@ export function dateRangeMatchesDefault(v: StandardDateControlValues, d: Standar
   );
 }
 
-const dateInputCls =
-  'h-9 w-full min-w-0 rounded-md border border-slate-200 bg-white px-2.5 text-sm text-slate-800 focus:border-[var(--color-teal-600)]/50 focus:outline-none focus:ring-2 focus:ring-[var(--color-teal-600)]/20';
-
 export function CoreDateGranularityPreviewCapsules({
   values,
   onValuesChange,
@@ -149,11 +149,6 @@ export function CoreDateGranularityPreviewCapsules({
     [maxHistoryDays],
   );
   const customFromMin = minAnalyticsCustomFromYmd(maxHistoryDays);
-  const customInvalid =
-    values.preset === 'custom' &&
-    values.customFrom.trim() &&
-    values.customTo.trim() &&
-    !customYmdRangeIsValid(values.customFrom, values.customTo);
 
   const dateLabel = analyticsDateRangeValueLabel({
     preset: values.preset,
@@ -212,97 +207,51 @@ export function CoreDateGranularityPreviewCapsules({
       >
         <div
           className={cn(
-            'flex flex-col gap-2 overflow-y-auto p-0.5',
-            compactPanel
-              ? 'max-h-[min(13rem,45vh)] min-w-[11rem]'
-              : 'max-h-[min(24rem,70vh)] min-w-[15rem]',
+            'p-0.5',
+            compactPanel ? 'min-w-[11rem]' : 'min-w-[15rem]',
           )}
         >
-          <ul className="m-0 list-none space-y-0.5 p-0 py-0.5">
-            {datePresetOptions.map((opt) => {
-              const selected = values.preset === opt.id;
-              return (
-                <li key={opt.id}>
-                  <button
-                    type="button"
-                    role="option"
-                    aria-selected={selected}
-                    disabled={disabled || opt.disabled}
-                    className={cn(
-                      'flex w-full items-center gap-2 rounded-md px-2 text-left text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50',
-                      compactPanel ? 'py-1 text-xs' : 'py-1.5 text-sm',
-                    )}
-                    onClick={() => {
-                      if (opt.disabled) return;
-                      if (opt.id === 'custom' && !values.customFrom.trim() && !values.customTo.trim()) {
-                        onValuesChange({ ...values, preset: 'custom', ...seedCustomRangeIfEmpty() });
-                      } else {
-                        onValuesChange({ ...values, preset: opt.id });
-                      }
-                      if (topicsDateMode) topicsDateEngagement.onEngagement(true);
-                      if (opt.id !== 'custom') closeAll();
-                    }}
-                  >
-                    <span className="flex w-4 shrink-0 justify-center" aria-hidden>
-                      {selected ? <Check className="h-3.5 w-3.5 text-[var(--color-teal-600)]" strokeWidth={2.5} /> : null}
-                    </span>
-                    <span className="min-w-0 flex-1">{opt.label}</span>
-                  </button>
-                </li>
-              );
+          <DateRangeFilter
+            value={toDateRangeFilterValue({
+              preset: values.preset,
+              customFrom: values.customFrom,
+              customTo: values.customTo,
             })}
-          </ul>
-          {values.preset === 'custom' ? (
-            <div className="border-t border-slate-100 pt-2">
-              <FieldRow label="From" htmlFor="analytics-cap-from">
-                <input
-                  id="analytics-cap-from"
-                  type="date"
-                  disabled={disabled}
-                  min={customFromMin}
-                  value={values.customFrom}
-                  onChange={(e) => {
-                    onValuesChange({ ...values, customFrom: e.target.value });
-                    if (topicsDateMode) topicsDateEngagement.onEngagement(true);
-                  }}
-                  className={dateInputCls}
-                />
-              </FieldRow>
-              <FieldRow label="To" htmlFor="analytics-cap-to">
-                <input
-                  id="analytics-cap-to"
-                  type="date"
-                  disabled={disabled}
-                  value={values.customTo}
-                  onChange={(e) => {
-                    onValuesChange({ ...values, customTo: e.target.value });
-                    if (topicsDateMode) topicsDateEngagement.onEngagement(true);
-                  }}
-                  className={dateInputCls}
-                />
-              </FieldRow>
-              {customInvalid ? (
-                <p className="m-0 text-[0.7rem] leading-snug text-amber-700">End date must be on or after start date.</p>
-              ) : null}
-              {maxHistoryDays != null ? (
-                <p className="m-0 mt-2 text-[0.7rem] leading-snug text-slate-600">
-                  {ANALYTICS_HISTORY_LOCKED_HELPER}{' '}
-                  <Link to="/settings/billing" className="font-medium text-teal-700 underline">
-                    View plans
-                  </Link>
-                </p>
-              ) : null}
-              {!compactPanel ? (
-                <p className="m-0 text-[0.7rem] leading-snug text-slate-500">Uses your local timezone.</p>
-              ) : null}
-            </div>
-          ) : null}
-          {!compactPanel ? (
-            <div className="border-t border-slate-100 pt-2">
-              <p className="m-0 text-[0.7rem] leading-snug text-slate-600">{viewCaption}</p>
-              <p className="m-0 mt-0.5 text-[0.65rem] leading-snug text-slate-500">Based on the selected date range.</p>
-            </div>
-          ) : null}
+            onChange={(next) => {
+              const mapped = fromDateRangeFilterValue(next);
+              onValuesChange({
+                ...values,
+                preset: mapped.preset,
+                customFrom: mapped.customFrom,
+                customTo: mapped.customTo,
+              });
+              if (topicsDateMode) topicsDateEngagement.onEngagement(true);
+            }}
+            presets={datePresetOptions}
+            disabled={disabled}
+            align="right"
+            compact={compactPanel}
+            minFromYmd={customFromMin}
+            onAfterPresetSelect={closeAll}
+            onAfterCustomApply={closeAll}
+            footer={
+              !compactPanel ? (
+                <div className="border-t border-slate-100 pt-2">
+                  <p className="m-0 text-[0.7rem] leading-snug text-slate-600">{viewCaption}</p>
+                  <p className="m-0 mt-0.5 text-[0.65rem] leading-snug text-slate-500">Based on the selected date range.</p>
+                  {maxHistoryDays != null ? (
+                    <p className="m-0 mt-2 text-[0.7rem] leading-snug text-slate-600">
+                      {ANALYTICS_HISTORY_LOCKED_HELPER}{' '}
+                      <Link to="/settings/billing" className="font-medium text-teal-700 underline">
+                        View plans
+                      </Link>
+                    </p>
+                  ) : null}
+                  <p className="m-0 mt-1 text-[0.7rem] leading-snug text-slate-500">Uses your local timezone.</p>
+                </div>
+              ) : null
+            }
+          />
         </div>
       </FilterCapsule>
 

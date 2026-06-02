@@ -60,6 +60,11 @@ export const PAID_PLAN_FEATURE_CALLOUT_PRESETS: Record<
     description: 'Upgrade to continue using this feature.',
     reason: 'bots',
   },
+  share_preview: {
+    title: 'Share preview links',
+    description: 'Share preview links are available on paid plans.',
+    reason: 'share_preview',
+  },
 };
 
 export function resolvePaidPlanFeatureCalloutPreset(

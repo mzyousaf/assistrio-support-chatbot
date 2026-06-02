@@ -13,6 +13,9 @@ import { Modal } from '@/components/ui/Modal';
 import { Button, Input, Select } from '@/components/ui';
 import { Switch } from '@/components/ui/Switch';
 import { appToast } from '@/lib/app-toast';
+import { PaidPlanFeatureCalloutForReason } from '@/components/billing/PaidPlanFeatureCallout';
+import { useUpgradePlanModal } from '@/components/billing/UpgradePlanModalProvider';
+import { mapPlanLimitErrorCodeToUpgradeReason } from '@/lib/planLimitError';
 import {
   SHARE_PREVIEW_DEFAULT_EXPIRES_HOURS,
   SHARE_PREVIEW_EXPIRES_HOURS_OPTIONS,
@@ -28,6 +31,7 @@ type Props = {
   botId: string;
   bot: CustomerBotDetail | null;
   agentStatus: 'draft' | 'published';
+  sharePreviewAllowed?: boolean;
   onRefresh: () => Promise<void>;
   onShareUpdated?: (share: CustomerShareLinkResponse) => void;
 };
@@ -318,10 +322,13 @@ export function SharePreviewModal({
   botId,
   bot,
   agentStatus: _agentStatus,
+  sharePreviewAllowed = true,
   onRefresh,
   onShareUpdated,
 }: Props) {
   void _agentStatus;
+  const { openUpgradeModal } = useUpgradePlanModal();
+  const controlsLocked = !sharePreviewAllowed;
   const [loadingAction, setLoadingAction] = useState<LoadingAction>(null);
   const [localShare, setLocalShare] = useState<CustomerShareLinkResponse | null>(null);
   const [lastGeneratedPreviewToken, setLastGeneratedPreviewToken] = useState<string | null>(null);
@@ -480,11 +487,17 @@ export function SharePreviewModal({
 
   const handleCreate = useCallback(async () => {
     if (!botId || loadingAction) return;
+    if (controlsLocked) {
+      openUpgradeModal({ reason: 'share_preview' });
+      return;
+    }
     setInlineError(null);
     setLoadingAction('create');
     const res = await enableSharePreview(botId, { expiresInHours: linkLifetimeHours });
     setLoadingAction(null);
     if (!res.ok) {
+      const reason = mapPlanLimitErrorCodeToUpgradeReason(res.errorCode);
+      if (reason) openUpgradeModal({ reason, errorCode: res.errorCode });
       setInlineError(res.error || 'Could not create preview link.');
       return;
     }
@@ -497,17 +510,23 @@ export function SharePreviewModal({
     setRegeneratePanelOpen(false);
     appToast.success('Preview link ready');
     void onRefresh();
-  }, [botId, loadingAction, linkLifetimeHours, applySharePayload, onRefresh]);
+  }, [botId, loadingAction, controlsLocked, linkLifetimeHours, applySharePayload, onRefresh, openUpgradeModal]);
 
   const handleEnabledSwitch = useCallback(
     async (turnOn: boolean) => {
       if (!botId || loadingAction) return;
+      if (controlsLocked && turnOn) {
+        openUpgradeModal({ reason: 'share_preview' });
+        return;
+      }
       setInlineError(null);
       if (turnOn) {
         setLoadingAction('enable');
         const res = await patchSharePreviewEnabled(botId, true);
         setLoadingAction(null);
         if (!res.ok) {
+          const reason = mapPlanLimitErrorCodeToUpgradeReason(res.errorCode);
+          if (reason) openUpgradeModal({ reason, errorCode: res.errorCode });
           setInlineError(res.error || 'Could not enable preview link.');
           return;
         }
@@ -527,16 +546,22 @@ export function SharePreviewModal({
         void onRefresh();
       }
     },
-    [botId, loadingAction, applySharePayload, onRefresh],
+    [botId, loadingAction, controlsLocked, applySharePayload, onRefresh, openUpgradeModal],
   );
 
   const handlePatchRegenerate = useCallback(async () => {
     if (!botId || loadingAction) return;
+    if (controlsLocked) {
+      openUpgradeModal({ reason: 'share_preview' });
+      return;
+    }
     setInlineError(null);
     setLoadingAction('regenerate');
     const res = await regenerateSharePreviewToken(botId, linkLifetimeHours);
     setLoadingAction(null);
     if (!res.ok) {
+      const reason = mapPlanLimitErrorCodeToUpgradeReason(res.errorCode);
+      if (reason) openUpgradeModal({ reason, errorCode: res.errorCode });
       setInlineError(res.error || 'Could not regenerate preview link.');
       return;
     }
@@ -544,7 +569,7 @@ export function SharePreviewModal({
     setRegeneratePanelOpen(false);
     appToast.success('Preview link updated');
     void onRefresh();
-  }, [botId, loadingAction, linkLifetimeHours, applySharePayload, onRefresh]);
+  }, [botId, loadingAction, controlsLocked, linkLifetimeHours, applySharePayload, onRefresh, openUpgradeModal]);
 
   const handleConfirmRevoke = useCallback(async () => {
     if (!botId || loadingAction) return;
@@ -568,9 +593,10 @@ export function SharePreviewModal({
   const revoking = loadingAction === 'revoke';
   const toggling = loadingAction === 'disable' || loadingAction === 'enable';
 
-  const canCopyOpen = urlActionsOk && !missingTokenUi;
+  const canCopyOpen = urlActionsOk && !missingTokenUi && !controlsLocked;
   const switchChecked = enabled && !isExpired;
   const showCreateIntro = (phase === 'not_created' && !hasSlug) || phase === 'revoked';
+  const actionDisabled = Boolean(loadingAction) || controlsLocked;
 
   const renderRegeneratePanel = (lifetimeSelectId: string) => (
     <>
@@ -581,7 +607,7 @@ export function SharePreviewModal({
         id={lifetimeSelectId}
         value={linkLifetimeHours}
         onChange={setLinkLifetimeHours}
-        disabled={Boolean(loadingAction)}
+        disabled={actionDisabled}
         className="mt-3"
       />
       <div className="mt-4 flex flex-wrap justify-end gap-2">
@@ -589,7 +615,7 @@ export function SharePreviewModal({
           type="button"
           variant="secondary"
           size="md"
-          disabled={Boolean(loadingAction)}
+          disabled={actionDisabled}
           onClick={() => setRegeneratePanelOpen(false)}
         >
           Cancel
@@ -598,7 +624,7 @@ export function SharePreviewModal({
           type="button"
           variant="primary"
           size="md"
-          disabled={Boolean(loadingAction)}
+          disabled={actionDisabled}
           onClick={() => void handlePatchRegenerate()}
         >
           {regenerating ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
@@ -625,7 +651,7 @@ export function SharePreviewModal({
                 <Switch
                   id="share-preview-enabled"
                   checked={switchChecked}
-                  disabled={Boolean(loadingAction) || isExpired}
+                  disabled={actionDisabled || isExpired}
                   onCheckedChange={(next) => void handleEnabledSwitch(next)}
                   aria-label="Allow access with the shared preview link"
                   title={switchChecked ? 'Preview link is active' : 'Preview link is paused'}
@@ -643,6 +669,9 @@ export function SharePreviewModal({
       titleClassName="!text-lg"
     >
       <div className="space-y-4">
+        {controlsLocked ? (
+          <PaidPlanFeatureCalloutForReason reason="share_preview" compact />
+        ) : null}
         {inlineError ? (
           <div
             className="rounded-xl border border-red-200/90 bg-red-50 px-3.5 py-2.5 text-sm leading-relaxed text-red-900"
@@ -680,7 +709,7 @@ export function SharePreviewModal({
               id="share-preview-lifetime-create"
               value={linkLifetimeHours}
               onChange={setLinkLifetimeHours}
-              disabled={Boolean(loadingAction)}
+              disabled={actionDisabled}
               className="mt-4"
             />
             <div
@@ -699,7 +728,7 @@ export function SharePreviewModal({
                 variant="primary"
                 size="md"
                 className="gap-1.5"
-                disabled={Boolean(loadingAction)}
+                disabled={actionDisabled}
                 onClick={() => void handleCreate()}
               >
                 {creating ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
@@ -724,7 +753,7 @@ export function SharePreviewModal({
               id="share-preview-lifetime-needs-secure"
               value={linkLifetimeHours}
               onChange={setLinkLifetimeHours}
-              disabled={Boolean(loadingAction)}
+              disabled={actionDisabled}
               className="mt-4"
             />
             <div className="mt-4 flex flex-wrap justify-end gap-2">
@@ -732,7 +761,7 @@ export function SharePreviewModal({
                 type="button"
                 variant="primary"
                 size="md"
-                disabled={Boolean(loadingAction)}
+                disabled={actionDisabled}
                 onClick={() => void handlePatchRegenerate()}
               >
                 {regenerating ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
@@ -777,7 +806,7 @@ export function SharePreviewModal({
                   id="share-preview-lifetime-expired"
                   value={linkLifetimeHours}
                   onChange={setLinkLifetimeHours}
-                  disabled={Boolean(loadingAction)}
+                  disabled={actionDisabled}
                   className="mt-0"
                 />
                 <div className="flex flex-wrap justify-end gap-2">
@@ -785,7 +814,7 @@ export function SharePreviewModal({
                     type="button"
                     variant="primary"
                     size="md"
-                    disabled={Boolean(loadingAction)}
+                    disabled={actionDisabled}
                     onClick={() => void handlePatchRegenerate()}
                   >
                     {regenerating ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
@@ -795,7 +824,7 @@ export function SharePreviewModal({
                     type="button"
                     variant="danger"
                     size="md"
-                    disabled={Boolean(loadingAction)}
+                    disabled={actionDisabled}
                     onClick={() => setRevokeConfirmOpen(true)}
                   >
                     Revoke link
@@ -811,7 +840,7 @@ export function SharePreviewModal({
                 {hasFullUrl ? (
                   <ShareUrlRow
                     value={displayUrl}
-                    canInteract={urlActionsOk && !Boolean(loadingAction)}
+                    canInteract={urlActionsOk && !actionDisabled}
                     loadingAction={loadingAction}
                     copyJustSucceeded={copyLinkFeedback}
                     onCopy={copyUrl}
@@ -830,7 +859,7 @@ export function SharePreviewModal({
                       variant="outlinePrimary"
                       size="md"
                       className="w-fit"
-                      disabled={Boolean(loadingAction)}
+                      disabled={actionDisabled}
                       onClick={() => setRegeneratePanelOpen((o) => !o)}
                     >
                       {regeneratePanelOpen ? 'Hide regenerate' : 'Regenerate link'}
@@ -839,7 +868,7 @@ export function SharePreviewModal({
                       type="button"
                       variant="danger"
                       size="md"
-                      disabled={Boolean(loadingAction)}
+                      disabled={actionDisabled}
                       onClick={() => setRevokeConfirmOpen(true)}
                     >
                       Revoke link
@@ -864,7 +893,7 @@ export function SharePreviewModal({
                       variant="outlinePrimary"
                       size="md"
                       className="w-fit"
-                      disabled={Boolean(loadingAction)}
+                      disabled={actionDisabled}
                       onClick={() => setRegeneratePanelOpen((o) => !o)}
                     >
                       {regeneratePanelOpen ? 'Hide regenerate' : 'Regenerate link'}
@@ -897,7 +926,7 @@ export function SharePreviewModal({
                       type="button"
                       variant="outlinePrimary"
                       size="md"
-                      disabled={Boolean(loadingAction)}
+                      disabled={actionDisabled}
                       onClick={() => setRegeneratePanelOpen(true)}
                     >
                       Regenerate link
@@ -906,7 +935,7 @@ export function SharePreviewModal({
                       type="button"
                       variant="danger"
                       size="md"
-                      disabled={Boolean(loadingAction)}
+                      disabled={actionDisabled}
                       onClick={() => setRevokeConfirmOpen(true)}
                     >
                       Revoke link
@@ -941,7 +970,7 @@ export function SharePreviewModal({
             type="button"
             variant="danger"
             size="md"
-            disabled={Boolean(loadingAction)}
+            disabled={actionDisabled}
             onClick={() => void handleConfirmRevoke()}
           >
             {revoking ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}

@@ -4,7 +4,9 @@ export { normalizeWidgetSettings } from "./normalize";
 export { mountEmbedWidget, unmountEmbedWidget, getMountedEmbedWidget } from "./bootstrap";
 export { EmbedWidgetRoot } from "./widget-root";
 export { AdminLiveChatAdapter } from "./components/AdminLiveChatAdapter";
+export { ClampedTextWithSeeMore } from "./components/chat-ui/ClampedTextWithSeeMore";
 export type { AdminLiveChatAdapterProps } from "./components/AdminLiveChatAdapter";
+export type { ClampedTextWithSeeMoreProps } from "./components/chat-ui/ClampedTextWithSeeMore";
 
 export type {
   AssistrioChatGlobal,

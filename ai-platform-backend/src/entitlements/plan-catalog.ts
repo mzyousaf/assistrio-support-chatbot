@@ -32,6 +32,7 @@ export type PlanDefinition = {
   autoTrainAllowed: boolean;
   addonsAllowed: boolean;
   memberInvitesAllowed: boolean;
+  sharePreviewAllowed: boolean;
 };
 
 function buildPaidPlanDefinition(input: Omit<
@@ -70,6 +71,7 @@ export const FREE_PLAN: PlanDefinition = {
   autoTrainAllowed: false,
   addonsAllowed: false,
   memberInvitesAllowed: false,
+  sharePreviewAllowed: false,
 };
 
 export const STARTER_PLAN: PlanDefinition = buildPaidPlanDefinition({
@@ -88,6 +90,7 @@ export const STARTER_PLAN: PlanDefinition = buildPaidPlanDefinition({
   autoTrainAllowed: true,
   addonsAllowed: true,
   memberInvitesAllowed: true,
+  sharePreviewAllowed: true,
 });
 
 export const PRO_PLAN: PlanDefinition = buildPaidPlanDefinition({
@@ -106,6 +109,7 @@ export const PRO_PLAN: PlanDefinition = buildPaidPlanDefinition({
   autoTrainAllowed: true,
   addonsAllowed: true,
   memberInvitesAllowed: true,
+  sharePreviewAllowed: true,
 });
 
 export const PLAN_CATALOG: readonly PlanDefinition[] = [FREE_PLAN, STARTER_PLAN, PRO_PLAN];

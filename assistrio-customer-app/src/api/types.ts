@@ -35,6 +35,7 @@ export type CustomerWorkspaceSummary = {
   autoTrainAllowed?: boolean;
   addonsAllowed?: boolean;
   memberInvitesAllowed?: boolean;
+  sharePreviewAllowed?: boolean;
   onboardingStatus?: WorkspaceOnboardingStatus;
   onboardingCurrentStep?: WorkspaceOnboardingStep;
   onboardingCreatedBotId?: string | null;
@@ -240,6 +241,7 @@ export type WorkspaceBillingEntitlementsSummary = {
   autoTrainAllowed: boolean;
   addonsAllowed: boolean;
   memberInvitesAllowed: boolean;
+  sharePreviewAllowed: boolean;
   canRemoveBranding: boolean;
   activeAddons: string[];
   topUpCreditsRemaining: number;
@@ -422,6 +424,7 @@ export type WorkspaceBillingInvoiceRow = {
   billingReason?: string;
   source?: 'lemon_subscription_invoice' | 'lemon_order' | 'local_top_up';
   billingKind?: 'subscription_invoice' | 'order';
+  billingInterval?: BillingInterval;
   requiresBillingDetails?: boolean;
   officialInvoiceUrl?: string | null;
   invoiceDeliveryMode?: 'provider_url' | 'direct_pdf' | 'local_pdf';

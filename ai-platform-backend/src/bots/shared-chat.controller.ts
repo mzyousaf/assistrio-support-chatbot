@@ -17,6 +17,7 @@ import { resolveWidgetEmbedRateLimitPerMinute } from '../models/bot.schema';
 import { exampleQuestionsToPublicLabels } from '../workspace/shared/example-questions.util';
 import { KnowledgeBaseItemService } from '../knowledge/knowledge-base-item.service';
 import { WorkspaceBotLimitService } from '../entitlements/workspace-bot-limit.service';
+import { WorkspaceSharePreviewEntitlementService } from '../entitlements/workspace-share-preview-entitlement.service';
 import { ChatEngineService } from '../chat/chat-engine.service';
 import { WidgetSpeechService } from '../chat/widget-speech.service';
 import {
@@ -204,7 +205,12 @@ export class SharedChatController {
     private readonly chatEngineService: ChatEngineService,
     private readonly widgetSpeechService: WidgetSpeechService,
     private readonly workspaceBotLimitService: WorkspaceBotLimitService,
+    private readonly sharePreviewEntitlementService: WorkspaceSharePreviewEntitlementService,
   ) {}
+
+  private async assertSharePreviewPlanEntitlement(row: Record<string, unknown>): Promise<void> {
+    await this.sharePreviewEntitlementService.assertCanUseSharePreviewForBot(row);
+  }
 
   @Get(':slug/init')
   async init(
@@ -217,6 +223,7 @@ export class SharedChatController {
     const row = await this.botsService.findShareBotByShareSlug(slugNorm);
     const token = typeof shareTokenQuery === 'string' ? shareTokenQuery.trim() : '';
     assertSharePreviewPolicy(row, slugNorm, token || undefined);
+    await this.assertSharePreviewPlanEntitlement(row);
 
     await this.workspaceBotLimitService.assertBotDocWithinEffectiveLimitIfWorkspaceScoped(
       row as Record<string, unknown>,
@@ -318,6 +325,8 @@ export class SharedChatController {
       assertSharePreviewPolicy(shareRow, slugNorm, jsonParsed.shareToken);
       parsedBody = jsonParsed;
     }
+
+    await this.assertSharePreviewPlanEntitlement(shareRow);
 
     const limit = resolveWidgetEmbedRateLimitPerMinute(shareRow);
     const ip = getClientIpForRateLimit(req);
@@ -427,6 +436,7 @@ export class SharedChatController {
     const shareRow = await this.botsService.findShareBotByShareSlug(slugNorm);
     const parsed = await this.widgetSpeechService.parseMultipart(req);
     assertSharePreviewPolicy(shareRow, slugNorm, parsed.shareToken);
+    await this.assertSharePreviewPlanEntitlement(shareRow);
 
     const limit = resolveWidgetEmbedRateLimitPerMinute(shareRow);
     const ip = getClientIpForRateLimit(req);
@@ -463,6 +473,7 @@ export class SharedChatController {
       );
     }
     assertSharePreviewPolicy(shareRow, slugNorm, parsed.shareToken);
+    await this.assertSharePreviewPlanEntitlement(shareRow);
 
     const limit = resolveWidgetEmbedRateLimitPerMinute(shareRow);
     const ip = getClientIpForRateLimit(req);
@@ -514,6 +525,7 @@ export class SharedChatController {
       );
     }
     assertSharePreviewPolicy(shareRow, slugNorm, parsed.shareToken);
+    await this.assertSharePreviewPlanEntitlement(shareRow);
 
     const limit = resolveWidgetEmbedRateLimitPerMinute(shareRow);
     const ip = getClientIpForRateLimit(req);

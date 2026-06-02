@@ -5,6 +5,7 @@ const CSV_HEADERS = [
   'Item',
   'Description',
   'Type',
+  'Billing cadence',
   'Amount',
   'Currency',
   'Status',
@@ -37,6 +38,13 @@ function resolveHistoryType(row: ProviderInvoiceRow): string {
       if (row.billingKind === 'order') return 'Order';
       return 'Payment';
   }
+}
+
+function resolveBillingCadence(row: ProviderInvoiceRow): string {
+  if (row.itemType === 'top_up') return 'One-time';
+  if (row.billingInterval === 'yearly') return 'Annually';
+  if (row.billingInterval === 'monthly') return 'Monthly';
+  return '';
 }
 
 function resolveProviderLabel(provider: ProviderInvoiceRow['provider']): string {
@@ -80,6 +88,7 @@ export function buildBillingHistoryCsv(rows: ProviderInvoiceRow[]): string {
         resolveItemLabel(row),
         resolveDescription(row),
         resolveHistoryType(row),
+        resolveBillingCadence(row),
         resolveAmount(row),
         row.currency || 'USD',
         row.status,

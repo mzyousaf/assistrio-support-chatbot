@@ -40,25 +40,25 @@ function formatMessageCountLabel(count: number): string {
 function UsageAgentCreditsLegendRow({ slice }: { slice: AgentSlice }) {
   return (
     <li className="list-none">
-      <div className="flex items-start gap-2 rounded-lg border border-slate-100/90 bg-slate-50/60 px-2 py-2">
+      <div className="flex items-start gap-1.5 rounded-lg border border-teal-100/70 bg-teal-50/60 px-2 py-1.5 ring-1 ring-teal-50/80">
         <span
-          className="mt-1 h-2 w-2 shrink-0 rounded-full"
+          className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full"
           style={{ backgroundColor: slice.color }}
           aria-hidden
         />
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-start justify-between gap-1.5">
             <p
-              className="m-0 min-w-0 flex-1 truncate text-xs font-medium leading-snug text-slate-800"
+              className="m-0 min-w-0 flex-1 truncate text-[11px] font-medium leading-snug text-slate-800"
               title={slice.name}
             >
               {slice.name}
             </p>
-            <span className="shrink-0 rounded-md bg-white px-1.5 py-0.5 text-[10px] font-semibold tabular-nums leading-none text-slate-700 ring-1 ring-slate-200/80">
+            <span className="shrink-0 text-[10px] font-semibold tabular-nums leading-none text-slate-600">
               {slice.share}%
             </span>
           </div>
-          <p className="m-0 mt-1 truncate text-[11px] leading-snug tabular-nums text-slate-500">
+          <p className="m-0 mt-0.5 truncate text-[10px] leading-snug tabular-nums text-slate-500">
             {formatCreditsUsedLabel(slice.value)} · {formatMessageCountLabel(slice.messageCount)}
           </p>
         </div>
@@ -127,9 +127,9 @@ export function UsageAgentCreditsTable({
             : 'No AI credit usage in this date range.'}
         </p>
       ) : (
-        <div className="flex min-h-[280px] flex-1 flex-col items-stretch gap-4 sm:min-h-[300px] sm:flex-row sm:items-center sm:gap-4">
+        <div className="flex min-h-[280px] flex-1 flex-col items-stretch gap-4 sm:min-h-[300px] sm:flex-row sm:items-center sm:gap-6">
           <div
-            className="relative mx-auto flex h-[200px] w-[200px] shrink-0 items-center justify-center sm:mx-0 sm:h-[210px] sm:w-[210px]"
+            className="relative mx-auto flex h-[280px] w-[280px] shrink-0 items-center justify-center sm:mx-0"
             data-testid="usage-agent-credits-donut"
           >
             <ResponsiveContainer width="100%" height="100%">

@@ -54,6 +54,7 @@ describe('WorkspaceBillingSummaryService admin support', () => {
           providerVariantId: '111',
           cancelAtPeriodEnd: false,
         }),
+        applyPendingScheduledPlanChanges: jest.fn().mockResolvedValue(undefined),
       } as never,
       {
         isCheckoutConfigured: jest.fn().mockReturnValue(true),

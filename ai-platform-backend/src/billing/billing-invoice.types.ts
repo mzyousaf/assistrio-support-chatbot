@@ -4,6 +4,8 @@ export type ProviderPaymentMethodSummary = {
   label?: string;
 };
 
+export type ProviderInvoiceBillingInterval = 'monthly' | 'yearly';
+
 export type ProviderInvoiceRow = {
   id: string;
   provider: 'lemon_squeezy' | 'stripe_future';
@@ -20,6 +22,7 @@ export type ProviderInvoiceRow = {
   itemType?: 'plan' | 'addon' | 'top_up' | 'unknown';
   itemKey?: string;
   itemName?: string;
+  billingInterval?: ProviderInvoiceBillingInterval;
   billingReason?: string;
   providerSubscriptionId?: string | null;
   providerVariantId?: string | null;

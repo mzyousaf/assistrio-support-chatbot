@@ -241,6 +241,62 @@ describe('WorkspaceEntitlementsService', () => {
     expect(entitlements.planKey).toBe('free');
     expect(entitlements.isTrialExpired).toBe(true);
     expect(entitlements.monthlyAiCredits).toBe(50);
+    expect(entitlements.sharePreviewAllowed).toBe(false);
+  });
+
+  it('allows share preview on Starter with past_due status', async () => {
+    const { service } = createService({
+      workspaceId: new Types.ObjectId(workspaceId),
+      planKey: 'starter',
+      status: 'past_due',
+      currentPeriodStart: new Date('2026-05-01'),
+      currentPeriodEnd: new Date('2026-06-01'),
+    });
+
+    const entitlements = await service.resolveForWorkspace(workspaceId);
+    expect(entitlements.planKey).toBe('starter');
+    expect(entitlements.sharePreviewAllowed).toBe(true);
+  });
+
+  it('allows share preview during cancel-at-period-end grace', async () => {
+    const { service } = createService({
+      workspaceId: new Types.ObjectId(workspaceId),
+      planKey: 'starter',
+      status: 'active',
+      cancelAtPeriodEnd: true,
+      currentPeriodStart: new Date('2026-05-01'),
+      currentPeriodEnd: new Date('2026-07-01'),
+    });
+
+    const entitlements = await service.resolveForWorkspace(workspaceId, new Date('2026-06-15'));
+    expect(entitlements.planKey).toBe('starter');
+    expect(entitlements.sharePreviewAllowed).toBe(true);
+  });
+
+  it('blocks share preview on free trial', async () => {
+    const { service } = createService({
+      workspaceId: new Types.ObjectId(workspaceId),
+      planKey: 'free',
+      status: 'trialing',
+      currentPeriodStart: new Date('2026-06-01'),
+      currentPeriodEnd: new Date('2026-06-08'),
+    });
+
+    const entitlements = await service.resolveForWorkspace(workspaceId);
+    expect(entitlements.sharePreviewAllowed).toBe(false);
+  });
+
+  it('allows share preview on active Pro', async () => {
+    const { service } = createService({
+      workspaceId: new Types.ObjectId(workspaceId),
+      planKey: 'pro',
+      status: 'active',
+      currentPeriodStart: new Date('2026-05-01'),
+      currentPeriodEnd: new Date('2026-06-01'),
+    });
+
+    const entitlements = await service.resolveForWorkspace(workspaceId);
+    expect(entitlements.sharePreviewAllowed).toBe(true);
   });
 
   it('falls back to Free for invalid workspace id without throwing', async () => {

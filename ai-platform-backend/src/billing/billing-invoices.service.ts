@@ -21,6 +21,7 @@ import type { InvoiceFetchHint } from './billing-invoice-item.util';
 import {
   buildSubscriptionInvoiceRowId,
   enrichInvoiceRow,
+  attachInvoiceBillingInterval,
   resolveInvoiceItemMatch,
 } from './billing-invoice-item.util';
 import {
@@ -853,12 +854,12 @@ export class BillingInvoicesService {
         ...enriched,
         source: 'lemon_subscription_invoice',
       });
-      rowsById.set(publicId, {
+      rowsById.set(publicId, attachInvoiceBillingInterval({
         ...enriched,
         id: publicId,
         billingKind: 'subscription_invoice',
         requiresBillingDetails: false,
-      });
+      }, ctx.lemonConfig));
       const orderId = String(enriched.providerOrderId ?? '').trim();
       if (orderId) seenOrderIds.add(orderId);
     }
@@ -907,11 +908,11 @@ export class BillingInvoicesService {
       }
 
       seenOrderIds.add(orderId);
-      rowsById.set(orderId, {
+      rowsById.set(orderId, attachInvoiceBillingInterval({
         ...storedBillingOrderToProviderRow(orderRow),
         billingKind: 'order',
         requiresBillingDetails: false,
-      });
+      }, ctx.lemonConfig));
     }
 
     const topUpPriceUsd =
@@ -955,14 +956,14 @@ export class BillingInvoicesService {
       });
 
       seenOrderIds.add(orderId);
-      rowsById.set(orderId, {
+      rowsById.set(orderId, attachInvoiceBillingInterval({
         ...enrichInvoiceRow(orderRow, match, {
           source: orderRow.source ?? 'lemon_order',
         }),
         id: orderId,
         billingKind: 'order',
         requiresBillingDetails: false,
-      });
+      }, ctx.lemonConfig));
     }
 
     const rows = [...rowsById.values()];

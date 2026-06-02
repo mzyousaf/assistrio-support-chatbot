@@ -1,4 +1,8 @@
-import type { WorkspaceBillingAddonCatalogCard, WorkspaceBillingPlanCatalogCard } from '@/api/types';
+import type {
+  WorkspaceBillingAddonCatalogCard,
+  WorkspaceBillingInvoiceRow,
+  WorkspaceBillingPlanCatalogCard,
+} from '@/api/types';
 import {
   CUSTOMER_EXTRA_AI_AGENT,
   CUSTOMER_KB_PER_AI_AGENT,
@@ -30,6 +34,15 @@ export function formatExportReportsLabel(enabled: boolean | null | undefined): s
 
 export function formatAddonBillingInterval(interval: WorkspaceBillingAddonCatalogCard['billingInterval']): string {
   return interval === 'one_time' ? 'one-time' : 'month';
+}
+
+export function formatInvoiceCadenceLabel(
+  row: Pick<WorkspaceBillingInvoiceRow, 'billingInterval' | 'itemType'>,
+): string | null {
+  if (row.itemType === 'top_up') return 'One-time';
+  if (row.billingInterval === 'yearly') return 'Annually';
+  if (row.billingInterval === 'monthly') return 'Monthly';
+  return null;
 }
 
 export function formatAddonScopeLabel(scope: WorkspaceBillingAddonCatalogCard['scope']): string {

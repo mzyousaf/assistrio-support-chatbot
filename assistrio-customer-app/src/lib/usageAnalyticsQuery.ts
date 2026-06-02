@@ -19,7 +19,6 @@ export const USAGE_DATE_PRESET_OPTIONS: { id: UsageDatePreset; label: string }[]
   { id: '7d', label: 'Last 7 days' },
   { id: '30d', label: 'Last 30 days' },
   { id: '90d', label: 'Last 90 days' },
-  { id: 'billing_period', label: 'Current billing period' },
   { id: 'custom', label: 'Custom range' },
 ];
 
@@ -74,6 +73,9 @@ export function usageDateRangeValueLabel(date: UsageDateFilterValues): string {
     const b = date.customTo.trim();
     if (a && b && customYmdRangeIsValid(a, b)) return `${a} – ${b}`;
     return 'Custom range';
+  }
+  if (date.preset === 'billing_period') {
+    return 'Last 7 days';
   }
   return USAGE_DATE_PRESET_OPTIONS.find((opt) => opt.id === date.preset)?.label ?? date.preset;
 }
