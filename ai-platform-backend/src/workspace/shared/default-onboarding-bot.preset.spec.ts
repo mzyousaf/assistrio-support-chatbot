@@ -65,8 +65,10 @@ describe('buildDefaultOnboardingBotPreset', () => {
       allowFileUpload: true,
       showMic: true,
       showVoice: true,
-      showBranding: true,
-      brandingMessage: 'Powered by Assistrio',
+      showBranding: false,
+      brandingMessage: '',
+      showPrivacyText: true,
+      privacyText: '',
       showComposerWithSuggestedQuestions: true,
       liveIndicatorStyle: 'dot-only',
       statusIndicator: 'live',
@@ -128,6 +130,10 @@ describe('buildOnboardingChatUI', () => {
 
   it('sets status, composer, and panel defaults explicitly', () => {
     const ui = buildOnboardingChatUI('#112233', []);
+    expect(ui.showBranding).toBe(false);
+    expect(ui.brandingMessage).toBe('');
+    expect(ui.showPrivacyText).toBe(true);
+    expect(ui.privacyText).toBe('');
     expect(ui.showComposerWithSuggestedQuestions).toBe(true);
     expect(ui.liveIndicatorStyle).toBe('dot-only');
     expect(ui.statusIndicator).toBe('live');

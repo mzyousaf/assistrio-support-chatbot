@@ -1,7 +1,6 @@
 import { HttpException, HttpStatus } from '@nestjs/common';
 import {
   applyBrandingEntitlementToChatUi,
-  DEFAULT_POWERED_BY_BRANDING_MESSAGE,
   PLAN_LIMIT_REMOVE_BRANDING_CODE,
   PLAN_LIMIT_REMOVE_BRANDING_MESSAGE,
 } from './workspace-branding-entitlement.util';

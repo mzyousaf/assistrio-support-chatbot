@@ -454,24 +454,13 @@ export function WidgetAppearanceSection() {
                             title="Assistrio branding"
                             description="Logo and Powered by Assistrio link above the composer before the first visitor message."
                             inlineEnd={
-                              <>
-                                <span
-                                  className={cn(
-                                    showAssistrioBrandingPaidEnabled
-                                      ? ws.workspaceEditorPreviewPillOn
-                                      : ws.workspaceEditorPreviewPillOff,
-                                  )}
-                                >
-                                  {showAssistrioBrandingPaidEnabled ? 'On' : 'Off'}
-                                </span>
-                                <Switch
-                                  id="appearance-show-assistrio-branding-paid"
-                                  checked={showAssistrioBrandingPaidEnabled}
-                                  onCheckedChange={(v) => patch('showAssistrioBrandingPaid', v)}
-                                  disabled={brandingLocked}
-                                  aria-label="Assistrio branding"
-                                />
-                              </>
+                              <Switch
+                                id="appearance-show-assistrio-branding-paid"
+                                checked={showAssistrioBrandingPaidEnabled}
+                                onCheckedChange={(v) => patch('showAssistrioBrandingPaid', v)}
+                                disabled={brandingLocked}
+                                aria-label="Assistrio branding"
+                              />
                             }
                           />
                           {brandingLocked ? (

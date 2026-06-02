@@ -780,7 +780,15 @@ export function getCustomerBotConversationMessages(botId: string, conversationId
   );
 }
 
-export function postCustomerBotDraft(body: { clientDraftId: string; workspaceId?: string }) {
+export function postCustomerBotDraft(body: {
+  clientDraftId: string;
+  workspaceId?: string;
+  name?: string;
+  description?: string;
+  shortDescription?: string;
+  category?: string;
+  brandColor?: string;
+}) {
   return customerFetch<CreateDraftResponse>(`${P}/bots/draft`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

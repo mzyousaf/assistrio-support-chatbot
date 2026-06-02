@@ -1,10 +1,7 @@
 import { HttpException, HttpStatus } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { BotsService } from './bots.service';
-import {
-  DEFAULT_POWERED_BY_BRANDING_MESSAGE,
-  PLAN_LIMIT_REMOVE_BRANDING_CODE,
-} from '../entitlements/workspace-branding-entitlement.util';
+import { PLAN_LIMIT_REMOVE_BRANDING_CODE } from '../entitlements/workspace-branding-entitlement.util';
 
 describe('BotsService branding entitlement enforcement', () => {
   const id = new Types.ObjectId().toString();
@@ -25,7 +22,11 @@ describe('BotsService branding entitlement enforcement', () => {
     const brandingService = {
       assertCanHideBranding: jest.fn().mockImplementation(async (_ws: string, chatUI: unknown) => {
         if (options.canRemoveBranding) return;
-        if (chatUI && typeof chatUI === 'object' && (chatUI as { showBranding?: boolean }).showBranding === false) {
+        if (
+          chatUI &&
+          typeof chatUI === 'object' &&
+          (chatUI as { showAssistrioBrandingPaid?: boolean }).showAssistrioBrandingPaid === false
+        ) {
           throw new HttpException(
             { errorCode: PLAN_LIMIT_REMOVE_BRANDING_CODE, message: 'blocked' },
             HttpStatus.FORBIDDEN,
@@ -36,11 +37,7 @@ describe('BotsService branding entitlement enforcement', () => {
         if (options.canRemoveBranding) return chatUI;
         return {
           ...chatUI,
-          showBranding: true,
-          brandingMessage:
-            typeof chatUI.brandingMessage === 'string' && chatUI.brandingMessage.trim()
-              ? chatUI.brandingMessage.trim()
-              : DEFAULT_POWERED_BY_BRANDING_MESSAGE,
+          showAssistrioBrandingPaid: true,
         };
       }),
     };
@@ -57,36 +54,53 @@ describe('BotsService branding entitlement enforcement', () => {
     return { svc, findOneAndUpdate, brandingService };
   }
 
-  it('updateWorkspaceBot blocks showBranding=false when canRemoveBranding=false', async () => {
+  it('updateWorkspaceBot blocks showAssistrioBrandingPaid=false when canRemoveBranding=false', async () => {
     const { svc, brandingService } = makeSvc({ canRemoveBranding: false });
     await expect(
       svc.updateWorkspaceBot(id, {
         touched: new Set(['chatUI']),
-        chatUI: { showBranding: false } as never,
+        chatUI: { showAssistrioBrandingPaid: false } as never,
       }),
     ).rejects.toBeInstanceOf(HttpException);
-    expect(brandingService.assertCanHideBranding).toHaveBeenCalledWith(workspaceId, { showBranding: false });
+    expect(brandingService.assertCanHideBranding).toHaveBeenCalledWith(workspaceId, {
+      showAssistrioBrandingPaid: false,
+    });
   });
 
-  it('updateWorkspaceBot allows showBranding=false when canRemoveBranding=true', async () => {
-    const { svc, findOneAndUpdate } = makeSvc({ canRemoveBranding: true });
+  it('updateWorkspaceBot allows showBranding=false when canRemoveBranding=false', async () => {
+    const { svc, findOneAndUpdate } = makeSvc({ canRemoveBranding: false });
     await svc.updateWorkspaceBot(id, {
       touched: new Set(['chatUI']),
       chatUI: { showBranding: false } as never,
     });
     expect(findOneAndUpdate).toHaveBeenCalledWith(
       expect.anything(),
-      expect.objectContaining({ chatUI: { showBranding: false } }),
+      expect.objectContaining({
+        chatUI: { showBranding: false, showAssistrioBrandingPaid: true },
+      }),
     );
   });
 
-  it('sanitizeRuntimeChatUiForBot forces branding visible when entitlement false', async () => {
+  it('updateWorkspaceBot allows showAssistrioBrandingPaid=false when canRemoveBranding=true', async () => {
+    const { svc, findOneAndUpdate } = makeSvc({ canRemoveBranding: true });
+    await svc.updateWorkspaceBot(id, {
+      touched: new Set(['chatUI']),
+      chatUI: { showAssistrioBrandingPaid: false } as never,
+    });
+    expect(findOneAndUpdate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ chatUI: { showAssistrioBrandingPaid: false } }),
+    );
+  });
+
+  it('sanitizeRuntimeChatUiForBot forces Assistrio branding visible when entitlement false', async () => {
     const { svc } = makeSvc({ canRemoveBranding: false });
     const out = await svc.sanitizeRuntimeChatUiForBot({
       workspaceId,
-      chatUI: { showBranding: false, brandingMessage: '' },
+      chatUI: { showBranding: false, showAssistrioBrandingPaid: false, brandingMessage: '' },
     });
-    expect(out.showBranding).toBe(true);
-    expect(out.brandingMessage).toBe(DEFAULT_POWERED_BY_BRANDING_MESSAGE);
+    expect(out.showBranding).toBe(false);
+    expect(out.showAssistrioBrandingPaid).toBe(true);
+    expect(out.brandingMessage).toBe('');
   });
 });

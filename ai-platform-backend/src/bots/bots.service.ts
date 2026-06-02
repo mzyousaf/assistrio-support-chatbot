@@ -16,6 +16,8 @@ import {
   TableImportJob,
 } from '../models';
 import { getDefaultBotCreatePayload } from '../workspace/shared/default-new-bot.payload';
+import { buildCustomerListingDraftBotPreset } from '../workspace/shared/default-customer-listing-bot.preset';
+import type { CustomerListingDraftOverrides } from '../workspace/shared/default-customer-listing-bot.preset';
 import { botKnowledgeBootstrapDefaults } from '../workspace/shared/default-bot-knowledge-bootstrap.util';
 import { KnowledgeBaseItemService } from '../knowledge/knowledge-base-item.service';
 import { effectiveKbDocumentFileMetaLean } from '../knowledge/knowledge-base-document-sync-fields.util';
@@ -200,6 +202,8 @@ const BOTS_COLLECTION = 'bots';
 /** Max characters of note `content` exposed on public list (gallery cards). */
 const KNOWLEDGE_NOTE_PREVIEW_MAX = 800;
 
+export type CustomerBotCreateSource = 'customer_listing' | 'template_bootstrap';
+
 export type CustomerBotCreateOptions = {
   /** When true, enforce workspace plan bot limit (customer API only). */
   enforceWorkspaceBotLimit?: boolean;
@@ -207,6 +211,13 @@ export type CustomerBotCreateOptions = {
   applyWorkspaceEntitlements?: boolean;
   /** Target workspace for the new draft (customer API). When omitted, falls back to personal workspace bootstrap. */
   workspaceId?: string;
+  /**
+   * `customer_listing` — clean agents-listing draft (no template KB bootstrap).
+   * `template_bootstrap` or omitted — legacy template defaults (admin / internal).
+   */
+  source?: CustomerBotCreateSource;
+  /** Optional overrides when `source` is `customer_listing`. */
+  listingOverrides?: CustomerListingDraftOverrides;
 };
 
 @Injectable()
@@ -1268,10 +1279,16 @@ export class BotsService {
     if (options?.applyWorkspaceEntitlements && workspaceOid) {
       botConfigForCreate = await this.buildCustomerBotConfigFromWorkspace(String(workspaceOid));
     }
+    const useListingDefaults = options?.source === 'customer_listing';
+    const slugSeed = useListingDefaults
+      ? String(options?.listingOverrides?.name ?? 'AI Agent').trim() || 'AI Agent'
+      : 'ai-support-assistant';
     for (let attempt = 0; attempt < 5; attempt++) {
-      const slug = await this.generateUniqueSlug('ai-support-assistant');
+      const slug = await this.generateUniqueSlug(slugSeed);
       try {
-        const payload = getDefaultBotCreatePayload(slug, clientDraftId);
+        const payload = useListingDefaults
+          ? buildCustomerListingDraftBotPreset(slug, clientDraftId, options?.listingOverrides)
+          : getDefaultBotCreatePayload(slug, clientDraftId);
         const created = await this.create({
           ...(payload as unknown as Record<string, unknown>),
           ...getCreatorDefaultsForUserFlow(creatorOid),

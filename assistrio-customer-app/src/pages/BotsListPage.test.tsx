@@ -229,10 +229,45 @@ describe('BotsListPage', () => {
       expect(mockPostDraft).toHaveBeenCalledWith({
         clientDraftId: 'draft-uuid-1',
         workspaceId: 'ws-1',
+        name: 'AI Agent',
+        description:
+          'A helpful AI support agent that answers customer questions clearly and professionally.',
+        category: 'Support',
+        brandColor: '#14B8A6',
       });
     });
     expect(mockNavigate).toHaveBeenCalledWith('/bots/new-bot');
     expect(mockRefreshOnboarding).toHaveBeenCalled();
+  });
+
+  it('opens upgrade modal when create hits plan bot limit', async () => {
+    mockPostDraft.mockResolvedValue({
+      ok: false,
+      status: 403,
+      error: 'Your workspace has reached the AI Agent limit for the current plan.',
+      errorCode: 'plan_limit_workspace_bots',
+    });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /New AI Agent/i }));
+
+    await waitFor(() => {
+      expect(mockOpenUpgradeModal).toHaveBeenCalledWith({ reason: 'bots' });
+    });
+  });
+
+  it('shows Creating… while draft request is in flight', async () => {
+    mockPostDraft.mockImplementation(
+      () =>
+        new Promise(() => {
+          /* never resolves */
+        }),
+    );
+    renderPage();
+    const [headerButton] = await screen.findAllByRole('button', { name: /New AI Agent/i });
+    fireEvent.click(headerButton);
+    const creatingButtons = await screen.findAllByRole('button', { name: /Creating…/i });
+    expect(creatingButtons.length).toBeGreaterThan(0);
+    expect(creatingButtons.every((button) => button.hasAttribute('disabled'))).toBe(true);
   });
 
   it('shows toast when create returns workspace_access_denied', async () => {

@@ -32,6 +32,42 @@ import { BotKnowledgeTotalLimitService } from '../knowledge/bot-knowledge-total-
 import { TableImportService } from '../ingestion/table-import.service';
 import { WorkspaceBotLimitService } from '../entitlements/workspace-bot-limit.service';
 
+function parseCustomerListingDraftBody(body: unknown): {
+  clientDraftId: string;
+  workspaceId?: string;
+  listingOverrides?: {
+    name?: string;
+    description?: string;
+    shortDescription?: string;
+    category?: string;
+    brandColor?: string;
+  };
+} | null {
+  if (!body || typeof body !== 'object') return null;
+  const o = body as Record<string, unknown>;
+  const clientDraftId = typeof o.clientDraftId === 'string' ? o.clientDraftId.trim() : '';
+  if (!clientDraftId) return null;
+  const workspaceId =
+    typeof o.workspaceId === 'string' && o.workspaceId.trim() ? o.workspaceId.trim() : undefined;
+  const pick = (key: string): string | undefined => {
+    const v = o[key];
+    return typeof v === 'string' && v.trim() ? v.trim() : undefined;
+  };
+  const listingOverrides = {
+    name: pick('name'),
+    description: pick('description'),
+    shortDescription: pick('shortDescription'),
+    category: pick('category'),
+    brandColor: pick('brandColor'),
+  };
+  const hasOverrides = Object.values(listingOverrides).some(Boolean);
+  return {
+    clientDraftId,
+    workspaceId,
+    ...(hasOverrides ? { listingOverrides } : {}),
+  };
+}
+
 function parseDatasheetImportCancelBody(body: unknown): { importSessionId: string } | null {
   if (!body || typeof body !== 'object') return null;
   const o = body as Record<string, unknown>;
@@ -173,20 +209,28 @@ export class CustomerBotsController extends WorkspaceBotsControllerBase {
 
   @Post('draft')
   override async createDraft(
-    @Body() body: { clientDraftId?: string; workspaceId?: string },
+    @Body() body: {
+      clientDraftId?: string;
+      workspaceId?: string;
+      name?: string;
+      description?: string;
+      shortDescription?: string;
+      category?: string;
+      brandColor?: string;
+    },
     @Req() req: RequestWithUser,
   ) {
-    const clientDraftId = String(body?.clientDraftId ?? '').trim();
-    if (!clientDraftId) {
+    const parsed = parseCustomerListingDraftBody(body);
+    if (!parsed) {
       throw new HttpException({ error: 'clientDraftId is required' }, HttpStatus.BAD_REQUEST);
     }
+    const { clientDraftId, workspaceId: explicitWorkspaceId, listingOverrides } = parsed;
     const createdByUserId = req.user?._id != null ? String(req.user._id) : undefined;
     if (!createdByUserId) {
       throw new HttpException({ error: 'Customer session required.' }, HttpStatus.FORBIDDEN);
     }
 
     let targetWorkspaceId: string;
-    const explicitWorkspaceId = body?.workspaceId?.trim();
     if (explicitWorkspaceId) {
       if (!Types.ObjectId.isValid(explicitWorkspaceId)) {
         throw new HttpException({ error: 'Invalid workspaceId' }, HttpStatus.BAD_REQUEST);
@@ -215,8 +259,9 @@ export class CustomerBotsController extends WorkspaceBotsControllerBase {
         enforceWorkspaceBotLimit: true,
         applyWorkspaceEntitlements: true,
         workspaceId: targetWorkspaceId,
+        source: 'customer_listing',
+        listingOverrides,
       });
-      await this.botOnboardingService.onboardNewBot(result.botId);
       return result;
     } catch (err) {
       if (err instanceof HttpException) throw err;

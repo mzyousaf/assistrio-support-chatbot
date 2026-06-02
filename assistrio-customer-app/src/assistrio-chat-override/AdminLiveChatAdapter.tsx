@@ -34,7 +34,7 @@ import { runtimeEmbedSpeechPost } from "@acw/lib/runtimeEmbedSpeechPost";
 import { speechEndpointFromChatUrl } from "@acw/lib/speechEndpoint";
 import { createTranscriptionUploadFile } from "@acw/lib/transcriptionUploadFile";
 import { sanitizeChatMessageContent } from "@acw/lib/chatMessageDisplay.util";
-import { resolveBrandingFooterDisplay } from "@acw/lib/resolveBrandingFooterDisplay";
+import { resolveBrandingFooterDisplay, resolvePrivacyFooterDisplay } from "@acw/lib/resolveBrandingFooterDisplay";
 import { resolveChatRuntimeErrorMessage } from "@acw/lib/resolveChatRuntimeErrorMessage";
 import {
   dispatchAiCreditsTopUpPromptModal,
@@ -1611,11 +1611,11 @@ export function AdminLiveChatAdapter({
     };
   }, [idleSessionModalOpen, onIdleSessionModalDismiss]);
 
-  const privacyLineRaw =
-    (chatUI?.privacyText ?? "").trim() || (footerPrivacyText ?? "").trim();
   const { showBrandingLine, brandingMessage: brandingMessageResolved } = resolveBrandingFooterDisplay(chatUI);
-  const showPrivacyLine = chatUI?.showPrivacyText !== false && Boolean(privacyLineRaw);
-  const privacyTextResolved = showPrivacyLine ? privacyLineRaw : undefined;
+  const { showPrivacyLine, privacyText: privacyTextResolved } = resolvePrivacyFooterDisplay(
+    chatUI,
+    footerPrivacyText,
+  );
   const showFooterResolved = showBrandingLine || showPrivacyLine;
 
   const launcherPosition =

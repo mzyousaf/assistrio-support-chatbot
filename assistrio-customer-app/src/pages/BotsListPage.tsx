@@ -102,7 +102,15 @@ export function BotsListPage() {
     setCreating(true);
     setError(null);
     const clientDraftId = crypto.randomUUID();
-    const res = await postCustomerBotDraft({ clientDraftId, workspaceId: activeWorkspaceId });
+    const res = await postCustomerBotDraft({
+      clientDraftId,
+      workspaceId: activeWorkspaceId,
+      name: 'AI Agent',
+      description:
+        'A helpful AI support agent that answers customer questions clearly and professionally.',
+      category: 'Support',
+      brandColor: '#14B8A6',
+    });
     setCreating(false);
     if (!res.ok) {
       if (isCreateDraftAdminDenied(res)) {

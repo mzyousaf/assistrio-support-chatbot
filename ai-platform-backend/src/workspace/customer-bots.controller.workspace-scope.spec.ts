@@ -123,7 +123,9 @@ describe('CustomerBotsController workspace scope', () => {
 
   describe('POST createDraft', () => {
     it('creates draft in active workspace for admin', async () => {
-      const { controller, botsService, workspacesService, req } = buildController({ activeWorkspaceId: wsInvited });
+      const { controller, botsService, workspacesService, botOnboardingService, req } = buildController({
+        activeWorkspaceId: wsInvited,
+      });
 
       await controller.createDraft({ clientDraftId }, req);
 
@@ -132,7 +134,10 @@ describe('CustomerBotsController workspace scope', () => {
         enforceWorkspaceBotLimit: true,
         applyWorkspaceEntitlements: true,
         workspaceId: wsInvited,
+        source: 'customer_listing',
+        listingOverrides: undefined,
       });
+      expect(botOnboardingService.onboardNewBot).not.toHaveBeenCalled();
     });
 
     it('creates draft in explicit workspaceId when provided and user is member admin', async () => {
@@ -145,7 +150,7 @@ describe('CustomerBotsController workspace scope', () => {
       expect(botsService.createDraft).toHaveBeenCalledWith(
         clientDraftId,
         userId,
-        expect.objectContaining({ workspaceId: wsPersonal }),
+        expect.objectContaining({ workspaceId: wsPersonal, source: 'customer_listing' }),
       );
     });
 
@@ -173,7 +178,10 @@ describe('CustomerBotsController workspace scope', () => {
       expect(botsService.createDraft).toHaveBeenCalledWith(
         clientDraftId,
         userId,
-        expect.objectContaining({ workspaceId: wsPersonal }),
+        expect.objectContaining({
+          workspaceId: wsPersonal,
+          source: 'customer_listing',
+        }),
       );
     });
   });

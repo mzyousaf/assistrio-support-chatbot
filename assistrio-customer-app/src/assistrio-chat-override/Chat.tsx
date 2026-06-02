@@ -818,7 +818,7 @@ export function Chat({
   const hasUserMessage = messages.some((m) => m.role === "user");
   const showBrandingLine = showFooter && Boolean((brandingMessage ?? "").trim());
   const showBrandingPaidAboveComposer =
-    showFooter && showAssistrioBrandingPaid !== false && !hasUserMessage;
+    showAssistrioBrandingPaid !== false && !hasUserMessage;
   const showFooterBrandingText = showBrandingLine;
   const showFooterContent = showFooterBrandingText || Boolean((privacyText ?? "").trim());
   const showAttachmentsChrome = attachmentsScreen != null;
@@ -1232,6 +1232,28 @@ export function Chat({
                   </button>
                 </div>
               ) : null}
+              <input
+                ref={attachInputRef}
+                type="file"
+                multiple
+                className="hidden"
+                accept={WIDGET_CHAT_ACCEPT}
+                aria-hidden
+                onChange={(e) => {
+                  const list = e.target.files;
+                  if (!list?.length) return;
+                  setHistoryViewOpen(false);
+                  const genId = () => `pf_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+                  const { added, errors } = pickWidgetChatFiles(list, pendingFiles.length, genId);
+                  if (errors.length) setAttachNotice([...new Set(errors)].join(" "));
+                  else setAttachNotice(null);
+                  if (added.length) setPendingFiles((prev) => [...prev, ...added]);
+                  e.target.value = "";
+                }}
+              />
+              {showBrandingPaidAboveComposer ? (
+                <AssistrioBrandingPaid dark={dark} compact={compact} />
+              ) : null}
               {postSpeechAudio && speechLimitNotice ? (
                 <div
                   role="status"
@@ -1256,28 +1278,6 @@ export function Chat({
                     <X className="h-4 w-4" strokeWidth={2} aria-hidden />
                   </button>
                 </div>
-              ) : null}
-              <input
-                ref={attachInputRef}
-                type="file"
-                multiple
-                className="hidden"
-                accept={WIDGET_CHAT_ACCEPT}
-                aria-hidden
-                onChange={(e) => {
-                  const list = e.target.files;
-                  if (!list?.length) return;
-                  setHistoryViewOpen(false);
-                  const genId = () => `pf_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-                  const { added, errors } = pickWidgetChatFiles(list, pendingFiles.length, genId);
-                  if (errors.length) setAttachNotice([...new Set(errors)].join(" "));
-                  else setAttachNotice(null);
-                  if (added.length) setPendingFiles((prev) => [...prev, ...added]);
-                  e.target.value = "";
-                }}
-              />
-              {showBrandingPaidAboveComposer ? (
-                <AssistrioBrandingPaid dark={dark} compact={compact} />
               ) : null}
               <ChatComposer
               dark={dark}

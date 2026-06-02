@@ -22,6 +22,10 @@ describe('BotsService.createPublishedBotFromWorkspaceOnboarding personality mapp
       assertCanAddBotToWorkspace: jest.fn().mockResolvedValue(undefined),
     } as unknown as WorkspaceBotLimitService;
 
+    const workspacesService = {
+      applyDefaultBotAccessGrantsOnBotCreate: jest.fn().mockResolvedValue(undefined),
+    } as never;
+
     const svc = new BotsService(
       {} as never,
       botModel,
@@ -35,7 +39,7 @@ describe('BotsService.createPublishedBotFromWorkspaceOnboarding personality mapp
       {} as never,
       {} as never,
       {} as never,
-      {} as never,
+      workspacesService,
       workspaceBotLimitService,
       workspaceEntitlementsService,
       {} as never,
@@ -95,6 +99,10 @@ describe('BotsService.createPublishedBotFromWorkspaceOnboarding personality mapp
 
     const chatUI = payload!.chatUI as Record<string, unknown>;
     expect(chatUI.primaryColor).toBe('#336699');
+    expect(chatUI.showBranding).toBe(false);
+    expect(chatUI.brandingMessage).toBe('');
+    expect(chatUI.showPrivacyText).toBe(true);
+    expect(chatUI.privacyText).toBe('');
     expect(chatUI.menuQuickLinks).toEqual([{ text: 'Visit website', route: 'https://example.com' }]);
     expect(chatUI.composerControlStyle).toBe('brand');
     expect(chatUI.allowFileUpload).toBe(true);

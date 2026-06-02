@@ -32,7 +32,7 @@ import { runtimeEmbedSpeechPost } from "../lib/runtimeEmbedSpeechPost";
 import { speechEndpointFromChatUrl } from "../lib/speechEndpoint";
 import { createTranscriptionUploadFile } from "../lib/transcriptionUploadFile";
 import { sanitizeChatMessageContent } from "../lib/chatMessageDisplay.util";
-import { resolveBrandingFooterDisplay } from "../lib/resolveBrandingFooterDisplay";
+import { resolveBrandingFooterDisplay, resolvePrivacyFooterDisplay } from "../lib/resolveBrandingFooterDisplay";
 import { resolveChatRuntimeErrorMessage } from "../lib/resolveChatRuntimeErrorMessage";
 import { streamAssistantReply } from "../lib/streamAssistantReply";
 import { mergeWidgetStrings, type WidgetStrings } from "../lib/widgetStrings";
@@ -1471,11 +1471,11 @@ export function AdminLiveChatAdapter({
     [executeSend, messages],
   );
 
-  const privacyLineRaw =
-    (chatUI?.privacyText ?? "").trim() || (footerPrivacyText ?? "").trim();
   const { showBrandingLine, brandingMessage: brandingMessageResolved } = resolveBrandingFooterDisplay(chatUI);
-  const showPrivacyLine = chatUI?.showPrivacyText !== false && Boolean(privacyLineRaw);
-  const privacyTextResolved = showPrivacyLine ? privacyLineRaw : undefined;
+  const { showPrivacyLine, privacyText: privacyTextResolved } = resolvePrivacyFooterDisplay(
+    chatUI,
+    footerPrivacyText,
+  );
   const showFooterResolved = showBrandingLine || showPrivacyLine;
 
   const launcherPosition =
