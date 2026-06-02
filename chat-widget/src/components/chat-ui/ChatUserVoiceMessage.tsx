@@ -1,5 +1,5 @@
 import { useWavesurfer } from "@wavesurfer/react";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { SpeechRecordingWaveStyle } from "../../models/botChatUI";
 import { cx } from "./utils";
 
@@ -134,25 +134,30 @@ function surferColorsFromRecordingStyle(
   if (waveStyle === "defaultDark") {
     if (dark) {
       return {
-        waveColor: "rgba(148, 163, 184, 0.4)",
+        waveColor: "rgb(100, 116, 139)",
         progressColor: "rgb(241, 245, 249)",
       };
     }
     return {
-      waveColor: "rgb(71, 85, 105)",
+      waveColor: "rgb(203, 213, 225)",
       progressColor: "rgb(15, 23, 42)",
     };
   }
   if (dark) {
     return {
       waveColor: "rgb(100, 116, 139)",
-      progressColor: "rgb(226, 232, 240)",
+      progressColor: "rgb(241, 245, 249)",
     };
   }
   return {
     waveColor: "rgb(203, 213, 225)",
-    progressColor: "rgb(71, 85, 105)",
+    progressColor: "rgb(148, 163, 184)",
   };
+}
+
+/** Preview playhead when `speechRecordingWaveStyle` is `default` (composer / neutral). */
+function defaultPreviewPlayheadDot(dark: boolean): string {
+  return dark ? "#cbd5e1" : "#64748b";
 }
 
 function wfPalette(dark: boolean, onAccent: boolean, accentColor: string | undefined, neutralBubbleBlack: boolean) {
@@ -169,18 +174,62 @@ function wfPalette(dark: boolean, onAccent: boolean, accentColor: string | undef
   return dark ? WF_COLORS.dark : WF_COLORS.light;
 }
 
-/** Snap to end when this close to duration (media vs decoded length mismatch). */
-const PLAYHEAD_END_EPS = 0.15;
+type WaveformLaneMetrics = { laneLeft: number; laneWidth: number };
 
-const PLAYHEAD_NOB_HALF_PX = 5;
-
-/** Progress is 0–1 along the waveform track; dot centered on that point (matches WaveSurfer progress). */
-function nobCenterFromProgress(p: number): { left: string; transform: string } {
+/** `[part=canvases]` — clipPath % is relative to this box (not the wider wrapper). */
+function readWaveformLaneMetrics(mount: HTMLElement): WaveformLaneMetrics | null {
+  const host = mount.firstElementChild;
+  if (!(host instanceof HTMLElement) || !host.shadowRoot) return null;
+  const canvases = host.shadowRoot.querySelector('[part="canvases"]');
+  if (!(canvases instanceof HTMLElement)) return null;
+  const mountRect = mount.getBoundingClientRect();
+  const canvasesRect = canvases.getBoundingClientRect();
+  const laneWidth = canvasesRect.width;
+  if (!Number.isFinite(laneWidth) || laneWidth <= 0) return null;
   return {
-    left: `clamp(${PLAYHEAD_NOB_HALF_PX}px, ${p * 100}%, calc(100% - ${PLAYHEAD_NOB_HALF_PX}px))`,
-    transform: "translate(-50%, -50%)",
+    laneLeft: canvasesRect.left - mountRect.left,
+    laneWidth,
   };
 }
+
+/** Split position from WaveSurfer `canvasWrapper` clipPath (authoritative vs time/duration drift). */
+function readWaveformClipRatio(mount: HTMLElement): number | null {
+  const host = mount.firstElementChild;
+  if (!(host instanceof HTMLElement) || !host.shadowRoot) return null;
+  const canvases = host.shadowRoot.querySelector('[part="canvases"]');
+  if (!(canvases instanceof HTMLElement)) return null;
+  const clip = canvases.style.clipPath || getComputedStyle(canvases).clipPath;
+  const m = clip.match(/polygon\(\s*([\d.]+)%/i);
+  if (!m) return null;
+  const p = Number(m[1]);
+  if (!Number.isFinite(p)) return null;
+  return Math.min(1, Math.max(0, p / 100));
+}
+
+/**
+ * Knob center on the canvas clip edge (matches `renderProgress`, not progress border or media drift).
+ */
+function resolvePlayheadCenterPx(
+  mount: HTMLElement,
+  wavesurfer: { getDuration: () => number; getCurrentTime: () => number } | null,
+): number | null {
+  const lane = readWaveformLaneMetrics(mount);
+  if (!lane) return null;
+
+  const clipRatio = readWaveformClipRatio(mount);
+  if (clipRatio != null) {
+    return lane.laneLeft + clipRatio * lane.laneWidth;
+  }
+
+  const dur = wavesurfer?.getDuration() ?? 0;
+  const t = wavesurfer?.getCurrentTime() ?? 0;
+  const ratio = dur > 0 ? Math.min(1, Math.max(0, t / dur)) : 0;
+  return lane.laneLeft + ratio * lane.laneWidth;
+}
+
+/** Default in-thread user voice message player width. */
+export const VOICE_MESSAGE_MIN_WIDTH_PX = 262;
+export const VOICE_MESSAGE_MAX_WIDTH_PX = 262;
 
 /** `mm:ss` fixed width (e.g. `05:00`); fits voice notes up to 59:59. */
 function formatClock(seconds: number): string {
@@ -229,6 +278,7 @@ export function ChatUserVoiceMessage({
   speechRecordingWaveStyle,
 }: ChatUserVoiceMessageProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const playheadDotRef = useRef<HTMLDivElement | null>(null);
   const [durationSec, setDurationSec] = useState(
     durationMs != null && durationMs > 0 ? durationMs / 1000 : 0,
   );
@@ -289,10 +339,7 @@ export function ChatUserVoiceMessage({
     const syncDurationFromWs = () => {
       const d = wavesurfer.getDuration();
       if (Number.isFinite(d) && d > 0) {
-        setDurationSec((prev) => {
-          const next = Math.max(prev || 0, d);
-          return next !== prev ? next : prev;
-        });
+        setDurationSec((prev) => (prev !== d ? d : prev));
       }
     };
     unsubs.push(
@@ -319,6 +366,47 @@ export function ChatUserVoiceMessage({
     if (isPlaying) wavesurfer.pause();
     else void wavesurfer.play();
   }, [disabled, wavesurfer, isReady, isPlaying]);
+
+  const syncPlayheadPosition = useCallback(() => {
+    const mount = containerRef.current;
+    const dot = playheadDotRef.current;
+    if (!mount || !dot) return;
+
+    const centerPx = resolvePlayheadCenterPx(mount, wavesurfer);
+    if (centerPx == null) return;
+
+    dot.style.left = `${centerPx}px`;
+    dot.style.transform = "translate(-50%, -50%)";
+  }, [wavesurfer]);
+
+  useLayoutEffect(() => {
+    if (!isReady) return;
+    syncPlayheadPosition();
+  }, [syncPlayheadPosition, isReady]);
+
+  useEffect(() => {
+    const mount = containerRef.current;
+    if (!mount) return;
+    const ro = new ResizeObserver(() => syncPlayheadPosition());
+    ro.observe(mount);
+    return () => ro.disconnect();
+  }, [syncPlayheadPosition]);
+
+  useEffect(() => {
+    if (!wavesurfer || !isReady) return;
+    const handler = () => syncPlayheadPosition();
+    const unsubs = [
+      /* Fires each animation frame while playing, after renderProgress — matches wave speed. */
+      wavesurfer.on("audioprocess", handler),
+      wavesurfer.on("timeupdate", handler),
+      wavesurfer.on("seeking", handler),
+      wavesurfer.on("drag", handler),
+      wavesurfer.on("dragend", handler),
+      wavesurfer.on("redrawcomplete", handler),
+      wavesurfer.on("ready", handler),
+    ];
+    return () => unsubs.forEach((u) => u());
+  }, [wavesurfer, isReady, syncPlayheadPosition]);
 
   const displayDuration =
     durationSec > 0 ? durationSec : durationMs != null ? durationMs / 1000 : 0;
@@ -353,26 +441,16 @@ export function ChatUserVoiceMessage({
         ? "text-gray-300"
         : "text-gray-500";
 
-  // Playhead must use WaveSurfer's decoded duration (not metadata) or it drifts from the wave.
-  const wsDuration = wavesurfer?.getDuration?.() ?? 0;
-  const durationForPlayhead =
-    wsDuration > 0 ? wsDuration : displayDuration;
-  let playheadProgress =
-    durationForPlayhead > 0
-      ? Math.min(1, Math.max(0, currentTime / durationForPlayhead))
-      : 0;
-  if (
-    durationForPlayhead > 0 &&
-    (playheadProgress >= 1 - 1e-6 || currentTime >= durationForPlayhead - PLAYHEAD_END_EPS)
-  ) {
-    playheadProgress = 1;
-  }
   const baseWf = wfPalette(dark, onAccent, accentColor, neutralBubbleBlack);
-  const wf =
-    speechRecordingWaveStyle === "brand" && (accentColor ?? "").trim()
-      ? { ...baseWf, playheadDot: (accentColor ?? "#6366f1").trim() }
-      : baseWf;
-  const playheadPt = nobCenterFromProgress(playheadProgress);
+  const wf = (() => {
+    if (speechRecordingWaveStyle === "brand" && (accentColor ?? "").trim()) {
+      return { ...baseWf, playheadDot: (accentColor ?? "#6366f1").trim() };
+    }
+    if (speechRecordingWaveStyle === "default") {
+      return { ...baseWf, playheadDot: defaultPreviewPlayheadDot(dark) };
+    }
+    return baseWf;
+  })();
 
   const playIcons = isPlaying ? (
     <svg className="h-[19px] w-[19px]" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
@@ -388,8 +466,8 @@ export function ChatUserVoiceMessage({
   return (
     <div
       className={cx(
-        "flex w-full min-w-0 items-center gap-2",
-        !className && "min-w-[230px] max-w-[320px]",
+        "flex w-full min-w-0 items-center gap-3",
+        !className && "min-w-[262px] max-w-[262px]",
         className,
       )}
     >
@@ -417,16 +495,17 @@ export function ChatUserVoiceMessage({
       </button>
 
       <div
-        className="assistrio-voice-wavesurfer min-h-[36px] min-w-0 flex-1 overflow-hidden rounded-sm py-1"
+        className="assistrio-voice-wavesurfer min-h-[36px] min-w-0 flex-1 overflow-visible rounded-sm py-1"
         aria-hidden={!isReady}
         data-wavesurfer-theme={
           onAccent ? (accentIsLight ? "accent-light" : "accent") : neutralBubbleBlack || dark ? "dark" : "light"
         }
       >
-        <div className="relative h-9 w-full min-w-0">
+        <div className="relative h-9 w-full min-w-0 overflow-visible">
           <div ref={containerRef} className="assistrio-ws-mount h-9 w-full min-w-0" />
           {isReady && displayDuration > 0 ? (
             <div
+              ref={playheadDotRef}
               className={cx(
                 "pointer-events-none absolute top-1/2 z-10 h-2.5 w-2.5 rounded-full",
                 onAccent && accentIsLight
@@ -438,9 +517,9 @@ export function ChatUserVoiceMessage({
                       : "shadow-[0_0_0_1px_rgb(51_65_85_/_0.55)]",
               )}
               style={{
-                left: playheadPt.left,
+                left: 0,
                 top: "50%",
-                transform: playheadPt.transform,
+                transform: "translate(-50%, -50%)",
                 backgroundColor: wf.playheadDot,
               }}
               aria-hidden

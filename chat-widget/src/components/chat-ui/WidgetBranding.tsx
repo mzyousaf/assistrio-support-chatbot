@@ -1,6 +1,6 @@
 import React from "react";
 
-import { cx } from "./utils";
+import { footerBrandingTextClass, cx } from "./utils";
 
 export type WidgetBrandingProps = {
   message: string;
@@ -13,6 +13,8 @@ export function WidgetBranding({ message, dark = true, className }: WidgetBrandi
   if (!text) return null;
 
   return (
-    <p className={cx("text-xs font-normal", dark ? "text-gray-500" : "text-gray-400", className)}>{text}</p>
+    <p className={cx("text-xs font-normal", footerBrandingTextClass(dark), className)}>
+      {text}
+    </p>
   );
 }

@@ -452,6 +452,10 @@ function normalizeComposerControlStyleInput(input: Record<string, unknown>): 'br
   return input.composerControlsUsePrimary === false ? 'default' : 'defaultDark';
 }
 
+function normalizeHeaderStyleInput(input: Record<string, unknown>): 'default' | 'brand' {
+  return input.headerStyle === 'brand' ? 'brand' : 'default';
+}
+
 function normalizeSpeechRecordingWaveStyleInput(input: Record<string, unknown>): 'brand' | 'default' | 'defaultDark' {
   const s = input.speechRecordingWaveStyle;
   if (s === 'brand' || s === 'default' || s === 'defaultDark') return s;
@@ -580,6 +584,7 @@ export function buildNormalizedChatUI(chatUIInput: Record<string, unknown>): Bot
     ...(menuQuickLinksMenuIcon ? { menuQuickLinksMenuIcon } : {}),
     showComposerWithSuggestedQuestions: chatUIInput.showComposerWithSuggestedQuestions === true,
     showAvatarInHeader: chatUIInput.showAvatarInHeader !== false,
+    headerStyle: normalizeHeaderStyleInput(chatUIInput),
     senderName: clampStr(
       typeof chatUIInput.senderName === 'string' ? chatUIInput.senderName.trim() : '',
       BOT_FIELD_MAX.senderName,

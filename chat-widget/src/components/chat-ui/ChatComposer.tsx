@@ -5,6 +5,10 @@ import { pickBrandChipForeground } from "../../lib/accentLuminance";
 import { CHAT_COMPOSER_INPUT_MAX_LENGTH } from "../../lib/chatComposerInputLimit";
 import { AttachmentCountBadge } from "./AttachmentCountBadge";
 import type { ComposerControlStyle, SpeechRecordingWaveStyle } from "../../models/botChatUI";
+import {
+  speechRecordingWaveSvgClass,
+  speechRecordingWaveSvgStyle,
+} from "../../lib/resolveComposerChatUiStyles";
 import { SPEECH_WAVEFORM_SCROLL_BARS } from "../../lib/useMediaRecorderCapture";
 import type { ChatSpeechInputMeta } from "./types";
 import { ChatUserVoiceMessage } from "./ChatUserVoiceMessage";
@@ -123,21 +127,10 @@ function SpeechLevelWaveform({
         : quietAmp + Math.pow((v - quietEnd) / (1 - quietEnd), 0.72) * (1 - quietAmp);
     return (amp * maxBarH * barPeakScale) / 2;
   };
-  const toneClass =
-    waveStyle === "brand"
-      ? undefined
-      : waveStyle === "defaultDark"
-        ? dark
-          ? "text-white/80"
-          : "text-gray-800"
-        : dark
-          ? "text-slate-500"
-          : "text-slate-400";
-
   return (
     <svg
-      className={cx("fill-current", toneClass, className)}
-      style={waveStyle === "brand" ? { color: accentColor.trim() || "#6366f1" } : undefined}
+      className={cx("fill-current", speechRecordingWaveSvgClass(waveStyle, dark ?? false), className)}
+      style={speechRecordingWaveSvgStyle(waveStyle, accentColor)}
       viewBox={`0 0 ${vbW} ${vbH}`}
       preserveAspectRatio="none"
       aria-hidden

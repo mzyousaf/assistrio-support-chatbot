@@ -42,6 +42,7 @@ export const DEFAULT_CHAT_UI: Record<string, unknown> = {
   showComposerWithSuggestedQuestions: false,
   hideSuggestionChipText: false,
   showAvatarInHeader: true,
+  headerStyle: 'default',
   showCopyButton: true,
   showMessageFeedback: true,
   showSources: false,
@@ -103,6 +104,10 @@ export function sanitizeMenuQuickLinksForPayload(raw: unknown): Array<{ text: st
 
 type ChatUiLike = Record<string, unknown>;
 
+function normalizeHeaderStyleForPayload(chatUI: ChatUiLike): 'default' | 'brand' {
+  return chatUI.headerStyle === 'brand' ? 'brand' : 'default';
+}
+
 function normalizeComposerControlStyleForPayload(chatUI: ChatUiLike): 'brand' | 'default' | 'defaultDark' {
   const s = chatUI.composerControlStyle;
   if (s === 'brand' || s === 'default' || s === 'defaultDark') return s;
@@ -112,7 +117,7 @@ function normalizeComposerControlStyleForPayload(chatUI: ChatUiLike): 'brand' | 
 function normalizeSpeechRecordingWaveStyleForPayload(chatUI: ChatUiLike): 'brand' | 'default' | 'defaultDark' {
   const s = chatUI.speechRecordingWaveStyle;
   if (s === 'brand' || s === 'default' || s === 'defaultDark') return s;
-  return 'default';
+  return normalizeComposerControlStyleForPayload(chatUI);
 }
 
 function normalizeScrollChromeStyleForPayload(chatUI: ChatUiLike): 'default' | 'defaultDark' | 'primary' {
@@ -211,6 +216,7 @@ export function buildChatUiPayload(chatUI: ChatUiLike): ChatUiLike {
     showComposerWithSuggestedQuestions: chatUI.showComposerWithSuggestedQuestions ?? false,
     hideSuggestionChipText: chatUI.hideSuggestionChipText === true,
     showAvatarInHeader: chatUI.showAvatarInHeader ?? DEFAULT_CHAT_UI.showAvatarInHeader,
+    headerStyle: normalizeHeaderStyleForPayload(chatUI),
     showCopyButton: chatUI.showCopyButton ?? DEFAULT_CHAT_UI.showCopyButton,
     showMessageFeedback: chatUI.showMessageFeedback ?? DEFAULT_CHAT_UI.showMessageFeedback,
     showSources: chatUI.showSources === true,
@@ -289,6 +295,7 @@ export const CHAT_EXPERIENCE_CHAT_UI_KEYS = [
   'userTextBubbleStyle',
   'userVoiceBubbleStyle',
   'showAvatarInHeader',
+  'headerStyle',
   'statusIndicator',
   'liveIndicatorStyle',
   'statusDotStyle',

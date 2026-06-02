@@ -4,6 +4,16 @@ export function cx(
   return classes.filter(Boolean).join(" ");
 }
 
+/** Assistant bubble body text. */
+export function assistantMessageTextClass(dark: boolean): string {
+  return dark ? "text-gray-300" : "text-gray-700";
+}
+
+/** Footer / “Powered by” lines — dark matches assistant text; light stays muted gray-400. */
+export function footerBrandingTextClass(dark: boolean): string {
+  return dark ? "text-gray-300" : "text-gray-400";
+}
+
 /** Simple inline markdown: **bold**, `code`, newlines */
 export function renderSimpleMarkdown(text: string): string {
   if (!text) return "";

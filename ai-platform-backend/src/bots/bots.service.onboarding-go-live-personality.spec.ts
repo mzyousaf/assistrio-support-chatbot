@@ -105,6 +105,7 @@ describe('BotsService.createPublishedBotFromWorkspaceOnboarding personality mapp
     expect(chatUI.privacyText).toBe('');
     expect(chatUI.menuQuickLinks).toEqual([{ text: 'Visit website', route: 'https://example.com' }]);
     expect(chatUI.composerControlStyle).toBe('brand');
+    expect(chatUI.headerStyle).toBe('brand');
     expect(chatUI.allowFileUpload).toBe(true);
 
     expect(Array.isArray(payload!.exampleQuestions)).toBe(true);

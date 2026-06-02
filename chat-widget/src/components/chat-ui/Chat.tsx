@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { RefObject } from "react";
 import { History, X } from "lucide-react";
-import { cx } from "./utils";
+import { footerBrandingTextClass, cx } from "./utils";
 import type { SuggestedQuestionChip } from "../../types";
 import type {
   ChatShadowIntensity,
+  ChatHeaderStyle,
   ComposerControlStyle,
   ScrollChromeStyle,
   ScrollToBottomAlign,
@@ -125,6 +126,8 @@ export interface ChatProps {
   composerBorderWidth?: number;
   /** When width >= 0.5: "default" = gray, "primary" = brand accent border. Default "primary". */
   composerBorderColor?: "default" | "primary";
+  /** Chat header bar: neutral (default) or brand-colored. */
+  headerStyle?: ChatHeaderStyle;
   /** Send + voice (waveform) control styling. */
   composerControlStyle?: ComposerControlStyle;
   /** Recording level meter bar colors in the composer. */
@@ -349,6 +352,7 @@ export function Chat({
   composerAsSeparateBox = true,
   composerBorderWidth = 1,
   composerBorderColor = "primary",
+  headerStyle = "default",
   composerControlStyle = "defaultDark",
   speechRecordingWaveStyle = "default",
   onMenu,
@@ -929,6 +933,8 @@ export function Chat({
       {showHeader && !showHistoryChrome && !showAttachmentsChrome ? (
         <ChatHeader
           dark={dark}
+          headerStyle={headerStyle}
+          accentColor={accentColor}
           showAvatar={showAvatarInHeader}
           onBack={onBack}
           showBackButton={showBackButton}
@@ -1357,7 +1363,7 @@ export function Chat({
               className={cx(
                 "text-[10px] font-normal leading-snug",
                 showFooterBrandingText ? "mt-1" : "",
-                dark ? "text-gray-500" : "text-gray-400",
+                footerBrandingTextClass(Boolean(dark)),
               )}
             >
               {(privacyText ?? "").trim()}

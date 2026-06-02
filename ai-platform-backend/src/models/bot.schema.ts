@@ -242,6 +242,9 @@ export class BotChatUI {
   /** Show bot avatar in chat header (default true) */
   @Prop({ default: true })
   showAvatarInHeader?: boolean;
+  /** Header bar: neutral strip (default) or brand primary fill. */
+  @Prop({ enum: ['default', 'brand'], default: 'default' })
+  headerStyle?: 'default' | 'brand';
   /** @deprecated Widget no longer shows sender line in-thread. */
   @Prop({ default: '' })
   senderName?: string;

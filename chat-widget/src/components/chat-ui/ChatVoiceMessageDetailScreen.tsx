@@ -236,7 +236,7 @@ export function ChatVoiceMessageDetailScreen({
           </section>
         ) : null}
         {!url && !transcript ? (
-          <p className={cx("text-sm", dark ? "text-gray-500" : "text-gray-500")}>No voice data.</p>
+          <p className={cx("text-sm", dark ? "text-gray-400" : "text-gray-500")}>No voice data.</p>
         ) : null}
       </div>
     </div>

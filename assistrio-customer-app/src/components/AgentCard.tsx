@@ -1,14 +1,14 @@
-import { useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Code2, ExternalLink, FileText, Globe, GraduationCap, HelpCircle, Link2,
-  Lock, MessagesSquare, MessageSquare, MoreHorizontal,
+  Loader2, Lock, MessagesSquare, MessageSquare, MoreHorizontal,
   StickyNote, Table2, Trash2, UserCheck,
 } from 'lucide-react';
 import type { CustomerBotListItem } from '../api/types';
 import { AgentEmbedModal } from '@/components/AgentEmbedModal';
 import { AgentViewAccessAvatarGroup } from '@/components/AgentViewAccessAvatarGroup';
-import { Tooltip } from '@/components/ui';
+import { Input, Label, Tooltip } from '@/components/ui';
 import { CATEGORY_OPTIONS } from '@/pages/bot-workspace/behaviorConstants';
 import { cn } from '@/lib/utils';
 
@@ -208,18 +208,114 @@ function CardMenu({ href, onDelete, canDelete = true }: { href: string; onDelete
 
 /* ── delete dialog ───────────────────────────────────────────────── */
 
-export function DeleteAgentDialog({ name, onConfirm, onCancel }: { name: string; onConfirm: () => void; onCancel: () => void }) {
+export function DeleteAgentDialog({
+  name,
+  onConfirm,
+  onCancel,
+  deleting = false,
+}: {
+  name: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+  deleting?: boolean;
+}) {
+  const inputId = useId();
+  const [confirmName, setConfirmName] = useState('');
+  const trimmedName = name.trim();
+  const canDelete = confirmName.trim() === trimmedName && trimmedName.length > 0;
+  const deleteInactive = deleting || !canDelete;
+
+  useEffect(() => {
+    setConfirmName('');
+  }, [trimmedName]);
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-[2px]" onClick={(e) => { if (e.target === e.currentTarget) onCancel(); }}>
-      <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl" style={{ border: '1px solid var(--border-soft)' }}>
-        <h3 className="m-0 text-base font-semibold text-gray-900">Delete agent</h3>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-[2px]"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="delete-agent-dialog-title"
+      aria-busy={deleting || undefined}
+      onClick={(e) => {
+        if (deleting) {
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
+        if (e.target === e.currentTarget) onCancel();
+      }}
+      onMouseDown={(e) => {
+        if (deleting) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      }}
+    >
+      <div
+        className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl"
+        style={{ border: '1px solid var(--border-soft)' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 id="delete-agent-dialog-title" className="m-0 text-base font-semibold text-gray-900">
+          Delete agent
+        </h3>
         <p className="mt-2 text-sm leading-relaxed text-gray-500">
-          Are you sure you want to delete <strong className="text-gray-700">{name || 'this agent'}</strong>?
+          Are you sure you want to delete <strong className="text-gray-700">{trimmedName || 'this agent'}</strong>?
           This permanently removes the agent, its conversations, and all knowledge data.
         </p>
+        <div className="mt-4 space-y-1.5">
+          <Label htmlFor={inputId} className="block text-sm font-medium text-gray-800">
+            Type the agent name to confirm
+          </Label>
+          <Input
+            id={inputId}
+            value={confirmName}
+            onChange={(e) => setConfirmName(e.target.value)}
+            placeholder={trimmedName || 'Agent name'}
+            inputSize="md"
+            quiet
+            autoComplete="off"
+            spellCheck={false}
+            disabled={deleting}
+          />
+          <p className="m-0 text-xs leading-relaxed text-gray-500">
+            Enter <span className="font-medium text-gray-700">{trimmedName || 'the agent name'}</span> exactly to
+            enable deletion.
+          </p>
+        </div>
         <div className="mt-5 flex items-center justify-end gap-2.5">
-          <button type="button" onClick={onCancel} className="cursor-pointer rounded-lg border border-gray-200 bg-white px-4 py-2 text-[0.8125rem] font-medium text-gray-600 shadow-sm transition hover:bg-gray-50">Cancel</button>
-          <button type="button" onClick={onConfirm} className="cursor-pointer rounded-lg border-none bg-red-600 px-4 py-2 text-[0.8125rem] font-semibold text-white shadow-sm transition hover:bg-red-700 active:scale-[0.98]">Delete permanently</button>
+          <button
+            type="button"
+            disabled={deleting}
+            onClick={onCancel}
+            className="cursor-pointer rounded-lg border border-gray-200 bg-white px-4 py-2 text-[0.8125rem] font-medium text-gray-600 shadow-sm transition hover:enabled:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-55"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            aria-disabled={deleteInactive || undefined}
+            tabIndex={deleteInactive ? -1 : 0}
+            onClick={() => {
+              if (deleteInactive) return;
+              onConfirm();
+            }}
+            className={cn(
+              'inline-flex items-center justify-center gap-2 rounded-lg border-none px-4 py-2 text-[0.8125rem] font-semibold shadow-sm transition',
+              deleteInactive
+                ? 'bg-red-200 text-red-50/95 shadow-none'
+                : 'bg-red-600 text-white hover:bg-red-700 active:scale-[0.98]',
+            )}
+          >
+            {deleting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                Deleting…
+              </>
+            ) : (
+              'Delete permanently'
+            )}
+          </button>
         </div>
       </div>
     </div>

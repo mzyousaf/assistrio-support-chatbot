@@ -28,6 +28,9 @@ export type UserBubbleStyle = "primary" | "default" | "defaultDark";
 /** Send and voice (waveform) control styling in the composer. */
 export type ComposerControlStyle = "brand" | "default" | "defaultDark";
 
+/** Chat panel header: neutral strip (default) or brand-colored bar. */
+export type ChatHeaderStyle = "default" | "brand";
+
 /** Live level meter while recording voice / dictate. */
 export type SpeechRecordingWaveStyle = "brand" | "default" | "defaultDark";
 
@@ -113,6 +116,8 @@ export interface BotChatUI {
    */
   hideSuggestionChipText?: boolean;
   showAvatarInHeader?: boolean;
+  /** Header bar fill: neutral (default) or brand primary color with contrasting text/icons. */
+  headerStyle?: ChatHeaderStyle;
   /** @deprecated Stored on legacy bots; widget no longer shows name/time/sources in-thread. */
   senderName?: string;
   /** @deprecated Stored on legacy bots; widget no longer shows name/time/sources in-thread. */

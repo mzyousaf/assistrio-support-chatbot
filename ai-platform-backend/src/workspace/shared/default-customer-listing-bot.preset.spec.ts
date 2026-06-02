@@ -27,6 +27,7 @@ describe('buildCustomerListingDraftBotPreset', () => {
     });
     expect(preset.chatUI).toMatchObject({
       primaryColor: ONBOARDING_DEFAULT_PRIMARY_COLOR,
+      headerStyle: 'brand',
       showBranding: false,
       brandingMessage: '',
       showPrivacyText: true,

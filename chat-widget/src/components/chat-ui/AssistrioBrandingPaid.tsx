@@ -1,7 +1,7 @@
 import React from "react";
 
 import assistrioLogo from "../../icons/logo.png";
-import { cx } from "./utils";
+import { footerBrandingTextClass, cx } from "./utils";
 
 const ASSISTRIO_HOME_URL = "https://assistrio.com";
 
@@ -31,7 +31,9 @@ export function AssistrioBrandingPaid({
         aria-label="Powered by Assistrio — visit assistrio.com"
         className={cx(
           "inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-0",
-          dark ? "text-gray-500 focus-visible:ring-gray-600" : "text-gray-400 focus-visible:ring-gray-300",
+          footerBrandingTextClass(dark),
+          "focus-visible:ring-gray-500/60",
+          dark ? "focus-visible:ring-gray-600" : "focus-visible:ring-gray-300",
         )}
       >
         <img

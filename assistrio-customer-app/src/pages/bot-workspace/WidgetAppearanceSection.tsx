@@ -85,7 +85,7 @@ function getComposerControlStyle(ui: Record<string, unknown>): 'brand' | 'defaul
 function getSpeechRecordingWaveStyle(ui: Record<string, unknown>): 'brand' | 'default' | 'defaultDark' {
   const s = ui.speechRecordingWaveStyle;
   if (s === 'brand' || s === 'default' || s === 'defaultDark') return s;
-  return 'default';
+  return getComposerControlStyle(ui);
 }
 
 function clamp(n: number, min: number, max: number): number {
@@ -944,7 +944,7 @@ export function WidgetAppearanceSection() {
                             label="Voice recording waveform"
                             htmlFor="appearance-speech-recording-wave"
                             className="min-w-0 gap-1.5"
-                            helperText="Colors for the live level meter while recording a voice note or dictation."
+                            helperText="Colors for the live level meter while recording. Default (dark) uses the same neutral Default palette for now; you can tune Default separately later."
                           >
                             <Select
                               id="appearance-speech-recording-wave"

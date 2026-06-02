@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Bot } from "lucide-react";
 
 import { usePreferredColorScheme } from "../hooks/usePreferredColorScheme";
 import { Chat, ChatWithLauncher } from "./chat-ui";
@@ -37,7 +36,11 @@ import { resolveChatRuntimeErrorMessage } from "../lib/resolveChatRuntimeErrorMe
 import { streamAssistantReply } from "../lib/streamAssistantReply";
 import { mergeWidgetStrings, type WidgetStrings } from "../lib/widgetStrings";
 import { resolveWelcomeMessage } from "../lib/welcomeMessage";
-import { resolveComposerControlStyle, resolveSpeechRecordingWaveStyle } from "../lib/resolveComposerChatUiStyles";
+import {
+  resolveComposerControlStyle,
+  resolveHeaderStyle,
+  resolveSpeechRecordingWaveStyle,
+} from "../lib/resolveComposerChatUiStyles";
 import type { BotChatUI, ScrollChromeStyle, UserBubbleStyle } from "../models/botChatUI";
 import type { SuggestedQuestionChip, WidgetPreviewOverrides } from "../types";
 
@@ -1489,17 +1492,11 @@ export function AdminLiveChatAdapter({
         )
         : avatarEmoji?.trim()
           ? (
-            <span className="assistrio-emoji-presentation text-2xl" aria-hidden>
+            <span className="assistrio-emoji-presentation text-lg" aria-hidden>
               {avatarEmoji.trim()}
             </span>
           )
-          : (
-            <Bot
-              className={cx("w-6 h-6 flex-shrink-0", dark ? "text-gray-400" : "text-gray-500")}
-              aria-hidden
-              strokeWidth={1.75}
-            />
-          )
+          : undefined
       : undefined;
 
   const menuExpanded = effectiveUseFloatingLauncher ? floatingPanelExpanded : expanded;
@@ -1642,6 +1639,7 @@ export function AdminLiveChatAdapter({
     composerAsSeparateBox: chatUI?.composerAsSeparateBox !== false,
     composerBorderWidth: composerBorderWidthFromChatUI(chatUI),
     composerBorderColor: chatUI?.composerBorderColor === "default" ? "default" as const : "primary" as const,
+    headerStyle: resolveHeaderStyle(chatUI),
     composerControlStyle: resolveComposerControlStyle(chatUI),
     speechRecordingWaveStyle: resolveSpeechRecordingWaveStyle(chatUI),
     showSuggestedChips: Boolean(suggestedQuestions?.length || suggestedQuestionChips?.length),

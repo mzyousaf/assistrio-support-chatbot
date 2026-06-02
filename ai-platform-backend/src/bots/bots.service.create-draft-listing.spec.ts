@@ -83,6 +83,7 @@ describe('BotsService.createDraft customer_listing source', () => {
         imageUrl: '',
         chatUI: expect.objectContaining({
           primaryColor: '#14B8A6',
+          headerStyle: 'brand',
           showBranding: false,
           brandingMessage: '',
           showPrivacyText: true,

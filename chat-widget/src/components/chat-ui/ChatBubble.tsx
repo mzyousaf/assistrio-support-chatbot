@@ -9,7 +9,7 @@ import { chatMarkdownComponents } from "./chatMarkdownComponents";
 import { pickBrandChipForeground } from "../../lib/accentLuminance";
 import type { UserBubbleStyle } from "../../models/botChatUI";
 import type { ChatUIMessage, ChatUISource } from "./types";
-import { cx } from "./utils";
+import { assistantMessageTextClass, cx } from "./utils";
 import { ChatSources } from "./ChatSources";
 import { AttachmentCountBadge } from "./AttachmentCountBadge";
 import { ChatUserVoiceMessage } from "./ChatUserVoiceMessage";
@@ -250,9 +250,10 @@ export function ChatBubble({
         ? "text-white bg-gray-700 border border-gray-600/70"
         : "text-gray-900 bg-gray-200 border border-gray-300/75"),
     isAssistant &&
-    (dark
-      ? "bg-gray-600/70 text-gray-300 border border-gray-500/55"
-      : "bg-gray-50/95 text-gray-700 border border-gray-200/90")
+    cx(
+      dark ? "bg-gray-600/70 border border-gray-500/55" : "bg-gray-50/95 border border-gray-200/90",
+      assistantMessageTextClass(dark),
+    )
   );
 
   const bubbleInlineStyle: React.CSSProperties =
@@ -307,7 +308,7 @@ export function ChatBubble({
       <div className={messageRowClass}>
         <div className={bubbleColumnClass}>
           {isUserVoice && message.speechInput?.audioUrl ? (
-            <div className="flex w-[80%] min-w-0 max-w-[320px] flex-col items-stretch self-end">
+            <div className="flex w-[80%] min-w-0 max-w-[262px] flex-col items-stretch self-end">
               <div className={cx(bubbleSurfaceClass, "block w-full min-w-0")} style={bubbleInlineStyle} role="article">
                 <ChatUserVoiceMessage
                   messageId={message.id}

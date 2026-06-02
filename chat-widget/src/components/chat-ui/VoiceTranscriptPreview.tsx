@@ -3,22 +3,27 @@ import { cx } from "./utils";
 
 const SEE_MORE_EN = "see more...";
 
-/** Muted / “disabled” tone for in-thread transcript. */
-const transcriptMuted = () => "text-gray-500";
+/** Muted tone for in-thread transcript (on panel background, not inside the voice bubble). */
+const transcriptMuted = (dark: boolean) => (dark ? "text-gray-400" : "text-gray-500");
 const SEE_MORE_CTA_EST_PX = 78;
 
-const textBase = () =>
+const textBase = (dark: boolean) =>
   cx(
     "text-left text-[13px] leading-snug whitespace-pre-wrap break-words [overflow-wrap:anywhere]",
-    transcriptMuted(),
+    transcriptMuted(dark),
   );
 
-function measureTwoLineBreak(t: string, widthPx: number, host: HTMLElement): { head: string; tail: string } {
+function measureTwoLineBreak(
+  t: string,
+  widthPx: number,
+  host: HTMLElement,
+  dark: boolean,
+): { head: string; tail: string } {
   if (!t) return { head: "", tail: "" };
   if (widthPx < 8) return { head: t, tail: "" };
   const div = document.createElement("div");
   div.setAttribute("aria-hidden", "true");
-  div.className = textBase();
+  div.className = textBase(dark);
   div.style.cssText = `position:absolute;left:0;top:0;visibility:hidden;pointer-events:none;width:${widthPx}px;`;
   host.appendChild(div);
   try {
@@ -51,11 +56,11 @@ function measureTwoLineBreak(t: string, widthPx: number, host: HTMLElement): { h
 /**
  * Fills a single line with as many full words (and the spaces after them) as fit in maxWidth; never splits a word.
  */
-function fitTailWordsToLineWidth(tail: string, maxWidth: number, host: HTMLElement): string {
+function fitTailWordsToLineWidth(tail: string, maxWidth: number, host: HTMLElement, dark: boolean): string {
   if (!tail || maxWidth < 4) return "";
   const div = document.createElement("div");
   div.setAttribute("aria-hidden", "true");
-  div.className = cx("inline-block text-left text-[13px] leading-snug whitespace-nowrap", transcriptMuted());
+  div.className = cx("inline-block text-left text-[13px] leading-snug whitespace-nowrap", transcriptMuted(dark));
   div.style.cssText = "position:absolute;left:0;top:0;visibility:hidden;pointer-events:none;";
   host.appendChild(div);
   try {
@@ -108,8 +113,8 @@ function TranscriptThirdLine({
     const cta = row.lastElementChild as HTMLElement | null;
     const ctaW = cta?.getBoundingClientRect().width ?? 0;
     const maxW = Math.max(0, w - (ctaW > 2 ? ctaW : SEE_MORE_CTA_EST_PX));
-    setVisibleTail(fitTailWordsToLineWidth(tail, maxW, host));
-  }, [tail, measureHostRef]);
+    setVisibleTail(fitTailWordsToLineWidth(tail, maxW, host, dark));
+  }, [tail, measureHostRef, dark]);
 
   useLayoutEffect(() => {
     recompute();
@@ -158,7 +163,7 @@ function TranscriptThirdLine({
         className={cx(
           "m-0 min-w-0 max-w-full flex-1 basis-0 overflow-hidden whitespace-nowrap text-left text-clip",
           "text-[13px] leading-snug",
-          transcriptMuted(),
+          transcriptMuted(dark),
         )}
       >
         {visibleTail}
@@ -193,9 +198,9 @@ export function VoiceTranscriptPreview({
     const host = hostRef.current;
     if (!host) return;
     const w = host.clientWidth;
-    const next = measureTwoLineBreak(t, w, host);
+    const next = measureTwoLineBreak(t, w, host, dark);
     setSplit((prev) => (prev && prev.head === next.head && prev.tail === next.tail ? prev : next));
-  }, [text]);
+  }, [text, dark]);
 
   useLayoutEffect(() => {
     recompute();
@@ -215,7 +220,7 @@ export function VoiceTranscriptPreview({
   if (split == null) {
     return (
       <div ref={hostRef} className="w-full min-w-0 max-w-full text-left">
-        <p className={cx(textBase(), "!text-left", "line-clamp-2")}>{t}</p>
+        <p className={cx(textBase(dark), "!text-left", "line-clamp-2")}>{t}</p>
       </div>
     );
   }
@@ -226,7 +231,7 @@ export function VoiceTranscriptPreview({
   if (!showThirdRow) {
     return (
       <div ref={hostRef} className="w-full min-w-0 max-w-full text-left">
-        <p className={cx(textBase(), "!text-left")}>{t}</p>
+        <p className={cx(textBase(dark), "!text-left")}>{t}</p>
       </div>
     );
   }
@@ -234,7 +239,7 @@ export function VoiceTranscriptPreview({
   return (
     <div ref={hostRef} className="w-full min-w-0 max-w-full text-left">
       {head ? (
-        <p className={cx(textBase(), "m-0 !text-left whitespace-pre-wrap break-words [overflow-wrap:anywhere]")}>
+        <p className={cx(textBase(dark), "m-0 !text-left whitespace-pre-wrap break-words [overflow-wrap:anywhere]")}>
           {head}
         </p>
       ) : null}

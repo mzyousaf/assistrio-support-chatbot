@@ -5,9 +5,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { RefObject } from "react";
 import { History, X } from "lucide-react";
-import { cx } from "@acw/components/chat-ui/utils";
+import { footerBrandingTextClass, cx } from "@acw/components/chat-ui/utils";
 import type {
   ChatShadowIntensity,
+  ChatHeaderStyle,
   ComposerControlStyle,
   ScrollChromeStyle,
   ScrollToBottomAlign,
@@ -130,6 +131,7 @@ export interface ChatProps {
   /** When width >= 0.5: "default" = gray, "primary" = brand accent border. Default "primary". */
   composerBorderColor?: "default" | "primary";
   /** Send + voice (waveform) control styling. */
+  headerStyle?: ChatHeaderStyle;
   composerControlStyle?: ComposerControlStyle;
   /** Recording level meter bar colors in the composer. */
   speechRecordingWaveStyle?: SpeechRecordingWaveStyle;
@@ -349,6 +351,7 @@ export function Chat({
   composerAsSeparateBox = true,
   composerBorderWidth = 1,
   composerBorderColor = "primary",
+  headerStyle = "default",
   composerControlStyle = "defaultDark",
   speechRecordingWaveStyle = "default",
   onMenu,
@@ -926,6 +929,8 @@ export function Chat({
       {showHeader && !showHistoryChrome && !showAttachmentsChrome ? (
         <ChatHeader
           dark={dark}
+          headerStyle={headerStyle}
+          accentColor={accentColor}
           showAvatar={showAvatarInHeader}
           onBack={onBack}
           showBackButton={showBackButton}
@@ -1354,7 +1359,7 @@ export function Chat({
               className={cx(
                 "text-[10px] font-normal leading-snug",
                 showFooterBrandingText ? "mt-1" : "",
-                dark ? "text-gray-500" : "text-gray-400",
+                footerBrandingTextClass(Boolean(dark)),
               )}
             >
               {(privacyText ?? "").trim()}

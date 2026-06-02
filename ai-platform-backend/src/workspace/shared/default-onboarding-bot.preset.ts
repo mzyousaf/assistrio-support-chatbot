@@ -53,6 +53,7 @@ export function buildOnboardingChatUI(
     composerBorderWidth: 1,
     composerBorderColor: 'default',
     showAvatarInHeader: true,
+    headerStyle: 'brand',
     showSenderName: true,
     showTime: true,
     showCopyButton: true,

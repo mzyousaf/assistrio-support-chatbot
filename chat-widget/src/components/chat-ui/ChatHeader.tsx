@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from "react";
+import React, { useMemo, useRef, useState, useEffect } from "react";
 import {
   Bot,
   History,
@@ -8,7 +8,9 @@ import {
   Minimize2,
   MoreVertical,
 } from "lucide-react";
+import { headerAvatarFallbackIconColor, pickBrandChipForeground } from "../../lib/accentLuminance";
 import { getQuickLinkIcon } from "../../lib/quickLinkIcons";
+import type { ChatHeaderStyle } from "../../models/botChatUI";
 import { AssistrioPageLoaderSpinner } from "./AssistrioPageLoaderSpinner";
 import { ClampedTextWithSeeMore } from "./ClampedTextWithSeeMore";
 import { cx } from "./utils";
@@ -22,6 +24,10 @@ export interface ChatMenuQuickLink {
 export interface ChatHeaderProps {
   /** Dark theme (default true) */
   dark?: boolean;
+  /** Header bar: neutral strip (default) or brand fill. */
+  headerStyle?: ChatHeaderStyle;
+  /** Brand color when {@link headerStyle} is `brand`. */
+  accentColor?: string;
   /** Back button click; omit to hide */
   onBack?: () => void;
   /** Show back button (default false). When false, back button is hidden even if onBack is set. */
@@ -115,15 +121,17 @@ const CloseIcon = () => (
 const StatusPill = ({
   dark = true,
   blinking = true,
+  brandRingClass,
 }: {
   dark?: boolean;
   blinking?: boolean;
+  brandRingClass?: string;
 }) => (
   <span
     className={cx(
       "absolute bottom-0 right-0 h-2 w-2 rounded-full ring-1 bg-emerald-500",
       blinking && "animate-pulse",
-      dark ? "ring-gray-900" : "ring-white"
+      brandRingClass ?? (dark ? "ring-gray-900" : "ring-white"),
     )}
     aria-hidden
   />
@@ -131,6 +139,8 @@ const StatusPill = ({
 
 export function ChatHeader({
   dark = true,
+  headerStyle = "default",
+  accentColor = "#6366f1",
   onBack,
   showBackButton = false,
   showAvatar = true,
@@ -205,10 +215,28 @@ export function ChatHeader({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [linksOpen, sessionOpen]);
 
-  const menuBtnClass = cx(
-    "rounded-lg p-2 transition-colors",
-    dark ? "text-gray-400 hover:bg-gray-800 hover:text-gray-200" : "text-gray-500 hover:bg-gray-200 hover:text-gray-800"
-  );
+  const brandHeader = headerStyle === "brand";
+  const brandChrome = useMemo(() => {
+    if (!brandHeader) return null;
+    const acc = (accentColor ?? "").trim() || "#6366f1";
+    const fg = pickBrandChipForeground(acc);
+    const light = fg === "#111827";
+    return { acc, fg, light };
+  }, [accentColor, brandHeader]);
+
+  const iconBtnClass = brandChrome
+    ? cx(
+        "rounded-lg p-2 transition-colors focus:outline-none focus-visible:ring-2",
+        brandChrome.light
+          ? "text-gray-900 hover:bg-gray-900/10 focus-visible:ring-gray-900/25"
+          : "text-white hover:bg-white/12 focus-visible:ring-white/35",
+      )
+    : cx(
+        "rounded-lg p-2 transition-colors",
+        dark ? "text-gray-400 hover:bg-gray-800 hover:text-gray-200" : "text-gray-500 hover:bg-gray-200 hover:text-gray-800",
+      );
+
+  const menuBtnClass = iconBtnClass;
   const dropdownClass = cx(
     "absolute right-0 top-full mt-1 min-w-[180px] max-w-[260px] rounded-lg border py-1 shadow-xl z-50",
     dark ? "border-gray-600 bg-gray-800" : "border-gray-200 bg-white"
@@ -230,23 +258,70 @@ export function ChatHeader({
     dark ? "text-gray-400" : "text-gray-500"
   );
   const QuickLinksMenuButtonIcon = getQuickLinkIcon(quickLinksMenuIcon ?? "link-2");
+  const headerSurfaceClass = brandChrome
+    ? cx("border-b", brandChrome.light ? "border-gray-900/12" : "border-white/20")
+    : cx("border-b", dark ? "border-gray-700 bg-gray-900/50" : "border-gray-200 bg-gray-50");
+
+  const headerSurfaceStyle: React.CSSProperties | undefined = brandChrome
+    ? { backgroundColor: brandChrome.acc, color: brandChrome.fg }
+    : undefined;
+
+  const titleClass = brandChrome
+    ? "text-sm font-medium tracking-tight truncate"
+    : cx("text-sm font-medium tracking-tight truncate", dark ? "text-gray-200" : "text-gray-800");
+
+  const subtitleClass = brandChrome
+    ? "text-xs mt-0.5 opacity-80"
+    : cx("text-xs mt-0.5", dark ? "text-gray-400" : "text-gray-500");
+
+  const seeMoreClass = brandChrome
+    ? "underline opacity-90"
+    : dark
+      ? "text-indigo-300"
+      : "text-teal-700";
+
+  const avatarShellClass = cx(
+    "w-10 h-10 rounded-full overflow-hidden flex items-center justify-center text-lg border-[1px]",
+    brandChrome
+      ? brandChrome.light
+        ? "bg-white/35 border-gray-900/15"
+        : "bg-white/15 border-white/25"
+      : dark
+        ? "bg-gray-700/80 border-gray-600/80"
+        : "bg-gray-100 border-gray-200",
+  );
+
+  const avatarFallbackIconStyle: React.CSSProperties = {
+    color: brandChrome?.fg ?? headerAvatarFallbackIconColor(dark),
+  };
+
+  const avatarFallbackIconClass = "w-6 h-6 flex-shrink-0";
+
+  const statusDotRingClass = brandChrome
+    ? brandChrome.light
+      ? "ring-gray-900"
+      : "ring-white"
+    : dark
+      ? "ring-gray-900"
+      : "ring-white";
+
+  const statusPillRingClass = brandChrome
+    ? brandChrome.light
+      ? "ring-gray-900"
+      : "ring-white"
+    : undefined;
+
   return (
     <header
-      className={cx(
-        "flex-shrink-0 flex items-center gap-3 border-b px-4 py-3",
-        dark ? "border-gray-700 bg-gray-900/50" : "border-gray-200 bg-gray-50",
-        className
-      )}
+      className={cx("flex-shrink-0 flex items-center gap-3 px-4 py-3", headerSurfaceClass, className)}
+      style={headerSurfaceStyle}
       aria-label="Chat header"
     >
       {showBackButton && onBack ? (
         <button
           type="button"
           onClick={onBack}
-          className={cx(
-            "flex-shrink-0 rounded-lg p-2 transition-colors",
-            dark ? "text-gray-400 hover:bg-gray-800 hover:text-gray-200" : "text-gray-500 hover:bg-gray-200 hover:text-gray-800"
-          )}
+          className={cx("flex-shrink-0", iconBtnClass)}
           aria-label={backLabel}
         >
           <BackIcon />
@@ -257,12 +332,7 @@ export function ChatHeader({
           className="flex-shrink-0 relative w-10 h-10"
           {...(showStatusPillOnAvatar && { role: "status" as const, "aria-label": statusLabel })}
         >
-          <div
-            className={cx(
-              "w-10 h-10 rounded-full overflow-hidden flex items-center justify-center text-lg border-[1px]",
-              dark ? "bg-gray-700/80 border-gray-600/80" : "bg-gray-100 border-gray-200"
-            )}
-          >
+          <div className={avatarShellClass}>
             {avatar != null ? (
               typeof avatar === "string" && (avatar.startsWith("http") || avatar.startsWith("/")) ? (
                 <img src={avatar} alt="" className="w-full h-full object-cover" />
@@ -270,18 +340,23 @@ export function ChatHeader({
                 avatar
               )
             ) : (
-              <Bot className={cx("w-6 h-6 flex-shrink-0", dark ? "text-gray-400" : "text-gray-500")} aria-hidden />
+              <Bot
+                className={avatarFallbackIconClass}
+                style={avatarFallbackIconStyle}
+                strokeWidth={1.75}
+                aria-hidden
+              />
             )}
           </div>
           {showStatusPillOnAvatar ? (
-            <StatusPill dark={dark} blinking={dotBlinking} />
+            <StatusPill dark={dark} blinking={dotBlinking} brandRingClass={statusPillRingClass} />
           ) : null}
         </div>
       ) : null}
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           {title ? (
-            <h2 className={cx("text-sm font-medium tracking-tight truncate", dark ? "text-gray-200" : "text-gray-800")}>
+            <h2 className={titleClass}>
               {title}
             </h2>
           ) : null}
@@ -296,7 +371,7 @@ export function ChatHeader({
                 className={cx(
                   "h-2 w-2 rounded-full ring-1 flex-shrink-0 bg-emerald-500",
                   dotBlinking && "animate-pulse",
-                  dark ? "ring-gray-900" : "ring-white"
+                  statusDotRingClass,
                 )}
               />
               <span className={cx("text-xs font-medium", dark ? "text-emerald-400" : "text-emerald-600")}>
@@ -311,8 +386,8 @@ export function ChatHeader({
             modalTitle={title}
             maxLines={10}
             dark={dark}
-            className={cx("text-xs mt-0.5", dark ? "text-gray-400" : "text-gray-500")}
-            seeMoreClassName={dark ? "text-indigo-300" : "text-teal-700"}
+            className={subtitleClass}
+            seeMoreClassName={seeMoreClass}
           />
         ) : null}
       </div>
@@ -404,9 +479,9 @@ export function ChatHeader({
                     className={itemClass}
                   >
                     {isExpanded ? (
-                      <Minimize2 className="w-4 h-4 flex-shrink-0 text-gray-400" strokeWidth={2} aria-hidden />
+                      <Minimize2 className={cx("w-4 h-4 flex-shrink-0", brandChrome ? "opacity-80" : "text-gray-400")} strokeWidth={2} aria-hidden />
                     ) : (
-                      <Maximize2 className="w-4 h-4 flex-shrink-0 text-gray-400" strokeWidth={2} aria-hidden />
+                      <Maximize2 className={cx("w-4 h-4 flex-shrink-0", brandChrome ? "opacity-80" : "text-gray-400")} strokeWidth={2} aria-hidden />
                     )}
                     <span className="truncate">{expandLabel}</span>
                   </button>
@@ -482,10 +557,7 @@ export function ChatHeader({
           <button
             type="button"
             onClick={onClose}
-            className={cx(
-              "rounded-lg p-2 transition-colors",
-              dark ? "text-gray-400 hover:bg-gray-800 hover:text-gray-200" : "text-gray-500 hover:bg-gray-200 hover:text-gray-800"
-            )}
+            className={iconBtnClass}
             aria-label={closeLabel}
             title={closeLabel}
           >

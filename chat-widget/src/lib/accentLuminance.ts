@@ -44,3 +44,8 @@ export function pickBrandChipForeground(
 ): "#ffffff" | "#111827" {
   return isLightAccentColor(css, lightThreshold) ? "#111827" : "#ffffff";
 }
+
+/** Bot glyph on the neutral (default) header avatar well. */
+export function headerAvatarFallbackIconColor(darkTheme: boolean): string {
+  return darkTheme ? "#9ca3af" : "#6b7280";
+}

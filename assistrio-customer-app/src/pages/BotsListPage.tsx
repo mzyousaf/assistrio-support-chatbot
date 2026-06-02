@@ -66,7 +66,6 @@ export function BotsListPage() {
 
   const [bots, setBots] = useState<CustomerBotListItem[] | null>(null);
   const [loadState, setLoadState] = useState<LoadState>(() => (activeWorkspaceId ? 'loading' : 'idle'));
-  const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<CustomerBotListItem | null>(null);
@@ -74,7 +73,6 @@ export function BotsListPage() {
 
   const load = useCallback(async (workspaceId: string) => {
     setLoadState('loading');
-    setError(null);
     setBots(null);
     const query = buildCustomerBotsListQuery({ activeWorkspaceId: workspaceId });
     const res = await getCustomerBots(query ?? undefined);
@@ -83,15 +81,15 @@ export function BotsListPage() {
       setLoadState('ready');
       return;
     }
-    setError(res.error);
-    setLoadState('error');
+    appToast.error(typeof res.error === 'string' ? res.error : 'Failed to load agents');
+    setBots([]);
+    setLoadState('ready');
   }, []);
 
   useEffect(() => {
     if (!activeWorkspaceId) {
       setBots(null);
       setLoadState('idle');
-      setError(null);
       return;
     }
     void load(activeWorkspaceId);
@@ -100,7 +98,6 @@ export function BotsListPage() {
   async function createDraft() {
     if (!activeWorkspaceId || !isAdmin) return;
     setCreating(true);
-    setError(null);
     const clientDraftId = crypto.randomUUID();
     const res = await postCustomerBotDraft({
       clientDraftId,
@@ -116,10 +113,10 @@ export function BotsListPage() {
       if (isCreateDraftAdminDenied(res)) {
         appToast.error(BOTS_LIST_ADMIN_ONLY_CREATE_TOAST);
       } else if (res.errorCode === PLAN_LIMIT_WORKSPACE_BOTS_CODE) {
-        setError(res.error);
+        appToast.error(typeof res.error === 'string' ? res.error : 'Agent limit reached');
         openUpgradeModal({ reason: 'bots' });
       } else {
-        setError(res.error);
+        appToast.error(typeof res.error === 'string' ? res.error : 'Failed to create agent');
       }
       return;
     }
@@ -129,15 +126,14 @@ export function BotsListPage() {
 
   async function handleDelete(bot: CustomerBotListItem) {
     setDeletingId(bot._id);
-    setError(null);
     const res = await deleteCustomerBot(bot._id);
     setDeletingId(null);
-    setConfirmDelete(null);
     if (!res.ok) {
       if (toastIfWorkspaceAdminRequired(res)) return;
-      setError(typeof res.error === 'string' ? res.error : 'Failed to delete agent');
+      appToast.error(typeof res.error === 'string' ? res.error : 'Failed to delete agent');
       return;
     }
+    setConfirmDelete(null);
     setBots((prev) => prev?.filter((b) => b._id !== bot._id) ?? null);
   }
 
@@ -157,7 +153,8 @@ export function BotsListPage() {
 
   const count = bots?.length ?? 0;
   const showSkeleton = loadState === 'loading';
-  const showEmpty = loadState === 'ready' && !error && bots && count === 0;
+  const showEmpty = loadState === 'ready' && bots && count === 0;
+  const isDeleting = deletingId !== null;
   const agentCount = loadState === 'ready' ? count : null;
   const agentCountTag = (
     <WorkspaceAgentCountTag
@@ -198,7 +195,7 @@ export function BotsListPage() {
           <button
             type="button"
             className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border-none bg-primary px-3.5 py-2 text-[0.8125rem] font-semibold text-white shadow-[var(--shadow-primary-fill)] transition-all duration-150 hover:enabled:bg-[var(--teal-800)] active:enabled:scale-[0.98] active:enabled:bg-[var(--teal-900)] disabled:cursor-not-allowed disabled:opacity-55"
-            disabled={creating}
+            disabled={creating || isDeleting}
             onClick={() => void createDraft()}
           >
             <Plus size={15} strokeWidth={2.5} />
@@ -208,12 +205,6 @@ export function BotsListPage() {
       }
       containerSize="editor"
     >
-
-      {error && (
-        <div className="mb-5 rounded-[0.625rem] border border-[var(--color-danger-border)] bg-[var(--color-danger-bg)] px-4 py-[0.85rem] text-[0.875rem] text-[var(--color-danger-text-emphasis)]" role="alert">
-          {error}
-        </div>
-      )}
 
       {showEmpty && (
         <div className="rounded-2xl bg-white px-6 py-14 text-center shadow-[var(--shadow-card)]" style={{ border: '1px dashed var(--border-soft)' }}>
@@ -230,7 +221,7 @@ export function BotsListPage() {
             <button
               type="button"
               className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-[var(--teal-200)] bg-[color-mix(in_srgb,var(--teal-600)_8%,transparent)] px-3.5 py-2 text-[0.8125rem] font-semibold text-[var(--teal-800)] shadow-[var(--shadow-xs)] transition-all duration-150 hover:enabled:border-primary hover:enabled:bg-[color-mix(in_srgb,var(--teal-600)_14%,transparent)] hover:enabled:text-[var(--teal-900)] active:enabled:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-55"
-              disabled={creating}
+              disabled={creating || isDeleting}
               onClick={() => void createDraft()}
             >
               <Plus size={15} strokeWidth={2.5} />
@@ -262,11 +253,26 @@ export function BotsListPage() {
         </section>
       )}
 
+      {isDeleting ? (
+        <div
+          className="fixed inset-0 z-[45] cursor-wait"
+          aria-hidden
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+        />
+      ) : null}
+
       {confirmDelete && (
         <DeleteAgentDialog
           name={confirmDelete.name}
+          deleting={isDeleting}
           onConfirm={() => void handleDelete(confirmDelete)}
-          onCancel={() => setConfirmDelete(null)}
+          onCancel={() => {
+            if (isDeleting) return;
+            setConfirmDelete(null);
+          }}
         />
       )}
 

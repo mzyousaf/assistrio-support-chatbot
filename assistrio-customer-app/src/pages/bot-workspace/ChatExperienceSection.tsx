@@ -649,6 +649,26 @@ export function ChatExperienceSection() {
                         />
                         <div className="border-b border-slate-100 py-3.5">
                           <FieldRow
+                            label="Header background"
+                            htmlFor="chat-header-style"
+                            className="min-w-0 gap-1.5"
+                            helperText="Default keeps the neutral header strip. Brand color fills the bar with your accent and adjusts text and icons for contrast."
+                          >
+                            <Select
+                              id="chat-header-style"
+                              quiet
+                              value={chatUi.headerStyle === 'brand' ? 'brand' : 'default'}
+                              onChange={(e) =>
+                                patch('headerStyle', e.target.value as 'default' | 'brand')
+                              }
+                            >
+                              <option value="default">Default (neutral)</option>
+                              <option value="brand">Brand color</option>
+                            </Select>
+                          </FieldRow>
+                        </div>
+                        <div className="border-b border-slate-100 py-3.5">
+                          <FieldRow
                             label="Status indicator"
                             htmlFor="chat-status-indicator"
                             className="min-w-0 gap-1.5"

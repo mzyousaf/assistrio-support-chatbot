@@ -5,8 +5,6 @@
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Bot } from "lucide-react";
-
 import { usePreferredColorScheme } from "@acw/hooks/usePreferredColorScheme";
 import { Chat, ChatWithLauncher } from "@acw/components/chat-ui";
 import type { ChatUIMessage, ChatUISource } from "@acw/components/chat-ui";
@@ -45,7 +43,11 @@ import {
 import { streamAssistantReply } from "@acw/lib/streamAssistantReply";
 import { mergeWidgetStrings, type WidgetStrings } from "@acw/lib/widgetStrings";
 import { resolveWelcomeMessage } from "@acw/lib/welcomeMessage";
-import { resolveComposerControlStyle, resolveSpeechRecordingWaveStyle } from "@acw/lib/resolveComposerChatUiStyles";
+import {
+  resolveComposerControlStyle,
+  resolveHeaderStyle,
+  resolveSpeechRecordingWaveStyle,
+} from "@acw/lib/resolveComposerChatUiStyles";
 import type { BotChatUI, ScrollChromeStyle, UserBubbleStyle } from "@acw/models/botChatUI";
 import type { SuggestedQuestionChip, WidgetPreviewOverrides } from "@acw/types";
 
@@ -1629,17 +1631,11 @@ export function AdminLiveChatAdapter({
         )
         : avatarEmoji?.trim()
           ? (
-            <span className="assistrio-emoji-presentation text-2xl" aria-hidden>
+            <span className="assistrio-emoji-presentation text-lg" aria-hidden>
               {avatarEmoji.trim()}
             </span>
           )
-          : (
-            <Bot
-              className={cx("w-6 h-6 flex-shrink-0", dark ? "text-gray-400" : "text-gray-500")}
-              aria-hidden
-              strokeWidth={1.75}
-            />
-          )
+          : undefined
       : undefined;
 
   const menuExpanded = useFloatingLauncher ? floatingPanelExpanded : expanded;
@@ -1750,6 +1746,7 @@ export function AdminLiveChatAdapter({
     composerAsSeparateBox: chatUI?.composerAsSeparateBox !== false,
     composerBorderWidth: composerBorderWidthFromChatUI(chatUI),
     composerBorderColor: chatUI?.composerBorderColor === "default" ? "default" as const : "primary" as const,
+    headerStyle: resolveHeaderStyle(chatUI),
     composerControlStyle: resolveComposerControlStyle(chatUI),
     speechRecordingWaveStyle: resolveSpeechRecordingWaveStyle(chatUI),
     showSuggestedChips: Boolean(suggestedQuestions?.length || suggestedQuestionChips?.length),

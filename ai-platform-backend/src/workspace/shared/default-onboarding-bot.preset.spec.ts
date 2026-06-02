@@ -57,6 +57,7 @@ describe('buildDefaultOnboardingBotPreset', () => {
       composerBorderWidth: 1,
       composerBorderColor: 'default',
       showAvatarInHeader: true,
+      headerStyle: 'brand',
       showSenderName: true,
       showTime: true,
       showCopyButton: true,
@@ -131,6 +132,7 @@ describe('buildOnboardingChatUI', () => {
   it('sets status, composer, and panel defaults explicitly', () => {
     const ui = buildOnboardingChatUI('#112233', []);
     expect(ui.showBranding).toBe(false);
+    expect(ui.headerStyle).toBe('brand');
     expect(ui.brandingMessage).toBe('');
     expect(ui.showPrivacyText).toBe(true);
     expect(ui.privacyText).toBe('');

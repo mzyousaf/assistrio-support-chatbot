@@ -69,7 +69,7 @@ function AttachmentTile({
             {name}
           </p>
           {sizeLine ? (
-            <p className={cx("mt-0.5 text-[10px] font-medium", dark ? "text-gray-500" : "text-gray-500")}>{sizeLine}</p>
+            <p className={cx("mt-0.5 text-[10px] font-medium", dark ? "text-gray-400" : "text-gray-500")}>{sizeLine}</p>
           ) : null}
         </div>
         {trailing}

@@ -5,6 +5,11 @@ import {
   computeSpeechWaveformBarRects,
 } from "../../lib/speech-waveform-layout";
 import { SPEECH_WAVEFORM_SCROLL_BARS } from "../../lib/useMediaRecorderCapture";
+import type { SpeechRecordingWaveStyle } from "../../models/botChatUI";
+import {
+  speechRecordingWaveSvgClass,
+  speechRecordingWaveSvgStyle,
+} from "../../lib/resolveComposerChatUiStyles";
 import { AssistrioPageLoaderSpinner } from "./AssistrioPageLoaderSpinner";
 import { cx } from "./utils";
 
@@ -33,20 +38,21 @@ export function SpeechLevelWaveform({
   levels,
   className,
   dark,
+  waveStyle = "default",
+  accentColor = "#6366f1",
 }: {
   levels: number[];
   className?: string;
   dark?: boolean;
+  waveStyle?: SpeechRecordingWaveStyle;
+  accentColor?: string;
 }) {
   const rects = computeSpeechWaveformBarRects(levels);
   if (rects.length < 1) return null;
   return (
     <svg
-      className={cx(
-        "fill-current",
-        dark ? "text-[#8ec9f8]" : "text-[#6eb6ea]",
-        className,
-      )}
+      className={cx("fill-current", speechRecordingWaveSvgClass(waveStyle, dark ?? false), className)}
+      style={speechRecordingWaveSvgStyle(waveStyle, accentColor)}
       viewBox={`0 0 ${SPEECH_WAVEFORM_VB_W} ${SPEECH_WAVEFORM_VB_H}`}
       preserveAspectRatio="none"
       aria-hidden
